@@ -233,6 +233,12 @@ describe('GraphTraversal', () => {
       new Map(),
       params,
     );
-    expect([...result.errors]).toEqual([[p('/bar'), new DoesNotExistError()]]);
+    expect([...result.errors]).toEqual([
+      [p('/bar'), expect.any(DoesNotExistError)],
+    ]);
+    // $FlowFixMe[prop-missing] Expando property set by addImportStackToError.
+    expect(result.errors.get(p('/bar'))?.metroImportStack).toBe(
+      `    at ${p('/bar')}\n    at ${p('/foo')}\n    at ${p('/bundle')}`,
+    );
   });
 });

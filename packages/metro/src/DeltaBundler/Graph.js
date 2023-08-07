@@ -351,7 +351,23 @@ export class Graph<T = MixedOutput> {
     options: InternalOptions<T>,
     moduleFilter?: (path: string) => boolean,
   ): Promise<Delta<T>> {
+    // Only edges traversed in this pass are known to be current, so a path
+    // visited from outside the entry points has an incomplete import stack. Its
+    // chain still connects to an entry point, which we can name if unambiguous.
+    const singleEntryPoint =
+      this.entryPoints.size === 1
+        ? this.entryPoints.values().next().value
+        : null;
+
     const subGraph = await buildSubgraph(pathsToVisit, this.#virtualSources, {
+      getEntryDependencyStack: absolutePath =>
+        this.entryPoints.has(absolutePath)
+          ? null
+          : {
+              absolutePath: singleEntryPoint ?? null,
+              dependency: null,
+              parent: null,
+            },
       resolve: options.resolve,
       shouldTraverse: (dependency: ResolvedDependency) => {
         if (options.shallow || isWeakOrLazy(dependency, options)) {
