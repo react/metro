@@ -20,7 +20,8 @@ const nullthrows = require('nullthrows');
 
 function makeTransformOptions<OptionsT extends ?EntryOptions>(
   plugins: ReadonlyArray<PluginEntry>,
-  options: OptionsT,
+  pluginOptions: OptionsT,
+  babelOptions?: BabelCoreOptions,
 ): BabelCoreOptions {
   return {
     ast: true,
@@ -30,9 +31,12 @@ function makeTransformOptions<OptionsT extends ?EntryOptions>(
     compact: true,
     configFile: false,
     plugins: plugins.length
-      ? plugins.map(plugin => [plugin, options])
+      ? plugins.map(plugin => [plugin, pluginOptions])
       : [() => ({visitor: {}})],
     sourceType: 'module',
+    filename:
+      '/Users/test/app/node_modules/react-native/Libraries/Components/Pressable/useAndroidRippleForView.js',
+    ...babelOptions,
   };
 }
 
@@ -55,10 +59,11 @@ function transformToAst<T extends ?EntryOptions>(
   plugins: ReadonlyArray<PluginEntry>,
   code: string,
   options: T,
+  babelOptions?: BabelCoreOptions,
 ): BabelNodeFile {
   const transformResult = transformSync(
     code,
-    makeTransformOptions(plugins, options),
+    makeTransformOptions(plugins, options, babelOptions),
   );
   const ast = nullthrows(transformResult.ast);
   validateOutputAst(ast);
@@ -69,8 +74,9 @@ function transform(
   code: string,
   plugins: ReadonlyArray<PluginEntry>,
   options: ?EntryOptions,
+  babelOptions?: BabelCoreOptions,
 ) {
-  return generate(transformToAst(plugins, code, options)).code;
+  return generate(transformToAst(plugins, code, options, babelOptions)).code;
 }
 
 exports.compare = function (
@@ -78,8 +84,11 @@ exports.compare = function (
   code: string,
   expected: string,
   options: ?EntryOptions = {},
+  babelOptions?: BabelCoreOptions,
 ) {
-  expect(transform(code, plugins, options)).toBe(transform(expected, [], {}));
+  expect(transform(code, plugins, options, babelOptions)).toBe(
+    transform(expected, [], {}),
+  );
 };
 
 exports.transformToAst = transformToAst;

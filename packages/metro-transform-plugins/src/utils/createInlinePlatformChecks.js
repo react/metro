@@ -22,13 +22,20 @@ type PlatformChecks = {
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean,
   isPlatformSelectNode: (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean,
 };
+
+const REACT_NATIVE_MODULES_REGEX = /[\/\\]node_modules[\/\\]react-native[\/\\]/;
+
+const isReactNativeFile = (filename?: string): boolean =>
+  filename != null && REACT_NATIVE_MODULES_REGEX.test(filename);
 
 export default function createInlinePlatformChecks(
   t: Types,
@@ -45,30 +52,40 @@ export default function createInlinePlatformChecks(
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
-    isPlatformOS(node, scope, isWrappedModule) ||
-    isReactPlatformOS(node, scope, isWrappedModule);
+    isPlatformOS(node, scope, isWrappedModule, filename) ||
+    isReactPlatformOS(node, scope, isWrappedModule, filename);
 
   const isPlatformSelectNode = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
-    isPlatformSelect(node, scope, isWrappedModule) ||
-    isReactPlatformSelect(node, scope, isWrappedModule);
+    isPlatformSelect(node, scope, isWrappedModule, filename) ||
+    isReactPlatformSelect(node, scope, isWrappedModule, filename);
 
   const isPlatformOS = (
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
     isIdentifier(node.property, {name: 'OS'}) &&
-    isImportOrGlobal(node.object, scope, [{name: 'Platform'}], isWrappedModule);
+    isImportOrGlobal(
+      node.object,
+      scope,
+      [{name: 'Platform'}],
+      isWrappedModule,
+      filename,
+    );
 
   const isReactPlatformOS = (
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
     isIdentifier(node.property, {name: 'OS'}) &&
     isMemberExpression(node.object) &&
@@ -79,12 +96,14 @@ export default function createInlinePlatformChecks(
       scope,
       [{name: 'React'}, {name: 'ReactNative'}],
       isWrappedModule,
+      filename,
     );
 
   const isPlatformSelect = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
     isMemberExpression(node.callee) &&
     isIdentifier(node.callee.property, {name: 'select'}) &&
@@ -94,12 +113,14 @@ export default function createInlinePlatformChecks(
       scope,
       [{name: 'Platform'}],
       isWrappedModule,
+      filename,
     );
 
   const isReactPlatformSelect = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
     isMemberExpression(node.callee) &&
     isIdentifier(node.callee.property, {name: 'select'}) &&
@@ -112,6 +133,7 @@ export default function createInlinePlatformChecks(
       scope,
       [{name: 'React'}, {name: 'ReactNative'}],
       isWrappedModule,
+      filename,
     );
 
   const isRequireCall = (
@@ -138,6 +160,7 @@ export default function createInlinePlatformChecks(
     scope: Scope,
     patterns: Array<{name: string}>,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean => {
     const identifier = patterns.find((pattern: {name: string}) =>
       isIdentifier(node, pattern),
@@ -147,6 +170,38 @@ export default function createInlinePlatformChecks(
       isToplevelBinding(scope.getBinding(identifier.name), isWrappedModule)
     ) {
       return true;
+    }
+    // Special case for handling transformed relative ES imports:
+    // Works only for RN files: `*/node_modules/react-native/**/*`
+    //
+    // ```tsx
+    // 1. Source code
+    // import Platform from '../../Utilities/Platform';
+    // const test = Platform.OS === 'ios' ? 1 : 2;
+    //
+    // 2. After `@react-native/babel-preset`
+    // var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+    // var test = _Platform.default.OS === 'ios' ? 1 : 2;
+    // ```
+    if (
+      isReactNativeFile(filename) &&
+      !identifier &&
+      isMemberExpression(node)
+    ) {
+      const objIdentifier = patterns.find((pattern: {name: string}) =>
+        isIdentifier(node.object, {name: `_${pattern.name}`}),
+      );
+
+      if (
+        objIdentifier &&
+        isToplevelBinding(
+          scope.getBinding(`_${objIdentifier.name}`),
+          isWrappedModule,
+        ) &&
+        isIdentifier(node.property, {name: 'default'})
+      ) {
+        return true;
+      }
     }
     if (isImport(node, scope, patterns)) {
       return true;

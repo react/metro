@@ -934,4 +934,105 @@ describe('inline constants', () => {
 
     compare([stripFlow, inlinePlugin], code, expected, {dev: false});
   });
+
+  test('replaces Platform.OS in the code if Platform is a top level relative Node.js require()', () => {
+    // Source code before `@react-native/babel-preset`:
+    // const Platform = require('../../Utilities/Platform').default;
+    const code = `
+      var Platform = require('../../Utilities/Platform').default;
+      var test = Platform.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare([inlinePlugin], code, code.replace('Platform.OS', '"android"'), {
+      inlinePlatform: true,
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.OS in the code if Platform is a top level relative ES import', () => {
+    // Source code before `@react-native/babel-preset`:
+    // import Platform from '../../Utilities/Platform';
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+      var test = _Platform.default.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace('_Platform.default.OS', '"android"'),
+      {
+        inlinePlatform: true,
+        platform: 'android',
+      },
+    );
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative Node.js require()', () => {
+    // Source code before `@react-native/babel-preset`:
+    // const Platform = require('../../Utilities/Platform').default;
+    const code = `
+      var Platform = require('../../Utilities/Platform').default;
+
+      function a() {
+        Platform.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare([inlinePlugin], code, code.replace(/Platform\.select[^;]+/, '2'), {
+      inlinePlatform: 'true',
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative ES import', () => {
+    // Source code before `@react-native/babel-preset`:
+    // import Platform from '../../Utilities/Platform';
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+
+      function a() {
+        _Platform.default.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_Platform\.default\.select[^;]+/, '2'),
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+    );
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative ES import on Window', () => {
+    // Source code before `@react-native/babel-preset`:
+    // import Platform from '../../Utilities/Platform';
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+
+      function a() {
+        _Platform.default.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_Platform\.default\.select[^;]+/, '2'),
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+      {
+        filename:
+          'C:\\Users\\test\\app\\node_modules\\react-native\\Libraries\\Components\\Pressable\\useAndroidRippleForView.js',
+      },
+    );
+  });
 });
