@@ -11,7 +11,7 @@
 
 import type {TransformResultDependency} from 'metro/private/DeltaBundler/types';
 
-export type Result<+TResolution, +TCandidates> =
+export type Result<out TResolution, out TCandidates> =
   | {+type: 'resolved', +resolution: TResolution}
   | {+type: 'failed', +candidates: TCandidates};
 

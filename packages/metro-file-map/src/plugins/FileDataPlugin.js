@@ -29,7 +29,7 @@ export type FileDataPluginOptions = Readonly<{
  * of lifecycle methods that subclasses can override as needed.
  */
 export default class FileDataPlugin<
-  -PerFileData extends void | V8Serializable = void | V8Serializable,
+  in PerFileData extends void | V8Serializable = void | V8Serializable,
 > implements FileMapPlugin<null, PerFileData>
 {
   +name: string;

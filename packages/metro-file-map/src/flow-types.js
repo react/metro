@@ -169,8 +169,8 @@ export type DuplicatesSet = Map<string, /* type */ number>;
 export type DuplicatesIndex = Map<string, Map<string, DuplicatesSet>>;
 
 export type FileMapPluginInitOptions<
-  +SerializableState,
-  +PerFileData = void,
+  out SerializableState,
+  out PerFileData = void,
 > = Readonly<{
   files: Readonly<{
     fileIterator(
@@ -212,8 +212,8 @@ export type V8Serializable =
   | Readonly<{[key: string]: V8Serializable}>;
 
 export interface FileMapPlugin<
-  -SerializableState extends void | V8Serializable = void | V8Serializable,
-  -PerFileData extends void | V8Serializable = void | V8Serializable,
+  in SerializableState extends void | V8Serializable = void | V8Serializable,
+  in PerFileData extends void | V8Serializable = void | V8Serializable,
 > {
   +name: string;
   initialize(
@@ -459,7 +459,7 @@ export interface FileSystemListener {
   fileRemoved(canonicalPath: CanonicalPath, data: FileMetadata): void;
 }
 
-export interface ReadonlyFileSystemChanges<+T = FileMetadata> {
+export interface ReadonlyFileSystemChanges<out T = FileMetadata> {
   +addedDirectories: Iterable<CanonicalPath>;
   +removedDirectories: Iterable<CanonicalPath>;
 
