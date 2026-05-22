@@ -14,6 +14,7 @@ munge_underscores=true
 enums=true
 casting_syntax=as
 experimental.pattern_matching=true
+experimental.allow_variance_keywords=true
 
 module.name_mapper='\(metro-[^/]*\)' -> '<PROJECT_ROOT>/packages/\1/src/index.js'
 
