@@ -3,13 +3,27 @@ id: configuration
 title: Configuring Metro
 ---
 
-A Metro config can be created in these three ways (ordered by priority):
+A Metro config can be created in the following file formats (ordered by priority):
 
-1.  `metro.config.js`
-2.  `metro.config.json`
-3.  The `metro` field in `package.json`
+1.  `metro.config.js` / `metro.config.cjs` / `metro.config.mjs` (CommonJS or ESM)
+2.  `metro.config.ts` / `metro.config.cts` / `metro.config.mts` (TypeScript)
+3.  `metro.config.json`
+4.  `.config/metro.js` / `.config/metro.cjs` / `.config/metro.mjs` / `.config/metro.ts` / `.config/metro.cts` / `.config/metro.mts` / `.config/metro.json`
+5.  The `metro` field in `package.json`
 
 You can also give a custom file to the configuration by specifying `--config <path/to/config>` when calling the CLI.
+
+:::warning Deprecated
+
+YAML config files (`.yaml`, `.yml`) are **deprecated** and will be removed in a future version of Metro. Please migrate to a JavaScript, TypeScript, or JSON config file. When Metro loads a YAML config file, it will display a deprecation warning.
+
+:::
+
+:::info TypeScript Config Support
+
+TypeScript config files are supported in Node.js 24.0.0+ or Node.js 22.6.0+ with the `--experimental-strip-types` flag. If your Node.js version doesn't support loading TypeScript natively, you'll see an error with instructions when attempting to load a TypeScript config file.
+
+:::
 
 :::note
 
@@ -21,6 +35,8 @@ See the [React Native repository](https://github.com/facebook/react-native/blob/
 ## Configuration Structure
 
 The configuration is based on [our concepts](./Concepts.md), which means that for every module we have a separate config option. A common configuration structure in Metro looks like this:
+
+### CommonJS Example (`metro.config.js`)
 
 ```js
 module.exports = {
@@ -45,6 +61,42 @@ module.exports = {
     }
   }
 };
+```
+
+### ESM Example (`metro.config.mjs`)
+
+```js
+export default {
+  /* general options */
+
+  resolver: {
+    /* resolver options */
+  },
+  transformer: {
+    /* transformer options */
+  },
+  // ... other options
+};
+```
+
+### TypeScript Example (`metro.config.ts`)
+
+```typescript
+import type {ConfigT} from 'metro-config';
+
+const config: ConfigT = {
+  /* general options */
+
+  resolver: {
+    /* resolver options */
+  },
+  transformer: {
+    /* transformer options */
+  },
+  // ... other options
+};
+
+export default config;
 ```
 
 ### General Options
@@ -814,4 +866,39 @@ configCFn = (previousConfig /* result of mergeConfig(configA, configB) */) => {
 }
 
 module.exports = mergeConfig(configA, configB, configCFn);
+```
+
+#### TypeScript Merging Example
+
+```typescript
+// metro.config.ts
+import type {ConfigT} from 'metro-config';
+import {mergeConfig} from 'metro-config';
+
+const configA: ConfigT = {
+  /* general options */
+
+  resolver: {
+    /* resolver options */
+  },
+  // ... other options
+};
+
+const configB: ConfigT = {
+  /* general options */
+
+  resolver: {
+    /* resolver options */
+  },
+  // ... other options
+};
+
+// Function forms may be used to access the previous configuration
+const configCFn = (previousConfig: ConfigT): Partial<ConfigT> => {
+  return {
+    watchFolders: [...(previousConfig.watchFolders ?? []), 'my-watch-folder'],
+  };
+};
+
+export default mergeConfig(configA, configB, configCFn);
 ```
