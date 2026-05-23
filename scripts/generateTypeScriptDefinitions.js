@@ -26,6 +26,90 @@ import {globSync} from 'tinyglobby';
 
 const WORKSPACE_ROOT = path.resolve(__dirname, '..');
 
+/**
+ * Produce a unified-diff-style string comparing two texts, using a basic
+ * LCS (longest common subsequence) algorithm. No external dependencies.
+ */
+function createLineDiff(
+  oldText: string,
+  newText: string,
+  label: string,
+): string {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const m = oldLines.length;
+  const n = newLines.length;
+
+  // Build DP table for LCS length
+  const dp: Array<Array<number>> = Array.from({length: m + 1}, () =>
+    new Array<number>(n + 1).fill(0),
+  );
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] =
+        oldLines[i - 1] === newLines[j - 1]
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+
+  // Backtrack to produce a list of diff operations
+  const ops: Array<{type: ' ' | '-' | '+', line: string}> = [];
+  let i = m;
+  let j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+      ops.push({type: ' ', line: oldLines[i - 1]});
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      ops.push({type: '+', line: newLines[j - 1]});
+      j--;
+    } else {
+      ops.push({type: '-', line: oldLines[i - 1]});
+      i--;
+    }
+  }
+  ops.reverse();
+
+  // Format as unified diff with context lines around each hunk
+  const CONTEXT = 3;
+  const changeIndices: Array<number> = [];
+  for (let k = 0; k < ops.length; k++) {
+    if (ops[k].type !== ' ') {
+      changeIndices.push(k);
+    }
+  }
+  if (changeIndices.length === 0) {
+    return '';
+  }
+
+  // Group nearby changes into hunks
+  const hunks: Array<{start: number, end: number}> = [];
+  let hunkStart = changeIndices[0];
+  let hunkEnd = changeIndices[0];
+  for (let k = 1; k < changeIndices.length; k++) {
+    if (changeIndices[k] - hunkEnd > CONTEXT * 2) {
+      hunks.push({start: hunkStart, end: hunkEnd});
+      hunkStart = changeIndices[k];
+    }
+    hunkEnd = changeIndices[k];
+  }
+  hunks.push({start: hunkStart, end: hunkEnd});
+
+  const output = [`--- ${label} (on disk)`, `+++ ${label} (expected)`, ''];
+  for (const hunk of hunks) {
+    const from = Math.max(0, hunk.start - CONTEXT);
+    const to = Math.min(ops.length - 1, hunk.end + CONTEXT);
+    output.push('@@');
+    for (let k = from; k <= to; k++) {
+      output.push(`${ops[k].type} ${ops[k].line}`);
+    }
+  }
+
+  return output.join('\n');
+}
+
 const TYPES_DIR = 'types';
 const SRC_DIR = 'src';
 
@@ -148,9 +232,14 @@ export async function generateTsDefsForJsGlobs(
       try {
         existingFile = await fs.promises.readFile(absoluteTsFile, 'utf-8');
         if (finalOutput !== existingFile) {
+          const diff = createLineDiff(
+            existingFile,
+            finalOutput,
+            path.relative(WORKSPACE_ROOT, absoluteTsFile),
+          );
           errors.push({
             sourceFile,
-            error: new Error('.d.ts file is out of sync'),
+            error: new Error('.d.ts file is out of sync\n' + diff),
           });
         }
       } catch {
@@ -189,7 +278,16 @@ export async function generateTsDefsForJsGlobs(
         return;
       }
       try {
-        const flowDef = await translateFlowToFlowDef(source);
+        const sourceWithPlatformNewlines =
+          process.platform === 'win32'
+            ? // flow-api-translator assumes CRLF line endings on Windows, whereas
+              // Metro sets eol=lf in .gitattributes, so we need to convert to CRLF
+              // before passing to flow-api-translator, and convert back later.
+              source.replaceAll('\n', '\r\n')
+            : source;
+        const flowDef = await translateFlowToFlowDef(
+          sourceWithPlatformNewlines,
+        );
         if (flowDef.includes('declare module.exports')) {
           errors.push({
             sourceFile,
@@ -201,6 +299,8 @@ export async function generateTsDefsForJsGlobs(
           const tsDef = await translateFlowDefToTSDef(flowDef);
 
           const beforeLint = tsDef
+            // Normalise line endings back to LF
+            .replaceAll('\r\n', '\n')
             // Fix up gap left in license header by removal of atflow
             .replace('\n *\n *\n', '\n *\n')
             // TypeScript has no analogue for __proto__: null
