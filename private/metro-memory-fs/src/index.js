@@ -64,19 +64,19 @@ type Encoding =
   | 'utf8';
 
 type Resolution = {
-  +basename: string,
-  +dirNode: DirectoryNode,
-  +dirPath: Array<[string, EntityNode]>,
-  +drive: string,
-  +node: ?EntityNode,
-  +realpath: string,
+  readonly basename: string,
+  readonly dirNode: DirectoryNode,
+  readonly dirPath: Array<[string, EntityNode]>,
+  readonly drive: string,
+  readonly node: ?EntityNode,
+  readonly realpath: string,
 };
 
 type Descriptor = {
-  +nodePath: Array<[string, EntityNode]>,
-  +node: FileNode,
-  +readable: boolean,
-  +writable: boolean,
+  readonly nodePath: Array<[string, EntityNode]>,
+  readonly node: FileNode,
+  readonly readable: boolean,
+  readonly writable: boolean,
   position: number,
 };
 
@@ -1272,8 +1272,8 @@ class MemoryFs {
   }
 
   _parsePath(filePath: string): {
-    +drive: ?string,
-    +entNames: Array<string>,
+    readonly drive: ?string,
+    readonly entNames: Array<string>,
   } {
     let drive;
     const sep = this._platform === 'win32' ? /[\\/]/ : /\//;
@@ -1297,8 +1297,8 @@ class MemoryFs {
   }
 
   _parsePathWithCwd(filePath: string): {
-    +drive: string,
-    +entNames: Array<string>,
+    readonly drive: string,
+    readonly entNames: Array<string>,
   } {
     let {drive, entNames} = this._parsePath(filePath);
     if (drive == null) {
@@ -1744,8 +1744,8 @@ class FSWatcher extends EventEmitter {
 }
 
 class Dirent {
-  +_stats: Stats;
-  +name: string | Buffer;
+  readonly _stats: Stats;
+  readonly name: string | Buffer;
 
   /**
    * Don't keep a reference to the node as it may get mutated over time.
