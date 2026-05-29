@@ -60,7 +60,7 @@ export default function resolve(
   }
 
   if (isRelativeImport(specifier) || path.isAbsolute(specifier)) {
-    const result = resolveModulePath(context, specifier, platform);
+    const result = resolveModulePath(context, specifier, platform, false);
     if (result.type === 'failed') {
       throw new FailedToResolvePathError(result.candidates);
     }
@@ -132,7 +132,7 @@ export default function resolve(
       originModulePath.indexOf(path.sep, fromModuleParentIdx),
     );
     const absPath = path.join(originModuleDir, redirectedSpecifier);
-    const result = resolveModulePath(context, absPath, platform);
+    const result = resolveModulePath(context, absPath, platform, false);
     if (result.type === 'failed') {
       throw new FailedToResolvePathError(result.candidates);
     }
@@ -232,10 +232,12 @@ export default function resolve(
       newPackageName,
       parsedSpecifier.posixSubpath,
     );
+    const isPackageRoot = parsedSpecifier.posixSubpath === '.';
     const resolution = resolveModuleFromTargetPath(
       context,
       platform,
       extraNodeModulePath,
+      isPackageRoot,
     );
     if (resolution != null) {
       return resolution;
@@ -269,12 +271,14 @@ function resolveFromNodeModulesPath(
   if (!lookupResult.exists || lookupResult.type !== 'd') {
     return null;
   }
+  const isPackageRoot = parsedSpecifier.posixSubpath === '.';
   return resolveModuleFromTargetPath(
     context,
     platform,
     nodeModulesPath +
       path.sep +
       posixToSystemPath(parsedSpecifier.normalizedSpecifier),
+    isPackageRoot,
   );
 }
 
@@ -282,6 +286,7 @@ function resolveModuleFromTargetPath(
   context: ResolutionContext,
   platform: string | null,
   targetPath: string,
+  isPackageRoot: boolean,
 ): Resolution | null {
   const candidate = redirectModulePath(context, targetPath);
   if (candidate === false) {
@@ -290,7 +295,7 @@ function resolveModuleFromTargetPath(
 
   // candidate should be absolute here - we assume that redirectModulePath
   // always returns an absolute path when given an absolute path.
-  const result = resolvePackage(context, candidate, platform);
+  const result = resolvePackage(context, candidate, platform, isPackageRoot);
   if (result.type === 'resolved') {
     return result.resolution;
   }
@@ -382,6 +387,7 @@ function resolveModulePath(
   context: ResolutionContext,
   toModuleName: string,
   platform: string | null,
+  skipFileResolution: boolean,
 ): Result<Resolution, FileAndDirCandidates> {
   // System-separated absolute path
   const modulePath = path.isAbsolute(toModuleName)
@@ -400,7 +406,9 @@ function resolveModulePath(
   const fileResult: ?Result<Resolution, FileCandidates> =
     // require('./foo/') should never resolve to ./foo.js - a trailing slash
     // implies we should resolve as a directory only.
-    redirectedPath.endsWith(path.sep)
+    // For ESM bare package imports (isPackageRoot), skip file resolution -
+    // e.g. don't look for node_modules/invariant.web.js as a sibling file.
+    redirectedPath.endsWith(path.sep) || skipFileResolution
       ? null
       : resolveFile(context, dirPath, fileName, platform);
 
@@ -434,7 +442,7 @@ function resolveHastePackage(
     return failedFor();
   }
   const potentialModulePath = path.join(packageJsonPath, '..', pathInModule);
-  const result = resolvePackage(context, potentialModulePath, platform);
+  const result = resolvePackage(context, potentialModulePath, platform, false);
   if (result.type === 'resolved') {
     return result;
   }
@@ -485,6 +493,7 @@ function resolvePackage(
    */
   absoluteCandidatePath: string,
   platform: string | null,
+  isPackageRoot: boolean,
 ): Result<Resolution, FileAndDirCandidates> {
   if (context.unstable_enablePackageExports) {
     const pkg = context.getPackageForModule(absoluteCandidatePath);
@@ -522,7 +531,13 @@ function resolvePackage(
     }
   }
 
-  return resolveModulePath(context, absoluteCandidatePath, platform);
+  const skipFileResolution = !!context.isESMImport && isPackageRoot;
+  return resolveModulePath(
+    context,
+    absoluteCandidatePath,
+    platform,
+    skipFileResolution,
+  );
 }
 
 /**
