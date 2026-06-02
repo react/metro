@@ -135,22 +135,16 @@ export default function resolve(
   // If the specifier was redirected to a relative path
   if (
     maybeRedirectedSpecifier != null &&
+    closestPackageToOrigin != null && // Implied by maybeRedirectedSpecifier != null
     isRelativeImport(maybeRedirectedSpecifier)
   ) {
-    // TODO: (robhogan) This isn't right - per browser spec: "All paths for
-    // browser fields are relative to the package.json file location". The
-    // *closest* package.json is the relevant one for browser spec, regardless
-    // of the closest node_modules.
-
-    // derive absolute path /.../node_modules/originModuleDir/specifier
-    const fromModuleParentIdx =
-      originModulePath.lastIndexOf('node_modules' + path.sep) + 13;
-    const originModuleDir = originModulePath.slice(
-      0,
-      originModulePath.indexOf(path.sep, fromModuleParentIdx),
+    // Per the "browser" spec: "All paths for browser fields are relative to
+    // the package.json file location". `closestPackageToOrigin` is the package
+    // that provided the redirect, so join relative paths to its `rootPath`.
+    const absPath = path.resolve(
+      closestPackageToOrigin.rootPath,
+      maybeRedirectedSpecifier,
     );
-
-    const absPath = path.join(originModuleDir, maybeRedirectedSpecifier);
     const result = resolveModulePath(context, absPath, platform);
     if (result.type === 'failed') {
       throw new FailedToResolvePathError(result.candidates);

@@ -99,4 +99,61 @@ describe('browser field spec', () => {
       });
     });
   });
+
+  describe('replace specific files', () => {
+    test('should resolve a bare-specifier redirect relative to the origin package root, not its containing directory', () => {
+      // Per the browser spec, paths in the `browser` map are relative to the
+      // package.json file location. When the origin module lives in a
+      // subdirectory of its package (here `lib/nested/`), the redirect target
+      // must still resolve against the package root.
+      const packageJson = {
+        name: 'origin-pkg',
+        main: 'lib/nested/index.js',
+        browser: {
+          'foo-pkg': './shims/foo.js',
+        },
+      };
+      const context = {
+        ...createResolutionContext({
+          '/root/node_modules/origin-pkg/package.json':
+            JSON.stringify(packageJson),
+          '/root/node_modules/origin-pkg/lib/nested/index.js': '',
+          '/root/node_modules/origin-pkg/shims/foo.js': '',
+        }),
+        originModulePath: '/root/node_modules/origin-pkg/lib/nested/index.js',
+        mainFields: ['browser', 'main'],
+      };
+
+      expect(Resolver.resolve(context, 'foo-pkg', null)).toEqual({
+        type: 'sourceFile',
+        filePath: '/root/node_modules/origin-pkg/shims/foo.js',
+      });
+    });
+
+    test('should resolve a bare-specifier redirect for an origin outside of `node_modules`', () => {
+      // Project-level package.json — there is no enclosing `node_modules`
+      // segment, so the old heuristic of slicing after `node_modules/` would
+      // misbehave. The redirect must resolve against the package root.
+      const context = {
+        ...createResolutionContext({
+          '/root/project/package.json': JSON.stringify({
+            name: 'project',
+            main: 'src/index.js',
+            browser: {
+              'foo-pkg': './shims/foo.js',
+            },
+          }),
+          '/root/project/src/index.js': '',
+          '/root/project/shims/foo.js': '',
+        }),
+        originModulePath: '/root/project/src/index.js',
+        mainFields: ['browser', 'main'],
+      };
+
+      expect(Resolver.resolve(context, 'foo-pkg', null)).toEqual({
+        type: 'sourceFile',
+        filePath: '/root/project/shims/foo.js',
+      });
+    });
+  });
 });
