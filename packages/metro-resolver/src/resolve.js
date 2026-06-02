@@ -193,6 +193,56 @@ export default function resolve(
 
   // parsedSpecifier is now a non-Haste bare specifier.
 
+  // PACKAGE_SELF_RESOLVE: if the origin lives inside a package whose `name`
+  // matches the bare specifier and which declares an `exports` field, resolve
+  // the request via that package's `exports`. Per Node.js ESM spec section 6.5
+  // (https://nodejs.org/api/esm.html#resolution-algorithm-specification).
+  if (
+    context.unstable_enablePackageExports &&
+    closestPackageToOrigin != null &&
+    closestPackageToOrigin.packageJson.exports != null &&
+    closestPackageToOrigin.packageJson.name === parsedSpecifier.packageName
+  ) {
+    try {
+      const exportsField = closestPackageToOrigin.packageJson.exports;
+      const packageExportsResult = resolvePackageTargetFromExports(
+        context,
+        closestPackageToOrigin.rootPath,
+        path.join(
+          closestPackageToOrigin.rootPath,
+          parsedSpecifier.posixSubpath,
+        ),
+        // packageRelativePath for the requested subpath, stripping the leading
+        // './' so the empty string represents the package root (matching how
+        // `getPackageForModule` reports `packageRelativePath`).
+        parsedSpecifier.posixSubpath === '.'
+          ? ''
+          : parsedSpecifier.posixSubpath.slice(2),
+        exportsField,
+        platform,
+      );
+      if (packageExportsResult != null) {
+        return packageExportsResult;
+      }
+    } catch (e) {
+      // NB: Falling back is a departure from the spec, but retained for
+      // backwards compatibility. Remove this in a breaking change.
+      if (e instanceof PackagePathNotExportedError) {
+        context.unstable_logWarning(
+          e.message +
+            ' Falling back to hierarchical resolution for backwards compatibility.',
+        );
+      } else if (e instanceof InvalidPackageConfigurationError) {
+        context.unstable_logWarning(
+          e.message +
+            ' Falling back to hierarchical resolution for backwards compatibility.',
+        );
+      } else {
+        throw e;
+      }
+    }
+  }
+
   const {disableHierarchicalLookup} = context;
 
   if (!disableHierarchicalLookup) {
