@@ -19,15 +19,19 @@ const vm = require('vm');
 
 jest.setTimeout(30 * 1000);
 
-test('builds and executes a RAM bundle', async () => {
-  const config = await Metro.loadConfig({
+let config;
+
+beforeAll(async () => {
+  config = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
-  const bundlePath = path.join(os.tmpdir(), 'rambundle.js');
+});
 
+async function buildAndExecRamBundle(entry: string): mixed {
+  const bundlePath = path.join(os.tmpdir(), `rambundle-${Date.now()}.js`);
   try {
     await Metro.runBuild(config, {
-      entry: 'TestBundle.js',
+      entry,
       output: ramBundleOutput,
       out: bundlePath,
     });
@@ -35,16 +39,26 @@ test('builds and executes a RAM bundle', async () => {
     const bundleBuffer = fs.readFileSync(bundlePath);
     const parser = new RamBundleParser(bundleBuffer);
 
-    // Create a context with a global nativeRequire function, which reads the
-    // module code from the RAM bundle and injects it into the VM.
     const context = vm.createContext({
       nativeRequire(id) {
         vm.runInContext(parser.getModule(id), context);
       },
     });
 
-    expect(vm.runInContext(parser.getStartupCode(), context)).toMatchSnapshot();
+    return vm.runInContext(parser.getStartupCode(), context);
   } finally {
-    fs.unlinkSync(bundlePath);
+    if (fs.existsSync(bundlePath)) {
+      fs.unlinkSync(bundlePath);
+    }
   }
+}
+
+test('builds and executes a RAM bundle', async () => {
+  expect(await buildAndExecRamBundle('TestBundle.js')).toMatchSnapshot();
+});
+
+test('rejects [metro-project] virtual prefix in runBuild entry', async () => {
+  await expect(
+    buildAndExecRamBundle('./[metro-project]/TestBundle.js'),
+  ).rejects.toThrow('was not found');
 });
