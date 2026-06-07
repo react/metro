@@ -3,13 +3,27 @@ id: configuration
 title: Configuring Metro
 ---
 
-A Metro config can be created in these three ways (ordered by priority):
+A Metro config can be created in the following file formats (ordered by priority):
 
-1.  `metro.config.js`
-2.  `metro.config.json`
-3.  The `metro` field in `package.json`
+1.  `metro.config.js` / `metro.config.cjs` / `metro.config.mjs` (CommonJS or ESM)
+2.  `metro.config.ts` / `metro.config.cts` / `metro.config.mts` (TypeScript)
+3.  `metro.config.json`
+4.  `.config/metro.js` / `.config/metro.cjs` / `.config/metro.mjs` / `.config/metro.ts` / `.config/metro.cts` / `.config/metro.mts` / `.config/metro.json`
+5.  The `metro` field in `package.json`
 
 You can also give a custom file to the configuration by specifying `--config <path/to/config>` when calling the CLI.
+
+:::warning Deprecated
+
+YAML config files (`.yaml`, `.yml`) are **deprecated** and will be removed in a future version of Metro. Please migrate to a JavaScript, TypeScript, or JSON config file. When Metro loads a YAML config file, it will display a deprecation warning.
+
+:::
+
+:::info TypeScript Config Support
+
+TypeScript config files are supported in Node.js 24.0.0+ or Node.js 22.6.0+ with the `--experimental-strip-types` flag. If your Node.js version doesn't support loading TypeScript natively, you'll see an error with instructions when attempting to load a TypeScript config file.
+
+:::
 
 :::note
 
@@ -20,10 +34,13 @@ See the [React Native repository](https://github.com/facebook/react-native/blob/
 
 ## Configuration Structure
 
-The configuration is based on [our concepts](./Concepts.md), which means that for every module we have a separate config option. A common configuration structure in Metro looks like this:
+The configuration is based on [our concepts](./Concepts.md), which means that for every module we have a separate config option. A basic configuration structure in Metro looks like this:
 
-```js
-module.exports = {
+```typescript
+// metro.config.mts
+import type {MetroConfig} from 'metro-config';
+
+const config: MetroConfig = {
   /* general options */
 
   resolver: {
@@ -45,10 +62,17 @@ module.exports = {
     }
   }
 };
+
+export default config;
 ```
 
-### General Options
+:::note
 
+See [Merging Configurations](#merging-configurations) below for more advanced forms.
+
+:::
+
+### General Options
 
 #### `cacheStores`
 
@@ -672,7 +696,7 @@ key?: string | Buffer,     // Private key (contents, not path)
 requestCert?: boolean,     // Whether to authenticate the remote peer by requesting a certificate
 ```
 
-Notice that when overriding the base config, object tls configs extend the base tls config, false overrides the base tls configs, and `null` and `undefined` are ignored.
+Notice that when overriding the base config, object `tls` configs extend the base `tls` config, `false` overrides the base `tls` configs, and `null` and `undefined` are ignored.
 
 When running Metro with `Metro.runServer` with the `secureServerOptions` property Metro will likewise start an HTTPS server merging with the `config.server.tls` object if provided, overriding it.
 
@@ -768,50 +792,23 @@ This allows overriding and removing default config parameters such as `platforms
 
 #### Merging Example
 
-```js
-// metro.config.js
-const { mergeConfig } = require('metro-config');
+```typescript
+// metro.config.ts
+import type {ConfigT} from 'metro-config';
+import {mergeConfig} from 'metro-config';
 
-const configA = {
-  /* general options */
-
-  resolver: {
-    /* resolver options */
-  },
-  transformer: {
-    /* transformer options */
-  },
-  serializer: {
-    /* serializer options */
-  },
-  server: {
-    /* server options */
-  }
-};
-
-const configB = {
-  /* general options */
-
-  resolver: {
-    /* resolver options */
-  },
-  transformer: {
-    /* transformer options */
-  },
-  serializer: {
-    /* serializer options */
-  },
-  server: {
-    /* server options */
-  }
-};
-
-// Function forms may be used to access the previous configuration
-configCFn = (previousConfig /* result of mergeConfig(configA, configB) */) => {
-  return {
-    watchFolders: [...previousConfig.watchFolders, 'my-watch-folder'],
-  }
-}
-
-module.exports = mergeConfig(configA, configB, configCFn);
+export default (defaults: ConfigT) =>
+  mergeConfig(
+    defaults,
+    // Function form: extends the default additionalExts
+    config => ({
+      watcher: {additionalExts: [...config.watcher.additionalExts, 'mts', 'cts']},
+    }),
+    // Plain object form
+    {transformer: {minifierPath: 'metro-minify-terser'}},
+    // Function form: additionalExts already includes 'mts' and 'cts' from above
+    config => ({
+      watcher: {additionalExts: [...config.watcher.additionalExts, 'css']},
+    }),
+  );
 ```
