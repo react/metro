@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<4aca97550eb6e579e435254037e38616>>
+ * @generated SignedSource<<0db5148fb0acea9a8a9da44c1853752a>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/index.flow.js
@@ -42,9 +42,7 @@ type MetroMiddleWare = {
   metroServer: MetroServer;
   middleware: Middleware;
 };
-export type RunMetroOptions = Omit<ServerOptions, 'waitForBundler'> & {
-  waitForBundler?: boolean;
-};
+export type RunMetroOptions = Omit<ServerOptions, keyof {waitForBundler?: boolean}> & {waitForBundler?: boolean};
 export type RunServerOptions = Readonly<{
   hasReducedPerformance?: boolean;
   host?: string;

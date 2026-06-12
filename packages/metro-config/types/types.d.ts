@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<3f0c3f9093e9a6eadd3a8885218f8f45>>
+ * @generated SignedSource<<2be417f711921cf51677da9330cc97d8>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-config/src/types.js
@@ -112,7 +112,17 @@ type SerializerConfigT = {
   processModuleFilter: (modules: Module) => boolean;
   isThirdPartyModule: (module: Readonly<{path: string}>) => boolean;
 };
-type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_workerThreads'> & {
+type TransformerConfigT = Omit<
+  JsTransformerConfig,
+  keyof {
+    getTransformOptions: GetTransformOptions;
+    transformVariants: {
+      readonly [name: string]: Partial<ExtraTransformOptions>;
+    };
+    publicPath: string;
+    unstable_workerThreads: boolean;
+  }
+> & {
   getTransformOptions: GetTransformOptions;
   transformVariants: {
     readonly [name: string]: Partial<ExtraTransformOptions>;

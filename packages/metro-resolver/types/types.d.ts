@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<58467833638b1ab05fcf02a24738f4ab>>
+ * @generated SignedSource<<1ac471db899e408116787abf9da2d550>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-resolver/src/types.js
@@ -74,7 +74,11 @@ export type PackageInfo = Readonly<{
   packageJson: PackageJson;
   rootPath: string;
 }>;
-export type PackageForModule = Readonly<Omit<PackageInfo, 'packageRelativePath'> & {packageRelativePath: string}>;
+export type PackageForModule = Readonly<
+  Omit<PackageInfo, keyof {packageRelativePath: string}> & {
+    packageRelativePath: string;
+  }
+>;
 /**
  * Check existence of a single file.
  */
@@ -176,7 +180,11 @@ export type ResolutionContext = Readonly<{
   unstable_incrementalResolution: boolean;
   unstable_logWarning: (message: string) => void;
 }>;
-export type CustomResolutionContext = Readonly<Omit<ResolutionContext, 'resolveRequest'> & {resolveRequest: CustomResolver}>;
+export type CustomResolutionContext = Readonly<
+  Omit<ResolutionContext, keyof {resolveRequest: CustomResolver}> & {
+    resolveRequest: CustomResolver;
+  }
+>;
 export type CustomResolver = (context: CustomResolutionContext, moduleName: string, platform: string | null) => Resolution;
 export type CustomResolverOptions = {
   readonly [$$Key$$: string]: unknown;

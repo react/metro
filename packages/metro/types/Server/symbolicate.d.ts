@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<2f4c251ae251c041be068cf3d50ce560>>
+ * @generated SignedSource<<823c26d53c6b12598c83c2bdee576fc7>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/Server/symbolicate.js
@@ -24,9 +24,7 @@ export type StackFrameInput = {
   readonly column: null | undefined | number;
   readonly methodName: null | undefined | string;
 };
-export type IntermediateStackFrame = Omit<StackFrameInput, 'collapse'> & {
-  collapse?: boolean;
-};
+export type IntermediateStackFrame = Omit<StackFrameInput, keyof {collapse?: boolean}> & {collapse?: boolean};
 export type StackFrameOutput = Readonly<IntermediateStackFrame>;
 declare function symbolicate(stack: ReadonlyArray<StackFrameInput>, maps: Iterable<[string, ExplodedSourceMap]>, config: ConfigT, extraData: unknown): Promise<ReadonlyArray<StackFrameOutput>>;
 export default symbolicate;

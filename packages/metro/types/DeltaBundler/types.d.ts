@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<295faf3dbcdeffd6b15b9fa949b501cb>>
+ * @generated SignedSource<<8c9fef2fd822c16190446b9a276bca51>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/types.js
@@ -95,7 +95,11 @@ export type TransformResult<T = MixedOutput> = Readonly<{
   output: ReadonlyArray<T>;
   unstable_transformResultKey?: null | undefined | string;
 }>;
-export type TransformResultWithSource<T = MixedOutput> = Readonly<Omit<TransformResult<T>, 'getSource'> & {getSource: () => Buffer}>;
+export type TransformResultWithSource<T = MixedOutput> = Readonly<
+  Omit<TransformResult<T>, keyof {getSource: () => Buffer}> & {
+    getSource: () => Buffer;
+  }
+>;
 export type TransformFn<T = MixedOutput> = ($$PARAM_0$$: string, $$PARAM_1$$: null | undefined | RequireContext) => Promise<TransformResultWithSource<T>>;
 export type ResolveFn = (from: string, dependency: TransformResultDependency) => BundlerResolution;
 export type AllowOptionalDependenciesWithOptions = {
