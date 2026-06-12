@@ -15,20 +15,39 @@ import type {CallExpression, MemberExpression} from '@babel/types';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-const importMap = new Map([['ReactNative', 'react-native']]);
+const PLATFORM_MODULE_RELATIVE_IMPORTS = /^(\.\.?\/).*Platform(\.js)?$/;
+
+const allowedPlatformImports = [
+  // 1. ES imports: `import {Platform} from 'react-native'`
+  (importSource: string): boolean => importSource === 'react-native',
+  // 2. Relative imports inside react-native package: `import Platform from '../../Utilities/Platform'`
+  (importSource: string): boolean =>
+    PLATFORM_MODULE_RELATIVE_IMPORTS.test(importSource),
+  // 3. Haste modules `require('Platform')`
+  (importSource: string): boolean => importSource === 'Platform',
+  // 4. Exotic imports `require('React').Platform`
+  (importSource: string): boolean => importSource === 'React',
+];
 
 type PlatformChecks = {
   isPlatformNode: (
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean,
   isPlatformSelectNode: (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean,
 };
+
+const REACT_NATIVE_MODULES_REGEX = /[\/\\]node_modules[\/\\]react-native[\/\\]/;
+
+const isReactNativeFile = (filename?: string): boolean =>
+  filename != null && REACT_NATIVE_MODULES_REGEX.test(filename);
 
 export default function createInlinePlatformChecks(
   t: Types,
@@ -45,32 +64,43 @@ export default function createInlinePlatformChecks(
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
-    isPlatformOS(node, scope, isWrappedModule) ||
-    isReactPlatformOS(node, scope, isWrappedModule);
+    isIdentifier(node.property, {name: 'OS'}) &&
+    (isPlatformOS(node, scope, isWrappedModule) ||
+      isReactPlatformOS(node, scope, isWrappedModule) ||
+      isPlatformDefaultOS(node, scope, isWrappedModule, filename));
 
   const isPlatformSelectNode = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
-    isPlatformSelect(node, scope, isWrappedModule) ||
-    isReactPlatformSelect(node, scope, isWrappedModule);
+    isMemberExpression(node.callee) &&
+    isIdentifier(node.callee.property, {name: 'select'}) &&
+    (isPlatformSelect(node, scope, isWrappedModule) ||
+      isReactPlatformSelect(node, scope, isWrappedModule) ||
+      isPlatformDefaultSelect(node, scope, isWrappedModule, filename));
 
+  /**
+   * Platform.OS
+   */
   const isPlatformOS = (
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
   ): boolean =>
-    isIdentifier(node.property, {name: 'OS'}) &&
     isImportOrGlobal(node.object, scope, [{name: 'Platform'}], isWrappedModule);
 
+  /**
+   * React.Platform.OS
+   */
   const isReactPlatformOS = (
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
   ): boolean =>
-    isIdentifier(node.property, {name: 'OS'}) &&
     isMemberExpression(node.object) &&
     isIdentifier(node.object.property, {name: 'Platform'}) &&
     isImportOrGlobal(
@@ -81,13 +111,35 @@ export default function createInlinePlatformChecks(
       isWrappedModule,
     );
 
+  /**
+   * `_Platform.default.OS`
+   */
+  const isPlatformDefaultOS = (
+    node: MemberExpression,
+    scope: Scope,
+    isWrappedModule: boolean,
+    filename?: string,
+  ): boolean =>
+    isReactNativeFile(filename) &&
+    isMemberExpression(node.object) &&
+    isIdentifier(node.object.property, {name: 'default'}) &&
+    isIdentifier(node.object.object, {name: '_Platform'}) &&
+    isImportOrGlobal(
+      // $FlowFixMe[incompatible-type]
+      node.object.object,
+      scope,
+      [],
+      isWrappedModule,
+    );
+
+  /**
+   * Platform.select(...)
+   */
   const isPlatformSelect = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
   ): boolean =>
-    isMemberExpression(node.callee) &&
-    isIdentifier(node.callee.property, {name: 'select'}) &&
     isImportOrGlobal(
       // $FlowFixMe[incompatible-type]
       node.callee.object,
@@ -96,13 +148,14 @@ export default function createInlinePlatformChecks(
       isWrappedModule,
     );
 
+  /**
+   * React.Platform.select(...)
+   */
   const isReactPlatformSelect = (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
   ): boolean =>
-    isMemberExpression(node.callee) &&
-    isIdentifier(node.callee.property, {name: 'select'}) &&
     isMemberExpression(node.callee.object) &&
     isIdentifier(node.callee.object.property, {name: 'Platform'}) &&
     isImportOrGlobal(
@@ -114,24 +167,51 @@ export default function createInlinePlatformChecks(
       isWrappedModule,
     );
 
-  const isRequireCall = (
-    node: BabelNodeExpression,
-    dependencyId: string,
+  /**
+   * _Platform.default.select(...)
+   */
+  const isPlatformDefaultSelect = (
+    node: CallExpression,
     scope: Scope,
+    isWrappedModule: boolean,
+    filename?: string,
   ): boolean =>
-    isCallExpression(node) &&
-    isIdentifier(node.callee, {name: requireName}) &&
-    checkRequireArgs(node.arguments, dependencyId);
+    isReactNativeFile(filename) &&
+    isMemberExpression(node.callee.object) &&
+    isIdentifier(node.callee.object.property, {name: 'default'}) &&
+    // $FlowFixMe[incompatible-type]
+    // $FlowFixMe[incompatible-use]
+    isIdentifier(node.callee.object.object, {name: '_Platform'}) &&
+    isImportOrGlobal(
+      // $FlowFixMe[incompatible-type]
+      // $FlowFixMe[incompatible-use]
+      node.callee.object.object,
+      scope,
+      [],
+      isWrappedModule,
+    );
 
-  const isImport = (
-    node: BabelNodeExpression,
-    scope: Scope,
-    patterns: Array<{name: string}>,
-  ): boolean =>
-    patterns.some((pattern: {name: string}) => {
-      const importName = importMap.get(pattern.name) || pattern.name;
-      return isRequireCall(node, importName, scope);
-    });
+  const isRequireCall = (node: BabelNodeExpression): boolean =>
+    // 1. Simple case: `require('react-native')`
+    (isCallExpression(node) &&
+      isIdentifier(node.callee, {name: requireName}) &&
+      checkRequireArgs(node.arguments)) ||
+    // 2. Require a babel helpers
+    // ```
+    // // Before
+    // import Platform from '../Platform';
+    // import * as RN from 'react-native';
+    // // After
+    // var _Platform = _interopRequireDefault(require('../Platform'));
+    // var RN = _interopRequireWildcard(require('react-native'));
+    // ```
+    ((isIdentifier(node.callee, {name: '_interopRequireDefault'}) ||
+      isIdentifier(node.callee, {name: '_interopRequireWildcard'})) &&
+      // $FlowFixMe[incompatible-type]
+      // $FlowFixMe[incompatible-use]
+      isRequireCall(node.arguments[0]));
+
+  const isImport = (node: BabelNodeExpression): boolean => isRequireCall(node);
 
   const isImportOrGlobal = (
     node: BabelNodeExpression,
@@ -143,12 +223,12 @@ export default function createInlinePlatformChecks(
       isIdentifier(node, pattern),
     );
     if (
-      !!identifier &&
+      identifier != null &&
       isToplevelBinding(scope.getBinding(identifier.name), isWrappedModule)
     ) {
       return true;
     }
-    if (isImport(node, scope, patterns)) {
+    if (isImport(node)) {
       return true;
     }
     if (isIdentifier(node)) {
@@ -160,7 +240,7 @@ export default function createInlinePlatformChecks(
       ) {
         const init = binding.path.node.init;
         // $FlowFixMe[incompatible-type] Flow doesn't narrow binding.path.node through isVariableDeclarator()
-        if (init != null && isImport(init, scope, patterns)) {
+        if (init != null && isImport(init)) {
           return true;
         }
       }
@@ -174,14 +254,20 @@ export default function createInlinePlatformChecks(
       | BabelNodeSpreadElement
       | BabelNodeArgumentPlaceholder,
     >,
-    dependencyId: string,
   ): boolean => {
-    const pattern = t.stringLiteral(dependencyId);
     return (
-      isStringLiteral(args[0], pattern) ||
+      // Basic case: `require('<module name>')`
+      (isStringLiteral(args[0]) &&
+        allowedPlatformImports.some(
+          check => typeof args[0].value === 'string' && check(args[0].value),
+        )) ||
+      // Transformed require calls: `require(arbitraryMapName[321], '<module name>')`
       (isMemberExpression(args[0]) &&
         isNumericLiteral(args[0].property) &&
-        isStringLiteral(args[1], pattern))
+        isStringLiteral(args[1]) &&
+        allowedPlatformImports.some(
+          check => typeof args[1].value === 'string' && check(args[1].value),
+        ))
     );
   };
 
