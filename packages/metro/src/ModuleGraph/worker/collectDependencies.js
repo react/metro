@@ -258,13 +258,12 @@ export default function collectDependencies(
         return;
       }
 
-      if (
-        name != null &&
-        state.dependencyCalls.has(name) &&
-        !path.scope.getBinding(name)
-      ) {
-        processRequireCall(path, state);
-        visited.add(path.node);
+      if (name != null && state.dependencyCalls.has(name)) {
+        const binding = path.scope.getBinding(name);
+        if (!binding || isRequireFactoryBinding(binding)) {
+          processRequireCall(path, state);
+          visited.add(path.node);
+        }
       }
     },
 
@@ -526,6 +525,15 @@ function processImportCall(
       options.asyncType as empty;
       throw new Error('Unreachable');
   }
+}
+
+function isRequireFactoryBinding(binding: {path: NodePath<>, ...}): boolean {
+  const bindingPath = binding.path;
+  if (!bindingPath.isVariableDeclarator()) {
+    return false;
+  }
+  const init = bindingPath.get('init');
+  return init.isCallExpression();
 }
 
 function processRequireCall(
