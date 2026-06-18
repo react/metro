@@ -83,6 +83,9 @@ export type InternalDependency = Readonly<MutableInternalDependency>;
 export type State = {
   asyncRequireModulePathStringLiteral: ?StringLiteral,
   dependencyCalls: Set<string>,
+  requireFactoryBindings: Set<{path: NodePath<>, ...}>,
+  nodeModuleBindings: Set<{path: NodePath<>, ...}>,
+  createRequireExportBindings: Set<{path: NodePath<>, ...}>,
   dependencyRegistry: DependencyRegistry,
   dependencyTransformer: DependencyTransformer,
   dynamicRequires: DynamicRequiresBehavior,
@@ -157,6 +160,9 @@ export default function collectDependencies(
   const state: State = {
     asyncRequireModulePathStringLiteral: null,
     dependencyCalls: new Set(),
+    requireFactoryBindings: new Set(),
+    nodeModuleBindings: new Set(),
+    createRequireExportBindings: new Set(),
     dependencyRegistry: new DependencyRegistry(),
     dependencyTransformer:
       options.dependencyTransformer ?? DefaultDependencyTransformer,
@@ -258,11 +264,71 @@ export default function collectDependencies(
         return;
       }
 
-      if (name != null && state.dependencyCalls.has(name)) {
+      if (name != null) {
         const binding = path.scope.getBinding(name);
-        if (!binding || isRequireFactoryBinding(binding)) {
+        if (binding == null) {
+          if (state.dependencyCalls.has(name)) {
+            processRequireCall(path, state);
+            visited.add(path.node);
+          }
+        } else if (state.requireFactoryBindings.has(binding)) {
           processRequireCall(path, state);
           visited.add(path.node);
+        }
+      }
+    },
+
+    VariableDeclarator(
+      path: NodePath<BabelNodeVariableDeclarator>,
+      state: State,
+    ): void {
+      const id = path.node.id;
+      const init = path.node.init;
+      if (init == null || init.type !== 'CallExpression') {
+        return;
+      }
+      const initPath = path.get('init');
+      if (!initPath.isCallExpression()) {
+        return;
+      }
+
+      // `const mod = require('node:module')` — track for MemberExpression detection
+      if (id.type === 'Identifier' && isRequireNodeModuleCall(initPath)) {
+        const binding = path.scope.getBinding(id.name);
+        if (binding != null) {
+          state.nodeModuleBindings.add(binding);
+        }
+        return;
+      }
+
+      // `const {createRequire} = require('node:module')` or
+      // `const {createRequire: alias} = require('node:module')`
+      if (id.type === 'ObjectPattern' && isRequireNodeModuleCall(initPath)) {
+        for (const prop of id.properties) {
+          if (
+            prop.type === 'ObjectProperty' &&
+            !prop.computed &&
+            prop.key.type === 'Identifier' &&
+            prop.key.name === 'createRequire' &&
+            prop.value.type === 'Identifier'
+          ) {
+            const binding = path.scope.getBinding(prop.value.name);
+            if (binding != null) {
+              state.createRequireExportBindings.add(binding);
+            }
+          }
+        }
+        return;
+      }
+
+      // `const req = createRequire(...)` or `const req = mod.createRequire(...)`
+      if (id.type === 'Identifier') {
+        const calleePath = initPath.get('callee');
+        if (isCreateRequireCallee(calleePath, state)) {
+          const binding = path.scope.getBinding(id.name);
+          if (binding != null) {
+            state.requireFactoryBindings.add(binding);
+          }
         }
       }
     },
@@ -286,6 +352,9 @@ export default function collectDependencies(
       }
 
       state.dependencyCalls = new Set(['require', ...options.inlineableCalls]);
+      state.requireFactoryBindings = new Set();
+      state.nodeModuleBindings = new Set();
+      state.createRequireExportBindings = new Set();
     },
   };
 
@@ -527,13 +596,88 @@ function processImportCall(
   }
 }
 
-function isRequireFactoryBinding(binding: {path: NodePath<>, ...}): boolean {
+function isCreateRequireCallee(
+  calleePath: NodePath<>,
+  state: State,
+): boolean {
+  if (calleePath.isIdentifier()) {
+    const name = calleePath.node.name;
+    const binding = calleePath.scope.getBinding(name);
+    return binding != null && isCreateRequireExportBinding(binding, state);
+  }
+  if (
+    calleePath.isMemberExpression() &&
+    !calleePath.node.computed &&
+    calleePath.node.property.type === 'Identifier' &&
+    calleePath.node.property.name === 'createRequire' &&
+    calleePath.node.object.type === 'Identifier'
+  ) {
+    const objName = calleePath.node.object.name;
+    const binding = calleePath.scope.getBinding(objName);
+    return binding != null && isNodeModuleBinding(binding, state);
+  }
+  return false;
+}
+
+function isCreateRequireExportBinding(
+  binding: {path: NodePath<>, ...},
+  state: State,
+): boolean {
   const bindingPath = binding.path;
-  if (!bindingPath.isVariableDeclarator()) {
+  // ESM: import {createRequire} from 'node:module'
+  //   or import {createRequire as alias} from 'node:module'
+  if (bindingPath.isImportSpecifier()) {
+    const imported = bindingPath.node.imported;
+    const importedName =
+      imported.type === 'Identifier' ? imported.name : imported.value;
+    return importedName === 'createRequire' && importSourceIs(bindingPath, 'node:module');
+  }
+  // CJS: detected and tracked during VariableDeclarator traversal
+  return state.createRequireExportBindings.has(binding);
+}
+
+function isNodeModuleBinding(
+  binding: {path: NodePath<>, ...},
+  state: State,
+): boolean {
+  const bindingPath = binding.path;
+  // ESM: import module from 'node:module' or import * as module from 'node:module'
+  if (
+    bindingPath.isImportDefaultSpecifier() ||
+    bindingPath.isImportNamespaceSpecifier()
+  ) {
+    return importSourceIs(bindingPath, 'node:module');
+  }
+  // CJS: detected and tracked during VariableDeclarator traversal
+  return state.nodeModuleBindings.has(binding);
+}
+
+function importSourceIs(specifierPath: NodePath<>, source: string): boolean {
+  const declaration = specifierPath.parentPath;
+  return (
+    declaration != null &&
+    declaration.isImportDeclaration() &&
+    declaration.node.source.value === source
+  );
+}
+
+function isRequireNodeModuleCall(initPath: NodePath<>): boolean {
+  if (!initPath.isCallExpression()) {
     return false;
   }
-  const init = bindingPath.get('init');
-  return init.isCallExpression();
+  const callee = initPath.node.callee;
+  if (callee.type !== 'Identifier' || callee.name !== 'require') {
+    return false;
+  }
+  if (initPath.scope.getBinding('require') != null) {
+    return false;
+  }
+  const args = initPath.node.arguments;
+  return (
+    args.length >= 1 &&
+    args[0].type === 'StringLiteral' &&
+    args[0].value === 'node:module'
+  );
 }
 
 function processRequireCall(

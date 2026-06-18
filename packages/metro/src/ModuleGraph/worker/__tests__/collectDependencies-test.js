@@ -1209,6 +1209,125 @@ test('collects dependencies from module.createRequire factory pattern', () => {
   ]);
 });
 
+test('collects dependencies when createRequire result is bound to non-require name', () => {
+  const ast = astFromCode(`
+    import { createRequire } from 'node:module';
+    const customRequire = createRequire(import.meta.url);
+    const dep = customRequire('./x');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'node:module', data: objectContaining({asyncType: null})},
+    {name: './x', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('collects dependencies with aliased createRequire named import', () => {
+  const ast = astFromCode(`
+    import { createRequire as cr } from 'node:module';
+    const req = cr(import.meta.url);
+    const dep = req('./aliased');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'node:module', data: objectContaining({asyncType: null})},
+    {name: './aliased', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('collects dependencies with namespace import mod.createRequire', () => {
+  const ast = astFromCode(`
+    import * as mod from 'node:module';
+    const req = mod.createRequire(import.meta.url);
+    const dep = req('./namespaced');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'node:module', data: objectContaining({asyncType: null})},
+    {name: './namespaced', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('collects dependencies with CJS destructured createRequire', () => {
+  const ast = astFromCode(`
+    const { createRequire } = require('node:module');
+    const req = createRequire(import.meta.url);
+    const dep = req('./cjs-destructured');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'node:module', data: objectContaining({asyncType: null})},
+    {name: './cjs-destructured', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('collects dependencies with CJS mod.createRequire two-statement pattern', () => {
+  const ast = astFromCode(`
+    const mod = require('node:module');
+    const req = mod.createRequire(import.meta.url);
+    const dep = req('./cjs-two-step');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'node:module', data: objectContaining({asyncType: null})},
+    {name: './cjs-two-step', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('does not collect from arbitrary factory call (tightening)', () => {
+  const ast = astFromCode(`
+    const require = someFactory();
+    require('should-be-ignored');
+  `);
+  const {dependencies} = collectDependencies(ast, opts);
+  expect(dependencies).toEqual([]);
+});
+
+test('does not collect when createRequire is imported from wrong module', () => {
+  const ast = astFromCode(`
+    import { createRequire } from 'some-other-module';
+    const req = createRequire(import.meta.url);
+    req('./should-be-ignored');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'some-other-module', data: objectContaining({asyncType: null})},
+  ]);
+});
+
+test('does not collect when CJS require uses bare "module" specifier instead of "node:module"', () => {
+  const ast = astFromCode(`
+    const { createRequire } = require('module');
+    const req = createRequire(import.meta.url);
+    req('./should-be-ignored');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    dynamicRequires: 'warn',
+  });
+  expect(dependencies).toEqual([
+    {name: 'module', data: objectContaining({asyncType: null})},
+  ]);
+});
+
 test('still ignores require shadowed by function expression or parameter', () => {
   const ast = astFromCode(`
     const require = function(name) { return {}; };
