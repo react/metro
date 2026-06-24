@@ -35,6 +35,24 @@ export type MetroSourceMapSegmentTuple =
   | SourceMapping
   | GeneratedCodeMapping;
 
+// A single segment of a standard "decoded" source map (as produced by
+// `@babel/generator`'s `result.decodedMap` / `@jridgewell/gen-mapping`),
+// grouped by generated line. All fields are 0-based, including the source line
+// (unlike Metro's `MetroSourceMapSegmentTuple`, whose source line is 1-based):
+//   [generatedColumn]
+//   [generatedColumn, sourceIndex, sourceLine, sourceColumn]
+//   [generatedColumn, sourceIndex, sourceLine, sourceColumn, nameIndex]
+type BabelDecodedMapSegment =
+  | [number]
+  | [number, number, number, number]
+  | [number, number, number, number, number];
+
+export type BabelDecodedMap = {
+  readonly mappings: ReadonlyArray<ReadonlyArray<BabelDecodedMapSegment>>,
+  readonly names: ReadonlyArray<string>,
+  ...
+};
+
 export type HermesFunctionOffsets = {[number]: ReadonlyArray<number>, ...};
 
 export type FBSourcesArray = ReadonlyArray<?FBSourceMetadata>;
@@ -279,6 +297,51 @@ function toSegmentTuple(
   return [line, column, original.line, original.column, name];
 }
 
+/**
+ * Converts a Babel/gen-mapping "decoded" source map (`result.decodedMap` from
+ * `@babel/generator`) into raw mapping tuples, byte-identical to
+ * `result.rawMappings.map(toSegmentTuple)`.
+ *
+ * Preferred over `result.rawMappings` because `decodedMap` is computed eagerly
+ * during generation, whereas accessing `rawMappings` triggers a second decode
+ * (`allMappings`) that allocates ~4-5 objects per segment. No terminating
+ * mapping is appended (callers that need one use `countLinesAndTerminateMap`).
+ */
+function tuplesFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+): Array<MetroSourceMapSegmentTuple> {
+  const {mappings, names} = decodedMap;
+  const tuples: Array<MetroSourceMapSegmentTuple> = [];
+  for (let line = 0, n = mappings.length; line < n; ++line) {
+    // Decoded mappings are grouped by generated line (0-based); tuples use
+    // 1-based generated lines.
+    const generatedLine = line + 1;
+    const segments = mappings[line];
+    for (let i = 0, m = segments.length; i < m; ++i) {
+      const segment = segments[i];
+      switch (segment.length) {
+        case 1:
+          tuples.push([generatedLine, segment[0]]);
+          break;
+        case 4:
+          // Decoded source lines are 0-based; tuples use 1-based source lines.
+          tuples.push([generatedLine, segment[0], segment[2] + 1, segment[3]]);
+          break;
+        case 5:
+          tuples.push([
+            generatedLine,
+            segment[0],
+            segment[2] + 1,
+            segment[3],
+            names[segment[4]],
+          ]);
+          break;
+      }
+    }
+  }
+  return tuples;
+}
+
 function addMappingsForFile(
   generator: Generator,
   mappings: Array<MetroSourceMapSegmentTuple>,
@@ -349,6 +412,7 @@ export {
   normalizeSourcePath,
   toBabelSegments,
   toSegmentTuple,
+  tuplesFromBabelDecodedMap,
 };
 
 /**

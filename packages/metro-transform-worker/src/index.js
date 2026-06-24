@@ -46,6 +46,7 @@ import {
   functionMapBabelPlugin,
   toBabelSegments,
   toSegmentTuple,
+  tuplesFromBabelDecodedMap,
 } from 'metro-source-map';
 import metroTransformPlugins from 'metro-transform-plugins';
 import collectDependencies from 'metro/private/ModuleGraph/worker/collectDependencies';
@@ -471,7 +472,12 @@ async function transformJS(
     file.code,
   );
 
-  let map = result.rawMappings ? result.rawMappings.map(toSegmentTuple) : [];
+  // Derive tuples from Babel's eagerly-computed decoded map rather than
+  // `result.rawMappings`, which would trigger a second, more expensive decode
+  // (`allMappings`). Byte-identical to `result.rawMappings.map(toSegmentTuple)`.
+  let map = result.decodedMap
+    ? tuplesFromBabelDecodedMap(result.decodedMap)
+    : [];
   let code = result.code;
 
   if (minify) {

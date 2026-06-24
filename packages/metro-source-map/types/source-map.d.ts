@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<7303fe7149cb12d764c6106cdf4f49ee>>
+ * @generated SignedSource<<c2fb54d8a5eb6212af899a87f3fa4852>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-source-map/src/source-map.js
@@ -35,6 +35,14 @@ export type MetroSourceMapSegmentTuple =
   | SourceMappingWithName
   | SourceMapping
   | GeneratedCodeMapping;
+type BabelDecodedMapSegment =
+  | [number]
+  | [number, number, number, number]
+  | [number, number, number, number, number];
+export type BabelDecodedMap = {
+  readonly mappings: ReadonlyArray<ReadonlyArray<BabelDecodedMapSegment>>;
+  readonly names: ReadonlyArray<string>;
+};
 export type HermesFunctionOffsets = {
   [$$Key$$: number]: ReadonlyArray<number>;
 };
@@ -125,6 +133,19 @@ declare function toBabelSegments(
 declare function toSegmentTuple(
   mapping: BabelSourceMapSegment,
 ): MetroSourceMapSegmentTuple;
+/**
+ * Converts a Babel/gen-mapping "decoded" source map (`result.decodedMap` from
+ * `@babel/generator`) into raw mapping tuples, byte-identical to
+ * `result.rawMappings.map(toSegmentTuple)`.
+ *
+ * Preferred over `result.rawMappings` because `decodedMap` is computed eagerly
+ * during generation, whereas accessing `rawMappings` triggers a second decode
+ * (`allMappings`) that allocates ~4-5 objects per segment. No terminating
+ * mapping is appended (callers that need one use `countLinesAndTerminateMap`).
+ */
+declare function tuplesFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+): Array<MetroSourceMapSegmentTuple>;
 export {
   BundleBuilder,
   composeSourceMaps,
@@ -137,6 +158,7 @@ export {
   normalizeSourcePath,
   toBabelSegments,
   toSegmentTuple,
+  tuplesFromBabelDecodedMap,
 };
 /**
  * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
