@@ -365,6 +365,11 @@ function refineDependencyLocation(
   // Note that module names may not always be found in the source code verbatim,
   // whether because of escaping or because of exotic dependency APIs.
   for (let line = loc.end.line - 1; line >= loc.start.line - 1; line--) {
+    // The error occurred in code that was added by a transform, then it
+    // won't be present in the original source code.
+    if (lines[line] == null) {
+      continue;
+    }
     const maxColumn =
       line === loc.end.line ? loc.end.column + 2 : lines[line].length;
     const minColumn = line === loc.start.line ? loc.start.column - 1 : 0;
