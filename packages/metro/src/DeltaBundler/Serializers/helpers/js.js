@@ -68,11 +68,15 @@ export function getModuleParams(
         // Construct a server-relative URL for the split bundle, propagating
         // most parameters from the main bundle's URL.
 
-        const {searchParams} = new URL(
-          jscSafeUrl.toNormalUrl(options.sourceUrl),
-        );
-        searchParams.set('modulesOnly', 'true');
-        searchParams.set('runModule', 'false');
+        let searchParamsString = '';
+        if (options.dev) {
+          const {searchParams} = new URL(
+            jscSafeUrl.toNormalUrl(options.sourceUrl),
+          );
+          searchParams.set('modulesOnly', 'true');
+          searchParams.set('runModule', 'false');
+          searchParamsString = '?' + searchParams.toString();
+        }
 
         const bundlePath = path.relative(
           options.serverRoot,
@@ -86,8 +90,8 @@ export function getModuleParams(
             // Strip the file extension
             path.basename(bundlePath, path.extname(bundlePath)),
           ) +
-          '.bundle?' +
-          searchParams.toString();
+          '.bundle' +
+          searchParamsString;
       }
       return id;
     },
