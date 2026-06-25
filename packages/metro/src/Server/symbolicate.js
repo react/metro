@@ -12,10 +12,12 @@
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from '../../../metro-source-map/src/source-map';
 import type {ExplodedSourceMap} from '../DeltaBundler/Serializers/getExplodedSourceMap';
 import type {ConfigT} from 'metro-config';
 
+import {toBabelSegments, toSegmentTuple} from 'metro-source-map';
 import {greatestLowerBound} from 'metro-source-map/private/Consumer/search';
 import {SourceMetadataMapConsumer} from 'metro-symbolicate/private/Symbolication';
 
@@ -34,6 +36,26 @@ export type IntermediateStackFrame = {
 export type StackFrameOutput = Readonly<IntermediateStackFrame>;
 type ExplodedSourceMapModule = ExplodedSourceMap[number];
 type Position = {readonly line1Based: number, column0Based: number};
+
+function ensureDecodedMap(
+  map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+  decodedMapCache: Map<VlqMap, Array<MetroSourceMapSegmentTuple>>,
+): Array<MetroSourceMapSegmentTuple> {
+  if (Array.isArray(map)) {
+    return map;
+  }
+  let decoded = decodedMapCache.get(map);
+  if (decoded == null) {
+    decoded = toBabelSegments({
+      version: 3,
+      sources: [''],
+      names: [...map.names],
+      mappings: map.mappings,
+    }).map(toSegmentTuple);
+    decodedMapCache.set(map, decoded);
+  }
+  return decoded;
+}
 
 function createFunctionNameGetter(
   module: ExplodedSourceMapModule,
@@ -70,11 +92,18 @@ export default async function symbolicate(
     {
       readonly firstLine1Based: number,
       readonly functionMap: ?FBSourceFunctionMap,
-      readonly map: Array<MetroSourceMapSegmentTuple>,
+      readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
       readonly path: string,
     },
     (Position) => ?string,
   >();
+
+  // Decoded VLQ maps are cached only for the duration of this request, then
+  // discarded. The cache dedupes decoding across frames that resolve to the
+  // same module, while keeping the (large) decoded tuples short-lived — the
+  // VlqMaps themselves are retained by the long-lived module graph, so caching
+  // beyond request scope would defeat the memory savings of storing them as VLQ.
+  const decodedMapCache = new Map<VlqMap, Array<MetroSourceMapSegmentTuple>>();
 
   function findModule(frame: StackFrameInput): ?ExplodedSourceMapModule {
     const map = mapsByUrl.get(frame.file);
@@ -96,19 +125,18 @@ export default async function symbolicate(
     frame: StackFrameInput,
     module: ExplodedSourceMapModule,
   ): ?Position {
-    if (
-      module.map == null ||
-      frame.lineNumber == null ||
-      frame.column == null
-    ) {
+    const lineNumber = frame.lineNumber;
+    const column = frame.column;
+    if (module.map == null || lineNumber == null || column == null) {
       return null;
     }
+    const decodedMap = ensureDecodedMap(module.map, decodedMapCache);
     const generatedPosInModule = {
-      line1Based: frame.lineNumber - module.firstLine1Based + 1,
-      column0Based: frame.column,
+      line1Based: lineNumber - module.firstLine1Based + 1,
+      column0Based: column,
     };
     const mappingIndex = greatestLowerBound(
-      module.map,
+      decodedMap,
       generatedPosInModule,
       (target, candidate) => {
         if (target.line1Based === candidate[0]) {
@@ -120,7 +148,7 @@ export default async function symbolicate(
     if (mappingIndex == null) {
       return null;
     }
-    const mapping = module.map[mappingIndex];
+    const mapping = decodedMap[mappingIndex];
     if (
       mapping[0] !== generatedPosInModule.line1Based ||
       mapping.length < 4 /* no source line/column info */
@@ -140,7 +168,7 @@ export default async function symbolicate(
     module: {
       readonly firstLine1Based: number,
       readonly functionMap: ?FBSourceFunctionMap,
-      readonly map: Array<MetroSourceMapSegmentTuple>,
+      readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
       readonly path: string,
     },
   ): ?string {
@@ -159,11 +187,6 @@ export default async function symbolicate(
     const module = findModule(frame);
     if (!module) {
       return {...frame};
-    }
-    if (!Array.isArray(module.map)) {
-      throw new Error(
-        `Unexpected module with serialized source map found: ${module.path}`,
-      );
     }
     const originalPos = findOriginalPos(frame, module);
     if (!originalPos) {

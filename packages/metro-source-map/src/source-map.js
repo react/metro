@@ -21,6 +21,7 @@ import {
   generateFunctionMap,
 } from './generateFunctionMap';
 import Generator from './Generator';
+import nullthrows from 'nullthrows';
 // $FlowFixMe[untyped-import] - source-map
 import SourceMap from 'source-map';
 
@@ -51,6 +52,11 @@ export type BabelDecodedMap = {
   readonly mappings: ReadonlyArray<ReadonlyArray<BabelDecodedMapSegment>>,
   readonly names: ReadonlyArray<string>,
   ...
+};
+
+export type VlqMap = {
+  readonly mappings: string,
+  readonly names: ReadonlyArray<string>,
 };
 
 export type HermesFunctionOffsets = {[number]: ReadonlyArray<number>, ...};
@@ -123,18 +129,26 @@ type SourceMapConsumerMapping = {
   name: ?string,
 };
 
+export type RawMappingsModule = {
+  readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
+  readonly functionMap: ?FBSourceFunctionMap,
+  readonly path: string,
+  readonly source: string,
+  readonly code: string,
+  readonly isIgnored: boolean,
+  readonly lineCount?: number,
+};
+
+function isVlqMap(
+  map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
+): implies map is VlqMap {
+  return map != null && !Array.isArray(map) && typeof map.mappings === 'string';
+}
+
 function fromRawMappingsImpl(
   isBlocking: boolean,
   onDone: Generator => void,
-  modules: ReadonlyArray<{
-    readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple>,
-    readonly functionMap: ?FBSourceFunctionMap,
-    readonly path: string,
-    readonly source: string,
-    readonly code: string,
-    readonly isIgnored: boolean,
-    readonly lineCount?: number,
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number,
 ): void {
   const modulesToProcess = modules.slice();
@@ -146,15 +160,18 @@ function fromRawMappingsImpl(
       return true;
     }
 
-    const mod = modulesToProcess.shift();
-    // $FlowFixMe[incompatible-use]
+    const mod = nullthrows(modulesToProcess.shift());
     const {code, map} = mod;
-    if (Array.isArray(map)) {
-      // $FlowFixMe[incompatible-type]
+    if (isVlqMap(map)) {
+      // Modules may store their map compactly as VLQ. Decode it back to tuples
+      // just-in-time so it can be folded into the flat Generator like any other
+      // module. Decoding one module at a time keeps the transient tuple arrays
+      // short-lived, preserving the memory win of VLQ storage.
+      addMappingsForFile(generator, decodeVlqMap(map), mod, carryOver);
+    } else if (Array.isArray(map)) {
       addMappingsForFile(generator, map, mod, carryOver);
     } else if (map != null) {
       throw new Error(
-        // $FlowFixMe[incompatible-use]
         `Unexpected module with full source map found: ${mod.path}`,
       );
     }
@@ -197,15 +214,7 @@ function fromRawMappingsImpl(
  * the resulting bundle, e.g. by some prefix code.
  */
 function fromRawMappings(
-  modules: ReadonlyArray<{
-    readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple>,
-    readonly functionMap: ?FBSourceFunctionMap,
-    readonly path: string,
-    readonly source: string,
-    readonly code: string,
-    readonly isIgnored: boolean,
-    readonly lineCount?: number,
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number = 0,
 ): Generator {
   let generator: void | Generator;
@@ -224,15 +233,7 @@ function fromRawMappings(
 }
 
 async function fromRawMappingsNonBlocking(
-  modules: ReadonlyArray<{
-    readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple>,
-    readonly functionMap: ?FBSourceFunctionMap,
-    readonly path: string,
-    readonly source: string,
-    readonly code: string,
-    readonly isIgnored: boolean,
-    readonly lineCount?: number,
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number = 0,
 ): Promise<Generator> {
   return new Promise(resolve => {
@@ -344,16 +345,8 @@ function tuplesFromBabelDecodedMap(
 
 function addMappingsForFile(
   generator: Generator,
-  mappings: Array<MetroSourceMapSegmentTuple>,
-  module: {
-    readonly code: string,
-    readonly functionMap: ?FBSourceFunctionMap,
-    readonly map: ?Array<MetroSourceMapSegmentTuple>,
-    readonly path: string,
-    readonly source: string,
-    readonly isIgnored: boolean,
-    readonly lineCount?: number,
-  },
+  mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
+  module: RawMappingsModule,
   carryOver: number,
 ) {
   generator.startFile(module.path, module.source, module.functionMap, {
@@ -400,6 +393,38 @@ const newline = /\r\n?|\n|\u2028|\u2029/g;
 const countLines = (string: string): number =>
   (string.match(newline) || []).length + 1;
 
+/**
+ * Decodes a compact VLQ map back into raw mapping tuples — the inverse of
+ * `vlqMapFromTuples`, reusing Metro's existing source-map consumer.
+ */
+function decodeVlqMap(vlqMap: VlqMap): Array<MetroSourceMapSegmentTuple> {
+  return toBabelSegments({
+    version: 3,
+    sources: [''],
+    names: [...vlqMap.names],
+    mappings: vlqMap.mappings,
+  }).map(toSegmentTuple);
+}
+
+/**
+ * Encodes raw mapping tuples into a compact VLQ `mappings` string + `names`
+ * table. Decode the inverse via `decodeVlqMap` (or `toBabelSegments` +
+ * `toSegmentTuple`). Storing maps in this form uses far less memory than the
+ * equivalent decoded tuple arrays.
+ */
+function vlqMapFromTuples(
+  mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
+): VlqMap {
+  const generator = new Generator();
+  generator.startFile('', '', null);
+  for (const mapping of mappings) {
+    addMapping(generator, mapping, 0);
+  }
+  generator.endFile();
+  const map = generator.toMap();
+  return {mappings: map.mappings, names: map.names};
+}
+
 export {
   BundleBuilder,
   composeSourceMaps,
@@ -409,10 +434,12 @@ export {
   fromRawMappings,
   fromRawMappingsNonBlocking,
   functionMapBabelPlugin,
+  isVlqMap,
   normalizeSourcePath,
   toBabelSegments,
   toSegmentTuple,
   tuplesFromBabelDecodedMap,
+  vlqMapFromTuples,
 };
 
 /**

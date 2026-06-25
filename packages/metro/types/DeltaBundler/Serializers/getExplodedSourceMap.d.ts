@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<623892927b76c4f68802bb69f19d9974>>
+ * @generated SignedSource<<2f0ab0435f64798986366df74674d02a>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/getExplodedSourceMap.js
@@ -19,10 +19,11 @@ import type {Module} from '../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
 export type ExplodedSourceMap = ReadonlyArray<{
-  readonly map: Array<MetroSourceMapSegmentTuple>;
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap;
   readonly firstLine1Based: number;
   readonly functionMap: null | undefined | FBSourceFunctionMap;
   readonly path: string;

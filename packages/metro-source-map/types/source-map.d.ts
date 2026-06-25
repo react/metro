@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<c2fb54d8a5eb6212af899a87f3fa4852>>
+ * @generated SignedSource<<313a3bbbf29c3ac69821b3124678d4e0>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-source-map/src/source-map.js
@@ -41,6 +41,10 @@ type BabelDecodedMapSegment =
   | [number, number, number, number, number];
 export type BabelDecodedMap = {
   readonly mappings: ReadonlyArray<ReadonlyArray<BabelDecodedMapSegment>>;
+  readonly names: ReadonlyArray<string>;
+};
+export type VlqMap = {
+  readonly mappings: string;
   readonly names: ReadonlyArray<string>;
 };
 export type HermesFunctionOffsets = {
@@ -92,6 +96,20 @@ export type IndexMap = {
   readonly x_google_ignoreList?: void;
 };
 export type MixedSourceMap = IndexMap | BasicSourceMap;
+export type RawMappingsModule = {
+  readonly map:
+    | (null | undefined | ReadonlyArray<MetroSourceMapSegmentTuple>)
+    | VlqMap;
+  readonly functionMap: null | undefined | FBSourceFunctionMap;
+  readonly path: string;
+  readonly source: string;
+  readonly code: string;
+  readonly isIgnored: boolean;
+  readonly lineCount?: number;
+};
+declare function isVlqMap(
+  map: (null | undefined | ReadonlyArray<MetroSourceMapSegmentTuple>) | VlqMap,
+): map is VlqMap;
 /**
  * Creates a source map from modules with "raw mappings", i.e. an array of
  * tuples with either 2, 4, or 5 elements:
@@ -100,27 +118,11 @@ export type MixedSourceMap = IndexMap | BasicSourceMap;
  * the resulting bundle, e.g. by some prefix code.
  */
 declare function fromRawMappings(
-  modules: ReadonlyArray<{
-    readonly map: null | undefined | ReadonlyArray<MetroSourceMapSegmentTuple>;
-    readonly functionMap: null | undefined | FBSourceFunctionMap;
-    readonly path: string;
-    readonly source: string;
-    readonly code: string;
-    readonly isIgnored: boolean;
-    readonly lineCount?: number;
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines?: number,
 ): Generator;
 declare function fromRawMappingsNonBlocking(
-  modules: ReadonlyArray<{
-    readonly map: null | undefined | ReadonlyArray<MetroSourceMapSegmentTuple>;
-    readonly functionMap: null | undefined | FBSourceFunctionMap;
-    readonly path: string;
-    readonly source: string;
-    readonly code: string;
-    readonly isIgnored: boolean;
-    readonly lineCount?: number;
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines?: number,
 ): Promise<Generator>;
 /**
@@ -146,6 +148,15 @@ declare function toSegmentTuple(
 declare function tuplesFromBabelDecodedMap(
   decodedMap: BabelDecodedMap,
 ): Array<MetroSourceMapSegmentTuple>;
+/**
+ * Encodes raw mapping tuples into a compact VLQ `mappings` string + `names`
+ * table. Decode the inverse via `decodeVlqMap` (or `toBabelSegments` +
+ * `toSegmentTuple`). Storing maps in this form uses far less memory than the
+ * equivalent decoded tuple arrays.
+ */
+declare function vlqMapFromTuples(
+  mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
+): VlqMap;
 export {
   BundleBuilder,
   composeSourceMaps,
@@ -155,10 +166,12 @@ export {
   fromRawMappings,
   fromRawMappingsNonBlocking,
   functionMapBabelPlugin,
+  isVlqMap,
   normalizeSourcePath,
   toBabelSegments,
   toSegmentTuple,
   tuplesFromBabelDecodedMap,
+  vlqMapFromTuples,
 };
 /**
  * Backwards-compatibility with CommonJS consumers using interopRequireDefault.

@@ -13,6 +13,7 @@ import type {Module} from '../../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
 import {getJsOutput} from './js';
@@ -25,7 +26,7 @@ export default function getSourceMapInfo(
     getSourceUrl: ?(module: Module<>) => string,
   },
 ): {
-  readonly map: Array<MetroSourceMapSegmentTuple>,
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
   readonly functionMap: ?FBSourceFunctionMap,
   readonly code: string,
   readonly path: string,

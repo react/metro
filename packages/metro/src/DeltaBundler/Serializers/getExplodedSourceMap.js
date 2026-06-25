@@ -13,12 +13,13 @@ import type {Module} from '../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
 import {getJsOutput, isJsModule} from './helpers/js';
 
 export type ExplodedSourceMap = ReadonlyArray<{
-  readonly map: Array<MetroSourceMapSegmentTuple>,
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
   readonly firstLine1Based: number,
   readonly functionMap: ?FBSourceFunctionMap,
   readonly path: string,

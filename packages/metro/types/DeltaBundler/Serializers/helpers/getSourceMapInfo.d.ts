@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<cd7e523b4fdfbff33e663b21c4529401>>
+ * @generated SignedSource<<af4dc08fc7e742357f7e2c12d3c89662>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/helpers/getSourceMapInfo.js
@@ -19,6 +19,7 @@ import type {Module} from '../../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
 declare function getSourceMapInfo(
@@ -29,7 +30,7 @@ declare function getSourceMapInfo(
     getSourceUrl: null | undefined | ((module: Module) => string);
   },
 ): {
-  readonly map: Array<MetroSourceMapSegmentTuple>;
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap;
   readonly functionMap: null | undefined | FBSourceFunctionMap;
   readonly code: string;
   readonly path: string;
