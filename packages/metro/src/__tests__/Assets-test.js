@@ -151,6 +151,42 @@ describe('getAsset', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  test('should reject sibling-prefix watchFolder paths outside watchFolders', async () => {
+    fs.mkdirSync('/watchfoldersub/imgs', {recursive: true});
+
+    fs.writeFileSync('/watchfoldersub/imgs/b.png', 'b image');
+
+    await expect(
+      getAssetStr(
+        '../watchfoldersub/imgs/b.png',
+        '/watchfolder',
+        ['/watchfolder/one'],
+        null,
+        ['png'],
+      ),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  test('should reject sibling-prefix asset paths outside root', async () => {
+    fs.mkdirSync('/app2/imgs', {recursive: true});
+
+    fs.writeFileSync('/app2/imgs/b.png', 'b image');
+
+    await expect(
+      getAssetStr('../app2/imgs/b.png', '/app', [], null, ['png']),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  test('should reject sibling-prefix asset paths outside root even with trailing root separator', async () => {
+    fs.mkdirSync('/app2/imgs', {recursive: true});
+
+    fs.writeFileSync('/app2/imgs/b.png', 'b image');
+
+    await expect(
+      getAssetStr('../app2/imgs/b.png', '/app/', [], null, ['png']),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
   test('should find an image when fileExistsInFileMap returns true', async () => {
     writeImages({'b.png': 'b image'});
 
