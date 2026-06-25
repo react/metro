@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {MetroSourceMapSegmentTuple} from '../source-map';
+import type {BabelDecodedMap, MetroSourceMapSegmentTuple} from '../source-map';
 
 import Generator from '../Generator';
 import {
@@ -17,6 +17,7 @@ import {
   isVlqMap,
   toBabelSegments,
   toSegmentTuple,
+  vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 } from '../source-map';
 
@@ -342,5 +343,49 @@ describe('vlqMapFromTuples', () => {
     const vlqMap = vlqMapFromTuples([]);
     expect(vlqMap.mappings).toBe('');
     expect(decode(vlqMap)).toEqual([]);
+  });
+});
+
+describe('vlqMapFromBabelDecodedMap', () => {
+  test('matches vlqMapFromTuples, appending a terminator when needed', () => {
+    // Decoded format: grouped by generated line (0-based), source lines 0-based.
+    const decodedMap: BabelDecodedMap = {
+      names: ['foo'],
+      mappings: [
+        [[0, 0, 0, 0]], // gen 1:0 -> src 1:0
+        [[2, 0, 0, 4, 0]], // gen 2:2 -> src 1:4 name 'foo'
+        [[0]], // gen 3:0 generated-only
+      ],
+    };
+    // Equivalent Metro tuples (source lines 1-based) + terminator at gen 3:5.
+    const tuples: Array<MetroSourceMapSegmentTuple> = [
+      [1, 0, 1, 0],
+      [2, 2, 1, 4, 'foo'],
+      [3, 0],
+      [3, 5],
+    ];
+    expect(vlqMapFromBabelDecodedMap(decodedMap, [3, 5])).toEqual(
+      vlqMapFromTuples(tuples),
+    );
+  });
+
+  test('does not append a terminator already present', () => {
+    const decodedMap: BabelDecodedMap = {
+      names: [],
+      mappings: [[[0], [5]]],
+    };
+    expect(vlqMapFromBabelDecodedMap(decodedMap, [1, 5])).toEqual(
+      vlqMapFromTuples([
+        [1, 0],
+        [1, 5],
+      ]),
+    );
+  });
+
+  test('handles an empty decoded map (terminator only)', () => {
+    const decodedMap: BabelDecodedMap = {names: [], mappings: []};
+    expect(vlqMapFromBabelDecodedMap(decodedMap, [1, 0])).toEqual(
+      vlqMapFromTuples([[1, 0]]),
+    );
   });
 });

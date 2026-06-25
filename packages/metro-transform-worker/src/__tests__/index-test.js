@@ -32,6 +32,8 @@ import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
 import typeof FSType from 'fs';
 
+import {vlqMapFromTuples} from 'metro-source-map';
+
 const {Buffer} = require('buffer');
 const path = require('path');
 
@@ -407,6 +409,56 @@ test('uses a reserved dependency map name and prevents it from being minified', 
       minified(code);
     });"
   `);
+});
+
+test('unstable_compactSourceMaps emits a VlqMap byte-identical to the tuple path', async () => {
+  const source = Buffer.from(
+    [
+      'function foo(aaa, bbb) {',
+      '  const ccc = aaa + bbb;',
+      '  return ccc * 2;',
+      '}',
+      'export default function entry(items) {',
+      '  return items.map(x => x.value).filter(Boolean);',
+      '}',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  // Default path stores decoded tuples (line-counted + terminated).
+  const tupleResult = await Transformer.transform(
+    {...baseConfig, unstable_compactSourceMaps: false},
+    '/root',
+    'local/file.js',
+    source,
+    {...baseTransformOptions, experimentalImportSupport: true},
+  );
+  // Compact path encodes VLQ straight from Babel's decoded map (no tuples).
+  const vlqResult = await Transformer.transform(
+    {...baseConfig, unstable_compactSourceMaps: true},
+    '/root',
+    'local/file.js',
+    source,
+    {...baseTransformOptions, experimentalImportSupport: true},
+  );
+
+  const tupleMap = tupleResult.output[0].data.map;
+  const vlqMap = vlqResult.output[0].data.map;
+
+  // Generated code and line count are unaffected by map storage.
+  expect(vlqResult.output[0].data.code).toBe(tupleResult.output[0].data.code);
+  expect(vlqResult.output[0].data.lineCount).toBe(
+    tupleResult.output[0].data.lineCount,
+  );
+
+  if (Array.isArray(vlqMap) || !Array.isArray(tupleMap)) {
+    throw new Error('Expected a VlqMap (compact) and a tuple array (default)');
+  }
+  // The compact fast path is byte-identical to re-encoding the tuple output.
+  expect(vlqMap).toEqual(vlqMapFromTuples(tupleMap));
+  expect(typeof vlqMap.mappings).toBe('string');
+  expect(vlqMap.mappings.length).toBeGreaterThan(0);
 });
 
 test('throws if the reserved dependency map name appears in the input', async () => {

@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<313a3bbbf29c3ac69821b3124678d4e0>>
+ * @generated SignedSource<<9ec89353742743678e422f0bf81e488d>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-source-map/src/source-map.js
@@ -157,6 +157,25 @@ declare function tuplesFromBabelDecodedMap(
 declare function vlqMapFromTuples(
   mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
 ): VlqMap;
+/**
+ * Encodes a `VlqMap` directly from a Babel/gen-mapping "decoded" source map
+ * (`result.decodedMap` from `@babel/generator`), without ever materialising the
+ * intermediate `Array<MetroSourceMapSegmentTuple>`.
+ *
+ * `@babel/generator` computes `decodedMap` eagerly while generating, so reusing
+ * it avoids the separate, more expensive `result.rawMappings` decode (which
+ * allocates a flat array of segment objects) plus the per-segment tuple
+ * allocation that `vlqMapFromTuples` would otherwise consume. The result is
+ * byte-identical to `vlqMapFromTuples(decoded -> tuples)`.
+ *
+ * `terminatingMapping` is a `[generatedLine1Based, generatedColumn0Based]`
+ * generated-only mapping appended at the end (matching the transform worker's
+ * `countLinesAndTerminateMap`) unless the last real mapping already sits there.
+ */
+declare function vlqMapFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+  terminatingMapping: [number, number],
+): VlqMap;
 export {
   BundleBuilder,
   composeSourceMaps,
@@ -171,6 +190,7 @@ export {
   toBabelSegments,
   toSegmentTuple,
   tuplesFromBabelDecodedMap,
+  vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 };
 /**

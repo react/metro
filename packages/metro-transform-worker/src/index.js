@@ -20,6 +20,7 @@ import type {
   BasicSourceMap,
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 import type {
   ImportExportPluginOptions,
@@ -47,6 +48,8 @@ import {
   toBabelSegments,
   toSegmentTuple,
   tuplesFromBabelDecodedMap,
+  vlqMapFromBabelDecodedMap,
+  vlqMapFromTuples,
 } from 'metro-source-map';
 import metroTransformPlugins from 'metro-transform-plugins';
 import collectDependencies from 'metro/private/ModuleGraph/worker/collectDependencies';
@@ -111,6 +114,8 @@ export type JsTransformerConfig = Readonly<{
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string>,
   /** Whether to rename scoped `require` functions to `_$$_REQUIRE`, usually an extraneous operation when serializing to iife (default). */
   unstable_renameRequire?: boolean,
+  /** Store source maps as compact VLQ-encoded strings (`VlqMap`) instead of decoded tuple arrays. Reduces source-map memory ~51% on the heap. Opt-in; changes `JsOutput.data.map` for consumers. */
+  unstable_compactSourceMaps?: boolean,
 }>;
 
 export type {CustomTransformOptions} from 'metro-babel-transformer';
@@ -169,7 +174,7 @@ export type JsOutput = Readonly<{
   data: Readonly<{
     code: string,
     lineCount: number,
-    map: Array<MetroSourceMapSegmentTuple>,
+    map: Array<MetroSourceMapSegmentTuple> | VlqMap,
     functionMap: ?FBSourceFunctionMap,
   }>,
   type: JSFileType,
@@ -472,28 +477,48 @@ async function transformJS(
     file.code,
   );
 
-  // Derive tuples from Babel's eagerly-computed decoded map rather than
-  // `result.rawMappings`, which would trigger a second, more expensive decode
-  // (`allMappings`). Byte-identical to `result.rawMappings.map(toSegmentTuple)`.
-  let map = result.decodedMap
-    ? tuplesFromBabelDecodedMap(result.decodedMap)
-    : [];
   let code = result.code;
+  let map: Array<MetroSourceMapSegmentTuple> | VlqMap;
+  let lineCount: number;
 
-  if (minify) {
-    ({map, code} = await minifyCode(
-      config,
-      projectRoot,
-      file.filename,
-      result.code,
-      file.code,
-      map,
-      reserved,
-    ));
+  if (config.unstable_compactSourceMaps === true && !minify) {
+    // Dominant path (e.g. Hermes, which doesn't minify): encode the compact VLQ
+    // map straight from Babel's eagerly-computed decoded map, never
+    // materialising tuples. Byte-identical to the tuple path below.
+    const {lineCount: lines, lastLineColumn} = countLines(code);
+    lineCount = lines;
+    map = vlqMapFromBabelDecodedMap(
+      result.decodedMap ?? {mappings: [], names: []},
+      [lines, lastLineColumn],
+    );
+  } else {
+    // Derive tuples from Babel's eagerly-computed decoded map rather than
+    // `result.rawMappings`, which would trigger a second, more expensive decode
+    // (`allMappings`). Byte-identical to `result.rawMappings.map(toSegmentTuple)`.
+    let tuples = result.decodedMap
+      ? tuplesFromBabelDecodedMap(result.decodedMap)
+      : [];
+
+    if (minify) {
+      // The minifier returns its own map (not Babel's `decodedMap`), so the
+      // fast path above can't apply; re-encode the resulting tuples if compact.
+      ({map: tuples, code} = await minifyCode(
+        config,
+        projectRoot,
+        file.filename,
+        result.code,
+        file.code,
+        tuples,
+        reserved,
+      ));
+    }
+
+    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, tuples));
+    map =
+      config.unstable_compactSourceMaps === true
+        ? vlqMapFromTuples(tuples)
+        : tuples;
   }
-
-  let lineCount;
-  ({lineCount, map} = countLinesAndTerminateMap(code, map));
 
   const output: Array<JsOutput> = [
     {
@@ -622,9 +647,13 @@ async function transformJSON(
 
   let lineCount;
   ({lineCount, map} = countLinesAndTerminateMap(code, map));
+  // The JSON path builds tuples directly (no Babel `decodedMap`), so when
+  // compact we re-encode the finished tuples to VLQ.
+  const outputMap =
+    config.unstable_compactSourceMaps === true ? vlqMapFromTuples(map) : map;
   const output: Array<JsOutput> = [
     {
-      data: {code, functionMap: null, lineCount, map},
+      data: {code, functionMap: null, lineCount, map: outputMap},
       type: jsType,
     },
   ];
@@ -761,12 +790,9 @@ export const getCacheKey = (
   ].join('$');
 };
 
-function countLinesAndTerminateMap(
-  code: string,
-  map: ReadonlyArray<MetroSourceMapSegmentTuple>,
-): {
+function countLines(code: string): {
   lineCount: number,
-  map: Array<MetroSourceMapSegmentTuple>,
+  lastLineColumn: number,
 } {
   const NEWLINE = /\r\n?|\n|\u2028|\u2029/g;
   let lineCount = 1;
@@ -777,9 +803,19 @@ function countLinesAndTerminateMap(
     lineCount++;
     lastLineStart = match.index + match[0].length;
   }
-  const lastLineLength = code.length - lastLineStart;
+  return {lineCount, lastLineColumn: code.length - lastLineStart};
+}
+
+function countLinesAndTerminateMap(
+  code: string,
+  map: ReadonlyArray<MetroSourceMapSegmentTuple>,
+): {
+  lineCount: number,
+  map: Array<MetroSourceMapSegmentTuple>,
+} {
+  const {lineCount, lastLineColumn} = countLines(code);
   const lastLineIndex1Based = lineCount;
-  const lastLineNextColumn0Based = lastLineLength;
+  const lastLineNextColumn0Based = lastLineColumn;
 
   // If there isn't a mapping at one-past-the-last column of the last line,
   // add one that maps to nothing. This ensures out-of-bounds lookups hit the

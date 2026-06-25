@@ -425,6 +425,78 @@ function vlqMapFromTuples(
   return {mappings: map.mappings, names: map.names};
 }
 
+/**
+ * Encodes a `VlqMap` directly from a Babel/gen-mapping "decoded" source map
+ * (`result.decodedMap` from `@babel/generator`), without ever materialising the
+ * intermediate `Array<MetroSourceMapSegmentTuple>`.
+ *
+ * `@babel/generator` computes `decodedMap` eagerly while generating, so reusing
+ * it avoids the separate, more expensive `result.rawMappings` decode (which
+ * allocates a flat array of segment objects) plus the per-segment tuple
+ * allocation that `vlqMapFromTuples` would otherwise consume. The result is
+ * byte-identical to `vlqMapFromTuples(decoded -> tuples)`.
+ *
+ * `terminatingMapping` is a `[generatedLine1Based, generatedColumn0Based]`
+ * generated-only mapping appended at the end (matching the transform worker's
+ * `countLinesAndTerminateMap`) unless the last real mapping already sits there.
+ */
+function vlqMapFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+  terminatingMapping: [number, number],
+): VlqMap {
+  const generator = new Generator();
+  generator.startFile('', '', null);
+  const {mappings, names} = decodedMap;
+  let lastGeneratedLine = -1;
+  let lastGeneratedColumn = -1;
+  for (let line = 0, n = mappings.length; line < n; ++line) {
+    // Decoded mappings are grouped by generated line (0-based); Generator
+    // expects 1-based generated lines.
+    const generatedLine = line + 1;
+    const segments = mappings[line];
+    for (let i = 0, m = segments.length; i < m; ++i) {
+      const segment = segments[i];
+      const generatedColumn = segment[0];
+      switch (segment.length) {
+        case 1:
+          generator.addSimpleMapping(generatedLine, generatedColumn);
+          break;
+        case 4:
+          // Decoded source lines are 0-based; Generator expects 1-based.
+          generator.addSourceMapping(
+            generatedLine,
+            generatedColumn,
+            segment[2] + 1,
+            segment[3],
+          );
+          break;
+        case 5:
+          generator.addNamedSourceMapping(
+            generatedLine,
+            generatedColumn,
+            segment[2] + 1,
+            segment[3],
+            names[segment[4]],
+          );
+          break;
+        default:
+          throw new Error(`Invalid mapping: [${segment.join(', ')}]`);
+      }
+      lastGeneratedLine = generatedLine;
+      lastGeneratedColumn = generatedColumn;
+    }
+  }
+  if (
+    lastGeneratedLine !== terminatingMapping[0] ||
+    lastGeneratedColumn !== terminatingMapping[1]
+  ) {
+    generator.addSimpleMapping(terminatingMapping[0], terminatingMapping[1]);
+  }
+  generator.endFile();
+  const map = generator.toMap();
+  return {mappings: map.mappings, names: map.names};
+}
+
 export {
   BundleBuilder,
   composeSourceMaps,
@@ -439,6 +511,7 @@ export {
   toBabelSegments,
   toSegmentTuple,
   tuplesFromBabelDecodedMap,
+  vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 };
 

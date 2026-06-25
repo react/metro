@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<165882da0b131608da36b1cbd00ecf28>>
+ * @generated SignedSource<<9cf6eca6abe0d86fd41c697473f45aff>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-transform-worker/src/index.js
@@ -23,6 +23,7 @@ import type {
   BasicSourceMap,
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 import type {TransformResultDependency} from 'metro/private/DeltaBundler';
 import type {AllowOptionalDependencies} from 'metro/private/DeltaBundler/types';
@@ -68,6 +69,8 @@ export type JsTransformerConfig = Readonly<{
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string>;
   /** Whether to rename scoped `require` functions to `_$$_REQUIRE`, usually an extraneous operation when serializing to iife (default). */
   unstable_renameRequire?: boolean;
+  /** Store source maps as compact VLQ-encoded strings (`VlqMap`) instead of decoded tuple arrays. Reduces source-map memory ~51% on the heap. Opt-in; changes `JsOutput.data.map` for consumers. */
+  unstable_compactSourceMaps?: boolean;
 }>;
 export type {CustomTransformOptions} from 'metro-babel-transformer';
 export type JsTransformOptions = Readonly<{
@@ -90,7 +93,7 @@ export type JsOutput = Readonly<{
   data: Readonly<{
     code: string;
     lineCount: number;
-    map: Array<MetroSourceMapSegmentTuple>;
+    map: Array<MetroSourceMapSegmentTuple> | VlqMap;
     functionMap: null | undefined | FBSourceFunctionMap;
   }>;
   type: JSFileType;
