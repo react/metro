@@ -352,8 +352,14 @@ function pathBelongsToRoots(
   return false;
 }
 
-function isPathInsideRoot(pathToCheck: string, rootFolder: string): boolean {
-  const relativePath = path.relative(path.resolve(rootFolder), pathToCheck);
+function isPathInsideRoot(
+  absolutePathToCheck: string,
+  rootFolder: string,
+): boolean {
+  const relativePath = path.relative(
+    path.resolve(rootFolder),
+    absolutePathToCheck,
+  );
 
   // path.relative('/repo', '/repo2') -> '../repo2', so this must reject leading "..".
   return (

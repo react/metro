@@ -152,15 +152,19 @@ describe('getAsset', () => {
   });
 
   test('should reject sibling-prefix watchFolder paths outside watchFolders', async () => {
-    fs.mkdirSync('/watchfoldersub/imgs', {recursive: true});
+    const outsideWatchFolder = path.resolve('/watchfoldersub');
+    const insideWatchFolder = path.resolve('/watchfolder');
+    const childRoot = path.join(outsideWatchFolder, 'imgs');
+    const relativePathToAsset = path.join('..', 'watchfoldersub', 'imgs', 'b.png');
 
-    fs.writeFileSync('/watchfoldersub/imgs/b.png', 'b image');
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
 
     await expect(
       getAssetStr(
-        '../watchfoldersub/imgs/b.png',
-        '/watchfolder',
-        ['/watchfolder/one'],
+        relativePathToAsset,
+        insideWatchFolder,
+        [path.join(insideWatchFolder, 'one')],
         null,
         ['png'],
       ),
@@ -168,22 +172,52 @@ describe('getAsset', () => {
   });
 
   test('should reject sibling-prefix asset paths outside root', async () => {
-    fs.mkdirSync('/app2/imgs', {recursive: true});
+    const rootFolder = path.resolve('/app');
+    const outsideRoot = path.resolve('/app2');
+    const childRoot = path.join(outsideRoot, 'imgs');
 
-    fs.writeFileSync('/app2/imgs/b.png', 'b image');
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
 
     await expect(
-      getAssetStr('../app2/imgs/b.png', '/app', [], null, ['png']),
+      getAssetStr(
+        path.join('..', 'app2', 'imgs', 'b.png'),
+        rootFolder,
+        [],
+        null,
+        ['png'],
+      ),
     ).rejects.toBeInstanceOf(Error);
   });
 
-  test('should reject sibling-prefix asset paths outside root even with trailing root separator', async () => {
-    fs.mkdirSync('/app2/imgs', {recursive: true});
+  test('should accept asset paths inside root', async () => {
+    const rootFolder = path.resolve('/app');
+    const childRoot = path.join(rootFolder, 'imgs');
 
-    fs.writeFileSync('/app2/imgs/b.png', 'b image');
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
 
     await expect(
-      getAssetStr('../app2/imgs/b.png', '/app/', [], null, ['png']),
+      getAssetStr('imgs/b.png', rootFolder, [], null, ['png']),
+    ).resolves.toContain('b image');
+  });
+
+  test('should reject sibling-prefix asset paths outside root even with trailing root separator', async () => {
+    const rootFolder = path.resolve('/app');
+    const outsideRoot = path.resolve('/app2');
+    const childRoot = path.join(outsideRoot, 'imgs');
+
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
+
+    await expect(
+      getAssetStr(
+        path.join('..', 'app2', 'imgs', 'b.png'),
+        rootFolder + path.sep,
+        [],
+        null,
+        ['png'],
+      ),
     ).rejects.toBeInstanceOf(Error);
   });
 
