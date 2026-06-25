@@ -102,13 +102,12 @@ beforeEach(() => {
   fs.writeFileSync(babelTransformerPath, transformerContents);
 });
 
-test('hashes internal dependency and import-locations modules', () => {
-  mockedMetroCacheKey.mockImplementation(files => files.join('|'));
+test('includes transform-affecting internal modules in cache key inputs', () => {
+  mockedMetroCacheKey.mockReturnValue('cache-key');
 
   Transformer.getCacheKey(baseConfig, {projectRoot: '/root'});
 
-  const files = mockedMetroCacheKey.mock.calls[0][0];
-  expect(files).toEqual(
+  expect(mockedMetroCacheKey).toHaveBeenCalledWith(
     expect.arrayContaining([
       require.resolve('metro/private/ModuleGraph/worker/collectDependencies'),
       require.resolve('metro/private/ModuleGraph/worker/importLocationsPlugin'),
