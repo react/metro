@@ -13,13 +13,22 @@ import type {Module} from '../types';
 
 import getSourceMapInfo from './helpers/getSourceMapInfo';
 import {isJsModule} from './helpers/js';
-import {fromRawMappings, fromRawMappingsNonBlocking} from 'metro-source-map';
+import {
+  fromRawMappings,
+  fromRawMappingsIndexed,
+  fromRawMappingsNonBlocking,
+  isVlqMap,
+} from 'metro-source-map';
 
 export type SourceMapGeneratorOptions = Readonly<{
   excludeSource: boolean,
   processModuleFilter: (module: Module<>) => boolean,
   shouldAddToIgnoreList: (module: Module<>) => boolean,
   getSourceUrl: ?(module: Module<>) => string,
+  // Allow an index map (sectioned) that passes VLQ-stored maps through
+  // verbatim, instead of decoding + re-encoding into a flat map. No-op unless
+  // VLQ maps are actually present.
+  allowIndexMap?: boolean,
 }>;
 
 function getSourceMapInfosImpl(
@@ -78,7 +87,9 @@ function getSourceMapInfosImpl(
 function sourceMapGenerator(
   modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappings> {
+):
+  | ReturnType<typeof fromRawMappings>
+  | ReturnType<typeof fromRawMappingsIndexed> {
   let sourceMapInfos;
   getSourceMapInfosImpl(
     true,
@@ -93,19 +104,41 @@ function sourceMapGenerator(
       'Expected getSourceMapInfosImpl() to finish synchronously.',
     );
   }
+  if (shouldEmitIndexedMap(options, sourceMapInfos)) {
+    return fromRawMappingsIndexed(sourceMapInfos);
+  }
   return fromRawMappings(sourceMapInfos);
 }
 
 async function sourceMapGeneratorNonBlocking(
   modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappingsNonBlocking> {
+): Promise<
+  | ReturnType<typeof fromRawMappings>
+  | ReturnType<typeof fromRawMappingsIndexed>,
+> {
   const sourceMapInfos = await new Promise<
     ReadonlyArray<ReturnType<typeof getSourceMapInfo>>,
   >(resolve => {
     getSourceMapInfosImpl(false, resolve, modules, options);
   });
+  if (shouldEmitIndexedMap(options, sourceMapInfos)) {
+    // The indexed path is a cheap synchronous passthrough — no need to yield.
+    return fromRawMappingsIndexed(sourceMapInfos);
+  }
   return fromRawMappingsNonBlocking(sourceMapInfos);
+}
+
+// An index map only helps (and only avoids decode) when maps are actually stored
+// as VLQ, so gate on both the option and the presence of a VLQ map.
+function shouldEmitIndexedMap(
+  options: SourceMapGeneratorOptions,
+  sourceMapInfos: ReadonlyArray<ReturnType<typeof getSourceMapInfo>>,
+): boolean {
+  return (
+    options.allowIndexMap === true &&
+    sourceMapInfos.some(info => isVlqMap(info.map))
+  );
 }
 
 export {sourceMapGenerator, sourceMapGeneratorNonBlocking};

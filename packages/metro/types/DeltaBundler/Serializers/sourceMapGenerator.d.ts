@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<49bc83c20821024a7b77f5d5c3168d62>>
+ * @generated SignedSource<<35bb62d836afac725c73389319206389>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/sourceMapGenerator.js
@@ -17,20 +17,25 @@
 
 import type {Module} from '../types';
 
-import {fromRawMappings, fromRawMappingsNonBlocking} from 'metro-source-map';
+import {fromRawMappings, fromRawMappingsIndexed} from 'metro-source-map';
 
 export type SourceMapGeneratorOptions = Readonly<{
   excludeSource: boolean;
   processModuleFilter: (module: Module) => boolean;
   shouldAddToIgnoreList: (module: Module) => boolean;
   getSourceUrl: null | undefined | ((module: Module) => string);
+  allowIndexMap?: boolean;
 }>;
 declare function sourceMapGenerator(
   modules: ReadonlyArray<Module>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappings>;
+):
+  | ReturnType<typeof fromRawMappings>
+  | ReturnType<typeof fromRawMappingsIndexed>;
 declare function sourceMapGeneratorNonBlocking(
   modules: ReadonlyArray<Module>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappingsNonBlocking>;
+): Promise<
+  ReturnType<typeof fromRawMappings> | ReturnType<typeof fromRawMappingsIndexed>
+>;
 export {sourceMapGenerator, sourceMapGeneratorNonBlocking};

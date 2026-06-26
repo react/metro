@@ -139,6 +139,45 @@ export type RawMappingsModule = {
   readonly lineCount?: number,
 };
 
+// Common shape of the flat `Generator` and the indexed `IndexedSourceMapResult`,
+// so serializers can hold either and call `toMap`/`toString` uniformly.
+export interface SourceMapGenerator {
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap;
+  toString(file?: string, options?: {excludeSource?: boolean}): string;
+}
+
+/**
+ * Result of `fromRawMappingsIndexed`: a sectioned (indexed) source map where
+ * each module is one section. VLQ-stored modules pass through verbatim, which is
+ * why building this is cheap compared to flattening into a single map.
+ */
+class IndexedSourceMapResult implements SourceMapGenerator {
+  #sections: Array<IndexMapSection>;
+
+  constructor(sections: Array<IndexMapSection>) {
+    this.#sections = sections;
+  }
+
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap {
+    const sections =
+      options?.excludeSource === true
+        ? this.#sections.map(section => {
+            // exclude source
+            const {sourcesContent: _, ...map} = section.map;
+            return {
+              ...section,
+              map,
+            };
+          })
+        : this.#sections;
+    return createIndexMap(file, sections);
+  }
+
+  toString(file?: string, options?: {excludeSource?: boolean}): string {
+    return JSON.stringify(this.toMap(file, options));
+  }
+}
+
 function isVlqMap(
   map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
 ): implies map is VlqMap {
@@ -239,6 +278,68 @@ async function fromRawMappingsNonBlocking(
   return new Promise(resolve => {
     fromRawMappingsImpl(false, resolve, modules, offsetLines);
   });
+}
+
+/**
+ * Like `fromRawMappings`, but produces an indexed (sectioned) source map with
+ * one section per module. VLQ-stored modules pass through verbatim — no
+ * decode/re-encode — which is the whole point: it's much cheaper to serialize
+ * than the flat path, at the cost of emitting an indexed map that consumers must
+ * understand. Per-module work is trivial, so this runs synchronously.
+ */
+function fromRawMappingsIndexed(
+  modules: ReadonlyArray<RawMappingsModule>,
+  offsetLines: number = 0,
+): IndexedSourceMapResult {
+  const sections: Array<IndexMapSection> = [];
+  let carryOver = offsetLines;
+
+  for (const mod of modules) {
+    if (mod.map != null) {
+      sections.push({
+        offset: {line: carryOver, column: 0},
+        map: toIndexMapSection(mod),
+      });
+    }
+    carryOver = carryOver + countLines(mod.code);
+  }
+
+  return new IndexedSourceMapResult(sections);
+}
+
+/**
+ * Builds a single section of an indexed source map. VLQ maps pass through
+ * verbatim, while tuple maps are encoded with a fresh per-section Generator.
+ */
+function toIndexMapSection(module: RawMappingsModule): BasicSourceMap {
+  const {map, path, source, functionMap, isIgnored} = module;
+
+  if (isVlqMap(map)) {
+    let sectionMap: BasicSourceMap = {
+      version: 3,
+      sources: [path],
+      sourcesContent: [source],
+      names: [...map.names],
+      mappings: map.mappings,
+    };
+    // The Generator bakes these in for tuple maps; for passthrough VLQ maps we
+    // have to attach them ourselves.
+    if (functionMap != null) {
+      sectionMap = {...sectionMap, x_facebook_sources: [[functionMap]]};
+    }
+    if (isIgnored) {
+      sectionMap = {...sectionMap, x_google_ignoreList: [0]};
+    }
+    return sectionMap;
+  }
+
+  if (Array.isArray(map)) {
+    const generator = new Generator();
+    addMappingsForFile(generator, map, module, 0);
+    return generator.toMap();
+  }
+
+  throw new Error(`Unexpected module with full source map found: ${path}`);
 }
 
 /**
@@ -504,6 +605,7 @@ export {
   createIndexMap,
   generateFunctionMap,
   fromRawMappings,
+  fromRawMappingsIndexed,
   fromRawMappingsNonBlocking,
   functionMapBabelPlugin,
   isVlqMap,

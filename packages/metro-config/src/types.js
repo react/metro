@@ -147,6 +147,13 @@ type SerializerConfigT = {
   polyfillModuleNames: ReadonlyArray<string>,
   processModuleFilter: (modules: Module<>) => boolean,
   isThirdPartyModule: (module: Readonly<{path: string, ...}>) => boolean,
+  // When source maps are stored compactly as VLQ (see
+  // `transformer.unstable_compactSourceMaps`), allow the whole-bundle map to be
+  // emitted as an index map (sectioned) that passes the VLQ through verbatim,
+  // instead of decoding + re-encoding into a flat map. Cheaper to serialize, but
+  // requires consumers that understand index source maps. No-op unless compact
+  // VLQ maps are actually present, and ignored when a `customSerializer` is set.
+  unstable_allowIndexMap: boolean,
 };
 
 type TransformerConfigT = {

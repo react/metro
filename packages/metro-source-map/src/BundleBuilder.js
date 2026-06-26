@@ -113,12 +113,12 @@ function measureString(str: string): {
 }
 
 export function createIndexMap(
-  file: string,
+  file: ?string,
   sections: Array<IndexMapSection>,
 ): IndexMap {
   return {
     version: 3,
-    file,
+    ...(file != null ? {file} : null),
     sections,
   };
 }

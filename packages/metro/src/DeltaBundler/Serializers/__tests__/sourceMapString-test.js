@@ -199,3 +199,101 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
     });
   },
 );
+
+describe.each([sourceMapString, sourceMapStringNonBlocking])(
+  'allowIndexMap (%p)',
+  sourceMapStringImpl => {
+    const vlqModule: Module<> = {
+      path: '/root/vlq.js',
+      dependencies: new Map(),
+      inverseDependencies: new CountingSet(),
+      getSource: () => Buffer.from('source vlq'),
+      output: [
+        {
+          type: 'js/module',
+          data: {
+            code: '__d(function() {/* code for vlq */});',
+            lineCount: 1,
+            // Stored compactly as VLQ rather than decoded tuples.
+            map: {mappings: 'AAAA', names: []},
+            functionMap: {names: ['<global>'], mappings: 'AAA'},
+          },
+        },
+      ],
+    };
+
+    const options = {
+      excludeSource: false,
+      processModuleFilter: (module: Module<>) => true,
+      shouldAddToIgnoreList: (module: Module<>) => false,
+      getSourceUrl: null,
+    };
+
+    test('emits an indexed map passing VLQ through verbatim when enabled', async () => {
+      const parsed = JSON.parse(
+        await sourceMapStringImpl([fooModule, vlqModule], {
+          ...options,
+          allowIndexMap: true,
+        }),
+      );
+      expect(parsed.version).toBe(3);
+      expect(parsed.sections).toHaveLength(2);
+      // VLQ module passes through unchanged.
+      expect(parsed.sections[1].offset).toEqual({line: 1, column: 0});
+      expect(parsed.sections[1].map.mappings).toBe('AAAA');
+      expect(parsed.sections[1].map.sources).toEqual(['/root/vlq.js']);
+      expect(parsed.sections[1].map.sourcesContent).toEqual(['source vlq']);
+      expect(parsed.sections[1].map.x_facebook_sources).toEqual([
+        [{names: ['<global>'], mappings: 'AAA'}],
+      ]);
+    });
+
+    test('falls back to a flat map when no VLQ maps are present', async () => {
+      const parsed = JSON.parse(
+        await sourceMapStringImpl([fooModule, barModule], {
+          ...options,
+          allowIndexMap: true,
+        }),
+      );
+      // No VLQ → indexed emit is pointless, so we stay flat.
+      expect(parsed.sections).toBeUndefined();
+      expect(typeof parsed.mappings).toBe('string');
+    });
+
+    test('emits a flat map for VLQ input when disabled', async () => {
+      const parsed = JSON.parse(
+        await sourceMapStringImpl([fooModule, vlqModule], {
+          ...options,
+          allowIndexMap: false,
+        }),
+      );
+      expect(parsed.sections).toBeUndefined();
+      expect(typeof parsed.mappings).toBe('string');
+    });
+
+    test('omits per-section sourcesContent when excludeSource is set', async () => {
+      const parsed = JSON.parse(
+        await sourceMapStringImpl([vlqModule], {
+          ...options,
+          excludeSource: true,
+          allowIndexMap: true,
+        }),
+      );
+      expect(parsed.sections).toHaveLength(1);
+      expect(parsed.sections[0].map.mappings).toBe('AAAA');
+      expect(parsed.sections[0].map.sourcesContent).toBeUndefined();
+    });
+
+    test('marks ignored modules with per-section x_google_ignoreList', async () => {
+      const parsed = JSON.parse(
+        await sourceMapStringImpl([vlqModule], {
+          ...options,
+          shouldAddToIgnoreList: (module: Module<>) => true,
+          allowIndexMap: true,
+        }),
+      );
+      expect(parsed.sections).toHaveLength(1);
+      expect(parsed.sections[0].map.x_google_ignoreList).toEqual([0]);
+    });
+  },
+);

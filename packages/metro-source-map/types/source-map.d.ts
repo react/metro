@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<9ec89353742743678e422f0bf81e488d>>
+ * @generated SignedSource<<13fbae6a38a28c6a6e3a2be58804c33d>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-source-map/src/source-map.js
@@ -107,6 +107,20 @@ export type RawMappingsModule = {
   readonly isIgnored: boolean;
   readonly lineCount?: number;
 };
+export interface SourceMapGenerator {
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap;
+  toString(file?: string, options?: {excludeSource?: boolean}): string;
+}
+/**
+ * Result of `fromRawMappingsIndexed`: a sectioned (indexed) source map where
+ * each module is one section. VLQ-stored modules pass through verbatim, which is
+ * why building this is cheap compared to flattening into a single map.
+ */
+declare class IndexedSourceMapResult implements SourceMapGenerator {
+  constructor(sections: Array<IndexMapSection>);
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap;
+  toString(file?: string, options?: {excludeSource?: boolean}): string;
+}
 declare function isVlqMap(
   map: (null | undefined | ReadonlyArray<MetroSourceMapSegmentTuple>) | VlqMap,
 ): map is VlqMap;
@@ -125,6 +139,17 @@ declare function fromRawMappingsNonBlocking(
   modules: ReadonlyArray<RawMappingsModule>,
   offsetLines?: number,
 ): Promise<Generator>;
+/**
+ * Like `fromRawMappings`, but produces an indexed (sectioned) source map with
+ * one section per module. VLQ-stored modules pass through verbatim — no
+ * decode/re-encode — which is the whole point: it's much cheaper to serialize
+ * than the flat path, at the cost of emitting an indexed map that consumers must
+ * understand. Per-module work is trivial, so this runs synchronously.
+ */
+declare function fromRawMappingsIndexed(
+  modules: ReadonlyArray<RawMappingsModule>,
+  offsetLines?: number,
+): IndexedSourceMapResult;
 /**
  * Transforms a standard source map object into a Raw Mappings object, to be
  * used across the bundler.
@@ -183,6 +208,7 @@ export {
   createIndexMap,
   generateFunctionMap,
   fromRawMappings,
+  fromRawMappingsIndexed,
   fromRawMappingsNonBlocking,
   functionMapBabelPlugin,
   isVlqMap,

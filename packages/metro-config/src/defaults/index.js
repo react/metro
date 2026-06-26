@@ -70,6 +70,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     customSerializer: null,
     isThirdPartyModule: module =>
       /(?:^|[/\\])node_modules[/\\]/.test(module.path),
+    unstable_allowIndexMap: false,
   },
 
   server: {

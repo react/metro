@@ -9,11 +9,17 @@
  * @oncall react_native
  */
 
-import type {BabelDecodedMap, MetroSourceMapSegmentTuple} from '../source-map';
+import type {
+  BabelDecodedMap,
+  IndexMap,
+  MetroSourceMapSegmentTuple,
+  MixedSourceMap,
+} from '../source-map';
 
 import Generator from '../Generator';
 import {
   fromRawMappings,
+  fromRawMappingsIndexed,
   isVlqMap,
   toBabelSegments,
   toSegmentTuple,
@@ -288,6 +294,105 @@ describe('fromRawMappings with VlqMap', () => {
       excludeSource: true,
     });
     expect(map.sourcesContent).toBeUndefined();
+  });
+});
+
+describe('fromRawMappingsIndexed', () => {
+  // fromRawMappingsIndexed always yields an indexed (sectioned) map.
+  const asIndexMap = (map: MixedSourceMap): IndexMap => {
+    // eslint-disable-next-line lint/strictly-null
+    if (map.mappings !== undefined) {
+      throw new Error('Expected an indexed source map');
+    }
+    return map;
+  };
+
+  test('produces an indexed map, passing VLQ through verbatim', () => {
+    const input = [
+      {
+        code: lines(11),
+        functionMap: null,
+        map: makeVlqMap('E;;IAKMA;;;;QAII;;;;YAIIC', ['apples', 'pears']),
+        source: 'code1',
+        path: 'path1',
+        isIgnored: false,
+      },
+      {
+        code: lines(3),
+        functionMap: null,
+        map: makeVlqMap('E;;IAegBA', ['bananas']),
+        source: 'code2',
+        path: 'path2',
+        isIgnored: true,
+      },
+    ];
+
+    const map = asIndexMap(fromRawMappingsIndexed(input).toMap());
+    expect(map.version).toBe(3);
+    expect(map.sections).toHaveLength(2);
+
+    const [s0, s1] = map.sections;
+    expect(s0.offset).toEqual({line: 0, column: 0});
+    expect(s0.map.sources).toEqual(['path1']);
+    expect(s0.map.sourcesContent).toEqual(['code1']);
+    // VLQ string passes through unchanged (no decode/re-encode).
+    expect(s0.map.mappings).toBe('E;;IAKMA;;;;QAII;;;;YAIIC');
+    expect(s0.map.names).toEqual(['apples', 'pears']);
+
+    expect(s1.offset).toEqual({line: 11, column: 0});
+    expect(s1.map.mappings).toBe('E;;IAegBA');
+    expect(s1.map.x_google_ignoreList).toEqual([0]);
+  });
+
+  test('preserves functionMap as per-section x_facebook_sources', () => {
+    const functionMap = {names: ['<global>'], mappings: 'AAA'};
+    const map = asIndexMap(
+      fromRawMappingsIndexed([
+        {
+          code: 'x\n',
+          functionMap,
+          map: makeVlqMap('AAAA', []),
+          source: 'src',
+          path: 'file.js',
+          isIgnored: false,
+        },
+      ]).toMap(),
+    );
+    expect(map.sections[0].map.x_facebook_sources).toEqual([[functionMap]]);
+  });
+
+  test('toString produces valid indexed JSON', () => {
+    const parsed = JSON.parse(
+      fromRawMappingsIndexed([
+        {
+          code: 'x\n',
+          functionMap: null,
+          map: makeVlqMap('AAAA', []),
+          source: 'src',
+          path: 'file.js',
+          isIgnored: false,
+        },
+      ]).toString(),
+    );
+    expect(parsed.version).toBe(3);
+    expect(parsed.sections).toHaveLength(1);
+    expect(parsed.sections[0].map.mappings).toBe('AAAA');
+  });
+
+  test('excludeSource omits sourcesContent', () => {
+    const map = asIndexMap(
+      fromRawMappingsIndexed([
+        {
+          code: 'x\n',
+          functionMap: null,
+          map: makeVlqMap('AAAA', []),
+          source: 'src',
+          path: 'file.js',
+          isIgnored: false,
+        },
+      ]).toMap(undefined, {excludeSource: true}),
+    );
+    expect(map.sections[0].map.sourcesContent).toBeUndefined();
   });
 });
 
