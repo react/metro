@@ -396,14 +396,12 @@ export default class HttpStore<T> {
     return backOff(fn, {
       jitter: 'full',
       maxDelay: 30000,
-      numOfAttempts: this.#getEndpoint.maxAttempts || Number.POSITIVE_INFINITY,
+      numOfAttempts: endpoint.maxAttempts || Number.POSITIVE_INFINITY,
       retry: (e: Error) => {
         if (e instanceof HttpError) {
-          return this.#getEndpoint.retryStatuses.has(e.code);
+          return endpoint.retryStatuses.has(e.code);
         }
-        return (
-          e instanceof NetworkError && this.#getEndpoint.retryNetworkErrors
-        );
+        return e instanceof NetworkError && endpoint.retryNetworkErrors;
       },
     });
   }

@@ -290,6 +290,39 @@ describe('HttpStore', () => {
     });
   });
 
+  test('set() retries use the set endpoint config, not the get endpoint', async () => {
+    jest.useRealTimers();
+    // Distinct read/write retry config: reads do not retry, writes retry 503s.
+    const store = new HttpStore({
+      getOptions: {endpoint: 'http://example.com', maxAttempts: 1},
+      setOptions: {
+        endpoint: 'http://example.com',
+        maxAttempts: 2,
+        retryStatuses: [503],
+      },
+    });
+    const {request} = require('http');
+
+    request.mockImplementation((opts, callback) => {
+      if (request.mock.calls.length === 1) {
+        callback(responseHttpError(503));
+      } else {
+        callback(responseHttpOk(''));
+      }
+      return new PassThrough();
+    });
+
+    let error;
+    try {
+      await store.set(Buffer.from('key-set'), {foo: 42});
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeUndefined();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   test('sets using the network via PUT method', done => {
     const store = new HttpStore({endpoint: 'http://www.example.com/endpoint'});
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
