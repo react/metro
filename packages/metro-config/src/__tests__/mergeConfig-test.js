@@ -29,6 +29,20 @@ describe('mergeConfig', () => {
     });
   });
 
+  test('applies trailing overrides after an async config function', async () => {
+    const base: InputConfigT = {server: {port: 8081}};
+    const asyncOverride = (): Promise<InputConfigT> =>
+      Promise.resolve({transformer: {assetPlugins: ['async-plugin']}});
+    const trailing: InputConfigT = {resolver: {sourceExts: ['ts']}};
+
+    const result = await mergeConfig(base, asyncOverride, trailing);
+
+    // The base and every config in the chain must survive the async branch.
+    expect(result.server?.port).toBe(8081);
+    expect(result.transformer?.assetPlugins).toEqual(['async-plugin']);
+    expect(result.resolver?.sourceExts).toEqual(['ts']);
+  });
+
   describe('server.tls merging', () => {
     describe('override IS applied when tls is false or object', () => {
       test('override tls: object replaces base tls: false', () => {
