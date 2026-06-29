@@ -23,7 +23,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^7.29.6",
     "flow-enums-runtime": "^0.0.6",
     "hermes-parser": "0.36.1",
     "metro-cache-key": "0.85.0",

@@ -19,7 +19,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^7.29.6",
     "@babel/generator": "^7.29.1",
     "@babel/template": "^7.28.6",
     "@babel/traverse": "^7.29.0",
