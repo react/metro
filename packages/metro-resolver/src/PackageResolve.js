@@ -83,7 +83,7 @@ export function redirectModulePath(
    *
    * - A relative specifier (beginning with '.'), which may be redirected by a
    *   `package.json` file local to `context.originModulePath`.
-   *     - Note: A path begining with '/' is treated as an absolute specifier
+   *     - Note: A path beginning with '/' is treated as an absolute specifier
    *       (non-standard).
    * - A bare specifier (e.g. 'some-pkg', 'some-pkg/foo'), which may be
    *   redirected by `package.json` rules in the containing package.
