@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<926fc453e7c2af496911a003ca20e556>>
+ * @generated SignedSource<<294ace0b3b28919393688be198af72c3>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-config/src/types.js
@@ -251,7 +251,15 @@ export type InputConfigT = Partial<
     }
   >
 >;
-export type MetroConfig = InputConfigT;
+export type MetroConfig =
+  | InputConfigT
+  | ((baseConfig: ConfigT) => InputConfigT)
+  | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+  | ReadonlyArray<
+      | InputConfigT
+      | ((baseConfig: ConfigT) => InputConfigT)
+      | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+    >;
 export type ConfigT = Readonly<
   MetalConfigT & {
     cacheStores: CacheStoresConfigT;

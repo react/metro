@@ -20,15 +20,19 @@ import {homedir} from 'os';
 import * as path from 'path';
 // eslint-disable-next-line no-restricted-imports
 import {pathToFileURL} from 'url';
-import {parse as parseYaml} from 'yaml';
 
 type ResolveConfigResult = {
   filepath: string,
   isEmpty: boolean,
   config:
-    | ((baseConfig: ConfigT) => Promise<ConfigT>)
-    | ((baseConfig: ConfigT) => ConfigT)
-    | InputConfigT,
+    | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+    | ((baseConfig: ConfigT) => InputConfigT)
+    | InputConfigT
+    | ReadonlyArray<
+        | InputConfigT
+        | ((baseConfig: ConfigT) => InputConfigT)
+        | ((baseConfig: ConfigT) => Promise<InputConfigT>),
+      >,
   ...
 };
 
@@ -57,12 +61,8 @@ const SEARCH_PLACES = [
   'package.json',
 ];
 
-const JS_EXTENSIONS = new Set([
-  ...SEARCH_JS_EXTS,
-  '.es6', // Deprecated
-]);
+const JS_EXTENSIONS = new Set(SEARCH_JS_EXTS);
 const TS_EXTENSIONS = new Set(SEARCH_TS_EXTS);
-const YAML_EXTENSIONS = new Set(['.yml', '.yaml', '']); // Deprecated
 
 const PACKAGE_JSON = path.sep + 'package.json';
 const PACKAGE_JSON_PROP_NAME = 'metro';
@@ -281,6 +281,8 @@ async function loadMetroConfigFromDisk(
     const resultedConfig = await configModule(defaultConfig);
 
     return mergeConfig(defaultConfig, resultedConfig);
+  } else if (Array.isArray(configModule)) {
+    return mergeConfig(defaultConfig, ...configModule);
   }
 
   return mergeConfig(defaultConfig, configModule);
@@ -394,7 +396,7 @@ async function loadConfig(
 export async function loadConfigFile(
   absolutePath: string,
 ): Promise<ResolveConfigResult> {
-  // Config should be JSON, CommonJS, ESM or YAML (deprecated)
+  // Config should be JSON, CommonJS, or ESM
   let config: unknown;
   const extension = path.extname(absolutePath);
 
@@ -436,15 +438,14 @@ export async function loadConfigFile(
         throw error;
       }
     }
-  } else if (YAML_EXTENSIONS.has(extension)) {
-    console.warn(
-      'YAML config is deprecated, please migrate to JavaScript config (e.g. metro.config.js)',
+  } else if (extension === '.yaml' || extension === '.yml') {
+    throw new Error(
+      'YAML config is no longer supported, please migrate to JavaScript config (e.g. metro.config.js)',
     );
-    config = parseYaml(fs.readFileSync(absolutePath, 'utf8'));
   } else {
     throw new Error(
       `Unsupported config file extension: ${extension}. ` +
-        `Supported extensions are ${[...JS_EXTENSIONS, ...TS_EXTENSIONS, ...YAML_EXTENSIONS].map(ext => (ext === '' ? 'none' : `${ext}`)).join()})}.`,
+        `Supported extensions are ${[...JS_EXTENSIONS, ...TS_EXTENSIONS].map(ext => (ext === '' ? 'none' : `${ext}`)).join()})}.`,
     );
   }
 

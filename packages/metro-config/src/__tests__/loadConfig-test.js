@@ -98,6 +98,23 @@ describe('loadConfig', () => {
     });
   });
 
+  test('array valued exports merge', async () => {
+    const defaultConfigOverrides = {
+      resolver: {
+        sourceExts: ['override'],
+      },
+    };
+    const config = path.resolve(
+      __dirname,
+      '../__fixtures__/merge-array.metro.config.js',
+    );
+    const result = await loadConfig({config}, defaultConfigOverrides);
+    expect(result.projectRoot).toEqual(path.dirname(config));
+    expect(result.resolver).toMatchObject({
+      sourceExts: ['before', 'override', 'after'],
+    });
+  });
+
   test('can load the config from a path pointing to a directory', async () => {
     // We don't actually use the specified file in this test but it needs to
     // resolve to a real file on the file system.
@@ -154,16 +171,6 @@ describe('loadConfig', () => {
     expect(result.cacheStores[0]).toBeInstanceOf(
       require('metro-cache').FileStore,
     );
-  });
-
-  test('supports loading YAML (deprecated)', async () => {
-    const result = await loadConfig({
-      config: path.resolve(FIXTURES, 'yaml-extensionless'),
-    });
-    expect(console.warn).toHaveBeenCalledWith(
-      'YAML config is deprecated, please migrate to JavaScript config (e.g. metro.config.js)',
-    );
-    expect(result.cacheVersion).toEqual('yaml-extensionless');
   });
 
   describe('given a search directory', () => {

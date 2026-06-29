@@ -263,7 +263,15 @@ export type InputConfigT = Partial<
   >,
 >;
 
-export type MetroConfig = InputConfigT;
+export type MetroConfig =
+  | InputConfigT
+  | ((baseConfig: ConfigT) => InputConfigT)
+  | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+  | ReadonlyArray<
+      | InputConfigT
+      | ((baseConfig: ConfigT) => InputConfigT)
+      | ((baseConfig: ConfigT) => Promise<InputConfigT>),
+    >;
 
 export type ConfigT = Readonly<
   MetalConfigT & {

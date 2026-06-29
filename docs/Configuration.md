@@ -773,15 +773,9 @@ The default value is `['hg.update']`.
 
 ## Merging Configurations
 
-Using the `metro-config` package it is possible to merge multiple configurations together.
+If a config file exports an *array*, the first entry will be merged into Metro's defaults, and each subsequent entry into the previous merged result.
 
-| Method                                  | Description                                                                         |
-| --------------------------------------- | ----------------------------------------------------------------------------------- |
-| `mergeConfig(...configs): MergedConfig` | Returns the merged configuration of two or more configuration objects or functions. |
-
-`configs` may be any combination of (promises resolving to) configuration objects or functions. Functions are called with the merged config of all configs to the left, which may be useful for complex merges with the previous config.
-
-If any arguments are promises or async functions, `mergeConfig` will return a `Promise`, otherwise it will return the merged config synchronously.
+Entries may be any combination of (promises resolving to) configuration objects or functions. Functions are called with the merged config of all configs to the left, which may be useful for complex merges with the previous config.
 
 :::note
 
@@ -792,23 +786,31 @@ This allows overriding and removing default config parameters such as `platforms
 
 #### Merging Example
 
+
 ```typescript
 // metro.config.ts
-import type {ConfigT} from 'metro-config';
-import {mergeConfig} from 'metro-config';
+import type {MetroConfig} from 'metro-config';
 
-export default (defaults: ConfigT) =>
-  mergeConfig(
-    defaults,
-    // Function form: extends the default additionalExts
-    config => ({
-      watcher: {additionalExts: [...config.watcher.additionalExts, 'mts', 'cts']},
-    }),
-    // Plain object form
-    {transformer: {minifierPath: 'metro-minify-terser'}},
-    // Function form: additionalExts already includes 'mts' and 'cts' from above
-    config => ({
-      watcher: {additionalExts: [...config.watcher.additionalExts, 'css']},
-    }),
-  );
+export default [
+  // Function form: extends the default additionalExts
+  config => ({
+    watcher: {additionalExts: [...config.watcher.additionalExts, 'mts', 'cts']},
+  }),
+  // Plain object form
+  {transformer: {minifierPath: 'metro-minify-terser'}},
+  // Function form: additionalExts already includes 'mts' and 'cts' from above
+  config => ({
+    watcher: {additionalExts: [...config.watcher.additionalExts, 'css']},
+  }),
+] satisfies MetroConfig;
 ```
+
+#### The `mergeConfig` API
+
+Array configs use `metro-config`'s `mergeConfig` under the hood, which you may also use directly.
+
+| Method                                  | Description                                                                         |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
+| `mergeConfig(...configs): MergedConfig` | Returns the merged configuration of two or more configuration objects or functions. |
+
+If any arguments are promises or async functions, `mergeConfig` will return a `Promise`, otherwise it will return the merged config synchronously.

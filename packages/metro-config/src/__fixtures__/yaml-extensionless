@@ -1,2 +1,0 @@
-# Use cacheVersion as a dummy free text field to check we've read the config
-cacheVersion: yaml-extensionless

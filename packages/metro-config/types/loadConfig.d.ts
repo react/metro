@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<766965f89c595a34edf84abd019f9b92>>
+ * @generated SignedSource<<31c1727bd4ec31822cebd8243fbf3fe4>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-config/src/loadConfig.js
@@ -21,9 +21,14 @@ type ResolveConfigResult = {
   filepath: string;
   isEmpty: boolean;
   config:
-    | ((baseConfig: ConfigT) => Promise<ConfigT>)
-    | ((baseConfig: ConfigT) => ConfigT)
-    | InputConfigT;
+    | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+    | ((baseConfig: ConfigT) => InputConfigT)
+    | InputConfigT
+    | ReadonlyArray<
+        | InputConfigT
+        | ((baseConfig: ConfigT) => InputConfigT)
+        | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+      >;
 };
 declare function resolveConfig(
   filePath?: string,
