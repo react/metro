@@ -25,9 +25,14 @@ type ResolveConfigResult = {
   filepath: string,
   isEmpty: boolean,
   config:
-    | ((baseConfig: ConfigT) => Promise<ConfigT>)
-    | ((baseConfig: ConfigT) => ConfigT)
-    | InputConfigT,
+    | ((baseConfig: ConfigT) => Promise<InputConfigT>)
+    | ((baseConfig: ConfigT) => InputConfigT)
+    | InputConfigT
+    | ReadonlyArray<
+        | InputConfigT
+        | ((baseConfig: ConfigT) => InputConfigT)
+        | ((baseConfig: ConfigT) => Promise<InputConfigT>),
+      >,
   ...
 };
 
@@ -276,6 +281,8 @@ async function loadMetroConfigFromDisk(
     const resultedConfig = await configModule(defaultConfig);
 
     return mergeConfig(defaultConfig, resultedConfig);
+  } else if (Array.isArray(configModule)) {
+    return mergeConfig(defaultConfig, ...configModule);
   }
 
   return mergeConfig(defaultConfig, configModule);
