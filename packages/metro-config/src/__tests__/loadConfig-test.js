@@ -156,16 +156,6 @@ describe('loadConfig', () => {
     );
   });
 
-  test('supports loading YAML (deprecated)', async () => {
-    const result = await loadConfig({
-      config: path.resolve(FIXTURES, 'yaml-extensionless'),
-    });
-    expect(console.warn).toHaveBeenCalledWith(
-      'YAML config is deprecated, please migrate to JavaScript config (e.g. metro.config.js)',
-    );
-    expect(result.cacheVersion).toEqual('yaml-extensionless');
-  });
-
   describe('given a search directory', () => {
     const HOME = process.platform === 'win32' ? 'C:\\Home' : '/home';
     const mockHomeDir = jest.fn().mockReturnValue(HOME);

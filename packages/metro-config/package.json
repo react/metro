@@ -25,8 +25,7 @@
     "metro": "0.85.0",
     "metro-cache": "0.85.0",
     "metro-core": "0.85.0",
-    "metro-runtime": "0.85.0",
-    "yaml": "^2.6.1"
+    "metro-runtime": "0.85.0"
   },
   "devDependencies": {
     "@types/connect": "^3.4.35",
