@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<926fc453e7c2af496911a003ca20e556>>
+ * @generated SignedSource<<fcd4ec40719bf4050bc337bfa17ccc5a>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-config/src/types.js
@@ -91,7 +91,6 @@ export type PerfLoggerFactory = (
 type ResolverConfigT = {
   assetExts: ReadonlyArray<string>;
   assetResolutions: ReadonlyArray<string>;
-  blacklistRE?: RegExp | Array<RegExp>;
   blockList: RegExp | Array<RegExp>;
   disableHierarchicalLookup: boolean;
   dependencyExtractor: null | undefined | string;

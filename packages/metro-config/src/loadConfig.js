@@ -369,11 +369,7 @@ async function loadConfig(
   validate(configuration, {
     exampleConfig: await validConfig(),
     recursiveDenylist: ['reporter', 'resolver', 'transformer'],
-    deprecatedConfig: {
-      blacklistRE: () =>
-        `Warning: Metro config option \`blacklistRE\` is deprecated.
-         Please use \`blockList\` instead.`,
-    },
+    deprecatedConfig: {},
   });
 
   // Override the configuration with cli parameters

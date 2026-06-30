@@ -102,7 +102,6 @@ export type PerfLoggerFactory = (
 type ResolverConfigT = {
   assetExts: ReadonlyArray<string>,
   assetResolutions: ReadonlyArray<string>,
-  blacklistRE?: RegExp | Array<RegExp>,
   blockList: RegExp | Array<RegExp>,
   disableHierarchicalLookup: boolean,
   dependencyExtractor: ?string,

@@ -19,43 +19,29 @@ import MetroFileMap, {
   HastePlugin,
 } from 'metro-file-map';
 
-function getIgnorePattern(config: ConfigT): RegExp {
-  // For now we support both options
-  const {blockList, blacklistRE} = config.resolver;
-  const ignorePattern = blacklistRE || blockList;
-
-  // If neither option has been set, use default pattern
-  if (!ignorePattern) {
-    return / ^/;
+const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
+  if (!Array.isArray(regexes)) {
+    return regexes;
   }
-
-  const combine = (regexes: Array<RegExp>) =>
-    new RegExp(
-      regexes
-        .map((regex, index) => {
-          if (regex.flags !== regexes[0].flags) {
-            throw new Error(
-              'Cannot combine blockList patterns, because they have different flags:\n' +
-                ' - Pattern 0: ' +
-                regexes[0].toString() +
-                '\n' +
-                ` - Pattern ${index}: ` +
-                regexes[index].toString(),
-            );
-          }
-          return '(' + regex.source + ')';
-        })
-        .join('|'),
-      regexes[0]?.flags ?? '',
-    );
-
-  // If ignorePattern is an array, merge it into one
-  if (Array.isArray(ignorePattern)) {
-    return combine(ignorePattern);
-  }
-
-  return ignorePattern;
-}
+  return new RegExp(
+    regexes
+      .map((regex, index) => {
+        if (regex.flags !== regexes[0].flags) {
+          throw new Error(
+            'Cannot combine blockList patterns, because they have different flags:\n' +
+              ' - Pattern 0: ' +
+              regexes[0].toString() +
+              '\n' +
+              ` - Pattern ${index}: ` +
+              regexes[index].toString(),
+          );
+        }
+        return '(' + regex.source + ')';
+      })
+      .join('|'),
+    regexes[0]?.flags ?? '',
+  );
+};
 
 export default function createFileMap(
   config: ConfigT,
@@ -126,7 +112,7 @@ export default function createFileMap(
       ]),
     ),
     healthCheck: config.watcher.healthCheck,
-    ignorePattern: getIgnorePattern(config),
+    ignorePattern: flattenBlockList(config.resolver.blockList),
     maxWorkers: config.maxWorkers,
     plugins,
     retainAllFiles: true,
