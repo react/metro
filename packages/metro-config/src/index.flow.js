@@ -15,11 +15,3 @@ import getDefaultConfig from './defaults';
 import {loadConfig, mergeConfig, resolveConfig} from './loadConfig';
 
 export {getDefaultConfig, loadConfig, mergeConfig, resolveConfig};
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-config' is deprecated, use named exports.
- */
-export default {getDefaultConfig, loadConfig, mergeConfig, resolveConfig};

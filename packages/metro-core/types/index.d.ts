@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<80e0670a74f3bf0ae7524193ec36bff9>>
+ * @generated SignedSource<<7bae6aff5277ac3c20ebc15002863e29>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-core/src/index.js
@@ -26,18 +26,3 @@ export {
   PackageResolutionError,
   Terminal,
 };
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-core' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  AmbiguousModuleResolutionError: typeof AmbiguousModuleResolutionError;
-  Logger: typeof Logger;
-  PackageResolutionError: typeof PackageResolutionError;
-  Terminal: typeof Terminal;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

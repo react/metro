@@ -37,18 +37,3 @@ export interface MetroCache {
   readonly HttpStore: typeof HttpStore;
   readonly stableHash: typeof stableHash;
 }
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-cache' is deprecated, use named exports.
- */
-export default {
-  AutoCleanFileStore,
-  Cache,
-  FileStore,
-  HttpGetStore,
-  HttpStore,
-  stableHash,
-} as MetroCache;

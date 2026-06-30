@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<e60b75113fdb3dbe291de1bc9b2656e2>>
+ * @generated SignedSource<<9dd33483d38a4822221997a63b6ed7d0>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-config/src/index.flow.js
@@ -20,18 +20,3 @@ import getDefaultConfig from './defaults';
 import {loadConfig, mergeConfig, resolveConfig} from './loadConfig';
 
 export {getDefaultConfig, loadConfig, mergeConfig, resolveConfig};
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-config' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  getDefaultConfig: typeof getDefaultConfig;
-  loadConfig: typeof loadConfig;
-  mergeConfig: typeof mergeConfig;
-  resolveConfig: typeof resolveConfig;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

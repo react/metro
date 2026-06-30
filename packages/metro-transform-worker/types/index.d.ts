@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<9cf6eca6abe0d86fd41c697473f45aff>>
+ * @generated SignedSource<<42a021f72552951fbd1a0bdc2c2bb138>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-transform-worker/src/index.js
@@ -115,16 +115,3 @@ export declare const getCacheKey: (
   opts?: Readonly<{projectRoot: string}>,
 ) => string;
 export declare type getCacheKey = typeof getCacheKey;
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-transform-worker' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  getCacheKey: typeof getCacheKey;
-  transform: typeof transform;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

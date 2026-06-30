@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<2bb72546f80164eb8c0068f9de3a1487>>
+ * @generated SignedSource<<804f03bb7635d27850a096a40e46de0c>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-cache/src/index.js
@@ -41,13 +41,3 @@ export interface MetroCache {
   readonly HttpStore: typeof HttpStore;
   readonly stableHash: typeof stableHash;
 }
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-cache' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: MetroCache;
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

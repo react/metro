@@ -616,23 +616,3 @@ export {
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 };
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-source-map' is deprecated, use named exports.
- */
-export default {
-  BundleBuilder,
-  composeSourceMaps,
-  Consumer,
-  createIndexMap,
-  generateFunctionMap,
-  fromRawMappings,
-  fromRawMappingsNonBlocking,
-  functionMapBabelPlugin,
-  normalizeSourcePath,
-  toBabelSegments,
-  toSegmentTuple,
-};

@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<c26a662896a7bf2992a47a7daf457cbf>>
+ * @generated SignedSource<<ff5d24a27b09aefdeb721ffcce936372>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-resolver/src/index.js
@@ -45,20 +45,3 @@ export {
   InvalidPackageError,
   resolve,
 };
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-resolver' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  FailedToResolveNameError: typeof FailedToResolveNameError;
-  FailedToResolvePathError: typeof FailedToResolvePathError;
-  FailedToResolveUnsupportedError: typeof FailedToResolveUnsupportedError;
-  formatFileCandidates: typeof formatFileCandidates;
-  InvalidPackageError: typeof InvalidPackageError;
-  resolve: typeof resolve;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

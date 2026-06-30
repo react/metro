@@ -835,14 +835,3 @@ function countLinesAndTerminateMap(
   }
   return {lineCount, map: [...map]};
 }
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-transform-worker' is deprecated, use named exports.
- */
-export default {
-  getCacheKey,
-  transform,
-};

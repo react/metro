@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<c71ff6c13c916919d1340d231518de8f>>
+ * @generated SignedSource<<346524f1f00a1d545b2f71e3afa6df07>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-babel-transformer/src/index.js
@@ -105,16 +105,3 @@ declare function transform(
  */
 declare function getCacheKey(options?: BabelTransformerCacheKeyOptions): string;
 export {transform, getCacheKey};
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-babel-transformer' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  transform: typeof transform;
-  getCacheKey: typeof getCacheKey;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

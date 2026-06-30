@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<13fbae6a38a28c6a6e3a2be58804c33d>>
+ * @generated SignedSource<<a3a499a683d5ea557e429489802510ae>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-source-map/src/source-map.js
@@ -219,25 +219,3 @@ export {
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 };
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-source-map' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  BundleBuilder: typeof BundleBuilder;
-  composeSourceMaps: typeof composeSourceMaps;
-  Consumer: typeof Consumer;
-  createIndexMap: typeof createIndexMap;
-  generateFunctionMap: typeof generateFunctionMap;
-  fromRawMappings: typeof fromRawMappings;
-  fromRawMappingsNonBlocking: typeof fromRawMappingsNonBlocking;
-  functionMapBabelPlugin: typeof functionMapBabelPlugin;
-  normalizeSourcePath: typeof normalizeSourcePath;
-  toBabelSegments: typeof toBabelSegments;
-  toSegmentTuple: typeof toSegmentTuple;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

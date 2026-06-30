@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<3c6460427c6760887187d6b16151c609>>
+ * @generated SignedSource<<8cfd5068558051749a42bc72eb4b915f>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/index.flow.js
@@ -182,25 +182,3 @@ export declare const attachMetroCli: (
   options?: AttachMetroCLIOptions,
 ) => Yargs;
 export declare type attachMetroCli = typeof attachMetroCli;
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro' is deprecated, use named exports.
- */
-declare const $$EXPORT_DEFAULT_DECLARATION$$: {
-  attachMetroCli: typeof attachMetroCli;
-  runServer: typeof runServer;
-  Terminal: typeof Terminal;
-  JsonReporter: typeof JsonReporter;
-  TerminalReporter: typeof TerminalReporter;
-  loadConfig: typeof loadConfig;
-  mergeConfig: typeof mergeConfig;
-  resolveConfig: typeof resolveConfig;
-  createConnectMiddleware: typeof createConnectMiddleware;
-  runBuild: typeof runBuild;
-  buildGraph: typeof buildGraph;
-};
-declare type $$EXPORT_DEFAULT_DECLARATION$$ =
-  typeof $$EXPORT_DEFAULT_DECLARATION$$;
-export default $$EXPORT_DEFAULT_DECLARATION$$;

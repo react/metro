@@ -40,18 +40,3 @@ export {
   InvalidPackageError,
   resolve,
 };
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-resolver' is deprecated, use named exports.
- */
-export default {
-  FailedToResolveNameError,
-  FailedToResolvePathError,
-  FailedToResolveUnsupportedError,
-  formatFileCandidates,
-  InvalidPackageError,
-  resolve,
-};

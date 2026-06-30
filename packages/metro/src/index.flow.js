@@ -587,23 +587,3 @@ async function earlyPortCheck(host: void | string, port: number) {
     await new Promise(resolve => server.close(() => resolve()));
   }
 }
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro' is deprecated, use named exports.
- */
-export default {
-  attachMetroCli,
-  runServer,
-  Terminal,
-  JsonReporter,
-  TerminalReporter,
-  loadConfig,
-  mergeConfig,
-  resolveConfig,
-  createConnectMiddleware,
-  runBuild,
-  buildGraph,
-};

@@ -20,16 +20,3 @@ export {
   PackageResolutionError,
   Terminal,
 };
-
-/**
- * Backwards-compatibility with CommonJS consumers using interopRequireDefault.
- * Do not add to this list.
- *
- * @deprecated Default import from 'metro-core' is deprecated, use named exports.
- */
-export default {
-  AmbiguousModuleResolutionError,
-  Logger,
-  PackageResolutionError,
-  Terminal,
-};
