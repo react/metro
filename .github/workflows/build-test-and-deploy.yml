@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Type check, lint, smoke test"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/yarn-install
       - run: yarn typecheck
       - run: yarn typecheck-ts
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     name: "Tests with coverage"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/yarn-install
       - run: yarn test-coverage
       - run: "./.github/scripts/install_codecov.sh"
@@ -71,7 +71,7 @@ jobs:
       contents: read
       id-token: write  # Required for npm provenance / OIDC trusted publishing
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/yarn-install
       - run: "./.github/scripts/publish.sh"
         env:
