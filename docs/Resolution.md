@@ -298,7 +298,7 @@ Any custom options passed to the resolver. By default, Metro populates this base
 
 #### `resolveRequest: CustomResolver`
 
-A alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolvereqeuest).
+An alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolverequest).
 
 Metro expects `resolveRequest` to have the following signature:
 
