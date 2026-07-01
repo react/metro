@@ -31,7 +31,7 @@ export type Options = Readonly<{
   platform: string,
 }>;
 
-type State = {opts: Options};
+type State = {opts: Options, filename?: string};
 
 const env = {name: 'env'};
 const nodeEnv = {name: 'NODE_ENV'};
@@ -137,11 +137,12 @@ export default function inlinePlugin(
         const node = path.node;
         const scope = path.scope;
         const opts = state.opts;
+        const filename = state.filename;
 
         if (!isLeftHandSideOfAssignmentExpression(node, path.parent)) {
           if (
             opts.inlinePlatform &&
-            isPlatformNode(node, scope, !!opts.isWrapped)
+            isPlatformNode(node, scope, !!opts.isWrapped, filename)
           ) {
             path.replaceWith(t.stringLiteral(opts.platform));
           } else if (!opts.dev && isProcessEnvNodeEnv(node, scope)) {
@@ -156,10 +157,11 @@ export default function inlinePlugin(
         const scope = path.scope;
         const arg = node.arguments[0];
         const opts = state.opts;
+        const filename = state.filename;
 
         if (
           opts.inlinePlatform &&
-          isPlatformSelectNode(node, scope, !!opts.isWrapped) &&
+          isPlatformSelectNode(node, scope, !!opts.isWrapped, filename) &&
           isObjectExpression(arg)
         ) {
           if (hasStaticProperties(arg)) {

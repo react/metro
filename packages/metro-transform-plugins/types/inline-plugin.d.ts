@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<0a0f52c4e23d8cd25d04b2d46a09e480>>
+ * @generated SignedSource<<b359d860825de0cb738f9042eb9a0086>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-transform-plugins/src/inline-plugin.js
@@ -26,7 +26,7 @@ export type Options = Readonly<{
   requireName?: string;
   platform: string;
 }>;
-type State = {opts: Options};
+type State = {opts: Options; filename?: string};
 declare function inlinePlugin(
   $$PARAM_0$$: {types: Types},
   options: Options,

@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<13269e5dcf93e0b31428517812e3bb88>>
+ * @generated SignedSource<<ecf4ea083ce738b6e360a87e0bfccc20>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-transform-plugins/src/utils/createInlinePlatformChecks.js
@@ -25,11 +25,13 @@ type PlatformChecks = {
     node: MemberExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean;
   isPlatformSelectNode: (
     node: CallExpression,
     scope: Scope,
     isWrappedModule: boolean,
+    filename?: string,
   ) => boolean;
 };
 declare function createInlinePlatformChecks(
