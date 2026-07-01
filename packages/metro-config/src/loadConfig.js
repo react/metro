@@ -239,7 +239,10 @@ function mergeConfig<
       typeof next === 'function' ? next(currentConfig) : next;
     if (nextConfig instanceof Promise) {
       // $FlowFixMe[incompatible-type] Not clear why Flow doesn't like this
-      return mergeConfigAsync(nextConfig, reversedConfigs.toReversed());
+      return mergeConfigAsync(
+        nextConfig.then(resolved => mergeConfigObjects(currentConfig, resolved)),
+        ...reversedConfigs.toReversed(),
+      );
     }
     currentConfig = mergeConfigObjects(currentConfig, nextConfig) as T;
   }
