@@ -3,19 +3,19 @@ id: source-map-format
 title: Source Map Format
 ---
 
-Metro produces standard [source maps](https://sourcemaps.info/spec.html) along with its JavaScript bundle output. In addition to the standard information, Metro encodes extra information in [vendor-specific fields](https://sourcemaps.info/spec.html#h.ghqpj1ytqjbm) within the source map. This page serves as a specification for this encoding.
+Metro produces standard [source maps](https://tc39.es/ecma426/#sec-source-map-format) along with its JavaScript bundle output. In addition to the standard information, Metro encodes extra information in [vendor-specific fields](https://tc39.es/ecma426/#sec-source-map-format:~:text=9%2E2%29%2E-,The,present) within the source map. This page serves as a specification for this encoding.
 
 :::note
-The content on this page assumes familiarity with the [source map specification](https://sourcemaps.info/spec.html). Check out [Anatomy of source maps](https://www.bugsnag.com/blog/source-maps) for a general introduction to source maps and how they work.
+The content on this page assumes familiarity with the [source map specification](https://tc39.es/ecma426/#sec-source-map-format). Check out [Anatomy of source maps](https://docs.bugsnag.com/build-integrations/legacy/js/source-maps-react-native/) for a general introduction to source maps and how they work.
 :::
 
 ## `x_facebook_sources`
 
 The `x_facebook_sources` field encodes metadata about source files in a source map. Each piece of metadata represents some attribute intrinsic to the source code of that particular file - for example, the result of running some analysis over the AST. This allows tools such as debuggers and JS engines to access such analyses efficiently, without needing to parse or even have access to the source code.
 
-In the same way that the standard [`sources`](https://sourcemaps.info/spec.html#h.ghqpj1ytqjbm:~:text=sourceRoot%22%3A%20%22%22%2C-,%22sources%22%3A,-%5B%22foo.js%22%2C%20%22bar) field is a list of source URLs and [`sourcesContent`](https://sourcemaps.info/spec.html#h.ghqpj1ytqjbm:~:text=js%22%2C%20%22bar.js%22%5D%2C-,%22sourcesContent%22%3A,-%5Bnull%2C%20null%5D%2C) is a list of (optional) source code strings, `x_facebook_sources` is a list of optional **metadata tuples**. The _i_-th metadata tuple (`x_facebook_sources[i]`) corresponds to the source file whose URL is `sources[i]`.
+In the same way that the standard [`sources`](https://tc39.es/ecma426/#sec-source-map-format:~:text=The%20sources%20field%20is%20a%20list%20of%20original%20sources%20used%20by%20the%20mappings%20field%2E) field is a list of source URLs and [`sourcesContent`](https://tc39.es/ecma426/#sec-source-map-format:~:text=The%20sourcesContent%20field%20is%20an%20optional%20list%20of%20source%20content) is a list of (optional) source code strings, `x_facebook_sources` is a list of optional **metadata tuples**. The _i_-th metadata tuple (`x_facebook_sources[i]`) corresponds to the source file whose URL is `sources[i]`.
 
-In nested (indexed) source maps, `x_facebook_sources` may appear as part of any nested source map in [`sections`](https://sourcemaps.info/spec.html#h.535es3xeprgt) that itself has a `sources` field.
+In nested (indexed) source maps, `x_facebook_sources` may appear as part of any nested source map in [`sections`](https://tc39.es/ecma426/#sec-source-map-format) that itself has a `sources` field.
 
 If present, `x_facebook_sources` may be a different length than `sources` (but usually shouldn't be). In particular, if it's shorter than `sources`, `x_facebook_sources` interpreted as if it were padded with `null` values to match the length of `sources`.
 
@@ -54,7 +54,7 @@ The value of the `mappings` field is described by the _Mappings_ production of t
 2. `LineMappings =  FirstColumnMapping "," ColumnMapping`
 3. `FirstColumnMapping =  VLQ VLQ VLQ`
 4. `ColumnMapping =  VLQ VLQ [ VLQ ]`
-5. `VLQ =` _A single Base64-encoded variable-length quantity, as defined in the [source map specification](https://sourcemaps.info/spec.html#h.crcf4lqeivt8)_.
+5. `VLQ =` _A single Base64-encoded variable-length quantity, as defined in the [source map specification](https://tc39.es/ecma426/#sec-base64-vlq)_.
 
 :::note
 The above grammar uses the following BNF-like notation:
