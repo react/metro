@@ -16,7 +16,9 @@ import type {
   MixedSourceMap,
 } from '../source-map';
 
+import {greatestLowerBound} from '../Consumer/search';
 import Generator from '../Generator';
+import LineIndexedMappings from '../LineIndexedMappings';
 import {
   fromRawMappings,
   fromRawMappingsIndexed,
@@ -492,5 +494,106 @@ describe('vlqMapFromBabelDecodedMap', () => {
     expect(vlqMapFromBabelDecodedMap(decodedMap, [1, 0])).toEqual(
       vlqMapFromTuples([[1, 0]]),
     );
+  });
+});
+
+describe('LineIndexedMappings', () => {
+  // Reference lookup: decode to tuples via toBabelSegments + toSegmentTuple,
+  // then greatestLowerBound over (generatedLine, generatedColumn), returning the
+  // original position only when the matched segment is on the target line and
+  // carries source info.
+  const referenceOriginalPositionFor = (
+    tuples: Array<MetroSourceMapSegmentTuple>,
+    line1Based: number,
+    column0Based: number,
+  ) => {
+    const index = greatestLowerBound(
+      tuples,
+      {line1Based, column0Based},
+      (target, candidate) =>
+        target.line1Based === candidate[0]
+          ? target.column0Based - candidate[1]
+          : target.line1Based - candidate[0],
+    );
+    if (index == null) {
+      return null;
+    }
+    const mapping = tuples[index];
+    if (mapping[0] !== line1Based || mapping.length < 4) {
+      return null;
+    }
+    return {
+      // $FlowFixMe[invalid-tuple-index]: Length checks do not refine tuple unions.
+      line1Based: mapping[2],
+      // $FlowFixMe[invalid-tuple-index]: Length checks do not refine tuple unions.
+      column0Based: mapping[3],
+    };
+  };
+
+  const cases: {[string]: Array<MetroSourceMapSegmentTuple>} = {
+    'single segment': [[1, 0, 10, 4]],
+    'multiple segments on one line': [
+      [1, 0, 10, 4],
+      [1, 8, 10, 12, 'greet'],
+      [2, 0, 11, 0],
+    ],
+    'generated-only segments (no source)': [
+      [1, 0],
+      [1, 5, 3, 2],
+      [2, 0],
+      [3, 0, 4, 0, 'x'],
+    ],
+    'gap in generated lines (blank line -> ";;")': [
+      [1, 0, 1, 0],
+      [3, 4, 3, 2, 'bar'],
+      [5, 0],
+    ],
+    'large multi-line map with names': [
+      [1, 2],
+      [3, 4, 5, 6, 'apples'],
+      [7, 8, 9, 10],
+      [11, 12, 13, 14, 'pears'],
+      [11, 20, 30, 40],
+    ],
+  };
+
+  for (const name of Object.keys(cases)) {
+    test(`matches the tuple path exactly across a position grid: ${name}`, () => {
+      const tuples = cases[name];
+      const vlqMap = vlqMapFromTuples(tuples);
+      // The exact tuples the old path would have produced from this VLQ map.
+      const reference = toBabelSegments({
+        version: 3,
+        sources: [''],
+        names: [...vlqMap.names],
+        mappings: vlqMap.mappings,
+      }).map(toSegmentTuple);
+
+      const decoded = new LineIndexedMappings(vlqMap.mappings);
+
+      const maxLine = Math.max(...tuples.map(t => t[0])) + 1;
+      for (let line = 1; line <= maxLine; line++) {
+        for (let column = 0; column <= 24; column++) {
+          expect(decoded.originalPositionFor(line, column)).toEqual(
+            referenceOriginalPositionFor(reference, line, column),
+          );
+        }
+      }
+    });
+  }
+
+  test('empty mappings never resolves a position', () => {
+    const decoded = new LineIndexedMappings('');
+    expect(decoded.originalPositionFor(1, 0)).toBeNull();
+    expect(decoded.originalPositionFor(5, 3)).toBeNull();
+  });
+
+  test('out-of-range generated lines resolve to null', () => {
+    const decoded = new LineIndexedMappings(
+      vlqMapFromTuples([[1, 0, 10, 4]]).mappings,
+    );
+    expect(decoded.originalPositionFor(0, 0)).toBeNull();
+    expect(decoded.originalPositionFor(-1, 0)).toBeNull();
+    expect(decoded.originalPositionFor(99, 0)).toBeNull();
   });
 });
