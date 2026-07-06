@@ -594,21 +594,40 @@ describe('processRequest', () => {
 
     expect(response._getJSON()).toEqual({
       version: 3,
-      sources: ['require-js', '/root/mybundle.js', '/root/foo.js'],
-      sourcesContent: ['code-require', 'code-mybundle', 'code-foo'],
-      names: [],
-      mappings: ';gBCAA;gBCAA',
-      x_facebook_sources: [
-        null,
-        null,
-        [
-          {
-            mappings: 'AAA',
-            names: ['<global>'],
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {
+            version: 3,
+            sources: ['require-js'],
+            sourcesContent: ['code-require'],
+            names: [],
+            mappings: '',
           },
-        ],
+        },
+        {
+          offset: {line: 1, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/mybundle.js'],
+            sourcesContent: ['code-mybundle'],
+            names: [],
+            mappings: 'gBAAA',
+          },
+        },
+        {
+          offset: {line: 2, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/foo.js'],
+            sourcesContent: ['code-foo'],
+            names: [],
+            mappings: 'gBAAA',
+            x_facebook_sources: [[{mappings: 'AAA', names: ['<global>']}]],
+            x_google_ignoreList: [0],
+          },
+        },
       ],
-      x_google_ignoreList: [2],
     });
   });
 
@@ -617,20 +636,30 @@ describe('processRequest', () => {
 
     expect(response._getJSON()).toEqual({
       version: 3,
-      sources: ['/root/mybundle.js', '/root/foo.js'],
-      sourcesContent: ['code-mybundle', 'code-foo'],
-      names: [],
-      mappings: 'gBAAA;gBCAA',
-      x_facebook_sources: [
-        null,
-        [
-          {
-            mappings: 'AAA',
-            names: ['<global>'],
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/mybundle.js'],
+            sourcesContent: ['code-mybundle'],
+            names: [],
+            mappings: 'gBAAA',
           },
-        ],
+        },
+        {
+          offset: {line: 1, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/foo.js'],
+            sourcesContent: ['code-foo'],
+            names: [],
+            mappings: 'gBAAA',
+            x_facebook_sources: [[{mappings: 'AAA', names: ['<global>']}]],
+            x_google_ignoreList: [0],
+          },
+        },
       ],
-      x_google_ignoreList: [1],
     });
   });
 
@@ -718,25 +747,40 @@ describe('processRequest', () => {
 
     expect(response._getJSON()).toEqual({
       version: 3,
-      sources: [
-        '/require-js',
-        '/[metro-project]/mybundle.js',
-        '/[metro-project]/foo.js',
-      ],
-      sourcesContent: ['code-require', 'code-mybundle', 'code-foo'],
-      names: [],
-      mappings: ';gBCAA;gBCAA',
-      x_facebook_sources: [
-        null,
-        null,
-        [
-          {
-            mappings: 'AAA',
-            names: ['<global>'],
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {
+            version: 3,
+            sources: ['/require-js'],
+            sourcesContent: ['code-require'],
+            names: [],
+            mappings: '',
           },
-        ],
+        },
+        {
+          offset: {line: 1, column: 0},
+          map: {
+            version: 3,
+            sources: ['/[metro-project]/mybundle.js'],
+            sourcesContent: ['code-mybundle'],
+            names: [],
+            mappings: 'gBAAA',
+          },
+        },
+        {
+          offset: {line: 2, column: 0},
+          map: {
+            version: 3,
+            sources: ['/[metro-project]/foo.js'],
+            sourcesContent: ['code-foo'],
+            names: [],
+            mappings: 'gBAAA',
+            x_facebook_sources: [[{mappings: 'AAA', names: ['<global>']}]],
+            x_google_ignoreList: [0],
+          },
+        },
       ],
-      x_google_ignoreList: [2],
     });
   });
 

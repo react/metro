@@ -9,19 +9,30 @@ Object {
       "code": "__d(function() {entry()},\\"/root/entry.js\\",[\\"/root/foo.js\\",\\"/root/entry2.js\\"],\\"entry.js\\");",
       "id": "/root/entry.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/entry.js",
-        ],
-        "sourcesContent": Array [
-          "source of entry",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/entry.js",
+              ],
+              "sourcesContent": Array [
+                "source of entry",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "entry.js",
       "source": "source of entry",
@@ -32,19 +43,30 @@ Object {
       "code": "__d(function() {entry2()},\\"/root/entry2.js\\",[\\"/root/foo2.js\\"],\\"entry2.js\\");",
       "id": "/root/entry2.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/entry2.js",
-        ],
-        "sourcesContent": Array [
-          "source of entry2",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/entry2.js",
+              ],
+              "sourcesContent": Array [
+                "source of entry2",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "entry2.js",
       "source": "source of entry2",
@@ -55,19 +77,30 @@ Object {
       "code": "__d(function() {foo2()},\\"/root/foo2.js\\",[],\\"foo2.js\\");",
       "id": "/root/foo2.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/foo2.js",
-        ],
-        "sourcesContent": Array [
-          "source of foo2",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/foo2.js",
+              ],
+              "sourcesContent": Array [
+                "source of foo2",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "foo2.js",
       "source": "source of foo2",
@@ -78,19 +111,30 @@ Object {
       "code": "__d(function() {foo()},\\"/root/foo.js\\",[\\"/root/bar.js\\",\\"/root/baz.js\\",\\"/root/qux.js\\"],\\"foo.js\\");",
       "id": "/root/foo.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/foo.js",
-        ],
-        "sourcesContent": Array [
-          "source of foo",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/foo.js",
+              ],
+              "sourcesContent": Array [
+                "source of foo",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "foo.js",
       "source": "source of foo",
@@ -101,19 +145,30 @@ Object {
       "code": "__d(function() {baz()},\\"/root/baz.js\\",[],\\"baz.js\\");",
       "id": "/root/baz.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/baz.js",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/baz.js",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "baz.js",
       "source": "source of baz",
@@ -124,19 +179,30 @@ Object {
       "code": "__d(function() {bar()},\\"/root/bar.js\\",[],\\"bar.js\\");",
       "id": "/root/bar.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/bar.js",
-        ],
-        "sourcesContent": Array [
-          "source of bar",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/bar.js",
+              ],
+              "sourcesContent": Array [
+                "source of bar",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "bar.js",
       "source": "source of bar",
@@ -147,19 +213,30 @@ Object {
       "code": "__d(function() {qux()},\\"/root/qux.js\\",[],\\"qux.js\\");",
       "id": "/root/qux.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/qux.js",
-        ],
-        "sourcesContent": Array [
-          "source of qux",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/qux.js",
+              ],
+              "sourcesContent": Array [
+                "source of qux",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "qux.js",
       "source": "source of qux",
@@ -172,19 +249,30 @@ Object {
       "code": "__d(function() {pre()});",
       "id": "/root/pre.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/pre.js",
-        ],
-        "sourcesContent": Array [
-          "source of pre",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/pre.js",
+              ],
+              "sourcesContent": Array [
+                "source of pre",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "pre.js",
       "source": "source of pre",
@@ -195,19 +283,30 @@ Object {
       "code": "require(\\"/root/entry.js\\");",
       "id": "require-/root/entry.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "require-/root/entry.js",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "require-/root/entry.js",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "entry.js",
       "source": "",
@@ -218,19 +317,30 @@ Object {
       "code": "//# sourceMappingURL=http://localhost/bundle.map",
       "id": "source-map",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "source-map",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "source-map",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+              "x_google_ignoreList": Array [
+                0,
+              ],
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
-        "x_google_ignoreList": Array [
-          0,
-        ],
       },
       "name": "source-map",
       "source": "",
@@ -250,14 +360,25 @@ Object {
       "code": "__d(function() {entry()},\\"/root/entry.js\\",[\\"/root/foo.js\\",\\"/root/entry2.js\\"],\\"entry.js\\");",
       "id": "/root/entry.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/entry.js",
-        ],
-        "sourcesContent": Array [
-          "source of entry",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/entry.js",
+              ],
+              "sourcesContent": Array [
+                "source of entry",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -270,14 +391,25 @@ Object {
       "code": "__d(function() {entry2()},\\"/root/entry2.js\\",[\\"/root/foo2.js\\"],\\"entry2.js\\");",
       "id": "/root/entry2.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/entry2.js",
-        ],
-        "sourcesContent": Array [
-          "source of entry2",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/entry2.js",
+              ],
+              "sourcesContent": Array [
+                "source of entry2",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -290,14 +422,25 @@ Object {
       "code": "__d(function() {foo2()},\\"/root/foo2.js\\",[],\\"foo2.js\\");",
       "id": "/root/foo2.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/foo2.js",
-        ],
-        "sourcesContent": Array [
-          "source of foo2",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/foo2.js",
+              ],
+              "sourcesContent": Array [
+                "source of foo2",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -310,14 +453,25 @@ Object {
       "code": "__d(function() {foo()},\\"/root/foo.js\\",[\\"/root/bar.js\\",\\"/root/baz.js\\",\\"/root/qux.js\\"],\\"foo.js\\");",
       "id": "/root/foo.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/foo.js",
-        ],
-        "sourcesContent": Array [
-          "source of foo",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/foo.js",
+              ],
+              "sourcesContent": Array [
+                "source of foo",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -330,14 +484,25 @@ Object {
       "code": "__d(function() {baz()},\\"/root/baz.js\\",[],\\"baz.js\\");",
       "id": "/root/baz.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/baz.js",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/baz.js",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -350,14 +515,25 @@ Object {
       "code": "__d(function() {bar()},\\"/root/bar.js\\",[],\\"bar.js\\");",
       "id": "/root/bar.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/bar.js",
-        ],
-        "sourcesContent": Array [
-          "source of bar",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/bar.js",
+              ],
+              "sourcesContent": Array [
+                "source of bar",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -370,14 +546,25 @@ Object {
       "code": "__d(function() {qux()},\\"/root/qux.js\\",[],\\"qux.js\\");",
       "id": "/root/qux.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/qux.js",
-        ],
-        "sourcesContent": Array [
-          "source of qux",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/qux.js",
+              ],
+              "sourcesContent": Array [
+                "source of qux",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -392,14 +579,25 @@ Object {
       "code": "__d(function() {pre()});",
       "id": "/root/pre.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "/root/pre.js",
-        ],
-        "sourcesContent": Array [
-          "source of pre",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "/root/pre.js",
+              ],
+              "sourcesContent": Array [
+                "source of pre",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -412,14 +610,25 @@ Object {
       "code": "require(\\"/root/entry.js\\");",
       "id": "require-/root/entry.js",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "require-/root/entry.js",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "require-/root/entry.js",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
@@ -432,14 +641,25 @@ Object {
       "code": "//# sourceMappingURL=http://localhost/bundle.map",
       "id": "source-map",
       "map": Object {
-        "file": undefined,
-        "mappings": "",
-        "names": Array [],
-        "sources": Array [
-          "source-map",
-        ],
-        "sourcesContent": Array [
-          "",
+        "sections": Array [
+          Object {
+            "map": Object {
+              "file": undefined,
+              "mappings": "",
+              "names": Array [],
+              "sources": Array [
+                "source-map",
+              ],
+              "sourcesContent": Array [
+                "",
+              ],
+              "version": 3,
+            },
+            "offset": Object {
+              "column": 0,
+              "line": 0,
+            },
+          },
         ],
         "version": 3,
       },
