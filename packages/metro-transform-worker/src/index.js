@@ -114,8 +114,6 @@ export type JsTransformerConfig = Readonly<{
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string>,
   /** Whether to rename scoped `require` functions to `_$$_REQUIRE`, usually an extraneous operation when serializing to iife (default). */
   unstable_renameRequire?: boolean,
-  /** Store source maps as compact VLQ-encoded strings (`VlqMap`) instead of decoded tuple arrays. Reduces source-map memory ~51% on the heap. Opt-in; changes `JsOutput.data.map` for consumers. */
-  unstable_compactSourceMaps?: boolean,
 }>;
 
 export type {CustomTransformOptions} from 'metro-babel-transformer';
@@ -174,7 +172,7 @@ export type JsOutput = Readonly<{
   data: Readonly<{
     code: string,
     lineCount: number,
-    map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+    map: VlqMap,
     functionMap: ?FBSourceFunctionMap,
   }>,
   type: JSFileType,
@@ -478,46 +476,39 @@ async function transformJS(
   );
 
   let code = result.code;
-  let map: Array<MetroSourceMapSegmentTuple> | VlqMap;
+  let map: VlqMap;
   let lineCount: number;
 
-  if (config.unstable_compactSourceMaps === true && !minify) {
+  if (minify) {
+    // The minifier returns its own map (not Babel's `decodedMap`), so we derive
+    // tuples from Babel's eagerly-computed decoded map, hand them to the
+    // minifier, then re-encode the resulting tuples to a compact VLQ map.
+    let tuples = result.decodedMap
+      ? tuplesFromBabelDecodedMap(result.decodedMap)
+      : [];
+
+    ({map: tuples, code} = await minifyCode(
+      config,
+      projectRoot,
+      file.filename,
+      result.code,
+      file.code,
+      tuples,
+      reserved,
+    ));
+
+    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, tuples));
+    map = vlqMapFromTuples(tuples);
+  } else {
     // Dominant path (e.g. Hermes, which doesn't minify): encode the compact VLQ
     // map straight from Babel's eagerly-computed decoded map, never
-    // materialising tuples. Byte-identical to the tuple path below.
+    // materialising tuples.
     const {lineCount: lines, lastLineColumn} = countLines(code);
     lineCount = lines;
     map = vlqMapFromBabelDecodedMap(
       result.decodedMap ?? {mappings: [], names: []},
       [lines, lastLineColumn],
     );
-  } else {
-    // Derive tuples from Babel's eagerly-computed decoded map rather than
-    // `result.rawMappings`, which would trigger a second, more expensive decode
-    // (`allMappings`). Byte-identical to `result.rawMappings.map(toSegmentTuple)`.
-    let tuples = result.decodedMap
-      ? tuplesFromBabelDecodedMap(result.decodedMap)
-      : [];
-
-    if (minify) {
-      // The minifier returns its own map (not Babel's `decodedMap`), so the
-      // fast path above can't apply; re-encode the resulting tuples if compact.
-      ({map: tuples, code} = await minifyCode(
-        config,
-        projectRoot,
-        file.filename,
-        result.code,
-        file.code,
-        tuples,
-        reserved,
-      ));
-    }
-
-    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, tuples));
-    map =
-      config.unstable_compactSourceMaps === true
-        ? vlqMapFromTuples(tuples)
-        : tuples;
   }
 
   const output: Array<JsOutput> = [
@@ -647,10 +638,9 @@ async function transformJSON(
 
   let lineCount;
   ({lineCount, map} = countLinesAndTerminateMap(code, map));
-  // The JSON path builds tuples directly (no Babel `decodedMap`), so when
-  // compact we re-encode the finished tuples to VLQ.
-  const outputMap =
-    config.unstable_compactSourceMaps === true ? vlqMapFromTuples(map) : map;
+  // The JSON path builds tuples directly (no Babel `decodedMap`), so re-encode
+  // the finished tuples to a compact VLQ map.
+  const outputMap = vlqMapFromTuples(map);
   const output: Array<JsOutput> = [
     {
       data: {code, functionMap: null, lineCount, map: outputMap},

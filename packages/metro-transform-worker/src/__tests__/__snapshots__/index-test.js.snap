@@ -3,260 +3,19 @@
 exports[`reports filename when encountering unsupported dynamic dependency 1`] = `"local/file.js:Invalid call at line 3: require(a)"`;
 
 exports[`transforms a module with dependencies 1`] = `
-Array [
-  Array [
-    2,
-    2,
-    1,
-    0,
-  ],
-  Array [
-    2,
-    14,
-    1,
-    12,
-  ],
-  Array [
-    4,
-    2,
-    1,
-    13,
-  ],
-  Array [
-    4,
-    6,
-    1,
-    13,
+Object {
+  "mappings": ";EAAA,YAAY;;EAAC,IAAAA,sBAAA,GAAAC,WAAA,CAAAC,cAAA;EAIb,IAAAC,EAAA,GAAAH,sBAAA,CAAAC,WAAA,CAAAC,cAAA;EAHAE,WAAO,CAAAF,cAAA,UAAM,CAAC;EACdG,SAAS,CAACC,IAAI,CAAC;EACf,IAAMC,CAAC,GAAGH,WAAO,CAAAF,cAAA,QAAI,CAAC;AAAC,G",
+  "names": Array [
     "_interopRequireDefault",
-  ],
-  Array [
-    4,
-    28,
-    1,
-    13,
-  ],
-  Array [
-    4,
-    31,
-    1,
-    13,
     "_$$_REQUIRE",
-  ],
-  Array [
-    4,
-    42,
-    1,
-    13,
-  ],
-  Array [
-    4,
-    43,
-    1,
-    13,
     "_dependencyMap",
-  ],
-  Array [
-    4,
-    57,
-    1,
-    13,
-  ],
-  Array [
-    5,
-    2,
-    5,
-    0,
-  ],
-  Array [
-    5,
-    6,
-    5,
-    0,
     "_c",
-  ],
-  Array [
-    5,
-    8,
-    5,
-    0,
-  ],
-  Array [
-    5,
-    11,
-    5,
-    0,
-    "_interopRequireDefault",
-  ],
-  Array [
-    5,
-    33,
-    5,
-    0,
-  ],
-  Array [
-    5,
-    34,
-    5,
-    0,
-    "_$$_REQUIRE",
-  ],
-  Array [
-    5,
-    45,
-    5,
-    0,
-  ],
-  Array [
-    5,
-    46,
-    5,
-    0,
-    "_dependencyMap",
-  ],
-  Array [
-    5,
-    60,
-    5,
-    0,
-  ],
-  Array [
-    6,
-    2,
-    2,
-    0,
     "require",
-  ],
-  Array [
-    6,
-    13,
-    2,
-    7,
-  ],
-  Array [
-    6,
-    14,
-    2,
-    7,
-    "_dependencyMap",
-  ],
-  Array [
-    6,
-    28,
-    2,
-    7,
-  ],
-  Array [
-    6,
-    38,
-    2,
-    13,
-  ],
-  Array [
-    6,
-    39,
-    2,
-    14,
-  ],
-  Array [
-    7,
-    2,
-    3,
-    0,
     "arbitrary",
-  ],
-  Array [
-    7,
-    11,
-    3,
-    9,
-  ],
-  Array [
-    7,
-    12,
-    3,
-    10,
     "code",
-  ],
-  Array [
-    7,
-    16,
-    3,
-    14,
-  ],
-  Array [
-    7,
-    17,
-    3,
-    15,
-  ],
-  Array [
-    8,
-    2,
-    4,
-    0,
-  ],
-  Array [
-    8,
-    6,
-    4,
-    6,
     "b",
   ],
-  Array [
-    8,
-    7,
-    4,
-    7,
-  ],
-  Array [
-    8,
-    10,
-    4,
-    10,
-    "require",
-  ],
-  Array [
-    8,
-    21,
-    4,
-    17,
-  ],
-  Array [
-    8,
-    22,
-    4,
-    17,
-    "_dependencyMap",
-  ],
-  Array [
-    8,
-    36,
-    4,
-    17,
-  ],
-  Array [
-    8,
-    44,
-    4,
-    21,
-  ],
-  Array [
-    8,
-    45,
-    4,
-    22,
-  ],
-  Array [
-    9,
-    0,
-    4,
-    23,
-  ],
-  Array [
-    9,
-    3,
-  ],
-]
+}
 `;
 
 exports[`transforms a module with dependencies 2`] = `
@@ -269,50 +28,13 @@ Object {
 `;
 
 exports[`transforms a simple module 1`] = `
-Array [
-  Array [
-    2,
-    2,
-    1,
-    0,
+Object {
+  "mappings": ";EAAAA,SAAS,CAACC,IAAI,CAAC;AAAA,G",
+  "names": Array [
     "arbitrary",
-  ],
-  Array [
-    2,
-    11,
-    1,
-    9,
-  ],
-  Array [
-    2,
-    12,
-    1,
-    10,
     "code",
   ],
-  Array [
-    2,
-    16,
-    1,
-    14,
-  ],
-  Array [
-    2,
-    17,
-    1,
-    15,
-  ],
-  Array [
-    3,
-    0,
-    1,
-    15,
-  ],
-  Array [
-    3,
-    3,
-  ],
-]
+}
 `;
 
 exports[`transforms a simple module 2`] = `
@@ -325,128 +47,16 @@ Object {
 `;
 
 exports[`transforms a simple script 1`] = `
-Array [
-  Array [
-    2,
-    2,
-    1,
-    0,
+Object {
+  "mappings": ";EAAAA,mBAAmB,CAACC,IAAI,CAAC;AAAA,UAAAC,UAAA,mBAAAA,UAAA,UAAAC,MAAA,mBAAAA,MAAA,UAAAC,MAAA,mBAAAA,MAAA,S",
+  "names": Array [
     "someReallyArbitrary",
-  ],
-  Array [
-    2,
-    21,
-    1,
-    19,
-  ],
-  Array [
-    2,
-    22,
-    1,
-    20,
     "code",
-  ],
-  Array [
-    2,
-    26,
-    1,
-    24,
-  ],
-  Array [
-    2,
-    27,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    0,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    10,
-    1,
-    25,
     "globalThis",
-  ],
-  Array [
-    3,
-    20,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    39,
-    1,
-    25,
-    "globalThis",
-  ],
-  Array [
-    3,
-    49,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    59,
-    1,
-    25,
     "global",
-  ],
-  Array [
-    3,
-    65,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    84,
-    1,
-    25,
-    "global",
-  ],
-  Array [
-    3,
-    90,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    100,
-    1,
-    25,
     "window",
   ],
-  Array [
-    3,
-    106,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    125,
-    1,
-    25,
-    "window",
-  ],
-  Array [
-    3,
-    131,
-    1,
-    25,
-  ],
-  Array [
-    3,
-    140,
-  ],
-]
+}
 `;
 
 exports[`transforms a simple script 2`] = `
@@ -508,63 +118,14 @@ exports[`transforms async generators 1`] = `
 `;
 
 exports[`transforms import/export syntax when experimental flag is on 1`] = `
-Array [
-  Array [
-    4,
-    2,
-    1,
-    0,
-  ],
-  Array [
-    4,
-    6,
-    1,
-    7,
+Object {
+  "mappings": ";;;EAAA,IAAOA,CAAC,GAAAC,kBAAA,CAAAC,cAAA;AAAY,G",
+  "names": Array [
     "c",
-  ],
-  Array [
-    4,
-    7,
-    1,
-    8,
-  ],
-  Array [
-    4,
-    10,
-    1,
-    8,
     "_$$_IMPORT_DEFAULT",
-  ],
-  Array [
-    4,
-    28,
-    1,
-    8,
-  ],
-  Array [
-    4,
-    29,
-    1,
-    8,
     "_dependencyMap",
   ],
-  Array [
-    4,
-    43,
-    1,
-    8,
-  ],
-  Array [
-    5,
-    0,
-    1,
-    20,
-  ],
-  Array [
-    5,
-    3,
-  ],
-]
+}
 `;
 
 exports[`transforms import/export syntax when experimental flag is on 2`] = `
