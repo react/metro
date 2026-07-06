@@ -32,8 +32,6 @@ import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
 import typeof FSType from 'fs';
 
-import {vlqMapFromTuples} from 'metro-source-map';
-
 const {Buffer} = require('buffer');
 const path = require('path');
 
@@ -193,7 +191,9 @@ test('transforms an es module with asyncToGenerator', async () => {
 
   expect(result.output[0].type).toBe('js/module');
   expect(result.output[0].data.code).toMatchSnapshot();
-  expect(result.output[0].data.map).toHaveLength(34);
+  const map = result.output[0].data.map;
+  expect(typeof map.mappings).toBe('string');
+  expect(map.mappings.length).toBeGreaterThan(0);
   expect(result.output[0].data.functionMap).toMatchSnapshot();
   expect(result.dependencies).toEqual([
     {
@@ -411,7 +411,7 @@ test('uses a reserved dependency map name and prevents it from being minified', 
   `);
 });
 
-test('unstable_compactSourceMaps emits a VlqMap byte-identical to the tuple path', async () => {
+test('emits a compact VlqMap for both the non-minified and minified paths', async () => {
   const source = Buffer.from(
     [
       'function foo(aaa, bbb) {',
@@ -426,39 +426,34 @@ test('unstable_compactSourceMaps emits a VlqMap byte-identical to the tuple path
     'utf8',
   );
 
-  // Default path stores decoded tuples (line-counted + terminated).
-  const tupleResult = await Transformer.transform(
-    {...baseConfig, unstable_compactSourceMaps: false},
+  // Non-minified path encodes VLQ straight from Babel's decoded map.
+  const devResult = await Transformer.transform(
+    baseConfig,
     '/root',
     'local/file.js',
     source,
     {...baseTransformOptions, experimentalImportSupport: true},
   );
-  // Compact path encodes VLQ straight from Babel's decoded map (no tuples).
-  const vlqResult = await Transformer.transform(
-    {...baseConfig, unstable_compactSourceMaps: true},
+  // Minified path re-encodes the minifier's tuple output to VLQ.
+  const minifiedResult = await Transformer.transform(
+    baseConfig,
     '/root',
     'local/file.js',
     source,
-    {...baseTransformOptions, experimentalImportSupport: true},
+    {
+      ...baseTransformOptions,
+      dev: false,
+      minify: true,
+      experimentalImportSupport: true,
+    },
   );
 
-  const tupleMap = tupleResult.output[0].data.map;
-  const vlqMap = vlqResult.output[0].data.map;
-
-  // Generated code and line count are unaffected by map storage.
-  expect(vlqResult.output[0].data.code).toBe(tupleResult.output[0].data.code);
-  expect(vlqResult.output[0].data.lineCount).toBe(
-    tupleResult.output[0].data.lineCount,
-  );
-
-  if (Array.isArray(vlqMap) || !Array.isArray(tupleMap)) {
-    throw new Error('Expected a VlqMap (compact) and a tuple array (default)');
+  for (const result of [devResult, minifiedResult]) {
+    const map = result.output[0].data.map;
+    expect(typeof map.mappings).toBe('string');
+    expect(map.mappings.length).toBeGreaterThan(0);
+    expect(Array.isArray(map.names)).toBe(true);
   }
-  // The compact fast path is byte-identical to re-encoding the tuple output.
-  expect(vlqMap).toEqual(vlqMapFromTuples(tupleMap));
-  expect(typeof vlqMap.mappings).toBe('string');
-  expect(vlqMap.mappings.length).toBeGreaterThan(0);
 });
 
 test('throws if the reserved dependency map name appears in the input', async () => {
