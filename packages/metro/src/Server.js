@@ -296,7 +296,6 @@ export default class Server {
           shouldAddToIgnoreList: bundleOptions.shouldAddToIgnoreList,
           getSourceUrl: (module: Module<>) =>
             this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
-          allowIndexMap: this._config.serializer.unstable_allowIndexMap,
         },
       );
     }
@@ -1310,7 +1309,6 @@ export default class Server {
             this._shouldAddModuleToIgnoreList(module),
           getSourceUrl: (module: Module<>) =>
             this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
-          allowIndexMap: this._config.serializer.unstable_allowIndexMap,
         },
       );
     },

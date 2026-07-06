@@ -398,11 +398,29 @@ test('should add an inline source map to a very simple bundle', () => {
       ).toString(),
     ),
   ).toEqual({
-    mappings: '',
-    names: [],
-    sources: ['/root/foo', '/root/bar'],
-    sourcesContent: ['foo-source', 'bar-source'],
     version: 3,
+    sections: [
+      {
+        offset: {line: 1, column: 0},
+        map: {
+          version: 3,
+          sources: ['/root/foo'],
+          sourcesContent: ['foo-source'],
+          names: [],
+          mappings: '',
+        },
+      },
+      {
+        offset: {line: 2, column: 0},
+        map: {
+          version: 3,
+          sources: ['/root/bar'],
+          sourcesContent: ['bar-source'],
+          names: [],
+          mappings: '',
+        },
+      },
+    ],
   });
 });
 
@@ -451,8 +469,30 @@ test('emits x_google_ignoreList based on shouldAddToIgnoreList', () => {
     ),
   ).toEqual(
     objectContaining({
-      sources: ['/root/foo', '/root/bar'],
-      x_google_ignoreList: [0, 1],
+      sections: [
+        {
+          offset: {line: 1, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/foo'],
+            sourcesContent: ['foo-source'],
+            names: [],
+            mappings: '',
+            x_google_ignoreList: [0],
+          },
+        },
+        {
+          offset: {line: 2, column: 0},
+          map: {
+            version: 3,
+            sources: ['/root/bar'],
+            sourcesContent: ['bar-source'],
+            names: [],
+            mappings: '',
+            x_google_ignoreList: [0],
+          },
+        },
+      ],
     }),
   );
 });
