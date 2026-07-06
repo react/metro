@@ -98,15 +98,39 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         ),
       ).toEqual({
         version: 3,
-        sources: ['/root/pre.js', '/root/foo.js', '/root/bar.js'],
-        sourcesContent: ['source pre', 'source foo', 'source bar'],
-        x_facebook_sources: [
-          null,
-          [{names: ['<global>'], mappings: 'AAA'}],
-          null,
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/pre.js'],
+              sourcesContent: ['source pre'],
+              names: [],
+              mappings: '',
+            },
+          },
+          {
+            offset: {line: 1, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/foo.js'],
+              sourcesContent: ['source foo'],
+              names: [],
+              mappings: '',
+              x_facebook_sources: [[{names: ['<global>'], mappings: 'AAA'}]],
+            },
+          },
+          {
+            offset: {line: 2, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/bar.js'],
+              sourcesContent: ['source bar'],
+              names: [],
+              mappings: '',
+            },
+          },
         ],
-        names: [],
-        mappings: '',
       });
     });
 
@@ -122,15 +146,39 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         ),
       ).toEqual({
         version: 3,
-        sources: ['/root/pre.js', '/root/bar.js', '/root/foo.js'],
-        sourcesContent: ['source pre', 'source bar', 'source foo'],
-        x_facebook_sources: [
-          null,
-          null,
-          [{names: ['<global>'], mappings: 'AAA'}],
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/pre.js'],
+              sourcesContent: ['source pre'],
+              names: [],
+              mappings: '',
+            },
+          },
+          {
+            offset: {line: 1, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/bar.js'],
+              sourcesContent: ['source bar'],
+              names: [],
+              mappings: '',
+            },
+          },
+          {
+            offset: {line: 2, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/foo.js'],
+              sourcesContent: ['source foo'],
+              names: [],
+              mappings: '',
+              x_facebook_sources: [[{names: ['<global>'], mappings: 'AAA'}]],
+            },
+          },
         ],
-        names: [],
-        mappings: '',
       });
     });
 
@@ -165,11 +213,29 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         ),
       ).toEqual({
         version: 3,
-        sources: ['/root/foo.js', '/root/asset.jpg'],
-        sourcesContent: ['source foo', ''],
-        x_facebook_sources: [[{names: ['<global>'], mappings: 'AAA'}], null],
-        names: [],
-        mappings: '',
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/foo.js'],
+              sourcesContent: ['source foo'],
+              names: [],
+              mappings: '',
+              x_facebook_sources: [[{names: ['<global>'], mappings: 'AAA'}]],
+            },
+          },
+          {
+            offset: {line: 1, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/asset.jpg'],
+              sourcesContent: [''],
+              names: [],
+              mappings: '',
+            },
+          },
+        ],
       });
     });
 
@@ -185,23 +251,49 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         ),
       ).toEqual({
         version: 3,
-        sources: ['/root/pre.js', '/root/foo.js', '/root/bar.js'],
-        sourcesContent: ['source pre', 'source foo', 'source bar'],
-        x_facebook_sources: [
-          null,
-          [{names: ['<global>'], mappings: 'AAA'}],
-          null,
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/pre.js'],
+              sourcesContent: ['source pre'],
+              names: [],
+              mappings: '',
+              x_google_ignoreList: [0],
+            },
+          },
+          {
+            offset: {line: 1, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/foo.js'],
+              sourcesContent: ['source foo'],
+              names: [],
+              mappings: '',
+              x_facebook_sources: [[{names: ['<global>'], mappings: 'AAA'}]],
+              x_google_ignoreList: [0],
+            },
+          },
+          {
+            offset: {line: 2, column: 0},
+            map: {
+              version: 3,
+              sources: ['/root/bar.js'],
+              sourcesContent: ['source bar'],
+              names: [],
+              mappings: '',
+              x_google_ignoreList: [0],
+            },
+          },
         ],
-        names: [],
-        mappings: '',
-        x_google_ignoreList: [0, 1, 2],
       });
     });
   },
 );
 
 describe.each([sourceMapString, sourceMapStringNonBlocking])(
-  'allowIndexMap (%p)',
+  'index source map sections (%p)',
   sourceMapStringImpl => {
     const vlqModule: Module<> = {
       path: '/root/vlq.js',
@@ -229,12 +321,9 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
       getSourceUrl: null,
     };
 
-    test('emits an indexed map passing VLQ through verbatim when enabled', async () => {
+    test('passes a VLQ-stored map through verbatim as a section', async () => {
       const parsed = JSON.parse(
-        await sourceMapStringImpl([fooModule, vlqModule], {
-          ...options,
-          allowIndexMap: true,
-        }),
+        await sourceMapStringImpl([fooModule, vlqModule], options),
       );
       expect(parsed.version).toBe(3);
       expect(parsed.sections).toHaveLength(2);
@@ -248,27 +337,15 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
       ]);
     });
 
-    test('falls back to a flat map when no VLQ maps are present', async () => {
+    test('re-encodes a tuple-stored map into its section', async () => {
       const parsed = JSON.parse(
-        await sourceMapStringImpl([fooModule, barModule], {
-          ...options,
-          allowIndexMap: true,
-        }),
+        await sourceMapStringImpl([fooModule, barModule], options),
       );
-      // No VLQ → indexed emit is pointless, so we stay flat.
-      expect(parsed.sections).toBeUndefined();
-      expect(typeof parsed.mappings).toBe('string');
-    });
-
-    test('emits a flat map for VLQ input when disabled', async () => {
-      const parsed = JSON.parse(
-        await sourceMapStringImpl([fooModule, vlqModule], {
-          ...options,
-          allowIndexMap: false,
-        }),
-      );
-      expect(parsed.sections).toBeUndefined();
-      expect(typeof parsed.mappings).toBe('string');
+      expect(parsed.version).toBe(3);
+      expect(parsed.sections).toHaveLength(2);
+      expect(parsed.sections[1].offset).toEqual({line: 1, column: 0});
+      expect(parsed.sections[1].map.sources).toEqual(['/root/bar.js']);
+      expect(typeof parsed.sections[1].map.mappings).toBe('string');
     });
 
     test('omits per-section sourcesContent when excludeSource is set', async () => {
@@ -276,7 +353,6 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         await sourceMapStringImpl([vlqModule], {
           ...options,
           excludeSource: true,
-          allowIndexMap: true,
         }),
       );
       expect(parsed.sections).toHaveLength(1);
@@ -289,7 +365,6 @@ describe.each([sourceMapString, sourceMapStringNonBlocking])(
         await sourceMapStringImpl([vlqModule], {
           ...options,
           shouldAddToIgnoreList: (module: Module<>) => true,
-          allowIndexMap: true,
         }),
       );
       expect(parsed.sections).toHaveLength(1);

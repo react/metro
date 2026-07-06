@@ -70,7 +70,6 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     customSerializer: null,
     isThirdPartyModule: module =>
       /(?:^|[/\\])node_modules[/\\]/.test(module.path),
-    unstable_allowIndexMap: false,
   },
 
   server: {
@@ -136,7 +135,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     unstable_disableNormalizePseudoGlobals: false,
     unstable_renameRequire: true,
     unstable_compactOutput: false,
-    unstable_compactSourceMaps: false,
+    unstable_compactSourceMaps: true,
     unstable_memoizeInlineRequires: false,
     unstable_workerThreads: false,
   },
