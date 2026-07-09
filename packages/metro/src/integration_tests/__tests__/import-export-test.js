@@ -27,6 +27,16 @@ test('builds a simple bundle', async () => {
   const object = execBundle(result.code);
   const cjs = await object.asyncImportCJS;
 
+  expect(object.extraData.renamedObject).toBe(
+    'export-destructuring: RENAMED_OBJECT',
+  );
+  expect(object.extraData.objectRest).toEqual({
+    remaining: 'export-destructuring: OBJECT_REST',
+  });
+  expect(object.extraData.arrayFirst).toBe('export-destructuring: ARRAY_FIRST');
+  expect(object.extraData.arrayRest).toEqual([
+    'export-destructuring: ARRAY_REST',
+  ]);
   expect(object.extraData.namespaceReExportDefault).toBe('export-2: DEFAULT');
   expect(object.extraData.namespaceReExportFoo).toBe('export-2: FOO');
   expect(object).toMatchSnapshot();

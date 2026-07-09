@@ -224,40 +224,9 @@ export default function importExportPlugin({
 
         if (declaration) {
           if (isVariableDeclaration(declaration)) {
-            declaration.declarations.forEach(d => {
-              switch (d.id.type) {
-                case 'ObjectPattern':
-                  {
-                    const properties = d.id.properties;
-                    properties.forEach(p => {
-                      // $FlowFixMe[incompatible-use] Flow error uncovered by typing Babel more strictly
-                      // $FlowFixMe[prop-missing]
-                      const name = p.key.name;
-                      // $FlowFixMe[incompatible-type]
-                      state.exportNamed.push({local: name, remote: name, loc});
-                    });
-                  }
-                  break;
-                case 'ArrayPattern':
-                  {
-                    const elements = d.id.elements;
-                    elements.forEach(e => {
-                      // $FlowFixMe[incompatible-use] Flow error uncovered by typing Babel more strictly
-                      // $FlowFixMe[prop-missing]
-                      const name = e.name;
-                      // $FlowFixMe[incompatible-type]
-                      state.exportNamed.push({local: name, remote: name, loc});
-                    });
-                  }
-                  break;
-                default:
-                  {
-                    const name = d.id.name;
-                    // $FlowFixMe[incompatible-type]
-                    state.exportNamed.push({local: name, remote: name, loc});
-                  }
-                  break;
-              }
+            const bindings = t.getBindingIdentifiers(declaration);
+            Object.keys(bindings).forEach(name => {
+              state.exportNamed.push({local: name, remote: name, loc});
             });
           } else {
             const id = declaration.id || path.scope.generateUidIdentifier();

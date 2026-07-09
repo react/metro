@@ -14,6 +14,12 @@ import type {RequireWithUnstableImportMaybeSync} from './utils';
 
 import {default as myDefault, foo as myFoo, myFunction} from './export-1';
 import * as importStar from './export-2';
+import {
+  arrayFirst,
+  arrayRest,
+  objectRest,
+  renamedObject,
+} from './export-destructuring';
 import {namespaceReExport} from './export-namespace';
 import {foo} from './export-null';
 import primitiveDefault, {
@@ -26,6 +32,8 @@ export {default as namedDefaultExported} from './export-3';
 export {foo as default} from './export-4';
 
 export const extraData = {
+  arrayFirst,
+  arrayRest,
   foo,
   importStar,
   myDefault,
@@ -33,8 +41,10 @@ export const extraData = {
   myFunction: myFunction() as string,
   namespaceReExportDefault: namespaceReExport.default,
   namespaceReExportFoo: namespaceReExport.foo,
+  objectRest,
   primitiveDefault,
   primitiveFoo,
+  renamedObject,
 };
 
 export const asyncImportCJS = import('./export-5');

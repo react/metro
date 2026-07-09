@@ -16,6 +16,10 @@ Object {
   },
   "default": "export-4: FOO",
   "extraData": Object {
+    "arrayFirst": "export-destructuring: ARRAY_FIRST",
+    "arrayRest": Array [
+      "export-destructuring: ARRAY_REST",
+    ],
     "foo": "export-null: FOO",
     "importStar": Object {
       "default": "export-2: DEFAULT",
@@ -27,8 +31,12 @@ Object {
     "myFunction": "export-1: MY_FUNCTION",
     "namespaceReExportDefault": "export-2: DEFAULT",
     "namespaceReExportFoo": "export-2: FOO",
+    "objectRest": Object {
+      "remaining": "export-destructuring: OBJECT_REST",
+    },
     "primitiveDefault": "export-primitive-default: DEFAULT",
     "primitiveFoo": "export-primitive-default: FOO",
+    "renamedObject": "export-destructuring: RENAMED_OBJECT",
   },
   "namedDefaultExported": "export-3: DEFAULT",
 }

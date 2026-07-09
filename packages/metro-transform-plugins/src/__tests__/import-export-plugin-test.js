@@ -255,6 +255,36 @@ test('exports destructured named object members', () => {
   compare([importExportPlugin], code, expected, opts);
 });
 
+test('exports destructured renamed object members', () => {
+  const code = `
+    export const {foo: bar, baz} = {foo: 'bar', baz: 'baz'};
+  `;
+
+  const expected = `
+    Object.defineProperty(exports, '__esModule', {value: true});
+    const {foo: bar,baz} = {foo: 'bar', baz: 'baz'};
+    exports.bar = bar;
+    exports.baz = baz;
+  `;
+
+  compare([importExportPlugin], code, expected, opts);
+});
+
+test('exports destructured object rest members', () => {
+  const code = `
+    export const {foo, ...bar} = {foo: 'foo', bar: 'bar', baz: 'baz'};
+  `;
+
+  const expected = `
+    Object.defineProperty(exports, '__esModule', {value: true});
+    const {foo,...bar} = {foo: 'foo', bar: 'bar', baz: 'baz'};
+    exports.foo = foo;
+    exports.bar = bar;
+  `;
+
+  compare([importExportPlugin], code, expected, opts);
+});
+
 test('exports destructured named array members', () => {
   const code = `
     export const [foo,bar] = ['bar','baz'];
@@ -263,6 +293,21 @@ test('exports destructured named array members', () => {
   const expected = `
     Object.defineProperty(exports, '__esModule', {value: true});
     const [foo,bar] = ['bar','baz'];
+    exports.foo = foo;
+    exports.bar = bar;
+  `;
+
+  compare([importExportPlugin], code, expected, opts);
+});
+
+test('exports destructured array rest members', () => {
+  const code = `
+    export const [foo, ...bar] = ['foo','bar','baz'];
+  `;
+
+  const expected = `
+    Object.defineProperty(exports, '__esModule', {value: true});
+    const [foo,...bar] = ['foo','bar','baz'];
     exports.foo = foo;
     exports.bar = bar;
   `;
