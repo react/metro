@@ -221,9 +221,9 @@ function main() {
 
     // retrievers/
     // eslint-disable-next-line max-len
-    `declare export function getBindingIdentifiers(node: ${NODE_PREFIX}, duplicates: boolean, outerOnly?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
+    `declare export function getBindingIdentifiers(node: ${NODE_PREFIX}, duplicates?: boolean, outerOnly?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
     // eslint-disable-next-line max-len
-    `declare export function getOuterBindingIdentifiers(node: Node, duplicates: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
+    `declare export function getOuterBindingIdentifiers(node: Node, duplicates?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
 
     // traverse/
     `declare export type TraversalAncestors = Array<{
