@@ -13,7 +13,10 @@
  * script to build (transpile) files.
  * By default it transpiles all files for all packages and writes them
  * into `build/` directory.
- * Non-js or files matching IGNORE_PATTERN will be copied without transpiling.
+ *
+ * Files matching IGNORE_PATTERNS will not be copied to the build directory.
+ *
+ * Non-js will be copied without transpiling.
  *
  * Example:
  *  node ./scripts/build.js
@@ -33,7 +36,13 @@ const SRC_DIR = 'src';
 const TYPES_DIR = 'types';
 const BUILD_DIR = 'build';
 const JS_FILES_PATTERN = '**/*.js';
-const IGNORE_PATTERN = '**/__tests__/**';
+const IGNORE_PATTERNS = [
+  '**/__tests__/**',
+  '**/__fixtures__/**',
+  '**/__flowtests__/**',
+  '**/__mocks__/**',
+  '**/integration_tests/basic_bundle/**',
+];
 const PACKAGES_DIR = path.resolve(__dirname, '../packages');
 
 const fixedWidth = function (str /*: string*/) {
@@ -90,7 +99,7 @@ async function buildFile(file /*: string */, silent /*: number | boolean */) {
   const destPath = getBuildPath(file, BUILD_DIR);
 
   fs.mkdirSync(path.dirname(destPath), {recursive: true});
-  if (path.matchesGlob(file, IGNORE_PATTERN)) {
+  if (IGNORE_PATTERNS.some(pattern => path.matchesGlob(file, pattern))) {
     silent ||
       process.stdout.write(
         styleText('dim', '  \u2022 ') +
