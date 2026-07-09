@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Portions Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,6 +8,8 @@
  * @format
  * @oncall react_native
  */
+
+// Portions Copyright (c) 2015-present 650 Industries, Inc. (aka Expo), under MIT.
 
 import type {PluginObj} from '@babel/core';
 import type {NodePath} from '@babel/traverse';
@@ -274,7 +276,6 @@ export default function importExportPlugin({
         const specifiers = path.node.specifiers;
         if (specifiers) {
           specifiers.forEach(s => {
-            const local = s.local;
             const remote = s.exported;
 
             if (remote.type === 'StringLiteral') {
@@ -283,6 +284,31 @@ export default function importExportPlugin({
                 'Module string names are not supported',
               );
             }
+
+            if (s.type === 'ExportNamespaceSpecifier') {
+              const source = nullthrows(path.node.source);
+              const temp = path.scope.generateUidIdentifier(remote.name);
+
+              path.insertBefore(
+                withLocation(
+                  importTemplate({
+                    IMPORT: t.cloneNode(state.importAll),
+                    FILE: resolvePath(t.cloneNode(source), state.opts.resolve),
+                    LOCAL: temp,
+                  }),
+                  loc,
+                ),
+              );
+
+              state.exportNamed.push({
+                local: temp.name,
+                remote: remote.name,
+                loc,
+              });
+              return;
+            }
+
+            const local = s.local;
 
             if (path.node.source) {
               // $FlowFixMe[incompatible-use]

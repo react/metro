@@ -294,6 +294,27 @@ test('exports members of another module directly from an import (as all)', () =>
   `);
 });
 
+test('exports members of another module directly from an import (as namespace)', () => {
+  const code = `
+    export * as AppleIcons from 'apple-icons';
+  `;
+
+  const expected = `
+    Object.defineProperty(exports, '__esModule', {value: true});
+
+    var _AppleIcons = _$$_IMPORT_ALL('apple-icons');
+    exports.AppleIcons = _AppleIcons;
+  `;
+
+  compare([importExportPlugin], code, expected, opts);
+
+  expect(showTransformedDeps(code)).toMatchInlineSnapshot(`
+    "
+    > 2 |     export * as AppleIcons from 'apple-icons';
+        |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ dep #0 (apple-icons)"
+  `);
+});
+
 test('enables module exporting when something is exported', () => {
   const code = `
     foo();

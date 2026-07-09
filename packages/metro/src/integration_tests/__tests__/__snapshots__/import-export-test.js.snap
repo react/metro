@@ -25,6 +25,8 @@ Object {
     "myDefault": "export-1: DEFAULT",
     "myFoo": "export-1: FOO",
     "myFunction": "export-1: MY_FUNCTION",
+    "namespaceReExportDefault": "export-2: DEFAULT",
+    "namespaceReExportFoo": "export-2: FOO",
     "primitiveDefault": "export-primitive-default: DEFAULT",
     "primitiveFoo": "export-primitive-default: FOO",
   },

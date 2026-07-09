@@ -14,6 +14,7 @@ import type {RequireWithUnstableImportMaybeSync} from './utils';
 
 import {default as myDefault, foo as myFoo, myFunction} from './export-1';
 import * as importStar from './export-2';
+import {namespaceReExport} from './export-namespace';
 import {foo} from './export-null';
 import primitiveDefault, {
   foo as primitiveFoo,
@@ -30,6 +31,8 @@ export const extraData = {
   myDefault,
   myFoo,
   myFunction: myFunction() as string,
+  namespaceReExportDefault: namespaceReExport.default,
+  namespaceReExportFoo: namespaceReExport.foo,
   primitiveDefault,
   primitiveFoo,
 };

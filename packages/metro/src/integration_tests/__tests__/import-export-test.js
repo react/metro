@@ -27,6 +27,8 @@ test('builds a simple bundle', async () => {
   const object = execBundle(result.code);
   const cjs = await object.asyncImportCJS;
 
+  expect(object.extraData.namespaceReExportDefault).toBe('export-2: DEFAULT');
+  expect(object.extraData.namespaceReExportFoo).toBe('export-2: FOO');
   expect(object).toMatchSnapshot();
   expect(cjs).toEqual(expect.objectContaining(cjs.default));
 

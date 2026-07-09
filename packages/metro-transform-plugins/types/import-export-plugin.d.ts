@@ -1,12 +1,12 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Portions Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<abccab72cbf3143d690c0cea72fcede8>>
+ * @generated SignedSource<<587cbe7792cfd21ce4abb4bfb5bac2f8>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-transform-plugins/src/import-export-plugin.js
