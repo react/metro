@@ -20,6 +20,9 @@ Object {
     "arrayRest": Array [
       "export-destructuring: ARRAY_REST",
     ],
+    "exportStarDefault": "export-star-overrides: DEFAULT",
+    "exportStarOverridden": "export-star-overrides: OVERRIDDEN",
+    "exportStarSourceOnly": "export-star-source: SOURCE_ONLY",
     "foo": "export-null: FOO",
     "importStar": Object {
       "default": "export-2: DEFAULT",

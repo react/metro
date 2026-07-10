@@ -15,8 +15,10 @@ import collectDependencies from 'metro/private/ModuleGraph/worker/collectDepende
 
 const {compare, transformToAst} = require('../__mocks__/test-helpers');
 const importExportPlugin = require('../import-export-plugin');
+const generate = require('@babel/generator').default;
 // $FlowFixMe[untyped-import] @babel/code-frame
 const {codeFrameColumns} = require('@babel/code-frame');
+const vm = require('vm');
 
 const opts = {
   importAll: '_$$_IMPORT_ALL',
@@ -156,8 +158,8 @@ test('exports members of another module directly from an import (as default)', (
 
     var _foo = require('bar').foo;
     var _baz = require('bar').baz;
-    exports.default = _foo;
     exports.baz = _baz;
+    exports.default = _foo;
   `;
 
   compare([importExportPlugin], code, expected, opts);
@@ -233,8 +235,8 @@ test('allows mixed esm and cjs exports', () => {
     exports.bar = 'bar';
     module.exports.baz = 'baz';
     class _default {}
-    exports.default = _default;
     exports.foo = foo;
+    exports.default = _default;
   `;
 
   compare([importExportPlugin], code, expected, opts);
@@ -358,6 +360,69 @@ test('exports members of another module directly from an import (as namespace)',
     > 2 |     export * as AppleIcons from 'apple-icons';
         |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ dep #0 (apple-icons)"
   `);
+});
+
+test('places export all above explicit exports', () => {
+  const code = `
+    export * from 'foo';
+    export {baz} from 'bar';
+    const bax = 'bax';
+    export default bax;
+  `;
+
+  const expected = `
+    Object.defineProperty(exports, '__esModule', {value: true});
+
+    var _baz = require('bar').baz;
+    const bax = 'bax';
+
+    var _default = bax;
+
+    var _foo = require("foo");
+
+    for (var _key in _foo) {
+      exports[_key] = _foo[_key];
+    }
+
+    exports.baz = _baz;
+    exports.default = _default;
+  `;
+
+  compare([importExportPlugin], code, expected, opts);
+});
+
+test('explicit exports override export all at runtime', () => {
+  const transformedCode = generate(
+    transformToAst(
+      [importExportPlugin],
+      `
+        export * from 'foo';
+        export const overridden = 'explicit named';
+        export default 'explicit default';
+      `,
+      opts,
+    ),
+  ).code;
+  const context = {
+    exports: {} as {[string]: unknown},
+    require: (id: string) => {
+      if (id !== 'foo') {
+        throw new Error(`Unexpected module: ${id}`);
+      }
+      return {
+        default: 'star default',
+        overridden: 'star named',
+        sourceOnly: 'source only',
+      };
+    },
+  };
+
+  vm.runInNewContext(transformedCode, context);
+
+  expect(context.exports.__esModule).toBe(true);
+  expect(context.exports.default).toBe('explicit default');
+  expect(context.exports.overridden).toBe('explicit named');
+  expect(context.exports.sourceOnly).toBe('source only');
 });
 
 test('enables module exporting when something is exported', () => {

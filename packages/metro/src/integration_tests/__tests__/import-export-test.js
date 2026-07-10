@@ -39,6 +39,15 @@ test('builds a simple bundle', async () => {
   ]);
   expect(object.extraData.namespaceReExportDefault).toBe('export-2: DEFAULT');
   expect(object.extraData.namespaceReExportFoo).toBe('export-2: FOO');
+  expect(object.extraData.exportStarDefault).toBe(
+    'export-star-overrides: DEFAULT',
+  );
+  expect(object.extraData.exportStarOverridden).toBe(
+    'export-star-overrides: OVERRIDDEN',
+  );
+  expect(object.extraData.exportStarSourceOnly).toBe(
+    'export-star-source: SOURCE_ONLY',
+  );
   expect(object).toMatchSnapshot();
   expect(cjs).toEqual(expect.objectContaining(cjs.default));
 

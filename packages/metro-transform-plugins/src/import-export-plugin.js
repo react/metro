@@ -522,20 +522,6 @@ export default function importExportPlugin({
             body.unshift(e.node);
           });
 
-          state.exportDefault.forEach(
-            (e: {local: string, loc: ?SourceLocation, ...}) => {
-              body.push(
-                withLocation(
-                  exportTemplate({
-                    LOCAL: t.identifier(e.local),
-                    REMOTE: t.identifier('default'),
-                  }),
-                  e.loc,
-                ),
-              );
-            },
-          );
-
           state.exportAll.forEach(
             (e: {file: string, loc: ?SourceLocation, ...}) => {
               body.push(
@@ -562,6 +548,20 @@ export default function importExportPlugin({
                   exportTemplate({
                     LOCAL: t.identifier(e.local),
                     REMOTE: t.identifier(e.remote),
+                  }),
+                  e.loc,
+                ),
+              );
+            },
+          );
+
+          state.exportDefault.forEach(
+            (e: {local: string, loc: ?SourceLocation, ...}) => {
+              body.push(
+                withLocation(
+                  exportTemplate({
+                    LOCAL: t.identifier(e.local),
+                    REMOTE: t.identifier('default'),
                   }),
                   e.loc,
                 ),

@@ -25,6 +25,10 @@ import {foo} from './export-null';
 import primitiveDefault, {
   foo as primitiveFoo,
 } from './export-primitive-default';
+import exportStarDefault, {
+  overridden as exportStarOverridden,
+  sourceOnly as exportStarSourceOnly,
+} from './export-star-overrides';
 
 declare var require: RequireWithUnstableImportMaybeSync;
 
@@ -34,6 +38,9 @@ export {foo as default} from './export-4';
 export const extraData = {
   arrayFirst,
   arrayRest,
+  exportStarDefault,
+  exportStarOverridden,
+  exportStarSourceOnly,
   foo,
   importStar,
   myDefault,
