@@ -10,6 +10,10 @@
 
 'use strict';
 
+(global.__exportStarEvents || (global.__exportStarEvents = [])).push(
+  'source module',
+);
+
 export default 'export-star-source: DEFAULT';
 
 export const overridden = 'export-star-source: OVERRIDDEN';

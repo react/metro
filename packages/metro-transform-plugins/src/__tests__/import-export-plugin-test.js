@@ -325,7 +325,7 @@ test('exports members of another module directly from an import (as all)', () =>
   const expected = `
     Object.defineProperty(exports, '__esModule', {value: true});
 
-    var _bar = require("bar");
+    var _bar = require('bar');
 
     for (var _key in _bar) {
       exports[_key] = _bar[_key];
@@ -373,16 +373,16 @@ test('places export all above explicit exports', () => {
   const expected = `
     Object.defineProperty(exports, '__esModule', {value: true});
 
-    var _baz = require('bar').baz;
-    const bax = 'bax';
-
-    var _default = bax;
-
-    var _foo = require("foo");
+    var _foo = require('foo');
 
     for (var _key in _foo) {
       exports[_key] = _foo[_key];
     }
+
+    var _baz = require('bar').baz;
+    const bax = 'bax';
+
+    var _default = bax;
 
     exports.baz = _baz;
     exports.default = _default;
@@ -423,6 +423,35 @@ test('explicit exports override export all at runtime', () => {
   expect(context.exports.default).toBe('explicit default');
   expect(context.exports.overridden).toBe('explicit named');
   expect(context.exports.sourceOnly).toBe('source only');
+});
+
+test('re-export dependencies evaluate before module body at runtime', () => {
+  const transformedCode = generate(
+    transformToAst(
+      [importExportPlugin],
+      `
+        events.push('body');
+        export {value} from 'foo';
+        export * from 'bar';
+      `,
+      opts,
+    ),
+  ).code;
+  const events = [];
+  const context = {
+    events,
+    exports: {} as {[string]: unknown},
+    require: (id: string) => {
+      events.push(`require ${id}`);
+      return id === 'foo' ? {value: 'foo value'} : {star: 'bar star'};
+    },
+  };
+
+  vm.runInNewContext(transformedCode, context);
+
+  expect(events).toEqual(['require foo', 'require bar', 'body']);
+  expect(context.exports.value).toBe('foo value');
+  expect(context.exports.star).toBe('bar star');
 });
 
 test('enables module exporting when something is exported', () => {

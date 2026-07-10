@@ -21,6 +21,10 @@ Object {
       "export-destructuring: ARRAY_REST",
     ],
     "exportStarDefault": "export-star-overrides: DEFAULT",
+    "exportStarEvaluationOrder": Array [
+      "source module",
+      "barrel body",
+    ],
     "exportStarOverridden": "export-star-overrides: OVERRIDDEN",
     "exportStarSourceOnly": "export-star-source: SOURCE_ONLY",
     "foo": "export-null: FOO",

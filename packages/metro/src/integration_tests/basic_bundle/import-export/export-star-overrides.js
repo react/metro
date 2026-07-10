@@ -12,6 +12,12 @@
 
 export * from './export-star-source';
 
+(global.__exportStarEvents || (global.__exportStarEvents = [])).push(
+  'barrel body',
+);
+
+export const evaluationOrder = global.__exportStarEvents;
+
 export const overridden = 'export-star-overrides: OVERRIDDEN';
 
 export default 'export-star-overrides: DEFAULT';

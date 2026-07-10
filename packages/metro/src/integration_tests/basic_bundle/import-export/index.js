@@ -26,6 +26,7 @@ import primitiveDefault, {
   foo as primitiveFoo,
 } from './export-primitive-default';
 import exportStarDefault, {
+  evaluationOrder as exportStarEvaluationOrder,
   overridden as exportStarOverridden,
   sourceOnly as exportStarSourceOnly,
 } from './export-star-overrides';
@@ -39,6 +40,7 @@ export const extraData = {
   arrayFirst,
   arrayRest,
   exportStarDefault,
+  exportStarEvaluationOrder,
   exportStarOverridden,
   exportStarSourceOnly,
   foo,

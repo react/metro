@@ -42,6 +42,10 @@ test('builds a simple bundle', async () => {
   expect(object.extraData.exportStarDefault).toBe(
     'export-star-overrides: DEFAULT',
   );
+  expect(object.extraData.exportStarEvaluationOrder).toEqual([
+    'source module',
+    'barrel body',
+  ]);
   expect(object.extraData.exportStarOverridden).toBe(
     'export-star-overrides: OVERRIDDEN',
   );
