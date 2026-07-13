@@ -4,12 +4,12 @@ exports[`should build the dependency graph 1`] = `
 Array [
   Object {
     "data": Object {
-      "code": "__d(function (global, _$$_REQUIRE, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
+      "code": "__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
   'use strict';
 
-  var Bar = _$$_REQUIRE(_dependencyMap[0]);
-  var Foo = _$$_REQUIRE(_dependencyMap[1]);
-  var TypeScript = _$$_REQUIRE(_dependencyMap[2]);
+  var Bar = require(_dependencyMap[0]);
+  var Foo = require(_dependencyMap[1]);
+  var TypeScript = require(_dependencyMap[2]);
   Object.keys(Object.assign({}, Bar));
   module.exports = {
     Foo: Foo,
@@ -25,7 +25,7 @@ Array [
       },
       "lineCount": 13,
       "map": Object {
-        "mappings": ";EAUA,YAAY;;EAEZ,IAAMA,GAAG,GAAGC,WAAO,CAAAC,cAAA,GAAQ,CAAC;EAC5B,IAAMC,GAAG,GAAGF,WAAO,CAAAC,cAAA,GAAQ,CAAC;EAG5B,IAAME,UAAU,GAAGH,WAAO,CAAAC,cAAA,GAAe,CAAC;EAE1CG,MAAM,CAACC,IAAI,CAAAD,MAAA,CAAAE,MAAA,KAAKP,GAAG,CAAC,CAAC;EAErBQ,MAAM,CAACC,OAAO,GAAG;IAACN,GAAG,EAAHA,GAAG;IAAEH,GAAG,EAAHA,GAAG;IAAEI,UAAU,EAAVA;EAAU,CAAC;AAAC,G",
+        "mappings": ";EAUA,YAAY;;EAEZ,IAAMA,GAAG,GAAGC,OAAO,CAAAC,cAAA,GAAQ,CAAC;EAC5B,IAAMC,GAAG,GAAGF,OAAO,CAAAC,cAAA,GAAQ,CAAC;EAG5B,IAAME,UAAU,GAAGH,OAAO,CAAAC,cAAA,GAAe,CAAC;EAE1CG,MAAM,CAACC,IAAI,CAAAD,MAAA,CAAAE,MAAA,KAAKP,GAAG,CAAC,CAAC;EAErBQ,MAAM,CAACC,OAAO,GAAG;IAACN,GAAG,EAAHA,GAAG;IAAEH,GAAG,EAAHA,GAAG;IAAEI,UAAU,EAAVA;EAAU,CAAC;AAAC,G",
         "names": Array [
           "Bar",
           "require",

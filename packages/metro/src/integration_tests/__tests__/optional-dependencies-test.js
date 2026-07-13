@@ -44,7 +44,7 @@ test('builds a simple bundle', async () => {
   expect(match).not.toBeNull();
 
   expect(match[0]).toMatchInlineSnapshot(`
-"__d(function (global, _$$_REQUIRE, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
+"__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
   'use strict';
 
   Object.defineProperty(exports, '__esModule', {
@@ -52,16 +52,16 @@ test('builds a simple bundle', async () => {
   });
   var shouldBeB, shouldBeC;
   try {
-    shouldBeB = _$$_REQUIRE(_dependencyMap[0], \\"./not-exists\\");
+    shouldBeB = require(_dependencyMap[0], \\"./not-exists\\");
   } catch (_unused) {
-    shouldBeB = _$$_REQUIRE(_dependencyMap[1], \\"./optional-b\\");
+    shouldBeB = require(_dependencyMap[1], \\"./optional-b\\");
   }
   (function requireOptionalC() {
     try {
-      shouldBeC = _$$_REQUIRE(_dependencyMap[2], \\"./optional-c\\");
+      shouldBeC = require(_dependencyMap[2], \\"./optional-c\\");
     } catch (e) {}
   })();
-  var a = _$$_REQUIRE(_dependencyMap[3], \\"./required-a\\");
+  var a = require(_dependencyMap[3], \\"./required-a\\");
   var b = shouldBeB;
   var c = shouldBeC;
   exports.a = a;
