@@ -128,7 +128,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     optimizationSizeLimit: 150 * 1024, // 150 KiB.
     transformVariants: {default: {}},
     publicPath: '/assets',
-    allowOptionalDependencies: false,
+    allowOptionalDependencies: true,
     unstable_allowRequireContext: false,
     unstable_dependencyMapReservedName: null,
     unstable_disableModuleWrapping: false,
