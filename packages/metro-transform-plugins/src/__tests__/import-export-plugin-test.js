@@ -328,6 +328,7 @@ test('exports members of another module directly from an import (as all)', () =>
     var _bar = require('bar');
 
     for (var _key in _bar) {
+      if (_key === "default") continue;
       exports[_key] = _bar[_key];
     }
   `;
@@ -376,6 +377,7 @@ test('places export all above explicit exports', () => {
     var _foo = require('foo');
 
     for (var _key in _foo) {
+      if (_key === "default") continue;
       exports[_key] = _foo[_key];
     }
 
@@ -423,6 +425,82 @@ test('explicit exports override export all at runtime', () => {
   expect(context.exports.default).toBe('explicit default');
   expect(context.exports.overridden).toBe('explicit named');
   expect(context.exports.sourceOnly).toBe('source only');
+});
+
+test('export all does not re-export the default of the source', () => {
+  const transformedCode = generate(
+    transformToAst(
+      [importExportPlugin],
+      `
+        export * from 'foo';
+      `,
+      opts,
+    ),
+  ).code;
+  const context = {
+    exports: {} as {[string]: unknown},
+    require: (id: string) => {
+      if (id !== 'foo') {
+        throw new Error(`Unexpected module: ${id}`);
+      }
+      return {
+        default: 'star default',
+        named: 'star named',
+      };
+    },
+  };
+
+  vm.runInNewContext(transformedCode, context);
+
+  // Per the ES spec (GetExportedNames) and Node.js, `export *` re-exports
+  // named exports but never the source module's default export.
+  expect(context.exports.named).toBe('star named');
+  expect('default' in context.exports).toBe(false);
+});
+
+test('export all as namespace includes the default of the source', () => {
+  const transformedCode = generate(
+    transformToAst(
+      [importExportPlugin],
+      `
+        export * as ns from 'foo';
+      `,
+      opts,
+    ),
+  ).code;
+  const source = {
+    __esModule: true,
+    default: 'star default',
+    named: 'star named',
+  };
+  // Faithful stand-in for metroImportAll: resolve the module via require,
+  // then expose an ES module's namespace as-is (default included).
+  const requireMock = (id: string) => {
+    if (id !== 'foo') {
+      throw new Error(`Unexpected module: ${id}`);
+    }
+    return source;
+  };
+  const exportsObj: {[string]: unknown} = {};
+  const context: {[string]: unknown} = {
+    exports: exportsObj,
+    require: requireMock,
+  };
+  context[opts.importAll] = (id: string) => {
+    const mod = requireMock(id);
+    return mod.__esModule === true ? mod : {...mod, default: mod};
+  };
+
+  vm.runInNewContext(transformedCode, context);
+
+  // `export * as ns` (ExportNamespaceSpecifier) creates a namespace object,
+  // which per the ES spec DOES expose the source module's default export -
+  // unlike bare `export *`.
+  expect(exportsObj.ns).toEqual({
+    __esModule: true,
+    default: 'star default',
+    named: 'star named',
+  });
 });
 
 test('re-export dependencies evaluate before module body at runtime', () => {
