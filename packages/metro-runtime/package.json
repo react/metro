@@ -28,7 +28,7 @@
     "flow-enums-runtime": "^0.0.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
+    "@babel/core": "^7.29.6",
     "react": "19.2.3",
     "react-refresh": "^0.14.0",
     "react-test-renderer": "19.2.3"
