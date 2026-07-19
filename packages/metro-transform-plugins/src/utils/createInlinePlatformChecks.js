@@ -127,11 +127,26 @@ export default function createInlinePlatformChecks(
     node: BabelNodeExpression,
     scope: Scope,
     patterns: Array<{name: string}>,
-  ): boolean =>
-    patterns.some((pattern: {name: string}) => {
+  ): boolean => {
+    if (isMemberExpression(node) && 'name' in node.object) {
+      const binding = scope.getBinding(node.object.name);
+      if (
+        binding &&
+        binding.path.isVariableDeclarator() &&
+        isCallExpression(binding.path.node.init) &&
+        isIdentifier(binding.path.node.init.callee, {name: requireName}) &&
+        binding.path.node.init?.arguments &&
+        checkRequireArgs(binding.path.node.init.arguments, 'react-native')
+      ) {
+        return true;
+      }
+    }
+
+    return patterns.some((pattern: {name: string}) => {
       const importName = importMap.get(pattern.name) || pattern.name;
       return isRequireCall(node, importName, scope);
     });
+  };
 
   const isImportOrGlobal = (
     node: BabelNodeExpression,
