@@ -16,7 +16,7 @@ const path = require('path');
 describe('exclusionList', () => {
   let originalSeparator;
 
-  function setPathSeperator(sep: string) {
+  function setPathSeparator(sep: string) {
     // $FlowFixMe[cannot-write]: property sep is not writable.
     path.sep = sep;
   }
@@ -31,14 +31,14 @@ describe('exclusionList', () => {
   });
 
   test('proves we can write to path.sep for setting up the tests', () => {
-    setPathSeperator('/');
+    setPathSeparator('/');
     expect(require('path').sep).toBe('/');
-    setPathSeperator('\\');
+    setPathSeparator('\\');
     expect(require('path').sep).toBe('\\');
   });
 
-  describe('simulate macOS/linux enviornment', () => {
-    beforeEach(() => setPathSeperator('/'));
+  describe('simulate macOS/linux environment', () => {
+    beforeEach(() => setPathSeparator('/'));
 
     test('converts forward slashes in the RegExp to the OS specific path separator', () => {
       // Simple case
@@ -73,8 +73,8 @@ describe('exclusionList', () => {
     });
   });
 
-  describe('simulate windows enviornment', () => {
-    beforeEach(() => setPathSeperator('\\'));
+  describe('simulate windows environment', () => {
+    beforeEach(() => setPathSeparator('\\'));
 
     test('converts forward slashes in the RegExp to the OS specific path separator', () => {
       // Simple case
