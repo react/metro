@@ -112,6 +112,47 @@ test('should return the RAM bundle info', async () => {
   ).toMatchSnapshot();
 });
 
+test('passes a working transitive-dependency lookup to getTransformOptions', async () => {
+  let resolvedDeps;
+  await getRamBundleInfo(
+    '/root/entry.js',
+    pre,
+    {...graph, entryPoints: new Set(['/root/entry.js'])},
+    {
+      asyncRequireModulePath: '',
+      // $FlowFixMe[incompatible-type] createModuleId assumes numeric IDs - is this too strict?
+      createModuleId: path => path,
+      dev: true,
+      excludeSource: false,
+      getRunModuleStatement,
+      getTransformOptions: async (entryPoints, opts, getDependenciesOf) => {
+        resolvedDeps = await getDependenciesOf('/root/foo.js');
+        return {preloadedModules: {}, ramGroups: []};
+      },
+      globalPrefix: '',
+      includeAsyncPaths: false,
+      inlineSourceMap: false,
+      modulesOnly: false,
+      platform: null,
+      processModuleFilter: module => true,
+      projectRoot: '/root',
+      runBeforeMainModule: [],
+      runModule: true,
+      serverRoot: '/root',
+      shouldAddToIgnoreList: () => false,
+      sourceMapUrl: 'http://localhost/bundle.map',
+      sourceUrl: null,
+      getSourceUrl: null,
+    },
+  );
+  // foo depends on bar, baz, qux — the callback must return those, not [undefined].
+  expect([...resolvedDeps].sort()).toEqual([
+    '/root/bar.js',
+    '/root/baz.js',
+    '/root/qux.js',
+  ]);
+});
+
 test('emits x_google_ignoreList based on shouldAddToIgnoreList', async () => {
   expect(
     await getRamBundleInfo(
