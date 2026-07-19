@@ -151,6 +151,76 @@ describe('getAsset', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  test('should reject sibling-prefix watchFolder paths outside watchFolders', async () => {
+    const outsideWatchFolder = path.resolve('/watchfoldersub');
+    const insideWatchFolder = path.resolve('/watchfolder');
+    const childRoot = path.join(outsideWatchFolder, 'imgs');
+    const relativePathToAsset = path.join('..', 'watchfoldersub', 'imgs', 'b.png');
+
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
+
+    await expect(
+      getAssetStr(
+        relativePathToAsset,
+        insideWatchFolder,
+        [path.join(insideWatchFolder, 'one')],
+        null,
+        ['png'],
+      ),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  test('should reject sibling-prefix asset paths outside root', async () => {
+    const rootFolder = path.resolve('/app');
+    const outsideRoot = path.resolve('/app2');
+    const childRoot = path.join(outsideRoot, 'imgs');
+
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
+
+    await expect(
+      getAssetStr(
+        path.join('..', 'app2', 'imgs', 'b.png'),
+        rootFolder,
+        [],
+        null,
+        ['png'],
+      ),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  test('should accept asset paths inside root', async () => {
+    const rootFolder = path.resolve('/app');
+    const childRoot = path.join(rootFolder, 'imgs');
+
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
+
+    await expect(
+      getAssetStr('imgs/b.png', rootFolder, [], null, ['png']),
+    ).resolves.toContain('b image');
+  });
+
+  test('should reject sibling-prefix asset paths outside root even with trailing root separator', async () => {
+    const rootFolder = path.resolve('/app');
+    const outsideRoot = path.resolve('/app2');
+    const childRoot = path.join(outsideRoot, 'imgs');
+
+    fs.mkdirSync(childRoot, {recursive: true});
+    fs.writeFileSync(path.join(childRoot, 'b.png'), 'b image');
+
+    await expect(
+      getAssetStr(
+        path.join('..', 'app2', 'imgs', 'b.png'),
+        rootFolder + path.sep,
+        [],
+        null,
+        ['png'],
+      ),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
   test('should find an image when fileExistsInFileMap returns true', async () => {
     writeImages({'b.png': 'b image'});
 
