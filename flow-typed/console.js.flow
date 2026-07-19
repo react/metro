@@ -38,3 +38,8 @@ declare module 'console' {
     warn(data: unknown): void;
   }
 }
+
+declare module 'node:console' {
+  export type * from 'console';
+  declare module.exports: $Exports<'console'>;
+}

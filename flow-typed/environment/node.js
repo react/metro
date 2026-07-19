@@ -5874,6 +5874,11 @@ declare module 'node:assert/strict' {
   declare module.exports: $Exports<'assert'>['strict'];
 }
 
+declare module 'node:buffer' {
+  export type * from 'buffer';
+  declare module.exports: $Exports<'buffer'>;
+}
+
 declare module 'node:child_process' {
   export type * from 'child_process';
   declare module.exports: $Exports<'child_process'>;
@@ -5889,9 +5894,19 @@ declare module 'node:crypto' {
   declare module.exports: $Exports<'crypto'>;
 }
 
+declare module 'node:dgram' {
+  export type * from 'dgram';
+  declare module.exports: $Exports<'dgram'>;
+}
+
 declare module 'node:dns' {
   export type * from 'dns';
   declare module.exports: $Exports<'dns'>;
+}
+
+declare module 'node:domain' {
+  export type * from 'domain';
+  declare module.exports: $Exports<'domain'>;
 }
 
 declare module 'node:events' {
@@ -5907,6 +5922,31 @@ declare module 'node:fs' {
 declare module 'node:fs/promises' {
   export type * from 'fs/promises';
   declare module.exports: $Exports<'fs'>['promises'];
+}
+
+declare module 'node:http' {
+  export type * from 'http';
+  declare module.exports: $Exports<'http'>;
+}
+
+declare module 'node:https' {
+  export type * from 'https';
+  declare module.exports: $Exports<'https'>;
+}
+
+declare module 'node:inspector' {
+  export type * from 'inspector';
+  declare module.exports: $Exports<'inspector'>;
+}
+
+declare module 'node:module' {
+  export type * from 'module';
+  declare module.exports: $Exports<'module'>;
+}
+
+declare module 'node:net' {
+  export type * from 'net';
+  declare module.exports: $Exports<'net'>;
 }
 
 declare module 'node:os' {
@@ -5929,6 +5969,36 @@ declare module 'node:process' {
   declare module.exports: $Exports<'process'>;
 }
 
+declare module 'node:punycode' {
+  export type * from 'punycode';
+  declare module.exports: $Exports<'punycode'>;
+}
+
+declare module 'node:querystring' {
+  export type * from 'querystring';
+  declare module.exports: $Exports<'querystring'>;
+}
+
+declare module 'node:readline' {
+  export type * from 'readline';
+  declare module.exports: $Exports<'readline'>;
+}
+
+declare module 'node:repl' {
+  export type * from 'repl';
+  declare module.exports: $Exports<'repl'>;
+}
+
+declare module 'node:stream' {
+  export type * from 'stream';
+  declare module.exports: $Exports<'stream'>;
+}
+
+declare module 'node:string_decoder' {
+  export type * from 'string_decoder';
+  declare module.exports: $Exports<'string_decoder'>;
+}
+
 declare module 'node:timers' {
   export type * from 'timers';
   declare module.exports: $Exports<'timers'>;
@@ -5937,6 +6007,16 @@ declare module 'node:timers' {
 declare module 'node:timers/promises' {
   export type * from 'timers/promises';
   declare module.exports: $Exports<'timers/promises'>;
+}
+
+declare module 'node:tls' {
+  export type * from 'tls';
+  declare module.exports: $Exports<'tls'>;
+}
+
+declare module 'node:tty' {
+  export type * from 'tty';
+  declare module.exports: $Exports<'tty'>;
 }
 
 declare module 'node:url' {
@@ -5953,7 +6033,17 @@ declare module 'node:v8' {
   declare module.exports: $Exports<'v8'>;
 }
 
+declare module 'node:vm' {
+  export type * from 'vm';
+  declare module.exports: $Exports<'vm'>;
+}
+
 declare module 'node:worker_threads' {
   export type * from 'worker_threads';
   declare module.exports: $Exports<'worker_threads'>;
+}
+
+declare module 'node:zlib' {
+  export type * from 'zlib';
+  declare module.exports: $Exports<'zlib'>;
 }
