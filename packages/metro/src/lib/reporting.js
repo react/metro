@@ -14,8 +14,8 @@ import type {HealthCheckResult, WatcherStatus} from 'metro-file-map';
 import type {CustomResolverOptions} from 'metro-resolver';
 import type {CustomTransformOptions} from 'metro-transform-worker';
 
-import tty from 'tty';
-import util from 'util';
+import tty from 'node:tty';
+import util from 'node:util';
 
 const supportsColor = (): boolean =>
   process.stdout instanceof tty.WriteStream && process.stdout.hasColors();

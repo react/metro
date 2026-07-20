@@ -33,7 +33,6 @@ import type {
   SplitBundleOptions,
 } from './shared/types';
 import type {IncomingMessage} from 'connect';
-import type {ServerResponse} from 'http';
 import type {CacheStore} from 'metro-cache';
 import type {ConfigT, RootPerfLogger} from 'metro-config';
 import type {
@@ -42,6 +41,7 @@ import type {
 } from 'metro-core/private/Logger';
 import type {CustomResolverOptions} from 'metro-resolver/private/types';
 import type {CustomTransformOptions} from 'metro-transform-worker';
+import type {ServerResponse} from 'node:http';
 
 import {getAsset} from './Assets';
 import baseJSBundle from './DeltaBundler/Serializers/baseJSBundle';
@@ -71,10 +71,10 @@ import * as fs from 'graceful-fs';
 import * as jscSafeUrl from 'jsc-safe-url';
 import {Logger} from 'metro-core';
 import mime from 'mime-types';
+import path from 'node:path';
+import {performance} from 'node:perf_hooks';
+import querystring from 'node:querystring';
 import nullthrows from 'nullthrows';
-import path from 'path';
-import {performance} from 'perf_hooks';
-import querystring from 'querystring';
 
 const debug = debugModule('Metro:Server');
 

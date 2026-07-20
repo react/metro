@@ -29,8 +29,6 @@ import type {FileSystemLookup} from 'metro-resolver';
 import createFileMap from './DependencyGraph/createFileMap';
 import {ModuleResolver} from './DependencyGraph/ModuleResolution';
 import {PackageCache} from './PackageCache';
-import EventEmitter from 'events';
-import fs from 'fs';
 import {
   AmbiguousModuleResolutionError,
   Logger,
@@ -39,8 +37,10 @@ import {
 import canonicalize from 'metro-core/private/canonicalize';
 import {DuplicateHasteCandidatesError} from 'metro-file-map';
 import {InvalidPackageError} from 'metro-resolver';
+import EventEmitter from 'node:events';
+import fs from 'node:fs';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
 const {createActionStartEntry, createActionEndEntry, log} = Logger;
 

@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<e898ae56224c64d5d37e23cae7a2b84d>>
+ * @generated SignedSource<<fdf4acf8d1eecbbefcabdb864cfc6482>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/helpers/js.js
@@ -18,7 +18,7 @@
 import type {MixedOutput, Module} from '../../types';
 import type {JsOutput} from 'metro-transform-worker';
 
-import path from 'path';
+import path from 'node:path';
 
 export type Options = Readonly<{
   createModuleId: ($$PARAM_0$$: string) => number | string;

@@ -61,12 +61,12 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
 
   beforeEach(async () => {
     if (osPlatform === 'win32') {
-      jest.doMock('path', () => jest.requireActual('path/win32'));
+      jest.doMock('node:path', () => jest.requireActual('node:path/win32'));
     } else {
-      jest.doMock('path', () => jest.requireActual('path'));
+      jest.doMock('node:path', () => jest.requireActual('node:path'));
     }
 
-    const {EventEmitter} = require('events');
+    const {EventEmitter} = require('node:events');
     const {Graph} = require('../Graph');
 
     traverseDependencies = jest.spyOn(Graph.prototype, 'traverseDependencies');

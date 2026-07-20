@@ -11,9 +11,9 @@
 
 'use strict';
 
-const fs = require('fs');
 const invariant = require('invariant');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function updateVersion(version /*: ?string */) {
   if (version == null) {

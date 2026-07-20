@@ -13,10 +13,10 @@ import type {DeltaResult, Options} from './types';
 import type {ChangeEvent} from 'metro-file-map';
 
 import {Graph} from './Graph';
-import crypto from 'crypto';
 import debugModule from 'debug';
-import EventEmitter from 'events';
-import path from 'path';
+import crypto from 'node:crypto';
+import EventEmitter from 'node:events';
+import path from 'node:path';
 
 const debug = debugModule('Metro:DeltaCalculator');
 

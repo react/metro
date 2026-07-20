@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import os from 'os';
+import os from 'node:os';
 
 export default function getMaxWorkers(workers: ?number): number {
   // $FlowFixMe[prop-missing] Missing Flow lib def for availableParallelism

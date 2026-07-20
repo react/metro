@@ -30,16 +30,16 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
-import typeof FSType from 'fs';
+import typeof FSType from 'node:fs';
 
-const {Buffer} = require('buffer');
-const path = require('path');
+const {Buffer} = require('node:buffer');
+const path = require('node:path');
 
 const babelTransformerPath =
   require.resolve('@react-native/metro-babel-transformer');
 
 const transformerContents = (() =>
-  require('fs').readFileSync(babelTransformerPath))();
+  require('node:fs').readFileSync(babelTransformerPath))();
 
 const HEADER_DEV =
   '__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {';
@@ -83,9 +83,9 @@ const baseTransformOptions: JsTransformOptions = {
 beforeEach(() => {
   jest.resetModules();
 
-  jest.mock('fs', () => new (require('metro-memory-fs'))());
+  jest.mock('node:fs', () => new (require('metro-memory-fs'))());
 
-  fs = require('fs');
+  fs = jest.requireMock('node:fs');
   Transformer = require('../');
   // $FlowFixMe[prop-missing] Cannot call `fs.reset` because property `reset` is missing in  module `fs`
   fs.reset();

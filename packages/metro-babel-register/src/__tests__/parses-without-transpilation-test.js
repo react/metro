@@ -11,8 +11,8 @@
 
 'use strict';
 
-const {promises: fsPromises} = require('fs');
-const vm = require('vm');
+const {promises: fsPromises} = require('node:fs');
+const vm = require('node:vm');
 
 test('can be loaded directly without transpilation', async () => {
   const code = await fsPromises.readFile(

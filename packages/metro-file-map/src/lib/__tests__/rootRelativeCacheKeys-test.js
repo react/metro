@@ -9,7 +9,7 @@
  */
 
 import type {BuildParameters, FileMapPlugin} from '../../flow-types';
-import typeof PathModule from 'path';
+import typeof PathModule from 'node:path';
 
 import rootRelativeCacheKeys from '../rootRelativeCacheKeys';
 
@@ -116,12 +116,12 @@ test('returns a distinct cache key for any change', () => {
 
 describe('cross-platform cache keys', () => {
   afterEach(() => {
-    jest.unmock('path');
+    jest.unmock('node:path');
   });
 
   test('returns the same cache key for Windows and POSIX path parameters', () => {
     let mockPathModule;
-    jest.mock('path', () => mockPathModule);
+    jest.mock('node:path', () => mockPathModule);
 
     jest.resetModules();
     mockPathModule = jest.requireActual<PathModule>('path').posix;

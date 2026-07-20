@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Determine if a file path should be considered an asset file based on the

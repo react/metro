@@ -23,8 +23,8 @@ import type {
 
 'use strict';
 
-const {createHash} = require('crypto');
 const fs = require('graceful-fs');
+const {createHash} = require('node:crypto');
 
 function sha1hex(content /*: string | Buffer */) /*: string */ {
   return createHash('sha1').update(content).digest('hex');

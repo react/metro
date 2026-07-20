@@ -14,11 +14,6 @@ import type {ReadOnlyGraph} from './DeltaBundler';
 import type {ServerOptions} from './Server';
 import type {BuildOptions, OutputOptions, RequestOptions} from './shared/types';
 import type {HandleFunction} from 'connect';
-import type {Server as HttpServer} from 'http';
-import type {
-  Server as HttpsServer,
-  ServerOptions as HttpsServerOptions,
-} from 'https';
 import type {TransformProfile} from 'metro-babel-transformer';
 import type {
   ConfigT,
@@ -28,6 +23,11 @@ import type {
 } from 'metro-config';
 import type {CustomResolverOptions} from 'metro-resolver';
 import type {CustomTransformOptions} from 'metro-transform-worker';
+import type {Server as HttpServer} from 'node:http';
+import type {
+  Server as HttpsServer,
+  ServerOptions as HttpsServerOptions,
+} from 'node:https';
 import type {Server as WebSocketServer} from 'ws';
 import typeof Yargs from 'yargs';
 
@@ -41,9 +41,6 @@ import JsonReporter from './lib/JsonReporter';
 import TerminalReporter from './lib/TerminalReporter';
 import MetroServer from './Server';
 import * as outputBundle from './shared/output/bundle';
-import fs from 'fs';
-import http from 'http';
-import https from 'https';
 import {
   getDefaultConfig,
   loadConfig,
@@ -51,9 +48,12 @@ import {
   resolveConfig,
 } from 'metro-config';
 import {Terminal} from 'metro-core';
-import net from 'net';
+import fs from 'node:fs';
+import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import util from 'node:util';
 import nullthrows from 'nullthrows';
-import util from 'util';
 
 const DEFAULTS = MetroServer.DEFAULT_BUNDLE_OPTIONS;
 

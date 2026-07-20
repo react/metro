@@ -11,7 +11,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 export default (file: string, roots: ReadonlyArray<string>): string =>
   path.resolve(roots[0], file);

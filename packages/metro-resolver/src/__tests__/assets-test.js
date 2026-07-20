@@ -11,7 +11,7 @@
 
 import * as Resolver from '../index';
 import {createResolutionContext} from './utils';
-import path from 'path';
+import path from 'node:path';
 
 describe('asset resolutions', () => {
   const baseContext = {

@@ -13,11 +13,11 @@ import type {AssetPath} from './node-haste/lib/AssetPaths';
 
 import {normalizePathSeparatorsToPosix} from './lib/pathUtils';
 import * as AssetPaths from './node-haste/lib/AssetPaths';
-import crypto from 'crypto';
-import fs from 'fs';
 // $FlowFixMe[untyped-import] image-size
 import getImageSize from 'image-size';
-import path from 'path';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export type AssetInfo = {
   readonly files: Array<string>,

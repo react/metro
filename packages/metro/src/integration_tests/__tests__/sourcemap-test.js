@@ -12,7 +12,7 @@
 
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
-const fs = require('fs');
+const fs = require('node:fs');
 const sourceMap = require('source-map');
 const stackTrace = require('stack-trace');
 

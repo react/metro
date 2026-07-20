@@ -12,7 +12,7 @@
 import type {ResolutionContext} from '../index';
 import type {PackageJson} from '../types';
 
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Data structure approximating a file tree. Should be populated with complete

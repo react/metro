@@ -11,7 +11,7 @@
 
 import type {HasteConflict} from '../../flow-types';
 
-import path from 'path';
+import path from 'node:path';
 
 export class HasteConflictsError extends Error {
   #conflicts: ReadonlyArray<HasteConflict>;

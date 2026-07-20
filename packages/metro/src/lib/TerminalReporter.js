@@ -12,7 +12,7 @@
 import type {BundleDetails, ReportableEvent} from './reporting';
 import type {Terminal} from 'metro-core';
 import type {HealthCheckResult, WatcherStatus} from 'metro-file-map';
-import type {BackgroundColors, ForegroundColors, Modifiers} from 'util';
+import type {BackgroundColors, ForegroundColors, Modifiers} from 'node:util';
 
 import {calculateBundleProgressRatio} from './bundleProgressUtils';
 import logToConsole from './logToConsole';
@@ -20,8 +20,8 @@ import * as reporting from './reporting';
 // $FlowFixMe[untyped-import] lodash.throttle
 import throttle from 'lodash.throttle';
 import {AmbiguousModuleResolutionError} from 'metro-core';
-import path from 'path';
-import util from 'util';
+import path from 'node:path';
+import util from 'node:util';
 
 type StyleFormat = ReadonlyArray<
   ForegroundColors | BackgroundColors | Modifiers,

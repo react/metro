@@ -9,7 +9,7 @@
  */
 
 import getMockName from '../getMockName';
-import path from 'path';
+import path from 'node:path';
 
 describe('getMockName', () => {
   test('extracts mock name from file path', () => {

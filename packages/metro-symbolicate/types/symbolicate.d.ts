@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<514225e55c0b3bbdbef6f68fb16f4085>>
+ * @generated SignedSource<<cf5eb72b236393b4e08cc4b1814f4e49>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-symbolicate/src/symbolicate.js
@@ -15,8 +15,8 @@
  *   yarn run build-ts-defs (OSS) 
  */
 
-import type {Readable, Writable} from 'stream';
-import type {ReadStream} from 'tty';
+import type {Readable, Writable} from 'node:stream';
+import type {ReadStream} from 'node:tty';
 
 declare function main(
   argvInput?: Array<string>,

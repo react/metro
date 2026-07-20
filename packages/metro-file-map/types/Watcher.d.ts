@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @noformat
- * @generated SignedSource<<264a91514e87b4d291030528067bc411>>
+ * @generated SignedSource<<f8c0d07df9a512cbfb4a3025ab1df4fb>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/Watcher.js
@@ -16,7 +16,7 @@
 
 import type {Console, CrawlerOptions, CrawlResult, PerfLogger, WatcherBackendChangeEvent} from './flow-types';
 
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 
 type WatcherOptions = {
   abortSignal: AbortSignal;

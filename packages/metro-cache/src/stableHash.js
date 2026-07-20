@@ -9,8 +9,8 @@
  * @oncall react_native
  */
 
-import crypto from 'crypto';
 import canonicalize from 'metro-core/private/canonicalize';
+import crypto from 'node:crypto';
 
 export default function stableHash(value: unknown): Buffer {
   return (

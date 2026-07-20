@@ -10,7 +10,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 require('eslint-plugin-lint').load(path.join(__dirname, 'rules'));
 

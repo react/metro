@@ -10,7 +10,7 @@
 
 import TreeFS from '../../lib/TreeFS';
 
-const path = require('path');
+const path = require('node:path');
 
 jest.useRealTimers();
 

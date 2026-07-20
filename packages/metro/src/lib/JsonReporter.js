@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {Writable} from 'stream';
+import type {Writable} from 'node:stream';
 
 export type SerializedError = {
   message: string,

@@ -15,11 +15,11 @@ import type {WatcherOptions} from '../common';
 import FallbackWatcher from '../FallbackWatcher';
 import NativeWatcher from '../NativeWatcher';
 import WatchmanWatcher from '../WatchmanWatcher';
-import {execSync} from 'child_process';
-import {promises as fsPromises} from 'fs';
 import invariant from 'invariant';
-import os from 'os';
-import {join} from 'path';
+import {execSync} from 'node:child_process';
+import {promises as fsPromises} from 'node:fs';
+import os from 'node:os';
+import {join} from 'node:path';
 
 jest.useRealTimers();
 

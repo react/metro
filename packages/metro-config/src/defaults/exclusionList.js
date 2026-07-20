@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import path from 'path';
+import path from 'node:path';
 
 const list = [/\/__tests__\/.*/];
 

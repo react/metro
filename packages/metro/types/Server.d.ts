@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<a9ab51140db45fe3c6a3c015d4da3401>>
+ * @generated SignedSource<<edf96165fc2c0bfc8f5e49c02021a841>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/Server.js
@@ -19,10 +19,10 @@ import type {AssetData} from './Assets';
 import type {RamBundleInfo} from './DeltaBundler/Serializers/getRamBundleInfo';
 import type {BuildOptions, BundleOptions} from './shared/types';
 import type {IncomingMessage} from 'connect';
-import type {ServerResponse} from 'http';
 import type {ConfigT} from 'metro-config';
 import type {CustomResolverOptions} from 'metro-resolver/private/types';
 import type {CustomTransformOptions} from 'metro-transform-worker';
+import type {ServerResponse} from 'node:http';
 
 import IncrementalBundler from './IncrementalBundler';
 import {SourcePathsMode} from './shared/types';

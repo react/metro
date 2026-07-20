@@ -8,8 +8,8 @@
  * @oncall react_native
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const PACKAGES_DIR = path.resolve(__dirname, '../packages');
 

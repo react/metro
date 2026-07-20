@@ -14,7 +14,7 @@ const Terminal = require('../Terminal').default;
 
 jest.useRealTimers();
 
-jest.mock('readline', () => ({
+jest.mock('node:readline', () => ({
   moveCursor: (stream, dx, dy, callback = () => {}) => {
     const {cursor, columns} = stream;
     stream.cursor =
@@ -50,7 +50,9 @@ describe.each([false, true])(
       const lines = 10;
       const columns = 10;
       const stream = Object.create(
-        isTTY ? require('tty').WriteStream.prototype : require('net').Socket,
+        isTTY
+          ? require('node:tty').WriteStream.prototype
+          : require('node:net').Socket,
       );
       Object.assign(stream, {
         cursor: 0,

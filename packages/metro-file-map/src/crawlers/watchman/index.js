@@ -26,8 +26,8 @@ import {RootPathUtils} from '../../lib/RootPathUtils';
 import {planQuery} from './planQuery';
 import watchman from 'fb-watchman';
 import invariant from 'invariant';
-import * as path from 'path';
-import {performance} from 'perf_hooks';
+import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 
 type WatchmanRoots = Map<
   string, // Posix-separated absolute path

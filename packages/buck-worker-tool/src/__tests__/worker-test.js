@@ -11,7 +11,7 @@
 'use strict';
 
 jest
-  .mock('console', () => {
+  .mock('node:console', () => {
     // Automocking is no longer working with jest after https://github.com/nodejs/node/pull/35399
     // because the typeof console is now 'console' and no longer Object.
     const mock = jest.fn();
@@ -21,16 +21,17 @@ jest
 
     return {Console};
   })
-  .mock('fs', () => new (require('metro-memory-fs'))())
+  .mock('node:fs', () => new (require('metro-memory-fs'))())
   .useRealTimers();
 
 const JSONStream = require('../third-party/JSONStream');
 const {buckWorker} = require('../worker-tool');
-// mocked
-const {Console} = require('console');
-const fs = require('fs');
-const path = require('path');
+const path = require('node:path');
 const through = require('through');
+
+// mocked
+const {Console} = jest.requireMock('node:console');
+const fs = jest.requireMock('node:fs');
 
 const {any, anything} = expect;
 

@@ -12,10 +12,10 @@ import * as Metro from '../../..';
 import RamBundleParser from '../../lib/RamBundleParser';
 import * as ramBundleOutput from '../../shared/output/unbundle';
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const vm = require('vm');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const vm = require('node:vm');
 
 jest.setTimeout(30 * 1000);
 

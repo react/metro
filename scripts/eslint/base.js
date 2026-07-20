@@ -10,7 +10,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 require('eslint-plugin-lint').load(path.join(__dirname, 'rules'));
 
@@ -28,6 +28,7 @@ module.exports = {
   rules: {
     'babel/quotes': ['error', 'single', 'avoid-escape'],
     'consistent-return': 'error',
+    'import/enforce-node-protocol-usage': ['warn', 'always'],
     'import/no-extraneous-dependencies': 'error',
     'fb-www/extra-arrow-initializer': 'off',
     'lint/metro-deep-imports': 'warn',

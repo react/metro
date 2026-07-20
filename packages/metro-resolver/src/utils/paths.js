@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import path from 'path';
+import path from 'node:path';
 
 export const systemToPosixPath: (relativeSystemPath: string) => string =
   path.sep === '/'

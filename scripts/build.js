@@ -27,10 +27,10 @@
 
 const getPackages = require('./_getPackages');
 const babel = require('@babel/core');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
+const {styleText} = require('node:util');
 const prettier = require('prettier');
-const {styleText} = require('util');
 
 const SRC_DIR = 'src';
 const TYPES_DIR = 'types';

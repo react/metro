@@ -18,8 +18,8 @@ import type {BabelCoreOptions} from '@babel/core';
 */
 
 const escapeRegExp = require('escape-string-regexp');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 let _only /*: ReadonlyArray<RegExp | string> */ = [];
 

@@ -14,7 +14,7 @@
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 const MetroConfig = require('metro-config');
-const path = require('path');
+const path = require('node:path');
 
 jest.setTimeout(30 * 1000);
 

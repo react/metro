@@ -11,8 +11,8 @@
 
 import type {PackageJson} from 'metro-resolver/private/types';
 
-import {readFileSync} from 'fs';
-import {dirname, sep} from 'path';
+import {readFileSync} from 'node:fs';
+import {dirname, sep} from 'node:path';
 
 type GetClosestPackageFn = (absoluteFilePath: string) => ?{
   packageJsonPath: string,

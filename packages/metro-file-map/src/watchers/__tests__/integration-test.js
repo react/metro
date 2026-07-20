@@ -14,9 +14,9 @@ import type {EventHelpers, WatcherName} from './helpers';
 
 import NativeWatcher from '../NativeWatcher';
 import {WATCHERS, createTempWatchRoot, startWatching} from './helpers';
-import {promises as fsPromises} from 'fs';
-import os from 'os';
-import {join} from 'path';
+import {promises as fsPromises} from 'node:fs';
+import os from 'node:os';
+import {join} from 'node:path';
 
 const {mkdir, writeFile, rm, symlink, unlink} = fsPromises;
 

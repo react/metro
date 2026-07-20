@@ -16,12 +16,12 @@ import type {ConfigT} from 'metro-config';
 import {normalizePathSeparatorsToPosix} from '../lib/pathUtils';
 import getTransformCacheKey from './getTransformCacheKey';
 import WorkerFarm from './WorkerFarm';
-import assert from 'assert';
-import crypto from 'crypto';
 import debugModule from 'debug';
-import fs from 'fs';
 import {Cache, stableHash} from 'metro-cache';
-import path from 'path';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const debug = debugModule('Metro:Transformer');
 

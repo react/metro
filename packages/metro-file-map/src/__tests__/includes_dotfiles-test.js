@@ -10,7 +10,7 @@
  */
 
 import HasteMap from '../index';
-import path from 'path';
+import path from 'node:path';
 
 jest.useRealTimers();
 

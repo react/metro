@@ -17,7 +17,7 @@ import type {
   Options,
   ReadOnlyGraph,
 } from './DeltaBundler/types';
-import type EventEmitter from 'events';
+import type EventEmitter from 'node:events';
 
 import DeltaCalculator from './DeltaBundler/DeltaCalculator';
 

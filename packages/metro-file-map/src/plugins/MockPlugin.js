@@ -23,8 +23,8 @@ import normalizePathSeparatorsToPosix from '../lib/normalizePathSeparatorsToPosi
 import normalizePathSeparatorsToSystem from '../lib/normalizePathSeparatorsToSystem';
 import {RootPathUtils} from '../lib/RootPathUtils';
 import getMockName from './mocks/getMockName';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
 export const CACHE_VERSION = 2;
 

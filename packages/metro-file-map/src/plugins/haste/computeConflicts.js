@@ -12,7 +12,7 @@ import type {HasteMapItem} from '../../flow-types';
 
 import H from '../../constants';
 import {chainComparators, compareStrings} from '../../lib/sorting';
-import path from 'path';
+import path from 'node:path';
 
 type Conflict = {
   id: string,

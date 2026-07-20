@@ -13,9 +13,9 @@ import type {CrawlerOptions} from '../../../flow-types';
 
 import TreeFS from '../../../lib/TreeFS';
 import watchmanCrawl from '../index';
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
 class MockClient extends EventEmitter {
   command: JestMockFn<ReadonlyArray<$FlowFixMe>, unknown> = jest.fn();

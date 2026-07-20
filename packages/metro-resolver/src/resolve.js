@@ -34,7 +34,7 @@ import {
 import resolveAsset from './resolveAsset';
 import isAssetFile from './utils/isAssetFile';
 import {posixToSystemPath} from './utils/paths';
-import path from 'path';
+import path from 'node:path';
 
 type ParsedBareSpecifier = Readonly<{
   isSinglePart: boolean,

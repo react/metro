@@ -20,7 +20,7 @@ import type TreeFSType from '../TreeFS';
 import H from '../../constants';
 
 let mockPathModule;
-jest.mock('path', () => mockPathModule);
+jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
   // Convenience function to write paths with posix separators but convert them

@@ -9,12 +9,14 @@
  * @oncall react_native
  */
 
-import {sep} from 'path';
+import {sep} from 'node:path';
 
 const {PackageCache} = require('../PackageCache');
 
 const mockReadFileSync = jest.fn();
-jest.mock('fs', () => ({readFileSync: (...args) => mockReadFileSync(...args)}));
+jest.mock('node:fs', () => ({
+  readFileSync: (...args) => mockReadFileSync(...args),
+}));
 
 type ClosestPackageMap = Map<
   string,

@@ -26,12 +26,12 @@ import type {
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
 import {codeFrameColumns} from '@babel/code-frame';
-import fs from 'fs';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
 import createDefaultContext from 'metro-resolver/private/createDefaultContext';
-import path from 'path';
-import util from 'util';
+import fs from 'node:fs';
+import path from 'node:path';
+import util from 'node:util';
 
 export type DirExistsFn = (filePath: string) => boolean;
 

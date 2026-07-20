@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import throat from 'throat';
 
 const writeFileWithThroat: typeof fs.promises.writeFile = throat(

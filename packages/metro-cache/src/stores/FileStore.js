@@ -9,8 +9,8 @@
  * @oncall react_native
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const NULL_BYTE = 0x00;
 const NULL_BYTE_BUFFER = Buffer.from([NULL_BYTE]);

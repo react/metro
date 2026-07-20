@@ -15,9 +15,9 @@ import composeSourceMaps from '../composeSourceMaps';
 import Consumer from '../Consumer';
 import {add0, add1} from 'ob1';
 
-const fs = require('fs');
 const invariant = require('invariant');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const terser = require('terser');
 
 const {objectContaining} = expect;

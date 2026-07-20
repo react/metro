@@ -19,9 +19,9 @@ describe('AutoCleanFileStore', () => {
     jest
       .resetModules()
       .resetAllMocks()
-      .mock('fs', () => memfs().fs);
+      .mock('node:fs', () => memfs().fs);
     AutoCleanFileStore = require('../AutoCleanFileStore').default;
-    fs = require('fs');
+    fs = jest.requireMock('node:fs');
     jest.spyOn(fs, 'statSync');
     jest.spyOn(fs, 'unlinkSync');
   });

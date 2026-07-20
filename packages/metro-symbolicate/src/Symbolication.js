@@ -11,15 +11,15 @@
 
 import type {ChromeHeapSnapshot} from './ChromeHeapSnapshot';
 import type {HermesFunctionOffsets, MixedSourceMap} from 'metro-source-map';
-import type {Writable} from 'stream';
+import type {Writable} from 'node:stream';
 
 import {ChromeHeapSnapshotProcessor} from './ChromeHeapSnapshot';
 import GoogleIgnoreListConsumer from './GoogleIgnoreListConsumer';
 import SourceMetadataMapConsumer from './SourceMetadataMapConsumer';
-import fs from 'fs';
 import invariant from 'invariant';
+import fs from 'node:fs';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 // flowlint-next-line untyped-type-import:off
 import {typeof SourceMapConsumer} from 'source-map';
 

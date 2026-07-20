@@ -11,8 +11,8 @@
 'use strict';
 
 const Metro = require('../../..');
-const http = require('http');
-const https = require('https');
+const http = require('node:http');
+const https = require('node:https');
 const selfsigned = require('selfsigned');
 const WebSocket = require('ws');
 

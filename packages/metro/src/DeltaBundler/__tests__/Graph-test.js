@@ -158,7 +158,7 @@ const Actions = {
     }
     const deps = getMockDependency(path);
     const depName = name ?? dependencyPath.replace('/', '');
-    const key = require('crypto')
+    const key = require('node:crypto')
       .createHash('sha1')
       .update([depName, data?.asyncType ?? '(null)'].join('\0'))
       .digest('base64');

@@ -18,7 +18,7 @@ import parseCustomResolverOptions from './parseCustomResolverOptions';
 import parseCustomTransformOptions from './parseCustomTransformOptions';
 import debugModule from 'debug';
 import * as jscSafeUrl from 'jsc-safe-url';
-import path from 'path';
+import path from 'node:path';
 
 const debug = debugModule(
   'Metro:Server:parseBundleOptionsFromBundleRequestUrl',

@@ -18,7 +18,7 @@ const importExportPlugin = require('../import-export-plugin');
 // $FlowFixMe[untyped-import] @babel/code-frame
 const {codeFrameColumns} = require('@babel/code-frame');
 const generate = require('@babel/generator').default;
-const vm = require('vm');
+const vm = require('node:vm');
 
 const opts = {
   importAll: '_$$_IMPORT_ALL',

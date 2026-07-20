@@ -14,7 +14,7 @@ import type {Module, ReadOnlyDependencies} from '../types';
 
 import {getAssetData} from '../../Assets';
 import {getJsOutput, isJsModule} from './helpers/js';
-import path from 'path';
+import path from 'node:path';
 
 type Options = {
   readonly processModuleFilter: (module: Module<>) => boolean,

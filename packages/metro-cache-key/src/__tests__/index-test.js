@@ -11,10 +11,11 @@
 
 'use strict';
 
-jest.mock('fs', () => new (require('metro-memory-fs'))());
+jest.mock('node:fs', () => new (require('metro-memory-fs'))());
 
 const {getCacheKey} = require('../index');
-const fs = require('fs');
+
+const fs = jest.requireMock('node:fs');
 
 beforeAll(() => {
   fs.writeFileSync('/a.txt', 'fake content for a.txt');

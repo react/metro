@@ -15,7 +15,7 @@ import CountingSet from '../../../lib/CountingSet';
 import baseJSBundle from '../baseJSBundle';
 import createModuleIdFactory from 'metro-config/private/defaults/createModuleIdFactory';
 
-const path = require('path');
+const path = require('node:path');
 
 const {objectContaining} = expect;
 

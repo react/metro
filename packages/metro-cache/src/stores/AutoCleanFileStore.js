@@ -12,8 +12,8 @@
 import type {Options} from './FileStore';
 
 import FileStore from './FileStore';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 type CleanOptions = Readonly<{
   ...Options,

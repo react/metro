@@ -11,9 +11,9 @@
 /* eslint-disable no-console */
 
 import type {Terminal} from 'metro-core';
-import type {BackgroundColors, ForegroundColors, Modifiers} from 'util';
+import type {BackgroundColors, ForegroundColors, Modifiers} from 'node:util';
 
-import util from 'util';
+import util from 'node:util';
 
 const groupStack = [];
 let collapsedGuardTimer;

@@ -14,7 +14,7 @@ import type {MixedOutput, Options, TransformResultDependency} from '../types';
 import DeltaBundler from '../../DeltaBundler';
 import DeltaCalculator from '../DeltaCalculator';
 
-const {EventEmitter} = require('events');
+const {EventEmitter} = require('node:events');
 
 jest.mock('../DeltaCalculator');
 

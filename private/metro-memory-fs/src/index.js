@@ -14,9 +14,9 @@
 /* eslint-disable no-bitwise */
 
 // $FlowFixMe[cannot-resolve-module]: not defined by Flow
-const constants = require('constants');
-const {EventEmitter} = require('events');
-const stream = require('stream');
+const constants = require('node:constants');
+const {EventEmitter} = require('node:events');
+const stream = require('node:stream');
 
 type NodeBase = {
   gid: number,

@@ -26,8 +26,8 @@ import template from '@babel/template';
 import traverse from '@babel/traverse';
 import * as types from '@babel/types';
 import {isImport, isProgram} from '@babel/types';
-import crypto from 'crypto';
 import invariant from 'invariant';
+import crypto from 'node:crypto';
 import nullthrows from 'nullthrows';
 
 type ImportDependencyOptions = Readonly<{

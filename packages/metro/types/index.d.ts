@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<4b2bbfa101b60fd30d555640425678d8>>
+ * @generated SignedSource<<4aca97550eb6e579e435254037e38616>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/index.flow.js
@@ -20,12 +20,12 @@ import type {ReadOnlyGraph} from './DeltaBundler';
 import type {ServerOptions} from './Server';
 import type {BuildOptions, OutputOptions, RequestOptions} from './shared/types';
 import type {HandleFunction} from 'connect';
-import type {Server as HttpServer} from 'http';
-import type {Server as HttpsServer, ServerOptions as HttpsServerOptions} from 'https';
 import type {TransformProfile} from 'metro-babel-transformer';
 import type {ConfigT, InputConfigT, MetroConfig, Middleware} from 'metro-config';
 import type {CustomResolverOptions} from 'metro-resolver';
 import type {CustomTransformOptions} from 'metro-transform-worker';
+import type {Server as HttpServer} from 'node:http';
+import type {Server as HttpsServer, ServerOptions as HttpsServerOptions} from 'node:https';
 import type {Server as WebSocketServer} from 'ws';
 import type $$IMPORT_TYPEOF_1$$ from 'yargs';
 

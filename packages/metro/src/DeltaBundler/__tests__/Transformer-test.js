@@ -12,17 +12,18 @@
 
 jest
   .setMock('jest-worker', () => ({}))
-  .mock('fs', () => new (require('metro-memory-fs'))())
-  .mock('assert')
+  .mock('node:fs', () => new (require('metro-memory-fs'))())
+  .mock('node:assert')
   .mock('../getTransformCacheKey', () => jest.fn(() => 'hash'))
   .mock('../WorkerFarm')
   .mock('/path/to/transformer.js', () => ({}), {virtual: true});
 
 // Must be required after mocks above
 const Transformer = require('../Transformer').default;
-const fs = require('fs');
 const {getDefaultValues} = require('metro-config').getDefaultConfig;
 const {mergeConfig} = require('metro-config/private/loadConfig');
+
+const fs = jest.requireMock('node:fs');
 
 describe('Transformer', function () {
   let watchFolders;

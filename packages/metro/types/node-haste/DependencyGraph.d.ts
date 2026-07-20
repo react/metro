@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<55a0e038f230fd92a5284a87b111235f>>
+ * @generated SignedSource<<30d76234544ec70f02b4a784d55cd7af>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/node-haste/DependencyGraph.js
@@ -19,7 +19,7 @@ import type {BundlerResolution, TransformResultDependency} from '../DeltaBundler
 import type {ResolverInputOptions} from '../shared/types';
 import type {ConfigT} from 'metro-config';
 
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 
 declare class DependencyGraph extends EventEmitter {
   constructor(

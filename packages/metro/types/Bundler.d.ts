@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<e960172db9c9ad9a32bc3bf30ebe2bc1>>
+ * @generated SignedSource<<f44800722810a79ea545d36086a3dde1>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/Bundler.js
@@ -17,8 +17,8 @@
 
 import type {TransformResultWithSource} from './DeltaBundler';
 import type {TransformOptions} from './DeltaBundler/Worker';
-import type EventEmitter from 'events';
 import type {ConfigT} from 'metro-config';
+import type EventEmitter from 'node:events';
 
 import DependencyGraph from './node-haste/DependencyGraph';
 

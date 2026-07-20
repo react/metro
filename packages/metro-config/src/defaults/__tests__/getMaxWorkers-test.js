@@ -11,11 +11,11 @@
 
 'use strict';
 
-jest.mock('os');
+jest.mock('node:os');
 
 import getMaxWorkers from '../getMaxWorkers';
 
-const os = require('os');
+const os = jest.requireMock('node:os');
 
 test('calculates the number of max workers', () => {
   /* $FlowFixMe[prop-missing](>=0.99.0 site=react_native_fb) This comment suppresses an error

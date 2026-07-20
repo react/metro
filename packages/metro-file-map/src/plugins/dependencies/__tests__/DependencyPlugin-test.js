@@ -10,7 +10,7 @@
  */
 
 import DependencyPlugin from '../../DependencyPlugin';
-import path from 'path';
+import path from 'node:path';
 
 describe('DependencyPlugin', () => {
   let plugin: DependencyPlugin;

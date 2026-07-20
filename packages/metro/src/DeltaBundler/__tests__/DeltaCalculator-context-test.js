@@ -18,9 +18,9 @@ import CountingSet from '../../lib/CountingSet';
 import DeltaCalculator from '../DeltaCalculator';
 import {Graph} from '../Graph';
 import {createEmitChange, createPathNormalizer} from './test-utils';
-import path from 'path';
+import path from 'node:path';
 
-const {EventEmitter} = require('events');
+const {EventEmitter} = require('node:events');
 
 const traverseDependencies = jest.spyOn(
   Graph.prototype,

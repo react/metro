@@ -12,7 +12,7 @@
 
 const virtualTypes = require('@babel/traverse/lib/path/lib/virtual-types');
 const t = require('@babel/types');
-const fs = require('fs');
+const fs = require('node:fs');
 
 const NODE_PREFIX = 'BabelNode';
 const VISITOR_METHODS_MARKER_NAME = 'VISITOR METHODS';

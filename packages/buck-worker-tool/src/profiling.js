@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 
 let currentInspectorSession;
 let isProfiling = false;
@@ -19,7 +19,7 @@ function getInspectorSession() {
     return currentInspectorSession;
   }
   // eslint-disable-next-line import/no-commonjs
-  const inspector = require('inspector');
+  const inspector = require('node:inspector');
   currentInspectorSession = new inspector.Session();
   currentInspectorSession.connect();
   return currentInspectorSession;

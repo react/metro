@@ -8,14 +8,14 @@
  * @format
  */
 
-import type {FSWatcher} from 'fs';
+import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
 import {includedByGlob, typeFromStat} from './common';
 import debugModule from 'debug';
-import {promises as fsPromises, watch} from 'fs';
-import {platform} from 'os';
-import * as path from 'path';
+import {promises as fsPromises, watch} from 'node:fs';
+import {platform} from 'node:os';
+import * as path from 'node:path';
 
 const debug = debugModule('Metro:NativeWatcher');
 

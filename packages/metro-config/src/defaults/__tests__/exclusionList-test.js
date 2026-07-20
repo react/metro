@@ -11,7 +11,7 @@
 
 import exclusionList from '../exclusionList';
 
-const path = require('path');
+const path = require('node:path');
 
 describe('exclusionList', () => {
   let originalSeparator;
@@ -32,9 +32,9 @@ describe('exclusionList', () => {
 
   test('proves we can write to path.sep for setting up the tests', () => {
     setPathSeperator('/');
-    expect(require('path').sep).toBe('/');
+    expect(require('node:path').sep).toBe('/');
     setPathSeperator('\\');
-    expect(require('path').sep).toBe('\\');
+    expect(require('node:path').sep).toBe('\\');
   });
 
   describe('simulate macOS/linux enviornment', () => {

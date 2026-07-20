@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<5a0b37c39c07c685f750eb9419dc5b5b>>
+ * @generated SignedSource<<1ea61133bb1f20cfa2e82c2ba414d139>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/Server/MultipartResponse.js
@@ -15,7 +15,7 @@
  *   yarn run build-ts-defs (OSS) 
  */
 
-import type {IncomingMessage, ServerResponse} from 'http';
+import type {IncomingMessage, ServerResponse} from 'node:http';
 
 type Data = string | Buffer | Uint8Array;
 type Headers = {[$$Key$$: string]: string | number};

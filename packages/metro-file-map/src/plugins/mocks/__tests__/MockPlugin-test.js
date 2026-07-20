@@ -12,7 +12,7 @@
 import type MockMapType from '../../MockPlugin';
 
 let mockPathModule;
-jest.mock('path', () => mockPathModule);
+jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('MockPlugin on %s', platform => {
   const p: string => string = filePath =>

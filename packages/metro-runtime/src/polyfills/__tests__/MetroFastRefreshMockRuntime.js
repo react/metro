@@ -15,7 +15,7 @@ import typeof ReactRefreshRuntime from 'react-refresh/runtime';
 import typeof ReactTestRenderer from 'react-test-renderer';
 
 import {transformSync} from '@babel/core';
-import fs from 'fs';
+import fs from 'node:fs';
 
 type RuntimeGlobal = Object;
 

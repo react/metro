@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<56a5351ea6e2e4904e17953a832baea1>>
+ * @generated SignedSource<<b1f992864b487f099044c1da57f1db9b>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/watchers/common.js
@@ -21,7 +21,7 @@
  */
 
 import type {ChangeEventMetadata} from '../flow-types';
-import type {Stats} from 'fs';
+import type {Stats} from 'node:fs';
 /**
  * Constants
  */

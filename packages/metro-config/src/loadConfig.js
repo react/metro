@@ -13,13 +13,13 @@ import type {ConfigT, InputConfigT, YargArguments} from './types';
 
 import getDefaultConfig from './defaults';
 import validConfig from './defaults/validConfig';
-import * as fs from 'fs';
 import {validate} from 'jest-validate';
 import * as MetroCache from 'metro-cache';
-import {homedir} from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import {homedir} from 'node:os';
+import * as path from 'node:path';
 // eslint-disable-next-line no-restricted-imports
-import {pathToFileURL} from 'url';
+import {pathToFileURL} from 'node:url';
 
 type ResolveConfigResult = {
   filepath: string,

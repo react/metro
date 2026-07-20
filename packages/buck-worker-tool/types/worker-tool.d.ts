@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<a2ba9ab7d2f4ec16efe9d5fae9bbab44>>
+ * @generated SignedSource<<ac520db8175e0ea99ea26ccce74debc2>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/buck-worker-tool/src/worker-tool.js
@@ -15,9 +15,9 @@
  *   yarn run build-ts-defs (OSS) 
  */
 
-import type {Duplex} from 'stream';
+import type {Duplex} from 'node:stream';
 
-import {Console} from 'console';
+import {Console} from 'node:console';
 
 export type Command = (argv: Array<string>, structuredArgs: unknown, console: Console) => Promise<void> | void;
 export type Commands = {[key: string]: Command};

@@ -11,16 +11,15 @@
 
 import type {WorkerMessage, WorkerMetadata} from '../flow-types';
 import typeof TWorker from '../worker';
-import typeof FS from 'fs';
+import typeof FS from 'node:fs';
 
 import {HastePlugin} from '..';
 import {Worker} from '../worker';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as vm from 'vm';
+import * as path from 'node:path';
+import * as vm from 'node:vm';
 
 jest.mock('fs', () => {
-  const path = require('path');
+  const path = require('node:path');
   const mockFs = {
     [path.join('/project', 'fruits', 'Banana.js')]: `
         const Strawberry = require("Strawberry");
@@ -64,6 +63,8 @@ jest.mock('fs', () => {
     }),
   };
 });
+
+const fs: FS = jest.requireMock('fs');
 
 const defaults: WorkerMessage = {
   computeSha1: false,

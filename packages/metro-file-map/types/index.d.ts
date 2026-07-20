@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<280eebdbd2507969e4b6df9e48a4495c>>
+ * @generated SignedSource<<ac5262bbac56ab4b35f7643b0c9d87d7>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/index.js
@@ -31,7 +31,7 @@ import type {
   PerfLoggerFactory,
 } from './flow-types';
 
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 
 export type {BuildParameters, BuildResult, CacheData, ChangeEventMetadata, FileData, FileMap, FileSystem, HasteMapData, HasteMapItem, InputFileMapPlugin};
 export type InputOptions = Readonly<{

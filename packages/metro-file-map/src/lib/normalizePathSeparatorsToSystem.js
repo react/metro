@@ -8,7 +8,7 @@
  * @format
  */
 
-import * as path from 'path';
+import * as path from 'node:path';
 
 let normalizePathSeparatorsToSystem;
 if (path.sep === '/') {

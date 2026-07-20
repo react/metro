@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<9fb6b7178cc917f17b839e36feb87ee8>>
+ * @generated SignedSource<<81e6b665d983033e84ac6517c1012086>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler.js
@@ -16,7 +16,7 @@
  */
 
 import type {DeltaResult, Graph, MixedOutput, Options, ReadOnlyGraph} from './DeltaBundler/types';
-import type EventEmitter from 'events';
+import type EventEmitter from 'node:events';
 
 export type {DeltaResult, Graph, Dependencies, MixedOutput, Module, ReadOnlyGraph, TransformFn, TransformResult, TransformResultDependency, TransformResultWithSource} from './DeltaBundler/types';
 /**

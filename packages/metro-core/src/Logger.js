@@ -11,8 +11,8 @@
 
 import type {BundleOptions} from 'metro/private/shared/types';
 
-import EventEmitter from 'events';
-import os from 'os';
+import EventEmitter from 'node:events';
+import os from 'node:os';
 
 // eslint-disable-next-line import/no-commonjs
 const VERSION = require('../package.json').version;

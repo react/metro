@@ -19,8 +19,8 @@ import buildSourcemapWithMetadata from './buildSourcemapWithMetadata';
 import MAGIC_RAM_BUNDLE_NUMBER from './magic-number';
 import {joinModules} from './util';
 import writeSourceMap from './write-sourcemap';
-import {promises as fsPromises} from 'fs';
-import path from 'path';
+import {promises as fsPromises} from 'node:fs';
+import path from 'node:path';
 
 // must not start with a dot, as that won't go into the apk
 const MAGIC_RAM_BUNDLE_FILENAME = 'UNBUNDLE';

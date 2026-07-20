@@ -19,10 +19,10 @@ describe('FileStore', () => {
     jest
       .resetModules()
       .resetAllMocks()
-      .mock('fs', () => memfs().fs);
+      .mock('node:fs', () => memfs().fs);
 
     FileStore = require('../FileStore').default;
-    fs = require('fs');
+    fs = jest.requireMock('node:fs');
     jest.spyOn(fs, 'unlinkSync');
   });
 
@@ -54,7 +54,7 @@ describe('FileStore', () => {
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
     const data = Buffer.from([0xca, 0xc4, 0xe5]);
 
-    require('fs').rmSync('/root', {recursive: true, force: true});
+    jest.requireMock('node:fs').rmSync('/root', {recursive: true, force: true});
     await fileStore.set(cache, data);
     expect(await fileStore.get(cache)).toEqual(data);
   });

@@ -16,7 +16,7 @@ import {isJsModule, wrapModule} from './helpers/js';
 import debugModule from 'debug';
 import * as jscSafeUrl from 'jsc-safe-url';
 import {addParamsToDefineCall} from 'metro-transform-plugins';
-import path from 'path';
+import path from 'node:path';
 
 const debug = debugModule('Metro:HMR');
 

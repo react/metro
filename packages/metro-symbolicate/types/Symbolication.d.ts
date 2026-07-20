@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<5f4d1981a4d319279ca64bcd7f24f02c>>
+ * @generated SignedSource<<91474206d25909f6f6d546877efa6e0a>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-symbolicate/src/Symbolication.js
@@ -17,7 +17,7 @@
 
 import type {ChromeHeapSnapshot} from './ChromeHeapSnapshot';
 import type {MixedSourceMap} from 'metro-source-map';
-import type {Writable} from 'stream';
+import type {Writable} from 'node:stream';
 
 import SourceMetadataMapConsumer from './SourceMetadataMapConsumer';
 import {type SourceMapConsumer as $$IMPORT_TYPEOF_1$$} from 'source-map';

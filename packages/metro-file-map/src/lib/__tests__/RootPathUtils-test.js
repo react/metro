@@ -12,7 +12,7 @@
 import type {RootPathUtils as RootPathUtilsT} from '../RootPathUtils';
 
 let mockPathModule;
-jest.mock('path', () => mockPathModule);
+jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
   // Convenience function to write paths with posix separators but convert them

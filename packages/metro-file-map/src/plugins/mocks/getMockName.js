@@ -8,7 +8,7 @@
  * @format
  */
 
-import * as path from 'path';
+import * as path from 'node:path';
 
 const MOCKS_PATTERN = path.sep + '__mocks__' + path.sep;
 

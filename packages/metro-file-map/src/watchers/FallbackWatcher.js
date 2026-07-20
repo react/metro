@@ -17,13 +17,13 @@ import type {
   ChangeEventMetadata,
   WatcherBackendChangeEvent,
 } from '../flow-types';
-import type {FSWatcher, Stats} from 'fs';
+import type {FSWatcher, Stats} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
 import * as common from './common';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 // $FlowFixMe[untyped-import] - Write libdefs for `walker`
 import walker from 'walker';
 

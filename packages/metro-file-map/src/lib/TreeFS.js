@@ -23,7 +23,7 @@ import type {
 import H from '../constants';
 import {RootPathUtils} from './RootPathUtils';
 import invariant from 'invariant';
-import path from 'path';
+import path from 'node:path';
 
 type DirectoryNode = Map<string, MixedNode>;
 type FileNode = FileMetadata;

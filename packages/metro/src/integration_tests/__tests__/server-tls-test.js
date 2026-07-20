@@ -11,11 +11,11 @@
 'use strict';
 
 const Metro = require('../../..');
-const fs = require('fs');
-const http = require('http');
-const https = require('https');
-const os = require('os');
-const path = require('path');
+const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
+const os = require('node:os');
+const path = require('node:path');
 const selfsigned = require('selfsigned');
 
 jest.useRealTimers();

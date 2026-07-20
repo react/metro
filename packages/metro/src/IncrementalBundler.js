@@ -25,9 +25,9 @@ import ResourceNotFoundError from './IncrementalBundler/ResourceNotFoundError';
 import getGraphId from './lib/getGraphId';
 import getPrependedScripts from './lib/getPrependedScripts';
 import * as transformHelpers from './lib/transformHelpers';
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export opaque type RevisionId: string = string;
 

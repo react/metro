@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<973161c2431719eaa4e5f3a5414b31bb>>
+ * @generated SignedSource<<9685e297be806c39ff9bf6b57103357c>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/DeltaCalculator.js
@@ -18,7 +18,7 @@
 import type {DeltaResult, Options} from './types';
 
 import {Graph} from './Graph';
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 /**
  * This class is in charge of calculating the delta of changed modules that
  * happen between calls. To do so, it subscribes to file changes, so it can

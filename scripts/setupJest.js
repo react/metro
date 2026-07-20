@@ -19,6 +19,6 @@ require('metro-babel-register').unstable_registerForMetroMonorepo = () => {};
  * using the orginal node `require` function.
  */
 jest.mock('prettier', () => {
-  const module = jest.requireActual('module');
+  const module = jest.requireActual('node:module');
   return module.prototype.require(require.resolve('prettier'));
 });

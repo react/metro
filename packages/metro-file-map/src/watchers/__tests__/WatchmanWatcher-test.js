@@ -16,7 +16,7 @@ import type {
 } from 'fb-watchman';
 
 import WatchmanWatcher from '../WatchmanWatcher';
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 
 class MockClient extends EventEmitter {
   command: JestMockFn<ReadonlyArray<$FlowFixMe>, unknown> = jest.fn();

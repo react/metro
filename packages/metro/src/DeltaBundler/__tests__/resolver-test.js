@@ -21,23 +21,23 @@ const {
   DuplicateHasteCandidatesError,
   default: {H: Haste},
 } = require('metro-file-map');
-const path = require('path');
+const path = require('node:path');
 
 const mockPlatform = process.platform;
 
 jest.useRealTimers();
 jest
   // It's noticeably faster to prevent running watchman from FileWatcher.
-  .mock('child_process', () => ({}))
-  .mock('os', () => ({
-    ...jest.requireActual('os'),
+  .mock('node:child_process', () => ({}))
+  .mock('node:os', () => ({
+    ...jest.requireActual('node:os'),
     platform: () => 'test',
     tmpdir: () => (mockPlatform === 'win32' ? 'C:\\tmp' : '/tmp'),
     hostname: () => 'testhost',
     endianness: () => 'LE',
     release: () => '',
   }))
-  .mock('graceful-fs', () => require('fs'))
+  .mock('graceful-fs', () => jest.requireMock('node:fs'))
   .spyOn(console, 'warn')
   .mockImplementation(() => {});
 
@@ -79,13 +79,13 @@ function dep(name: string): TransformResultDependency {
     for (const entName in desc) {
       const ent = desc[entName];
 
-      const entPath = require('path').join(dirPath, entName);
+      const entPath = jest.requireMock('node:path').join(dirPath, entName);
       if (typeof ent === 'string') {
         fs.writeFileSync(entPath, ent);
         continue;
       }
       if (typeof ent !== 'object') {
-        throw new Error(require('util').format('invalid entity:', ent));
+        throw new Error(require('node:util').format('invalid entity:', ent));
       }
       fs.mkdirSync(entPath);
       mockDir(entPath, ent);
@@ -162,20 +162,20 @@ function dep(name: string): TransformResultDependency {
 
       if (osPlatform === 'win32') {
         const mockPath = jest.requireActual<{win32: unknown}>('path');
-        jest.mock('path', () => mockPath.win32);
+        jest.mock('node:path', () => mockPath.win32);
         jest.mock(
-          'fs',
+          'node:fs',
           () => new (require('metro-memory-fs'))({platform: 'win32'}),
         );
       } else {
-        jest.mock('path', () => jest.requireActual('path'));
-        jest.mock('fs', () => new (require('metro-memory-fs'))());
+        jest.mock('node:path', () => jest.requireActual('node:path'));
+        jest.mock('node:fs', () => new (require('metro-memory-fs'))());
       }
 
       // $FlowFixMe[cannot-write]
-      require('os').tmpdir = () => p('/tmp');
+      jest.requireMock('node:os').tmpdir = () => p('/tmp');
 
-      fs = require('fs');
+      fs = jest.requireMock('node:fs');
       originalError = console.error;
       // $FlowFixMe[cannot-write]
       console.error = jest.fn((...args) => {

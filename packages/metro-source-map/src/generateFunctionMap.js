@@ -42,8 +42,8 @@ import {
   isVariableDeclarator,
 } from '@babel/types';
 import invariant from 'invariant';
+import fsPath from 'node:path';
 import nullthrows from 'nullthrows';
-import fsPath from 'path';
 
 type Position = {
   line: number,

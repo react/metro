@@ -10,7 +10,7 @@
  */
 
 import parsePlatformFilePath from './parsePlatformFilePath';
-import path from 'path';
+import path from 'node:path';
 
 export type AssetPath = {
   assetName: string,

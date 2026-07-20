@@ -13,7 +13,7 @@
 'use strict';
 
 const excludedExtensions = require('../../workerExclusionList');
-const path = require('path');
+const path = require('node:path');
 
 /*::
 import type {MetadataWorker, WorkerMessage, V8Serializable} from '../../flow-types';

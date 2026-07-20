@@ -11,7 +11,7 @@
 'use strict';
 
 const {getDefaultConfig} = require('metro-config');
-const {Readable} = require('stream');
+const {Readable} = require('node:stream');
 
 describe('Worker Farm', function () {
   let api;
@@ -23,10 +23,10 @@ describe('Worker Farm', function () {
   beforeEach(async function () {
     jest
       .resetModules()
-      .mock('fs', () => ({writeFileSync: jest.fn()}))
+      .mock('node:fs', () => ({writeFileSync: jest.fn()}))
       .mock('jest-worker', () => ({__esModule: true, Worker: jest.fn()}));
 
-    const fs = require('fs');
+    const fs = jest.requireMock('node:fs');
     const jestWorker = require('jest-worker');
     config = await getDefaultConfig();
 

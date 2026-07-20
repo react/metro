@@ -17,7 +17,7 @@ import {normalizePathSeparatorsToPosix} from '../../../lib/pathUtils';
 import invariant from 'invariant';
 import * as jscSafeUrl from 'jsc-safe-url';
 import {addParamsToDefineCall} from 'metro-transform-plugins';
-import path from 'path';
+import path from 'node:path';
 
 export type Options = Readonly<{
   createModuleId: string => number | string,

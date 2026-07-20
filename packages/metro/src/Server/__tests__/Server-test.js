@@ -30,7 +30,7 @@ import MockResponse from 'mock-res';
 const {
   getDefaultConfig: {getDefaultValues},
 } = require('metro-config');
-const path = require('path');
+const path = require('node:path');
 
 jest
   .mock('jest-worker', () => ({}))
@@ -78,8 +78,8 @@ describe('processRequest', () => {
     getAsset = jest.fn();
 
     let i = 0;
-    jest.doMock('crypto', () => ({
-      ...jest.requireActual('crypto'),
+    jest.doMock('node:crypto', () => ({
+      ...jest.requireActual('node:crypto'),
       randomBytes: jest.fn().mockImplementation(() => `XXXXX-${i++}`),
     }));
 
@@ -97,13 +97,16 @@ describe('processRequest', () => {
       getResolveDependencyFn,
     }));
 
+    const mockFs = new (require('metro-memory-fs'))();
+    jest.doMock('fs', () => mockFs);
+    jest.doMock('node:fs', () => mockFs);
+
     Bundler = require('../../Bundler').default;
     jest
       .spyOn(Bundler.prototype, 'getDependencyGraph')
       .mockImplementation(getDependencyGraph);
 
-    jest.mock('fs', () => new (require('metro-memory-fs'))());
-    fs = require('fs');
+    fs = mockFs;
 
     DeltaBundler = require('../../DeltaBundler').default;
     jest
@@ -326,7 +329,9 @@ describe('processRequest', () => {
     );
 
     // $FlowFixMe[cannot-write]
-    fs.realpath = jest.fn((file, cb) => cb?.(null, '/root/foo.js'));
+    fs.realpath = jest.fn((file, cb) => {
+      cb?.(null, '/root/foo.js');
+    });
   });
 
   test.each(['?', '//&'])(

@@ -19,11 +19,11 @@ import type {
 
 import rootRelativeCacheKeys from '../lib/rootRelativeCacheKeys';
 import debugModule from 'debug';
-import {promises as fsPromises} from 'fs';
-import {tmpdir} from 'os';
-import path from 'path';
-import {Timeout, clearTimeout, setTimeout} from 'timers';
-import {deserialize, serialize} from 'v8';
+import {promises as fsPromises} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {Timeout, clearTimeout, setTimeout} from 'node:timers';
+import {deserialize, serialize} from 'node:v8';
 
 const debug = debugModule('Metro:FileMapCache');
 

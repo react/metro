@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 
 export const watchFile = async function (
   filename: string,

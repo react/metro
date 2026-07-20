@@ -23,7 +23,7 @@ import {Worker} from '../worker';
 import {RootPathUtils} from './RootPathUtils';
 import debugModule from 'debug';
 import {Worker as JestWorker} from 'jest-worker';
-import {sep} from 'path';
+import {sep} from 'node:path';
 
 const debug = debugModule('Metro:FileMap');
 

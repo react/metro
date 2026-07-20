@@ -12,8 +12,8 @@
 import type {TransformerConfig} from './Worker';
 import type {JsTransformerConfig} from 'metro-transform-worker';
 
-import crypto from 'crypto';
 import {getCacheKey} from 'metro-cache-key';
+import crypto from 'node:crypto';
 
 // eslint-disable-next-line import/no-commonjs
 const VERSION = require('../../package.json').version;

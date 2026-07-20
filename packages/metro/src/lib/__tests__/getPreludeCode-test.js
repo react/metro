@@ -11,7 +11,7 @@
 
 import getPreludeCode from '../getPreludeCode';
 
-const vm = require('vm');
+const vm = require('node:vm');
 
 ['development', 'production'].forEach((mode: string) => {
   describe(`${mode} mode`, () => {

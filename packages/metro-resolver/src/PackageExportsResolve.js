@@ -25,7 +25,7 @@ import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
 import {systemToPosixPath} from './utils/paths';
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Resolve a package subpath based on the entry points defined in the package's

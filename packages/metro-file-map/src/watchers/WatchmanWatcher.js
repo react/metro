@@ -24,11 +24,11 @@ import normalizePathSeparatorsToSystem from '../lib/normalizePathSeparatorsToSys
 import {AbstractWatcher} from './AbstractWatcher';
 import * as common from './common';
 import RecrawlWarning from './RecrawlWarning';
-import assert from 'assert';
-import {createHash} from 'crypto';
 import debugModule from 'debug';
 import watchman from 'fb-watchman';
 import invariant from 'invariant';
+import assert from 'node:assert';
+import {createHash} from 'node:crypto';
 
 const debug = debugModule('Metro:WatchmanWatcher');
 

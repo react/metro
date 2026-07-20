@@ -20,7 +20,7 @@ import type {
 
 import {deriveAbsolutePathFromContext} from '../lib/contextModule';
 import {isResolvedDependency} from '../lib/isResolvedDependency';
-import path from 'path';
+import path from 'node:path';
 
 type Parameters<T> = Readonly<{
   resolve: ResolveFn,

@@ -26,8 +26,8 @@ import getMaxWorkers from './getMaxWorkers';
 import {FileStore} from 'metro-cache';
 import {Terminal} from 'metro-core';
 import TerminalReporter from 'metro/private/lib/TerminalReporter';
-import * as os from 'os';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 const getDefaultValues = (projectRoot: ?string): ConfigT => ({
   resolver: {

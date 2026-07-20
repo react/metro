@@ -11,8 +11,8 @@
 
 'use strict';
 
-const crypto = require('crypto');
-const fs = require('fs');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
 
 /*::
 import type {BabelCoreOptions} from '@babel/core';

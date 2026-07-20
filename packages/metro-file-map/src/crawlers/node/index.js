@@ -19,7 +19,7 @@ import type {
 
 import {RootPathUtils} from '../../lib/RootPathUtils';
 import * as fs from 'graceful-fs';
-import * as path from 'path';
+import * as path from 'node:path';
 
 type Callback = (result: FileData) => void;
 

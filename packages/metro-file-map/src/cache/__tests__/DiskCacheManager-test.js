@@ -17,14 +17,14 @@ import type {
 } from '../../flow-types';
 
 import {DiskCacheManager} from '../DiskCacheManager';
-import EventEmitter from 'events';
-import * as path from 'path';
-import {serialize} from 'v8';
+import EventEmitter from 'node:events';
+import * as path from 'node:path';
+import {serialize} from 'node:v8';
 
 const mockReadFile = jest.fn();
 const mockWriteFile = jest.fn();
 
-jest.mock('fs', () => ({
+jest.mock('node:fs', () => ({
   promises: {
     readFile: (...args) => mockReadFile(...args),
     writeFile: (...args) => mockWriteFile(...args),
@@ -33,7 +33,7 @@ jest.mock('fs', () => ({
 
 // We're explicitly using node:timers, which Jest doesn't automatically mock
 // with useFakeTimers. Global timers are mocked.
-jest.mock('timers', () => ({
+jest.mock('node:timers', () => ({
   setTimeout: globalThis.setTimeout,
   clearTimeout: globalThis.clearTimeout,
 }));

@@ -18,8 +18,8 @@ import DeltaBundler from '../DeltaBundler';
 import HmrServer from '../HmrServer';
 import IncrementalBundler from '../IncrementalBundler';
 import getGraphId from '../lib/getGraphId';
-import EventEmitter from 'events';
 import {mergeConfig} from 'metro-config';
+import EventEmitter from 'node:events';
 
 const {
   getDefaultConfig: {getDefaultValues},
@@ -29,7 +29,7 @@ jest.mock('../lib/transformHelpers', () => ({
   getResolveDependencyFn:
     () => (from: string, to: TransformResultDependency) => ({
       type: 'sourceFile',
-      filePath: `${require('path').resolve(from, to.name)}.js`,
+      filePath: `${require('node:path').resolve(from, to.name)}.js`,
     }),
 }));
 

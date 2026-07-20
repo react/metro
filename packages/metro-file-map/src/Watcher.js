@@ -26,11 +26,11 @@ import FallbackWatcher from './watchers/FallbackWatcher';
 import NativeWatcher from './watchers/NativeWatcher';
 import WatchmanWatcher from './watchers/WatchmanWatcher';
 import debugModule from 'debug';
-import EventEmitter from 'events';
-import * as fs from 'fs';
+import EventEmitter from 'node:events';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 import nullthrows from 'nullthrows';
-import * as path from 'path';
-import {performance} from 'perf_hooks';
 
 const debug = debugModule('Metro:Watcher');
 

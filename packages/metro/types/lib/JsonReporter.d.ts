@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<a6f3db4f608d926c8320368a79e63fc3>>
+ * @generated SignedSource<<1c9e77c89ab61bbb8fea403a63e33ab2>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/lib/JsonReporter.js
@@ -15,7 +15,7 @@
  *   yarn run build-ts-defs (OSS) 
  */
 
-import type {Writable} from 'stream';
+import type {Writable} from 'node:stream';
 
 export type SerializedError = {
   message: string;

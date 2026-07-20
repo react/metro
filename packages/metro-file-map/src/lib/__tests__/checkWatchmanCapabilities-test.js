@@ -11,7 +11,7 @@
 import checkWatchmanCapabilities from '../checkWatchmanCapabilities';
 
 const mockExecFile = jest.fn();
-jest.mock('child_process', () => ({
+jest.mock('node:child_process', () => ({
   execFile: (...args) => mockExecFile(...args),
 }));
 

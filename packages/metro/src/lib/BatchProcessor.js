@@ -10,7 +10,7 @@
  */
 
 import invariant from 'invariant';
-import {clearTimeout, setTimeout} from 'timers';
+import {clearTimeout, setTimeout} from 'node:timers';
 
 type ProcessBatch<TItem, TResult> = (
   batch: Array<TItem>,

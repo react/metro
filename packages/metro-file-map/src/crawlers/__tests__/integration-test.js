@@ -12,10 +12,10 @@
 import TreeFS from '../../lib/TreeFS';
 import nodeCrawl from '../node';
 import watchmanCrawl from '../watchman';
-import {execSync} from 'child_process';
 import invariant from 'invariant';
-import os from 'os';
-import {join} from 'path';
+import {execSync} from 'node:child_process';
+import os from 'node:os';
+import {join} from 'node:path';
 
 jest.useRealTimers();
 

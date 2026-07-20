@@ -9,13 +9,13 @@
  * @oncall react_native
  */
 
-import type {Socket} from 'net';
-import type {Writable} from 'stream';
+import type {Socket} from 'node:net';
+import type {Writable} from 'node:stream';
 
 import throttle from 'lodash.throttle';
-import readline from 'readline';
-import tty from 'tty';
-import util from 'util';
+import readline from 'node:readline';
+import tty from 'node:tty';
+import util from 'node:util';
 
 const {promisify} = util;
 

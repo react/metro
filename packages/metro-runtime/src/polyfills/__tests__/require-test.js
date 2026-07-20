@@ -11,7 +11,7 @@
 'use strict';
 
 const {transformSync} = require('@babel/core');
-const fs = require('fs');
+const fs = require('node:fs');
 
 function createModule(
   moduleSystem,

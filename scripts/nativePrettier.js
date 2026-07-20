@@ -10,9 +10,9 @@
 
 'use strict';
 
-const fs = require('fs');
-const Module = require('module');
-const path = require('path');
+const fs = require('node:fs');
+const Module = require('node:module');
+const path = require('node:path');
 
 const prettierPath = [
   path.resolve(__dirname, '../node_modules/prettier'),

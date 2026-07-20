@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import {clearInterval, setInterval} from 'timers';
+import {clearInterval, setInterval} from 'node:timers';
 import ws from 'ws';
 
 type WebsocketServiceInterface<T> = interface {

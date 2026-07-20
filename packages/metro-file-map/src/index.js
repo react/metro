@@ -53,11 +53,11 @@ import {RootPathUtils} from './lib/RootPathUtils';
 import TreeFS from './lib/TreeFS';
 import {Watcher} from './Watcher';
 import debugModule from 'debug';
-import EventEmitter from 'events';
-import {promises as fsPromises} from 'fs';
 import invariant from 'invariant';
-import * as path from 'path';
-import {performance} from 'perf_hooks';
+import EventEmitter from 'node:events';
+import {promises as fsPromises} from 'node:fs';
+import * as path from 'node:path';
+import {performance} from 'node:perf_hooks';
 
 const debug = debugModule('Metro:FileMap');
 

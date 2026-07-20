@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import vm from 'vm';
+import vm from 'node:vm';
 
 module.exports = function execBundle(code: string, context: any = {}): unknown {
   if (vm.isContext(context)) {

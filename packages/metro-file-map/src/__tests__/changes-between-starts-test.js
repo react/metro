@@ -12,7 +12,7 @@
 import type {CacheData, FileData, FileMetadata} from '../flow-types';
 import type FileMapT from '../index';
 
-import * as path from 'path';
+import * as path from 'node:path';
 
 jest.useRealTimers();
 

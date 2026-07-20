@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-const path = require('path');
+const path = require('node:path');
 
 // TODO: fix on windows
 const BROKEN_ON_WINDOWS = [

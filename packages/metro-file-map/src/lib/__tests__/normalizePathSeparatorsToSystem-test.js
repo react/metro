@@ -13,7 +13,7 @@
 describe('normalizePathSeparatorsToSystem', () => {
   test('does nothing on posix', () => {
     jest.resetModules();
-    jest.mock('path', () => jest.requireActual('path').posix);
+    jest.mock('node:path', () => jest.requireActual('node:path').posix);
     const normalizePathSeparatorsToSystem =
       require('../normalizePathSeparatorsToSystem').default;
     expect(normalizePathSeparatorsToSystem('foo/bar/baz.js')).toEqual(
@@ -23,7 +23,7 @@ describe('normalizePathSeparatorsToSystem', () => {
 
   test('replace slashes on windows', () => {
     jest.resetModules();
-    jest.mock('path', () => jest.requireActual('path').win32);
+    jest.mock('node:path', () => jest.requireActual('node:path').win32);
     const normalizePathSeparatorsToSystem =
       require('../normalizePathSeparatorsToSystem').default;
     expect(normalizePathSeparatorsToSystem('foo/bar/baz.js')).toEqual(

@@ -15,14 +15,14 @@ import type {
   ModuleTransportLike,
   OutputOptions,
 } from '../../types';
-import type {WriteStream} from 'fs';
+import type {WriteStream} from 'node:fs';
 
 import relativizeSourceMapInline from '../../../lib/relativizeSourceMap';
 import buildSourcemapWithMetadata from './buildSourcemapWithMetadata';
 import MAGIC_UNBUNDLE_FILE_HEADER from './magic-number';
 import {joinModules} from './util';
 import writeSourceMap from './write-sourcemap';
-import fs from 'fs';
+import fs from 'node:fs';
 
 const SIZEOF_UINT32 = 4;
 

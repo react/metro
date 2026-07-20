@@ -14,7 +14,7 @@ import type {BabelTransformerArgs} from 'metro-babel-transformer';
 
 import {getAssetData} from 'metro/private/Assets';
 import {generateAssetCodeFileAst} from 'metro/private/Bundler/util';
-import path from 'path';
+import path from 'node:path';
 
 export async function transform(
   {filename, options, src}: BabelTransformerArgs,

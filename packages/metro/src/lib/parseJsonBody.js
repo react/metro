@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {IncomingMessage} from 'http';
+import type {IncomingMessage} from 'node:http';
 
 const CONTENT_TYPE = 'application/json';
 const SIZE_LIMIT = 100 * 1024 * 1024; // 100MB

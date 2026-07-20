@@ -17,14 +17,14 @@
 // In our third form, we symbolicate using a module ID, a line number, and
 // optionally a column.
 
-import type {Readable, Writable} from 'stream';
-import type {ReadStream} from 'tty';
+import type {Readable, Writable} from 'node:stream';
+import type {ReadStream} from 'node:tty';
 
 import * as Symbolication from './Symbolication';
-import fs from 'fs';
+import fs from 'node:fs';
+import {Transform} from 'node:stream';
 // $FlowFixMe[untyped-import] source-map
 import {SourceMapConsumer} from 'source-map';
-import {Transform} from 'stream';
 
 function printHelp() {
   const usages = [

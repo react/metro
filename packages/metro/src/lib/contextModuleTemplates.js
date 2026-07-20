@@ -11,8 +11,8 @@
 
 import type {ContextMode} from '../ModuleGraph/worker/collectDependencies';
 
-import * as os from 'os';
-import * as path from 'path';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 function createFileMap(
   modulePath: string,

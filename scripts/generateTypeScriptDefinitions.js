@@ -15,9 +15,9 @@ import {
   translateFlowDefToTSDef,
   translateFlowToFlowDef,
 } from 'flow-api-translator';
-import fs from 'fs';
+import fs from 'node:fs';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 import * as prettier from 'prettier';
 // $FlowFixMe[untyped-import] in OSS only
 import SignedSource from 'signedsource';

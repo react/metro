@@ -10,15 +10,16 @@
 
 'use strict';
 
-jest.mock('fs', () => new (require('metro-memory-fs'))());
+jest.mock('node:fs', () => new (require('metro-memory-fs'))());
 jest.mock('image-size');
 
 jest.useRealTimers();
 
 const {getAsset, getAssetData} = require('../Assets');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+const crypto = require('node:crypto');
+const path = require('node:path');
+
+const fs = jest.requireMock('node:fs');
 
 const mockImageWidth = 300;
 const mockImageHeight = 200;

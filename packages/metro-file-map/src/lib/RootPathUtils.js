@@ -9,7 +9,7 @@
  */
 
 import invariant from 'invariant';
-import * as path from 'path';
+import * as path from 'node:path';
 
 /**
  * This module provides path utility functions - similar to `node:path` -

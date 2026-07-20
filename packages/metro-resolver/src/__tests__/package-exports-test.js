@@ -11,7 +11,7 @@
 
 import * as Resolver from '../index';
 import {createPackageAccessors, createResolutionContext} from './utils';
-import path from 'path';
+import path from 'node:path';
 
 // Tests validating Package Exports resolution behaviour. See RFC0534:
 // https://github.com/react-native-community/discussions-and-proposals/blob/master/proposals/0534-metro-package-exports-support.md

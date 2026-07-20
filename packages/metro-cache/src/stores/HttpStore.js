@@ -14,10 +14,10 @@ import type {HttpsProxyAgentOptions} from 'https-proxy-agent';
 import HttpError from './HttpError';
 import NetworkError from './NetworkError';
 import {backOff} from 'exponential-backoff';
-import http from 'http';
-import https from 'https';
 import {HttpsProxyAgent} from 'https-proxy-agent';
-import zlib from 'zlib';
+import http from 'node:http';
+import https from 'node:https';
+import zlib from 'node:zlib';
 
 export type Options =
   | EndpointOptions // Uses the same options for both reads and writes

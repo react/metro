@@ -12,7 +12,7 @@
 import type {PackageInfo, PackageJson, ResolutionContext} from './types';
 
 import {systemToPosixPath} from './utils/paths';
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Resolve the main entry point subpath for a package.

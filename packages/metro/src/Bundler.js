@@ -11,8 +11,8 @@
 
 import type {TransformResultWithSource} from './DeltaBundler';
 import type {TransformOptions} from './DeltaBundler/Worker';
-import type EventEmitter from 'events';
 import type {ConfigT} from 'metro-config';
+import type EventEmitter from 'node:events';
 
 import Transformer from './DeltaBundler/Transformer';
 import DependencyGraph from './node-haste/DependencyGraph';

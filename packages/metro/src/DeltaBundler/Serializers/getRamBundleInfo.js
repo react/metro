@@ -19,8 +19,8 @@ import getAppendScripts from '../../lib/getAppendScripts';
 import getTransitiveDependencies from './helpers/getTransitiveDependencies';
 import {isJsModule, wrapModule} from './helpers/js';
 import {sourceMapObject} from './sourceMapObject';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
 type Options = Readonly<{
   ...SerializerOptions,

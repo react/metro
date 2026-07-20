@@ -15,11 +15,11 @@
  */
 
 import type {ChangeEventMetadata} from '../flow-types';
-import type {Stats} from 'fs';
+import type {Stats} from 'node:fs';
 
 // $FlowFixMe[untyped-import] - Write libdefs for `micromatch`
 import micromatch from 'micromatch';
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Constants

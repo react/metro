@@ -11,10 +11,10 @@
 
 import symbolicate from '../symbolicate';
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const {PassThrough} = require('stream');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const {PassThrough} = require('node:stream');
 
 jest.useRealTimers();
 

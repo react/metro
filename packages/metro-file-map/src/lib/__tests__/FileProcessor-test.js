@@ -17,7 +17,7 @@ import type {
 } from '../../flow-types';
 
 import H from '../../constants';
-import path from 'path';
+import path from 'node:path';
 
 const MockJestWorker = jest.fn().mockImplementation(() => ({
   processFile: async () => ({}),
