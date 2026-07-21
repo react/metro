@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<928292862ce27bcd6b8441ad5cc402ee>>
+ * @generated SignedSource<<54f6248424a42ea2eb7966fc06105eb3>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/plugins/FileDataPlugin.js
@@ -18,7 +18,7 @@
 import type {FileMapPlugin, FileMapPluginInitOptions, FileMapPluginWorker, ReadonlyFileSystemChanges, V8Serializable} from '../flow-types';
 
 export type FileDataPluginOptions = Readonly<
-  Omit<FileMapPluginWorker, keyof {name: string; cacheKey: string}> & {
+  Omit<FileMapPluginWorker, 'name' | 'cacheKey'> & {
     name: string;
     cacheKey: string;
   }

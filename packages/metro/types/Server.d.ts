@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<c64f72b69cbd604efba78ae1b3dff95e>>
+ * @generated SignedSource<<edf96165fc2c0bfc8f5e49c02021a841>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/Server.js
@@ -64,18 +64,7 @@ declare class Server {
   }>;
   static DEFAULT_BUNDLE_OPTIONS: Omit<
     typeof Server.DEFAULT_GRAPH_OPTIONS,
-    keyof {
-      excludeSource: false;
-      inlineSourceMap: false;
-      lazy: false;
-      modulesOnly: false;
-      onProgress: null;
-      runModule: true;
-      shallow: false;
-      sourceMapUrl: null;
-      sourceUrl: null;
-      sourcePaths: SourcePathsMode;
-    }
+    'excludeSource' | 'inlineSourceMap' | 'lazy' | 'modulesOnly' | 'onProgress' | 'runModule' | 'shallow' | 'sourceMapUrl' | 'sourceUrl' | 'sourcePaths'
   > & {
     excludeSource: false;
     inlineSourceMap: false;

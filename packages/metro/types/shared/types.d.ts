@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<7c33bbd1ff74878c022143eb61319922>>
+ * @generated SignedSource<<6d2429c6b34b624881402caa12117d34>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/shared/types.js
@@ -101,7 +101,7 @@ export type ModuleTransportLikeStrict = {
   readonly name?: string;
   readonly sourcePath: string;
 };
-export type RamModuleTransport = Omit<ModuleTransportLikeStrict, keyof {readonly source: string; readonly type: string}> & {readonly source: string; readonly type: string};
+export type RamModuleTransport = Omit<ModuleTransportLikeStrict, 'source' | 'type'> & {readonly source: string; readonly type: string};
 export type OutputOptions = {
   bundleOutput: string;
   bundleEncoding?: 'utf8' | 'utf16le' | 'ascii';

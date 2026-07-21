@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<91afc5df98c20f7940ae313045da7d51>>
+ * @generated SignedSource<<31a9b3b916ff14dc24a254ab9039a8c9>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-resolver/src/createDefaultContext.js
@@ -18,7 +18,11 @@
 import type {ResolutionContext} from './types';
 import type {TransformResultDependency} from 'metro/private/DeltaBundler/types';
 
-type PartialContext = Readonly<Omit<ResolutionContext, keyof {redirectModulePath?: ResolutionContext['redirectModulePath']}> & {redirectModulePath?: ResolutionContext['redirectModulePath']}>;
+type PartialContext = Readonly<
+  Omit<ResolutionContext, 'redirectModulePath'> & {
+    redirectModulePath?: ResolutionContext['redirectModulePath'];
+  }
+>;
 /**
  * Helper used by the `metro` package to create the `ResolutionContext` object.
  * As context values can be overridden by callers, this occurs externally to

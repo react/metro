@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<f3041d08041579b1bcd745f978993a6d>>
+ * @generated SignedSource<<be37108c9a159230fdcfc2e7df6867e0>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/lib/parseBundleOptionsFromBundleRequestUrl.js
@@ -17,5 +17,5 @@
 
 import type {BundleOptions} from '../shared/types';
 
-declare function parseBundleOptionsFromBundleRequestUrl(rawNonJscSafeUrlEncodedUrl: string, platforms: Set<string>): Omit<BundleOptions, keyof {bundleType: string}> & {bundleType: string};
+declare function parseBundleOptionsFromBundleRequestUrl(rawNonJscSafeUrlEncodedUrl: string, platforms: Set<string>): Omit<BundleOptions, 'bundleType'> & {bundleType: string};
 export default parseBundleOptionsFromBundleRequestUrl;

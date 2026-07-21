@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @noformat
- * @generated SignedSource<<e729ad59e5cbf45e7aff533760b7dc47>>
+ * @generated SignedSource<<780e521123ff9528911d3a6307815dee>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/ModuleGraph/worker/collectDependencies.js
@@ -37,11 +37,7 @@ type DependencyData = Readonly<{
   /** Context for requiring a collection of modules. */
   contextParams?: RequireContextParams;
 }>;
-export type MutableInternalDependency = Omit<DependencyData, keyof {locs: Array<ReadonlySourceLocation>; index: number; name: string}> & {
-  locs: Array<ReadonlySourceLocation>;
-  index: number;
-  name: string;
-};
+export type MutableInternalDependency = Omit<DependencyData, 'locs' | 'index' | 'name'> & {locs: Array<ReadonlySourceLocation>; index: number; name: string};
 export type InternalDependency = Readonly<MutableInternalDependency>;
 export type State = {
   asyncRequireModulePathStringLiteral: null | undefined | StringLiteral;

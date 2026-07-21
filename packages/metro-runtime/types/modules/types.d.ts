@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<3ff5e6379d94db2cf24b884dc9b00e3e>>
+ * @generated SignedSource<<6699c9b4e3ffd1142e3253a834be43e9>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-runtime/src/modules/types.js
@@ -27,14 +27,9 @@ export type DeltaBundle = {
   readonly deleted: ReadonlyArray<number>;
 };
 export type BundleVariant =
+  | Readonly<Omit<Bundle, 'base' | 'revisionId'> & {base: true; revisionId: string}>
   | Readonly<
-      Omit<Bundle, keyof {base: true; revisionId: string}> & {
-        base: true;
-        revisionId: string;
-      }
-    >
-  | Readonly<
-      Omit<DeltaBundle, keyof {base: false; revisionId: string}> & {
+      Omit<DeltaBundle, 'base' | 'revisionId'> & {
         base: false;
         revisionId: string;
       }

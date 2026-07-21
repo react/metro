@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<b48a572e322053f43ea91adf8f8a2bdb>>
+ * @generated SignedSource<<b07b0e495add6daceeb2d94c8e8ac9c5>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-cache/src/stores/AutoCleanFileStore.js
@@ -20,7 +20,7 @@ import type {Options} from './FileStore';
 import FileStore from './FileStore';
 
 type CleanOptions = Readonly<
-  Omit<Options, keyof {intervalMs?: number; cleanupThresholdMs?: number}> & {
+  Omit<Options, 'intervalMs' | 'cleanupThresholdMs'> & {
     intervalMs?: number;
     cleanupThresholdMs?: number;
   }
