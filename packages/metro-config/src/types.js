@@ -146,6 +146,7 @@ type SerializerConfigT = {
   polyfillModuleNames: ReadonlyArray<string>,
   processModuleFilter: (modules: Module<>) => boolean,
   isThirdPartyModule: (module: Readonly<{path: string, ...}>) => boolean,
+  unstable_inlineDependencyMap: boolean,
 };
 
 type TransformerConfigT = {

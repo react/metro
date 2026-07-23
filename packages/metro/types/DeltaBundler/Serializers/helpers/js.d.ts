@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<9cfb26ac2da104285365c1e527665ebe>>
+ * @generated SignedSource<<e3641a502fcdb817619db54a07c9ae43>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/helpers/js.js
@@ -27,6 +27,8 @@ export type Options = Readonly<{
   projectRoot: string;
   serverRoot: string;
   sourceUrl: null | undefined | string;
+  dependencyMapReservedName?: null | undefined | string;
+  unstable_inlineDependencyMap?: boolean;
 }>;
 export declare function wrapModule(module: Module, options: Options): string;
 export declare function getModuleParams(module: Module, options: Options): Array<unknown>;

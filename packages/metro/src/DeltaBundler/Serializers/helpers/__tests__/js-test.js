@@ -200,6 +200,87 @@ describe('wrapModule()', () => {
   });
 });
 
+describe('wrapModule() with inlined module ids', () => {
+  const NAME = 'DEPENDENCY_MAP';
+  const ref = (i: number) => `${NAME}[${i}]`;
+  const baseInlineOptions = {
+    dev: false,
+    includeAsyncPaths: false,
+    projectRoot: '/root',
+    serverRoot: '/root',
+    sourceUrl: null,
+    dependencyMapReservedName: NAME,
+    unstable_inlineDependencyMap: true,
+  };
+
+  beforeEach(() => {
+    // foo=0 (self), bar=1, baz=2 with a fresh sequential id factory.
+    myModule.output[0].data.code = `__d(function(g,r,i,a,m,e,${NAME}){r(${ref(
+      0,
+    )});r(${ref(1)})});`;
+  });
+
+  test('inlines sync ids and drops the dependency-map array', () => {
+    expect(
+      wrapModule(myModule, {
+        ...baseInlineOptions,
+        createModuleId: createModuleIdFactory(),
+      }),
+    ).toBe(
+      `__d(function(g,r,i,a,m,e,${NAME}){r(${'1'.padEnd(
+        ref(0).length,
+      )});r(${'2'.padEnd(ref(1).length)})},0);`,
+    );
+  });
+
+  test('keeps a placeholder slot before the verbose name in dev', () => {
+    expect(
+      wrapModule(myModule, {
+        ...baseInlineOptions,
+        dev: true,
+        createModuleId: createModuleIdFactory(),
+      }),
+    ).toBe(
+      `__d(function(g,r,i,a,m,e,${NAME}){r(${'1'.padEnd(
+        ref(0).length,
+      )});r(${'2'.padEnd(ref(1).length)})},0,null,"foo.js");`,
+    );
+  });
+
+  test('passes a paths object (not the id array) for async dependencies', () => {
+    const dep = nullthrows(myModule.dependencies.get('bar'));
+    myModule.dependencies.set('bar', {
+      ...dep,
+      data: {...dep.data, data: {...dep.data.data, asyncType: 'async'}},
+    });
+    expect(
+      wrapModule(myModule, {
+        ...baseInlineOptions,
+        includeAsyncPaths: true,
+        sourceUrl: 'http://localhost/Main.bundle?param1=true',
+        createModuleId: createModuleIdFactory(),
+      }),
+    ).toBe(
+      `__d(function(g,r,i,a,m,e,${NAME}){r(${'1'.padEnd(
+        ref(0).length,
+      )});r(${'2'.padEnd(ref(1).length)})},0,` +
+        `{"paths":{"1":"/../bar.bundle?param1=true&modulesOnly=true&runModule=false"}});`,
+    );
+  });
+
+  test('does not inline when the flag is off, even with a reserved name', () => {
+    expect(
+      wrapModule(myModule, {
+        ...baseInlineOptions,
+        unstable_inlineDependencyMap: false,
+        createModuleId: createModuleIdFactory(),
+      }),
+    ).toBe(
+      `__d(function(g,r,i,a,m,e,${NAME}){r(${ref(0)});r(${ref(1)})},0,[1,2]);`,
+    );
+  });
+});
+
 describe('inlineModuleIdReferences()', () => {
   const NAME = 'DEP_MAP_RESERVED_NAME';
   const ref = (i: number) => `${NAME}[${i}]`;

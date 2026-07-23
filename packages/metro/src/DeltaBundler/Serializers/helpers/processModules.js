@@ -23,6 +23,8 @@ export default function processModules(
     projectRoot,
     serverRoot,
     sourceUrl,
+    dependencyMapReservedName,
+    unstable_inlineDependencyMap,
   }: Readonly<{
     filter?: (module: Module<>) => boolean,
     createModuleId: string => number,
@@ -31,6 +33,8 @@ export default function processModules(
     projectRoot: string,
     serverRoot: string,
     sourceUrl: ?string,
+    dependencyMapReservedName?: ?string,
+    unstable_inlineDependencyMap?: boolean,
   }>,
 ): ReadonlyArray<[Module<>, string]> {
   return [...modules]
@@ -45,6 +49,8 @@ export default function processModules(
         projectRoot,
         serverRoot,
         sourceUrl,
+        dependencyMapReservedName,
+        unstable_inlineDependencyMap,
       }),
     ]);
 }

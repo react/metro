@@ -549,3 +549,63 @@ test('does not add polyfills when `modulesOnly` is used', () => {
     }
   `);
 });
+
+test('inlines module ids when unstable_inlineDependencyMap is set', () => {
+  const NAME = 'DEP_MAP_RESERVED';
+  const ref = `${NAME}[0]`;
+  const fooWithRefs: Module<> = {
+    ...fooModule,
+    output: [
+      {
+        type: 'js/module',
+        data: {
+          code: `__d(function(g,r,i,a,m,e,${NAME}){r(${ref})});`,
+          map: [],
+          lineCount: 1,
+        },
+      },
+    ],
+  };
+
+  const bundle = baseJSBundle(
+    '/root/foo',
+    [polyfill],
+    {
+      dependencies: new Map([
+        ['/root/foo', fooWithRefs],
+        ['/root/bar', barModule],
+      ]),
+      entryPoints: new Set(['/root/foo']),
+      transformOptions,
+    },
+    {
+      asyncRequireModulePath: '',
+      createModuleId: createModuleIdFactory(),
+      dev: false,
+      getRunModuleStatement,
+      globalPrefix: '',
+      includeAsyncPaths: false,
+      inlineSourceMap: false,
+      modulesOnly: false,
+      processModuleFilter: () => true,
+      projectRoot: '/root',
+      runBeforeMainModule: [],
+      runModule: true,
+      serverRoot: '/root',
+      shouldAddToIgnoreList: () => false,
+      sourceMapUrl: null,
+      sourceUrl: null,
+      getSourceUrl: null,
+      dependencyMapReservedName: NAME,
+      unstable_inlineDependencyMap: true,
+    },
+  );
+
+  // baseJSBundle pre-assigns sequential ids in graph order: foo=0, bar=1.
+  // foo's DEP_MAP_RESERVED[0] resolves to its first dependency (bar => 1),
+  // inlined and right-padded; the dependency-map array is dropped.
+  expect(bundle.modules).toEqual([
+    [0, `__d(function(g,r,i,a,m,e,${NAME}){r(${'1'.padEnd(ref.length)})},0);`],
+    [1, '__d(function() {/* code for bar */},1);'],
+  ]);
+});

@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<295faf3dbcdeffd6b15b9fa949b501cb>>
+ * @generated SignedSource<<1e7de4a3bc2a47dfb8f5031657e74bb6>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/types.js
@@ -126,6 +126,7 @@ export type DeltaResult<T = MixedOutput> = {
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string;
   createModuleId: ($$PARAM_0$$: string) => number;
+  dependencyMapReservedName?: null | undefined | string;
   dev: boolean;
   getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
   globalPrefix: string;
@@ -141,4 +142,5 @@ export type SerializerOptions = Readonly<{
   sourceMapUrl: null | undefined | string;
   sourceUrl: null | undefined | string;
   getSourceUrl: null | undefined | (($$PARAM_0$$: Module) => string);
+  unstable_inlineDependencyMap?: boolean;
 }>;

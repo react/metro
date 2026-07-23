@@ -26,6 +26,11 @@ export type Options = Readonly<{
   projectRoot: string,
   serverRoot: string,
   sourceUrl: ?string,
+  // When set (and `unstable_inlineDependencyMap` is true), resolved module IDs are
+  // inlined into each module body in place of `<dependencyMapReservedName>[i]`
+  // references, instead of being appended as a dependency-map array argument.
+  dependencyMapReservedName?: ?string,
+  unstable_inlineDependencyMap?: boolean,
   ...
 }>;
 
@@ -36,14 +41,39 @@ export function wrapModule(module: Module<>, options: Options): string {
     return output.data.code;
   }
 
+  if (
+    options.unstable_inlineDependencyMap === true &&
+    options.dependencyMapReservedName != null
+  ) {
+    return wrapModuleWithInlinedDependencyIds(
+      module,
+      output.data.code,
+      options.dependencyMapReservedName,
+      options,
+    );
+  }
+
   const params = getModuleParams(module, options);
   return addParamsToDefineCall(output.data.code, ...params);
 }
 
-export function getModuleParams(
+function getModuleVerboseName(module: Module<>, options: Options): string {
+  // The relative path of the module, to make debugging easier. This is mapped
+  // to `module.verboseName` in `require.js`.
+  return normalizePathSeparatorsToPosix(
+    path.relative(options.projectRoot, module.path),
+  );
+}
+
+function getModuleDependencies(
   module: Module<>,
   options: Options,
-): Array<unknown> {
+): {
+  moduleId: number | string,
+  dependencyMapArray: Array<number | string | null>,
+  paths: {[moduleID: number | string]: unknown},
+  hasPaths: boolean,
+} {
   const moduleId = options.createModuleId(module.path);
 
   const paths: {[moduleID: number | string]: unknown} = {};
@@ -93,6 +123,18 @@ export function getModuleParams(
     },
   );
 
+  return {moduleId, dependencyMapArray, paths, hasPaths};
+}
+
+export function getModuleParams(
+  module: Module<>,
+  options: Options,
+): Array<unknown> {
+  const {moduleId, dependencyMapArray, paths, hasPaths} = getModuleDependencies(
+    module,
+    options,
+  );
+
   const params = [
     moduleId,
     hasPaths
@@ -105,16 +147,47 @@ export function getModuleParams(
   ];
 
   if (options.dev) {
-    // Add the relative path of the module to make debugging easier.
-    // This is mapped to `module.verboseName` in `require.js`.
-    params.push(
-      normalizePathSeparatorsToPosix(
-        path.relative(options.projectRoot, module.path),
-      ),
-    );
+    params.push(getModuleVerboseName(module, options));
   }
 
   return params;
+}
+
+// Wraps a module after inlining resolved module IDs into its body (via
+// `inlineModuleIdReferences`). Because synchronous `<dependencyMap>[i]`
+// references are replaced with literal IDs, the dependency-map array argument is
+// redundant and dropped. Async requires still read `<dependencyMap>.paths`, so a
+// `{paths}` object is passed in the dependency-map argument slot when needed. In
+// dev, an empty array keeps that slot occupied so the verbose-name argument
+// stays in position.
+function wrapModuleWithInlinedDependencyIds(
+  module: Module<>,
+  code: string,
+  dependencyMapReservedName: string,
+  options: Options,
+): string {
+  const {moduleId, dependencyMapArray, paths, hasPaths} = getModuleDependencies(
+    module,
+    options,
+  );
+
+  const inlinedCode = inlineModuleIdReferences(
+    code,
+    dependencyMapReservedName,
+    dependencyMapArray.map(id => (id == null ? 'null' : id)),
+  );
+
+  const params: Array<unknown> = [moduleId];
+  if (hasPaths) {
+    params.push({paths});
+  } else if (options.dev) {
+    params.push(null);
+  }
+  if (options.dev) {
+    params.push(getModuleVerboseName(module, options));
+  }
+
+  return addParamsToDefineCall(inlinedCode, ...params);
 }
 
 /**

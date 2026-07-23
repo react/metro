@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<1c5fe56fba9dbedcde1dbaeb5a486467>>
+ * @generated SignedSource<<9225c6d36e106c7936277e8158e90dc0>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/helpers/processModules.js
@@ -27,6 +27,8 @@ declare function processModules(
     projectRoot: string;
     serverRoot: string;
     sourceUrl: null | undefined | string;
+    dependencyMapReservedName?: null | undefined | string;
+    unstable_inlineDependencyMap?: boolean;
   }>,
 ): ReadonlyArray<[Module, string]>;
 export default processModules;

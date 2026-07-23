@@ -266,6 +266,10 @@ export default class Server {
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
         this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+      dependencyMapReservedName:
+        this._config.transformer.unstable_dependencyMapReservedName,
+      unstable_inlineDependencyMap:
+        this._config.serializer.unstable_inlineDependencyMap,
     };
     let bundleCode = null;
     let bundleMap = null;
@@ -412,6 +416,10 @@ export default class Server {
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
         this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+      dependencyMapReservedName:
+        this._config.transformer.unstable_dependencyMapReservedName,
+      unstable_inlineDependencyMap:
+        this._config.serializer.unstable_inlineDependencyMap,
     });
   }
 
@@ -1158,6 +1166,10 @@ export default class Server {
             this._shouldAddModuleToIgnoreList(module),
           getSourceUrl: (module: Module<>) =>
             this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+          dependencyMapReservedName:
+            this._config.transformer.unstable_dependencyMapReservedName,
+          unstable_inlineDependencyMap:
+            this._config.serializer.unstable_inlineDependencyMap,
         },
       );
       bundlePerfLogger.point('serializingBundle_end');

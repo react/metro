@@ -168,6 +168,7 @@ export type DeltaResult<T = MixedOutput> = {
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: string => number,
+  dependencyMapReservedName?: ?string,
   dev: boolean,
   getRunModuleStatement: (
     moduleId: number | string,
@@ -186,4 +187,5 @@ export type SerializerOptions = Readonly<{
   sourceMapUrl: ?string,
   sourceUrl: ?string,
   getSourceUrl: ?(Module<>) => string,
+  unstable_inlineDependencyMap?: boolean,
 }>;
