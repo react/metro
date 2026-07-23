@@ -12,7 +12,7 @@
 import type {Dependency} from '../../../types';
 
 import CountingSet from '../../../../lib/CountingSet';
-import {wrapModule} from '../js';
+import {inlineModuleIdReferences, wrapModule} from '../js';
 import {wrap as raw} from 'jest-snapshot-serializer-raw';
 import createModuleIdFactory from 'metro-config/private/defaults/createModuleIdFactory';
 import nullthrows from 'nullthrows';
@@ -197,5 +197,67 @@ describe('wrapModule()', () => {
     ).toMatchInlineSnapshot(
       `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/../bar.bundle?modulesOnly=true&runModule=false"}});`,
     );
+  });
+});
+
+describe('inlineModuleIdReferences()', () => {
+  const NAME = 'DEP_MAP_RESERVED_NAME';
+  const ref = (i: number) => `${NAME}[${i}]`;
+
+  test('returns code unchanged when there are no dependencies', () => {
+    const code = ref(0);
+    expect(inlineModuleIdReferences(code, NAME, [])).toBe(code);
+  });
+
+  test('replaces dependency-map references with resolved ids', () => {
+    const code = `require(${ref(0)}); require(${ref(1)});`;
+    const inlined = inlineModuleIdReferences(code, NAME, [7, 42]);
+    expect(inlined).toBe(
+      `require(${'7'.padEnd(ref(0).length)}); ` +
+        `require(${'42'.padEnd(ref(1).length)});`,
+    );
+    expect(inlined.length).toBe(code.length);
+  });
+
+  test('right-pads ids to preserve byte offsets / source-map columns', () => {
+    const code = `x=${ref(0)};y=1;`;
+    const inlined = inlineModuleIdReferences(code, NAME, [3]);
+    expect(inlined.length).toBe(code.length);
+    expect(inlined).toBe(`x=${'3'.padEnd(ref(0).length)};y=1;`);
+    // Everything after the reference keeps its original column.
+    expect(inlined.indexOf('y=1;')).toBe(code.indexOf('y=1;'));
+  });
+
+  test('tolerates embedded tabs and spaces inside the reference', () => {
+    const code = `${NAME}\t[ 1 ]`;
+    const inlined = inlineModuleIdReferences(code, NAME, [0, 5]);
+    expect(inlined).toBe('5'.padEnd(code.length));
+    expect(inlined.length).toBe(code.length);
+  });
+
+  test('throws when a resolved id is wider than the available space', () => {
+    // Short reserved name so the resolved id cannot fit in the reference width.
+    expect(() => inlineModuleIdReferences('D[0]', 'D', [12345])).toThrow(
+      "Module ID doesn't fit in available space; add 1 more characters to " +
+        "'dependencyMapReservedName'.",
+    );
+  });
+
+  test('throws when the reserved name is absent but deps exist', () => {
+    expect(() =>
+      inlineModuleIdReferences('require(someOtherName[0]);', NAME, [1]),
+    ).toThrow(
+      'Module has dependencies but does not use the preconfigured dependency ' +
+        "map name 'DEP_MAP_RESERVED_NAME'",
+    );
+  });
+
+  test('ignores a missing reserved name when told to', () => {
+    const code = 'require(someOtherName[0]);';
+    expect(
+      inlineModuleIdReferences(code, NAME, [1], {
+        ignoreMissingDependencyMapReference: true,
+      }),
+    ).toBe(code);
   });
 });

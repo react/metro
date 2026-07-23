@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<fdf4acf8d1eecbbefcabdb864cfc6482>>
+ * @generated SignedSource<<9cfb26ac2da104285365c1e527665ebe>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro/src/DeltaBundler/Serializers/helpers/js.js
@@ -30,5 +30,36 @@ export type Options = Readonly<{
 }>;
 export declare function wrapModule(module: Module, options: Options): string;
 export declare function getModuleParams(module: Module, options: Options): Array<unknown>;
+/**
+ * Fast path for inlining module IDs as a cheap string operation, requiring
+ * neither parsing nor any adjustment to the source map.
+ *
+ * Assumptions:
+ * 1. `dependencyMapReservedName` is a globally reserved string; there are
+ *    no false positives.
+ * 2. The longest module ID in the bundle does not exceed a length of
+ *    `dependencyMapReservedName.length + 3`. (We assert this below.)
+ * 3. False negatives (failing to inline occasionally if an assumption
+ *    isn't met) are rare to nonexistent, but safe if they do occur.
+ *
+ * Syntax definitions:
+ * 1. A dependency map reference is a member expression which, if parsed,
+ *    would have the form:
+ *      MemberExpression
+ *      ├──object: Identifier (name = dependencyMapReservedName)
+ *      ├──property: NumericLiteral (value = some integer)
+ *      └──computed: true
+ * 2. The concrete form of a dependency map reference may contain embedded
+ *    tabs or spaces, but no newlines (which would complicate source maps),
+ *    parens (which would complicate detection) or comments (likewise).
+ * 3. The numeric literal in a dependency map reference is a base-10
+ *    integer printed as a simple sequence of digits.
+ */
+export declare function inlineModuleIdReferences(
+  code: string,
+  dependencyMapReservedName: string,
+  dependencyIds: ReadonlyArray<number | string>,
+  $$PARAM_3$$?: Readonly<{ignoreMissingDependencyMapReference?: boolean}>,
+): string;
 export declare function getJsOutput(module: Readonly<{output: ReadonlyArray<MixedOutput>; path?: string}>): JsOutput;
 export declare function isJsModule(module: Module): boolean;
