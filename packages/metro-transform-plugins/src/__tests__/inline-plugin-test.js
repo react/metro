@@ -934,4 +934,200 @@ describe('inline constants', () => {
 
     compare([stripFlow, inlinePlugin], code, expected, {dev: false});
   });
+
+  test('replaces Platform.OS in the code if Platform is a top level relative Node.js require()', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // const Platform = require('../../Utilities/Platform').default;
+    // ```
+    const code = `
+      var Platform = require('../../Utilities/Platform').default;
+      var test = Platform.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare([inlinePlugin], code, code.replace('Platform.OS', '"android"'), {
+      inlinePlatform: true,
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.OS in the code if Platform is a top level relative ES import', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import Platform from '../../Utilities/Platform';
+    // ```
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+      var test = _Platform.default.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace('_Platform.default.OS', '"android"'),
+      {
+        inlinePlatform: true,
+        platform: 'android',
+      },
+    );
+  });
+
+  test('should not replace Platform.OS in the code if Platform was exported from unexpected place', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import Platform from '../../diff/lib/name.js';
+    // ```
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../diff/lib/name.js"));
+      var test = _Platform.default.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare([inlinePlugin], code, code, {
+      inlinePlatform: true,
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.OS in the code if babel helper wrap require call', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import * as RN from 'react-native';
+    // ```
+    const code = `
+      var RN = _interopRequireWildcard(require('react-native'));
+      var test = RN.Platform.OS === 'ios' ? 'ios' : 'not-ios';
+    `;
+
+    compare([inlinePlugin], code, code.replace('RN.Platform.OS', '"android"'), {
+      inlinePlatform: 'true',
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative Node.js require()', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // const Platform = require('../../Utilities/Platform').default;
+    // ```
+    const code = `
+      var Platform = require('../../Utilities/Platform').default;
+
+      function a() {
+        Platform.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare([inlinePlugin], code, code.replace(/Platform\.select[^;]+/, '2'), {
+      inlinePlatform: 'true',
+      platform: 'android',
+    });
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative ES import', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import Platform from '../../Utilities/Platform';
+    // ```
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+
+      function a() {
+        _Platform.default.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_Platform\.default\.select[^;]+/, '2'),
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+    );
+  });
+
+  test('should not replace Platform.select in the code if Platform was imported from non react-native package files', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import Platform from '../../Utilities/Platform';
+    // ```
+    const code = `
+      var _Platform = _interopRequireDefault(require("../Platform"));
+
+      function a() {
+        _Platform.default.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code,
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+      {
+        filename: '/Users/test/app/src/myCode.js',
+      },
+    );
+  });
+
+  test('replaces Platform.select in the code if Platform is a top level relative ES import on Windows', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import Platform from '../../Utilities/Platform';
+    // ```
+    const code = `
+      var _Platform = _interopRequireDefault(require("../../Utilities/Platform"));
+
+      function a() {
+        _Platform.default.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_Platform\.default\.select[^;]+/, '2'),
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+      {
+        filename:
+          'C:\\Users\\test\\app\\node_modules\\react-native\\Libraries\\Components\\Pressable\\useAndroidRippleForView.js',
+      },
+    );
+  });
+
+  test('replaces Platform.select in the code if babel helper wrap require call', () => {
+    // Source code before `@react-native/babel-preset`:
+    // ```
+    // import * as RN from 'react-native';
+    // ```
+    const code = `
+      var RN = _interopRequireWildcard(require('react-native'));
+
+      function a() {
+        RN.Platform.select({ios: 1, android: 2});
+        var b = a.Platform.select({});
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/RN\.Platform\.select[^;]+/, '2'),
+      {
+        inlinePlatform: 'true',
+        platform: 'android',
+      },
+    );
+  });
 });
