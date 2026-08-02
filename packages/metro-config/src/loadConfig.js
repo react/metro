@@ -123,9 +123,11 @@ function mergeConfigObjects<T extends InputConfigT>(
       ...(overrides.resolver?.dependencyExtractor != null
         ? {dependencyExtractor: resolve(overrides.resolver.dependencyExtractor)}
         : null),
-      ...(overrides.resolver?.hasteImplModulePath != null
-        ? {hasteImplModulePath: resolve(overrides.resolver.hasteImplModulePath)}
-        : null),
+      schemeResolvers: {
+        // $FlowFixMe[exponential-spread]
+        ...base.resolver?.schemeResolvers,
+        ...overrides.resolver?.schemeResolvers,
+      },
     },
     serializer: {
       ...base.serializer,

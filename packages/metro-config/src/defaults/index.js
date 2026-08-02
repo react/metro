@@ -46,6 +46,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     nodeModulesPaths: [],
     resolveRequest: null,
     resolverMainFields: ['browser', 'main'],
+    schemeResolvers: {},
     unstable_conditionNames: [],
     unstable_conditionsByPlatform: {
       web: ['browser'],

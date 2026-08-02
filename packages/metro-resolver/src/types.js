@@ -228,6 +228,18 @@ export type ResolutionContext = Readonly<{
   resolveHastePackage: (name: string) => ?string,
 
   resolveRequest?: ?CustomResolver,
+
+  /**
+   * Resolvers for specifiers prefixed with a URI scheme, keyed by the
+   * lowercased scheme (the part before the first ':', without the colon). The
+   * scheme parsed from a specifier is lowercased before lookup, so keys must be
+   * lowercase (both `Foo:` and `foo:` match the `'foo'` key). When a
+   * specifier's scheme matches a key, the corresponding resolver is invoked
+   * instead of the default algorithm, receiving the full specifier and a
+   * context whose `resolveRequest` delegates to default resolution.
+   */
+  schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}>,
+
   sourceExts: ReadonlyArray<string>,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{

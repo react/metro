@@ -147,6 +147,9 @@ export type ResolverConfigT = {
     platforms: ReadonlyArray<string>;
     resolveRequest: null | undefined | CustomResolver;
     resolverMainFields: ReadonlyArray<string>;
+    schemeResolvers: Readonly<{
+        [scheme: string]: CustomResolver;
+    }>;
     sourceExts: ReadonlyArray<string>;
     unstable_conditionNames: ReadonlyArray<string>;
     unstable_conditionsByPlatform: Readonly<{

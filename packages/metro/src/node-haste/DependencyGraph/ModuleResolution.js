@@ -54,6 +54,7 @@ type Options = Readonly<{
   reporter: Reporter,
   resolveAsset: ResolveAsset,
   resolveRequest: ?CustomResolver,
+  schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
@@ -119,6 +120,7 @@ export class ModuleResolver {
       preferNativePlatform,
       resolveAsset,
       resolveRequest,
+      schemeResolvers,
       sourceExts,
       unstable_conditionNames,
       unstable_conditionsByPlatform,
@@ -151,6 +153,7 @@ export class ModuleResolver {
             resolveHastePackage: (name: string) =>
               this._options.getHastePackagePath(name, platform),
             resolveRequest,
+            schemeResolvers,
             sourceExts,
             unstable_conditionNames,
             unstable_conditionsByPlatform,

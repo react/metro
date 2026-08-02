@@ -84,6 +84,7 @@ export function createResolutionContext(
     resolveAsset: (filePath: string) => null,
     resolveHasteModule: (name: string) => null,
     resolveHastePackage: (name: string) => null,
+    schemeResolvers: {},
     sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
     unstable_conditionNames: ['require'],
     unstable_conditionsByPlatform: {
