@@ -227,6 +227,7 @@ export default class DependencyGraph extends EventEmitter {
         return assets.length ? assets : null;
       },
       resolveRequest: this._config.resolver.resolveRequest,
+      schemeResolvers: this._config.resolver.schemeResolvers,
       sourceExts: this._config.resolver.sourceExts,
       unstable_conditionNames: this._config.resolver.unstable_conditionNames,
       unstable_conditionsByPlatform:

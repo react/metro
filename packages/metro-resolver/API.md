@@ -82,6 +82,9 @@ export type ResolutionContext = Readonly<{
     resolveHasteModule: (name: string) => null | undefined | string;
     resolveHastePackage: (name: string) => null | undefined | string;
     resolveRequest?: null | undefined | CustomResolver;
+    schemeResolvers?: Readonly<{
+        [scheme: string]: CustomResolver;
+    }>;
     sourceExts: ReadonlyArray<string>;
     unstable_conditionNames: ReadonlyArray<string>;
     unstable_conditionsByPlatform: Readonly<{

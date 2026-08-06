@@ -113,6 +113,7 @@ type ResolverConfigT = {
   platforms: ReadonlyArray<string>,
   resolveRequest: ?CustomResolver,
   resolverMainFields: ReadonlyArray<string>,
+  schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{

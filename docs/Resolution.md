@@ -68,28 +68,30 @@ Parameters: (*context*, *moduleName*, *platform*)
     2. Return the result of [**RESOLVE_MODULE**](#resolve_module)(*context*, *absoluteModuleName*, *platform*), or continue.
 3. If *moduleName* begins `'#'`
     1. Throw an error. This will be replaced with subpath imports support in a non-breaking future release.
-4. Apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to *moduleName*. If this is `false`:
+4. If *moduleName* parses as a URL, let *scheme* be the lowercased scheme (the prefix before `':'`), then
+    1. If [`context.schemeResolvers`](#schemeresolvers-readonlyscheme-string-customresolver) has a resolver registered for *scheme*, return the result of calling it with (*context*, *moduleName*, *platform*), where *context.resolveRequest* is set to the default resolver for chaining.
+5. Apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to *moduleName*. If this is `false`:
     1. Return the empty module.
-5. If [Haste resolutions are allowed](#allowhaste-boolean), then
+6. If [Haste resolutions are allowed](#allowhaste-boolean), then
     1. Get the result of [**RESOLVE_HASTE**](#resolve_haste)(*context*, *moduleName*, *platform*).
     2. If resolved as a Haste package path, then
         1. Perform the algorithm for resolving a path (step 2 above). Throw an error if this resolution fails.
             For example, if the Haste package path for `'a/b'` is `foo/package.json`, perform step 2 as if _moduleName_ was `foo/c`.
-6. If [`context.enablePackageExports`](#enablepackageexports-boolean) is enabled, then
+7. If [`context.enablePackageExports`](#enablepackageexports-boolean) is enabled, then
     1. Get the result of [**PACKAGE_SELF_RESOLVE**](#package_self_resolve)(*context*, *moduleName*, *platform*).
     2. If resolved, return result.
-7. If [`context.disableHierarchicalLookup`](#disableHierarchicalLookup-boolean) is not `true`, then
+8. If [`context.disableHierarchicalLookup`](#disableHierarchicalLookup-boolean) is not `true`, then
     1. Try resolving _moduleName_ under `node_modules` from the current directory (i.e. parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory.
     2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
-8. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
-    1. Try resolving _moduleName_ under _nodeModulesPath_ as if the latter was another `node_modules` directory (similar to step 5 above).
+9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
+    1. Try resolving _moduleName_ under _nodeModulesPath_ as if the latter was another `node_modules` directory (similar to step 8 above).
     2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
-9. If [`context.extraNodeModules`](#extranodemodules-string-string) is set:
+10. If [`context.extraNodeModules`](#extranodemodules-string-string) is set:
     1. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
     2. Look up the package name in [`context.extraNodeModules`](#extranodemodules-string-string). If found, then
         1. Construct a path _modulePath_ by replacing the package name part of _moduleName_ with the value found in [`context.extraNodeModules`](#extranodemodules-string-string)
         2. Return the result of [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*).
-10. If no valid resolution has been found, throw a resolution failure error.
+11. If no valid resolution has been found, throw a resolution failure error.
 
 #### RESOLVE_MODULE
 
@@ -322,6 +324,14 @@ Returned paths (`filePath` and `filePaths`) must be *absolute* and *real*, such 
 When calling the default resolver with a non-null `resolveRequest` function, it represents a custom resolver and will always be called, fully replacing the default resolution logic.
 
 Inside a custom resolver, `resolveRequest` is set to the default resolver function, for easy chaining and customization.
+
+#### `schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>`
+
+An object of [custom resolvers](#resolverequest-customresolver) for import specifiers prefixed with a URI scheme, keyed by lowercased scheme name (the part before the first `':'`, without the colon). The scheme parsed from a specifier is lowercased before lookup, so keys must be lowercase (both `Foo:` and `foo:` match the `'foo'` key). Defaults to [`resolver.schemeResolvers`](./Configuration.md#schemeresolvers).
+
+When the default resolver encounters a specifier whose scheme matches a key — for example `my-scheme:foo` matching `'my-scheme'` — it invokes the corresponding resolver with the full specifier. The resolver is passed a `context` whose [`resolveRequest`](#resolverequest-customresolver) is the default resolver, so it can chain back into default resolution (e.g. to resolve a relative path).
+
+Relative (`./`, `../`) and subpath (`#…`) imports are handled before scheme dispatch and are never treated as schemes. See [**RESOLVE**](#resolve) step 4 for how scheme dispatch fits into the algorithm, and [`resolver.schemeResolvers`](./Configuration.md#schemeresolvers) for precedence relative to [`resolveRequest`](#resolverequest-customresolver).
 
 #### `dependency: ?Dependency`
 

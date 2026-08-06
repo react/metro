@@ -19,6 +19,7 @@ import type {
 
 import FailedToResolveNameError from './errors/FailedToResolveNameError';
 import FailedToResolvePathError from './errors/FailedToResolvePathError';
+import FailedToResolveUnsupportedError from './errors/FailedToResolveUnsupportedError';
 import formatFileCandidates from './errors/formatFileCandidates';
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import InvalidPackageError from './errors/InvalidPackageError';
@@ -62,6 +63,8 @@ export default function resolve(
       platform,
     );
   }
+
+  let schemeError: ?Error;
 
   if (isRelativeImport(specifier) || path.isAbsolute(specifier)) {
     const result = resolveModulePath(context, specifier, platform);
@@ -112,6 +115,33 @@ export default function resolve(
         }
       }
     }
+  } else if (specifier.indexOf(':') > 0 && URL.canParse(specifier)) {
+    const scheme = specifier.slice(0, specifier.indexOf(':')).toLowerCase();
+    const schemeResolvers = context.schemeResolvers;
+    if (schemeResolvers != null && Object.hasOwn(schemeResolvers, scheme)) {
+      try {
+        return schemeResolvers[scheme](
+          Object.freeze({...context, resolveRequest: resolve}),
+          specifier,
+          platform,
+        );
+      } catch (error: unknown) {
+        // Scheme resolvers may throw a plain error to signal an unsupported
+        // specifier (they need not depend on metro-resolver); surface it as the
+        // resolver's typed error.
+        throw new FailedToResolveUnsupportedError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // TODO: In a breaking change, we should throw this immediately.
+    // For now, fall through in case the user is using scheme-like specifiers
+    // for Haste, or in extraNodeModules, etc. Throw a scheme-specific error
+    // if nothing else works.
+    schemeError = new FailedToResolveUnsupportedError(
+      `No resolver is registered for the '${scheme}:' URI scheme.`,
+    );
   }
 
   const {originModulePath} = context;
@@ -317,6 +347,12 @@ export default function resolve(
     if (resolution != null) {
       return resolution;
     }
+  }
+
+  if (schemeError) {
+    // The specifier is a scheme we don't recognise and every other resolution
+    // strategy has been exhausted, so fail with a scheme-specific error.
+    throw schemeError;
   }
 
   throw buildFailedToResolveNameError(

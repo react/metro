@@ -310,6 +310,42 @@ resolveRequest: (context, moduleName, platform) => {
 
 For more information on customizing the resolver, see [Module Resolution](https://metrobundler.dev/docs/resolution).
 
+#### `schemeResolvers`
+
+Type: `?{[scheme: string]: `[`CustomResolver`](./Resolution.md#resolverequest-customresolver)`}`
+
+An object of custom resolvers for import specifiers prefixed with a URI scheme, keyed by lowercase scheme name (the prefix before the first `:`, without the colon). When Metro's default resolution encounters a specifier whose scheme matches a registered key (for example `my-scheme:foo` matching `'my-scheme'`), the corresponding resolver is invoked with the full specifier.
+
+```javascript
+schemeResolvers: {
+  'my-scheme': (context, specifier, platform) => {
+    // `specifier` is the full 'my-scheme:...' string.
+    // Resolve it to a file, or delegate back to the default resolver via
+    // `context.resolveRequest(context, someOtherName, platform)`.
+    return {
+      type: 'sourceFile',
+      filePath: '/absolute/path/to/file.js',
+    };
+  },
+},
+```
+
+This differs from [`resolveRequest`](#resolverequest) in a few ways:
+
+- Scheme resolvers run *within* Metro's default resolution rather than replacing it. A user [`resolveRequest`](#resolverequest) still takes precedence, and can delegate back into default resolution (via `context.resolveRequest`), at which point scheme resolvers apply.
+- Only specifiers matching a registered scheme are dispatched. Relative (`./`, `../`) and subpath (`#…`) imports are resolved first and are never treated as schemes.
+- The resolver receives a `context` whose [`resolveRequest`](./Resolution.md#resolverequest-customresolver) delegates to Metro's default resolution, for easy chaining.
+
+The scheme parsed from a specifier is lowercased before lookup, so keys must be lowercase — both `Foo:` and `foo:` match the `'foo'` key. When multiple configs are combined with `mergeConfig`, `schemeResolvers` are merged per scheme, so a later config replaces an earlier resolver only when it reuses the same (lowercase) key.
+
+:::warning Deprecated
+
+For backwards compatibility, Metro falls back to other methods to resolve the specifier (Haste, `node_modules`, [`extraNodeModules`](#extranodemodules)). This will be removed in a later release.
+
+:::
+
+Defaults to `{}`.
+
 #### `useWatchman`
 
 Type: `boolean`
