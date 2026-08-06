@@ -648,7 +648,7 @@ describe('inline constants', () => {
       var ReactNative = require('react-native');
 
       function a() {
-        var a = ReactNative.Plaftform.select({ios: 1, android: 2});
+        var a = ReactNative.Platform.select({ios: 1, android: 2});
         var b = a.ReactNative.Platform.select;
       }
     `;
@@ -933,5 +933,98 @@ describe('inline constants', () => {
     `;
 
     compare([stripFlow, inlinePlugin], code, expected, {dev: false});
+  });
+
+  test('replaces _react.Platform.OS in the code if _react is a top level import', () => {
+    const code = `
+      var _react = require('react-native');
+
+      function a() {
+        var a = _react.Platform.OS;
+        var b = a._react.Platform.OS;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_react\.Platform\.OS/, '"ios"'),
+      {
+        inlinePlatform: 'true',
+        platform: 'ios',
+      },
+    );
+  });
+
+  test('replaces _reactNative.Platform.OS  in the code if _reactNative is a top level import', () => {
+    const code = `
+      var _reactNative = require('react-native');
+
+      function a() {
+        var a = _reactNative.Platform.OS;
+        var b = a._reactNative.Platform.OS;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_reactNative\.Platform\.OS/, '"ios"'),
+      {inlinePlatform: true, platform: 'ios'},
+    );
+  });
+
+  test('replaces _reactNative.Platform.select in the code if _reactNative is a top level import', () => {
+    const code = `
+      var _reactNative = require('react-native');
+
+      function a() {
+        var a = _reactNative.Platform.select({ios: 1, android: 2});
+        var b = a._reactNative.Platform.select;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_reactNative\.Platform\.select[^;]+/, '2'),
+      {inlinePlatform: true, platform: 'android'},
+    );
+  });
+
+  test('replaces _react.Platform.select in the code if _react is a top level import', () => {
+    const code = `
+      var _react = require('react-native');
+
+      function a() {
+        var a = _react.Platform.select({ios: 1, android: 2});
+        var b = a._react.Platform.select;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_react\.Platform\.select[^;]+/, '2'),
+      {inlinePlatform: true, platform: 'android'},
+    );
+  });
+
+  test('replaces abracadabra in the code if abracadabra is react-native default import', () => {
+    const code = `
+      var abracadabra = require('react-native');
+
+      function a() {
+        var a = abracadabra.Platform.select({ios: 1, android: 2});
+        var b = a._react.Platform.select;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/abracadabra\.Platform\.select[^;]+/, '2'),
+      {inlinePlatform: true, platform: 'android'},
+    );
   });
 });
