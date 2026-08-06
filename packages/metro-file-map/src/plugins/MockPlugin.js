@@ -147,13 +147,18 @@ export default class MockPlugin
     const duplicates = this.#raw.duplicates.get(mockName);
     if (duplicates != null) {
       const posixRelativePath = normalizePathSeparatorsToPosix(canonicalPath);
+      const wasActiveMock = this.#raw.mocks.get(mockName) === posixRelativePath;
       duplicates.delete(posixRelativePath);
       if (duplicates.size === 1) {
         this.#raw.duplicates.delete(mockName);
       }
-      // Set the mock to a remaining duplicate. Should never be empty.
-      const remaining = nullthrows(duplicates.values().next().value);
-      this.#raw.mocks.set(mockName, remaining);
+      // Only reassign the active mock if the file we removed *was* the active
+      // one; otherwise a non-active duplicate's removal would clobber it.
+      if (wasActiveMock) {
+        // Set the mock to a remaining duplicate. Should never be empty.
+        const remaining = nullthrows(duplicates.values().next().value);
+        this.#raw.mocks.set(mockName, remaining);
+      }
     } else {
       this.#raw.mocks.delete(mockName);
     }
