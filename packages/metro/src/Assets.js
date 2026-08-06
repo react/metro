@@ -341,11 +341,31 @@ function pathBelongsToRoots(
   pathToCheck: string,
   roots: ReadonlyArray<string>,
 ): boolean {
+  const absolutePathToCheck = path.resolve(pathToCheck);
+
   for (const rootFolder of roots) {
-    if (pathToCheck.startsWith(path.resolve(rootFolder))) {
+    if (isPathInsideRoot(absolutePathToCheck, rootFolder)) {
       return true;
     }
   }
 
   return false;
+}
+
+function isPathInsideRoot(
+  absolutePathToCheck: string,
+  rootFolder: string,
+): boolean {
+  const relativePath = path.relative(
+    path.resolve(rootFolder),
+    absolutePathToCheck,
+  );
+
+  // path.relative('/repo', '/repo2') -> '../repo2', so this must reject leading "..".
+  return (
+    relativePath === '' ||
+    (!relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== '..' &&
+      !path.isAbsolute(relativePath))
+  );
 }
