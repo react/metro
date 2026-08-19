@@ -92,6 +92,7 @@ export type State = {
   dependencyTransformer: DependencyTransformer,
   dynamicRequires: DynamicRequiresBehavior,
   dependencyMapIdentifier: ?Identifier,
+  modeArgHelper: ?string,
   keepRequireNames: boolean,
   allowOptionalDependencies: AllowOptionalDependencies,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
@@ -104,6 +105,15 @@ export type Options = Readonly<{
   dependencyMapName: ?string,
   dynamicRequires: DynamicRequiresBehavior,
   inlineableCalls: ReadonlyArray<string>,
+  /**
+   * Name of the one inlineable helper permitted to carry a second,
+   * mode-selecting argument (`helper(id, 1)`). Set only when
+   * `unstable_liveBindings` is enabled, and only to the importDefault helper.
+   * Left unset, the two-argument form is rejected exactly as before, so no
+   * other call - `require`, `import()`, `resolveWeak`, importAll - can
+   * silently acquire a second argument.
+   */
+  unstable_modeArgHelper?: ?string,
   keepRequireNames: boolean,
   allowOptionalDependencies: AllowOptionalDependencies,
   dependencyTransformer?: DependencyTransformer,
@@ -166,6 +176,7 @@ export default function collectDependencies(
     dependencyTransformer:
       options.dependencyTransformer ?? DefaultDependencyTransformer,
     dependencyMapIdentifier: null,
+    modeArgHelper: options.unstable_modeArgHelper ?? null,
     dynamicRequires: options.dynamicRequires,
     keepRequireNames: options.keepRequireNames,
     allowOptionalDependencies: options.allowOptionalDependencies,
@@ -443,7 +454,7 @@ function processResolveWeakCall(
   path: NodePath<CallExpression>,
   state: State,
 ): void {
-  const name = getModuleNameFromCallArgs(path);
+  const name = getModuleNameFromCallArgs(path, state.modeArgHelper);
 
   if (name == null) {
     throw new InvalidRequireCallError(path);
@@ -493,7 +504,7 @@ function processImportCall(
   state: State,
   options: ImportDependencyOptions,
 ): void {
-  const name = getModuleNameFromCallArgs(path);
+  const name = getModuleNameFromCallArgs(path, state.modeArgHelper);
 
   if (name == null) {
     throw new InvalidRequireCallError(path);
@@ -534,7 +545,7 @@ function processRequireCall(
   path: NodePath<CallExpression>,
   state: State,
 ): void {
-  const name = getModuleNameFromCallArgs(path);
+  const name = getModuleNameFromCallArgs(path, state.modeArgHelper);
 
   const transformer = state.dependencyTransformer;
 
@@ -721,9 +732,26 @@ function isNonNullishCallbackArg(arg: Node): boolean {
   return true;
 }
 
-function getModuleNameFromCallArgs(path: NodePath<CallExpression>): ?string {
+function getModuleNameFromCallArgs(
+  path: NodePath<CallExpression>,
+  modeArgHelper?: ?string,
+): ?string {
   const args = path.get('arguments');
-  if (!Array.isArray(args) || args.length !== 1) {
+  if (!Array.isArray(args) || args.length < 1) {
+    throw new InvalidRequireCallError(path);
+  }
+
+  // Exactly one helper may carry a second argument, and only a literal `1`:
+  // the mode selector consumed by the runtime importDefault helper under
+  // `unstable_liveBindings`. Everything else - `require`, `import()`,
+  // `resolveWeak`, importAll - keeps the strict single-argument contract, so
+  // a malformed call like `require('x', 'anything')` still throws. Callers
+  // that omit `modeArgHelper` - including anyone using the public re-export -
+  // get that strict single-argument contract for every call.
+  //
+  // `isModeArgCall` only admits exactly two arguments, so three or more are
+  // already rejected here.
+  if (args.length > 1 && !isModeArgCall(path, modeArgHelper)) {
     throw new InvalidRequireCallError(path);
   }
 
@@ -734,6 +762,31 @@ function getModuleNameFromCallArgs(path: NodePath<CallExpression>): ?string {
   }
 
   return null;
+}
+
+/**
+ * True when this call is the configured mode-arg helper invoked as
+ * `helper(id, 1)`. Both the callee name and the literal value are checked, so
+ * neither an unrelated two-argument call nor a different numeric mode is
+ * mistaken for it.
+ */
+function isModeArgCall(
+  path: NodePath<CallExpression>,
+  modeArgHelper: ?string,
+): boolean {
+  if (modeArgHelper == null) {
+    return false;
+  }
+  const callee = path.node.callee;
+  if (callee.type !== 'Identifier' || callee.name !== modeArgHelper) {
+    return false;
+  }
+  const args = path.node.arguments;
+  return (
+    args.length === 2 &&
+    args[1].type === 'NumericLiteral' &&
+    args[1].value === 1
+  );
 }
 
 collectDependencies.getModuleNameFromCallArgs = getModuleNameFromCallArgs;
@@ -807,11 +860,22 @@ const DefaultDependencyTransformer: DependencyTransformer = {
     state: State,
   ): void {
     const moduleIDExpression = createModuleIDExpression(dependency, state);
+    const originalArgs = path.node.arguments;
+    // Decided before the arguments are replaced below, and through the same
+    // predicate `getModuleNameFromCallArgs` validates with, so the accepting
+    // and preserving sides cannot drift apart. In particular this is gated on
+    // the configured helper and callee name, not merely on a trailing `1`.
+    const hasModeArg = isModeArgCall(path, state.modeArgHelper);
     path.node.arguments = [moduleIDExpression] as Array<
       Expression | SpreadElement | ArgumentPlaceholder,
     >;
-    // Always add the debug name argument last
-    if (state.keepRequireNames) {
+    if (hasModeArg) {
+      // The runtime helper needs the mode arg at every call site; dropping it
+      // here would silently revert the namespace-shaped return to the
+      // value-shaped one after dependency inlining.
+      path.node.arguments.push(originalArgs[1]);
+    } else if (state.keepRequireNames) {
+      // Debug-name argument (dev builds only).
       path.node.arguments.push(types.stringLiteral(dependency.name));
     }
   },

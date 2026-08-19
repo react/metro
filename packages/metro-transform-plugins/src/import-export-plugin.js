@@ -18,6 +18,7 @@ import type {
   ExportDefaultDeclaration,
   ExportNamedDeclaration,
   Expression,
+  Identifier,
   ImportDeclaration,
   Node,
   Program,
@@ -35,13 +36,21 @@ import nullthrows from 'nullthrows';
 export type Options = Readonly<{
   importDefault: string,
   importAll: string,
+  liveBindings?: boolean,
   resolve: boolean,
   out?: {isESModule: boolean, ...},
 }>;
 
 type State = {
   exportAll: Array<{file: string, loc: ?SourceLocation, ...}>,
+  exportAllLive: Array<{source: Node, loc: ?SourceLocation, ...}>,
   exportDefault: Array<{local: string, loc: ?SourceLocation, ...}>,
+  exportGetters: Array<{
+    remote: string,
+    value: Expression,
+    loc: ?SourceLocation,
+    ...
+  }>,
   exportNamed: Array<{
     local: string,
     remote: string,
@@ -49,8 +58,15 @@ type State = {
     ...
   }>,
   imports: Array<{node: Statement}>,
-  importDefault: Node,
-  importAll: Node,
+  importDefault: Expression,
+  importAll: Expression,
+  // Under `liveBindings`, imported locals get no binding of their own: each
+  // reference is rewritten to a member read off a namespace binding, so that
+  // the read observes the source module's current value. Populated by
+  // `ImportDeclaration` and applied at `Program.exit`, once the body -
+  // including generated export statements that may themselves reference an
+  // imported local - is final.
+  liveImportMembers: Map<string, Expression>,
   opts: Options,
   ...
 };
@@ -81,6 +97,33 @@ const importSideEffectTemplate = template.statement(`
 `);
 
 /**
+ * Binds a source module's exports object, off which live *named* reads are
+ * taken ("import {x} from …" becomes a "_foo.x" read at each use site).
+ *
+ * A plain `require` is correct here for both ESM and CJS sources: named
+ * bindings live directly on the exports object either way. Only `default`
+ * needs interop, which is what the namespace helper below is for.
+ */
+const importSharedTemplate = template.statement(`
+  var LOCAL = require(FILE);
+`);
+
+/**
+ * Re-reads a source module's default export inside a live default re-export
+ * getter.
+ *
+ * Uses the mode-1 namespace shape explicitly rather than the single-argument
+ * form. Mode 0 memoises on the module descriptor, so a getter built on it
+ * would hand back the value captured on its first call and stop being live -
+ * defeating the point of installing a getter. Mode 1 re-resolves through
+ * `metroRequire` per call, so a source that reassigns its default is observed
+ * on the next read.
+ */
+const importDefaultValueTemplate = template.expression(`
+  IMPORT(FILE, 1).default
+`);
+
+/**
  * Produces an "export all" template that traverses all exported symbols and
  * re-exposes them.
  */
@@ -99,6 +142,57 @@ const exportAllTemplate = template.statements(`
  */
 const exportTemplate = template.statement(`
   exports.REMOTE = LOCAL;
+`);
+
+/**
+ * Live re-export forwarding ("export {x} from '...'"): defines a getter on
+ * exports so that reads observe the current value in the source module, which
+ * may change after this module is evaluated.
+ */
+const exportGetterTemplate = template.statement(`
+  Object.defineProperty(exports, REMOTE, {
+    enumerable: true,
+    configurable: true,
+    get: function () {
+      return VALUE;
+    },
+  });
+`);
+
+/**
+ * Reads a named binding from a required module, used inside a live re-export
+ * getter.
+ */
+const requireMemberTemplate = template.expression(`
+  require(FILE).REMOTE
+`);
+
+/**
+ * Live "export all" ("export * from '...'"): defines a getter for each of the
+ * source module's own enumerable names, except "default"/"__esModule" and names
+ * already exported by this module (explicit exports take precedence). Reads stay
+ * live.
+ */
+const exportAllLiveTemplate = template.statements(`
+  var REQUIRED = require(FILE);
+
+  Object.keys(REQUIRED).forEach(function (KEY) {
+    if (
+      KEY === "default" ||
+      KEY === "__esModule" ||
+      Object.prototype.hasOwnProperty.call(exports, KEY)
+    ) {
+      return;
+    }
+
+    Object.defineProperty(exports, KEY, {
+      enumerable: true,
+      configurable: true,
+      get: function () {
+        return REQUIRED[KEY];
+      },
+    });
+  });
 `);
 
 /**
@@ -165,6 +259,48 @@ export default function importExportPlugin({
 }): PluginObj<State> {
   const {isDeclaration, isVariableDeclaration} = t;
 
+  /**
+   * Replaces every free reference to an imported local with a member read off
+   * its namespace binding.
+   *
+   * This runs at `Program.exit` rather than in the `ImportDeclaration` visitor
+   * because export statements are generated during exit and may themselves
+   * reference an imported local (`import d from 'x'; export {d}`). Deferring
+   * until the body is final means those are rewritten by the same pass, instead
+   * of having to be special-cased against a binding that `path.remove()` has
+   * already destroyed.
+   */
+  function rewriteLiveImportReferences(
+    programPath: NodePath<Program>,
+    members: Map<string, Expression>,
+  ): void {
+    programPath.traverse({
+      Identifier(refPath: NodePath<Identifier>): void {
+        const name = refPath.node.name;
+        const member = members.get(name);
+        if (member == null || !refPath.isReferencedIdentifier()) {
+          return;
+        }
+        // An inner scope may declare the same name; only free references
+        // resolve to the import binding, which no longer exists.
+        if (refPath.scope.getBinding(name) != null) {
+          return;
+        }
+        const parent = refPath.parent;
+        if (
+          parent.type === 'ObjectProperty' &&
+          parent.shorthand === true &&
+          parent.value === refPath.node
+        ) {
+          // `{d}` has to become `{d: _x.default}`, not `{_x.default}`.
+          parent.shorthand = false;
+        }
+        // Deep clone: each use site needs its own nodes.
+        refPath.replaceWith(t.cloneNode(member, true));
+      },
+    });
+  }
+
   return {
     visitor: {
       ExportAllDeclaration(
@@ -179,14 +315,24 @@ export default function importExportPlugin({
           loc,
         });
 
-        withLocation(
-          exportAllTemplate({
-            FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
-            REQUIRED: path.scope.generateUidIdentifier(file.value),
-            KEY: path.scope.generateUidIdentifier('key'),
-          }),
-          loc,
-        ).forEach(node => state.imports.push({node}));
+        if (state.opts.liveBindings === true) {
+          // Defer emission to Program.exit so explicit exports (which take
+          // precedence) are already defined on `exports` when the live getters
+          // are installed.
+          state.exportAllLive.push({
+            source: resolvePath(t.cloneNode(file), state.opts.resolve),
+            loc,
+          });
+        } else {
+          withLocation(
+            exportAllTemplate({
+              FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
+              REQUIRED: path.scope.generateUidIdentifier(file.value),
+              KEY: path.scope.generateUidIdentifier('key'),
+            }),
+            loc,
+          ).forEach(node => state.imports.push({node}));
+        }
 
         path.remove();
       },
@@ -294,6 +440,39 @@ export default function importExportPlugin({
             const local = s.local;
 
             if (path.node.source) {
+              const source = nullthrows(path.node.source);
+
+              if (state.opts.liveBindings === true) {
+                // Re-export forwarding must be live: the source binding can be
+                // reassigned after this module is evaluated, so we install a
+                // getter rather than snapshotting the value.
+                const value: Expression =
+                  // $FlowFixMe[incompatible-use]
+                  local.name === 'default'
+                    ? importDefaultValueTemplate({
+                        IMPORT: t.cloneNode(state.importDefault),
+                        FILE: resolvePath(
+                          t.cloneNode(source),
+                          state.opts.resolve,
+                        ),
+                      })
+                    : requireMemberTemplate({
+                        FILE: resolvePath(
+                          t.cloneNode(source),
+                          state.opts.resolve,
+                        ),
+                        // $FlowFixMe[incompatible-call]
+                        REMOTE: t.cloneNode(local),
+                      });
+
+                state.exportGetters.push({
+                  remote: remote.name,
+                  value,
+                  loc,
+                });
+                return;
+              }
+
               // $FlowFixMe[incompatible-use]
               const temp = path.scope.generateUidIdentifier(local.name);
 
@@ -393,6 +572,158 @@ export default function importExportPlugin({
               loc,
             ),
           });
+        } else if (state.opts.liveBindings === true) {
+          // Bind the source module once and rewrite every reference to a
+          // member read off that binding, so reads stay live. The bindings are
+          // created lazily: a declaration importing only named bindings never
+          // pays for the namespace helper, and vice versa.
+          //
+          // Named reads bind the source exports object once and read
+          // members off it at each use. Default reads bypass the binding and
+          // call the helper directly at each site, so the helper - which is
+          // non-memoizing under liveBindings - re-resolves the current
+          // default on every read.
+          let sharedId: ?Identifier = null;
+          let sharedDefaultId: ?Identifier = null;
+          let anchoredTopLevel = false;
+
+          const getShared = (): Identifier => {
+            let id = sharedId;
+            if (id == null) {
+              id = path.scope.generateUidIdentifierBasedOnNode(file);
+              sharedId = id;
+              state.imports.push({
+                node: withLocation(
+                  importSharedTemplate({
+                    LOCAL: t.cloneNode(id),
+                    FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
+                  }),
+                  loc,
+                ),
+              });
+              anchoredTopLevel = true;
+            }
+            return id;
+          };
+
+          // Shared alias for default reads: `var _n = importDefault(dep, 1)`.
+          // Mode 1 requests a namespace-shaped return so that `_n.default`
+          // resolves correctly for both ESM (helper returns exports
+          // unchanged; exports.default is the default) and CJS (helper wraps
+          // as {default: exports}; wrapper.default is exports = the
+          // default). All references to this default import share this
+          // single alias; each read site becomes `_n.default`, which under
+          // inline-requires inlines to `importDefault(dep, 1).default` per
+          // use and under non-inlined consumers stays as a cheap property
+          // access on the local var.
+          const getSharedDefault = (): Identifier => {
+            let id = sharedDefaultId;
+            if (id == null) {
+              id = path.scope.generateUidIdentifierBasedOnNode(file);
+              sharedDefaultId = id;
+              state.imports.push({
+                node: withLocation(
+                  t.variableDeclaration('var', [
+                    t.variableDeclarator(
+                      t.cloneNode(id),
+                      t.callExpression(t.cloneNode(state.importDefault), [
+                        resolvePath(t.cloneNode(file), state.opts.resolve),
+                        t.numericLiteral(1),
+                      ]),
+                    ),
+                  ]),
+                  loc,
+                ),
+              });
+              anchoredTopLevel = true;
+            }
+            return id;
+          };
+
+          // Produces `_n.default` for a default read site, cloned at each
+          // rewrite site. `_n` is the shared alias set up by
+          // `getSharedDefault()`.
+          const defaultRef = (): Expression =>
+            withLocation(
+              t.memberExpression(
+                t.cloneNode(getSharedDefault()),
+                t.identifier('default'),
+              ),
+              loc,
+            );
+
+          specifiers.forEach(s => {
+            const local = s.local;
+
+            switch (s.type) {
+              case 'ImportNamespaceSpecifier':
+                // `import * as ns` is already a namespace object whose identity
+                // is stable, so the existing binding is live as-is.
+                state.imports.push({
+                  node: withLocation(
+                    importTemplate({
+                      IMPORT: t.cloneNode(state.importAll),
+                      FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
+                      LOCAL: t.cloneNode(local),
+                    }),
+                    loc,
+                  ),
+                });
+                anchoredTopLevel = true;
+                break;
+
+              case 'ImportDefaultSpecifier':
+                state.liveImportMembers.set(local.name, defaultRef());
+                break;
+
+              case 'ImportSpecifier': {
+                const imported = s.imported;
+                if (imported.type === 'StringLiteral') {
+                  // `import {'a-b' as x}` needs a computed read.
+                  state.liveImportMembers.set(
+                    local.name,
+                    t.memberExpression(
+                      t.cloneNode(getShared()),
+                      t.cloneNode(imported),
+                      true,
+                    ),
+                  );
+                } else if (imported.name === 'default') {
+                  state.liveImportMembers.set(local.name, defaultRef());
+                } else {
+                  state.liveImportMembers.set(
+                    local.name,
+                    t.memberExpression(
+                      t.cloneNode(getShared()),
+                      t.cloneNode(imported),
+                    ),
+                  );
+                }
+                break;
+              }
+
+              default:
+                throw new TypeError('Unknown import type: ' + s.type);
+            }
+          });
+
+          // Every ES module import evaluates its source for side effects,
+          // regardless of whether any binding is used. Namespace and named
+          // specifiers naturally anchor a top-level `require(...)` (via
+          // `getShared()` / `importAll(...)`), which inline-requires elides
+          // for inlineable modules and retains for non-inlineable ones (see
+          // its `ignoredRequires` option). Default-only imports have no
+          // such anchor - default reads go through a per-read helper call -
+          // so we introduce one explicitly. The shared binding it creates
+          // is unused for default-only declarations, so inline-requires
+          // treats it as dead code and elides it for inlineable modules;
+          // for non-inlineable modules the `require(...)` is retained,
+          // preserving the load-time side effect. Under dev builds (where
+          // inline-requires does not run), the binding is retained as-is,
+          // matching pre-liveBindings behaviour.
+          if (!anchoredTopLevel) {
+            getShared();
+          }
         } else {
           let sharedModuleImport;
           let sharedModuleVariableDeclaration = null;
@@ -511,12 +842,15 @@ export default function importExportPlugin({
       Program: {
         enter(path: NodePath<Program>, state: State): void {
           state.exportAll = [];
+          state.exportAllLive = [];
           state.exportDefault = [];
+          state.exportGetters = [];
           state.exportNamed = [];
 
           state.imports = [];
           state.importAll = t.identifier(state.opts.importAll);
           state.importDefault = t.identifier(state.opts.importDefault);
+          state.liveImportMembers = new Map();
 
           // Rename declarations at module scope that might otherwise conflict
           // with arguments we inject into the module factory.
@@ -538,6 +872,19 @@ export default function importExportPlugin({
 
           state.exportNamed.forEach(
             (e: {local: string, remote: string, loc: ?SourceLocation, ...}) => {
+              const member = state.liveImportMembers.get(e.local);
+              if (member != null) {
+                // Re-exporting an imported binding is an *indirect* export:
+                // reads must observe the source module's current value, just
+                // as they do for the `export {x} from '…'` spelling of the
+                // same thing. A data property here would snapshot it.
+                state.exportGetters.push({
+                  remote: e.remote,
+                  value: t.cloneNode(member, true),
+                  loc: e.loc,
+                });
+                return;
+              }
               body.push(
                 withLocation(
                   exportTemplate({
@@ -552,6 +899,15 @@ export default function importExportPlugin({
 
           state.exportDefault.forEach(
             (e: {local: string, loc: ?SourceLocation, ...}) => {
+              const member = state.liveImportMembers.get(e.local);
+              if (member != null) {
+                state.exportGetters.push({
+                  remote: 'default',
+                  value: t.cloneNode(member, true),
+                  loc: e.loc,
+                });
+                return;
+              }
               body.push(
                 withLocation(
                   exportTemplate({
@@ -564,10 +920,48 @@ export default function importExportPlugin({
             },
           );
 
+          // Live re-export forwarding getters (named/default `export … from`).
+          // Emitted after the explicit data-property exports above so that, by
+          // the time the live `export *` loops below run, `exports` already owns
+          // every explicitly-exported name.
+          state.exportGetters.forEach(
+            (e: {
+              remote: string,
+              value: Expression,
+              loc: ?SourceLocation,
+              ...
+            }) => {
+              body.push(
+                withLocation(
+                  exportGetterTemplate({
+                    REMOTE: t.stringLiteral(e.remote),
+                    VALUE: e.value,
+                  }),
+                  e.loc,
+                ),
+              );
+            },
+          );
+
+          // Live `export * from` forwarding loops.
+          state.exportAllLive.forEach(
+            (e: {source: Node, loc: ?SourceLocation, ...}) => {
+              withLocation(
+                exportAllLiveTemplate({
+                  REQUIRED: path.scope.generateUidIdentifier('exportAll'),
+                  FILE: e.source,
+                  KEY: path.scope.generateUidIdentifier('key'),
+                }),
+                e.loc,
+              ).forEach(node => body.push(node));
+            },
+          );
+
           if (
             state.exportDefault.length ||
             state.exportAll.length ||
-            state.exportNamed.length
+            state.exportNamed.length ||
+            state.exportGetters.length
           ) {
             body.unshift(esModuleExportTemplate());
             if (state.opts.out) {
@@ -575,6 +969,124 @@ export default function importExportPlugin({
             }
           } else if (state.opts.out) {
             state.opts.out.isESModule = false;
+          }
+
+          if (state.opts.liveBindings === true) {
+            // Recompute scope information now that import/export declarations
+            // have been rewritten, so that `constantViolations` reflect the
+            // final tree.
+            path.scope.crawl();
+
+            if (state.liveImportMembers.size > 0) {
+              rewriteLiveImportReferences(path, state.liveImportMembers);
+              // Rewriting removed the last references to the imported locals
+              // and introduced the namespace bindings; the mirroring below
+              // needs bindings that reflect that.
+              path.scope.crawl();
+            }
+
+            // Map each exported local binding to the remote name(s) it is
+            // exposed as.
+            const localToRemotes: Map<string, Array<string>> = new Map();
+            const addLocalRemote = (local: string, remote: string): void => {
+              const remotes = localToRemotes.get(local);
+              if (remotes != null) {
+                remotes.push(remote);
+              } else {
+                localToRemotes.set(local, [remote]);
+              }
+            };
+            state.exportNamed.forEach(e => addLocalRemote(e.local, e.remote));
+            state.exportDefault.forEach(e =>
+              addLocalRemote(e.local, 'default'),
+            );
+
+            const exportsMember = (remote: string) =>
+              t.memberExpression(t.identifier('exports'), t.identifier(remote));
+
+            // value  ->  exports.r1 = exports.r2 = ... = value
+            const mirrorInto = (
+              remotes: Array<string>,
+              value: Expression,
+            ): Expression => {
+              let expr: Expression = value;
+              for (const remote of remotes) {
+                expr = t.assignmentExpression('=', exportsMember(remote), expr);
+              }
+              return expr;
+            };
+
+            // True where the update expression's own value cannot be observed,
+            // so a postfix update may be rewritten without preserving it.
+            const isValueDiscarded = (violation: NodePath<>): boolean => {
+              const parent = violation.parentPath;
+              if (parent == null) {
+                return false;
+              }
+              return (
+                parent.isExpressionStatement() ||
+                (parent.isForStatement() &&
+                  parent.node.update === violation.node)
+              );
+            };
+
+            for (const [local, remotes] of localToRemotes) {
+              const binding = path.scope.getBinding(local);
+              if (binding == null) {
+                continue;
+              }
+              for (const violation of binding.constantViolations) {
+                const vnode = violation.node;
+                if (t.isAssignmentExpression(vnode)) {
+                  if (!t.isIdentifier(vnode.left, {name: local})) {
+                    // Deferred: destructuring / non-identifier assignment
+                    // targets.
+                    continue;
+                  }
+                  // x <op>= v  ->  exports.r1 = exports.r2 = (x <op>= v)
+                  violation.replaceWith(mirrorInto(remotes, vnode));
+                  violation.skip();
+                } else if (t.isUpdateExpression(vnode)) {
+                  if (!t.isIdentifier(vnode.argument, {name: local})) {
+                    continue;
+                  }
+                  if (vnode.prefix === true || isValueDiscarded(violation)) {
+                    // ++x  ->  exports.r1 = ++x
+                    //
+                    // Postfix takes this path too where its value is
+                    // unobservable: prefix and postfix have identical side
+                    // effects, so switching form avoids needing a temporary.
+                    violation.replaceWith(
+                      mirrorInto(
+                        remotes,
+                        t.updateExpression(
+                          vnode.operator,
+                          vnode.argument,
+                          true,
+                        ),
+                      ),
+                    );
+                    violation.skip();
+                    continue;
+                  }
+                  // x++  ->  (t = x++, exports.r1 = x, t)
+                  //
+                  // Postfix evaluates to the *old* value, so it must be held in
+                  // a temporary: mirroring reads the new value, and the outer
+                  // expression has to keep yielding the old one.
+                  const temp = path.scope.generateUidIdentifier(local);
+                  path.scope.push({id: t.cloneNode(temp)});
+                  violation.replaceWith(
+                    t.sequenceExpression([
+                      t.assignmentExpression('=', t.cloneNode(temp), vnode),
+                      mirrorInto(remotes, t.identifier(local)),
+                      t.cloneNode(temp),
+                    ]),
+                  );
+                  violation.skip();
+                }
+              }
+            }
           }
         },
       },

@@ -1184,6 +1184,139 @@ test('collects imports', () => {
   ]);
 });
 
+test('accepts a mode argument only on the configured helper', () => {
+  // The two-argument form is reserved for the importDefault helper's
+  // return-shape mode selector, and only when the caller opts in via
+  // `unstable_modeArgHelper` (set under `unstable_liveBindings`). The extra
+  // arg is runtime metadata; the dep name still comes from the first arg.
+  const ast = astFromCode(`
+    importDefault('a-mod', 1);
+    importDefault('c-mod');
+    importAll('d-mod');
+    require('e-mod');
+  `);
+  const {dependencies} = collectDependencies(ast, {
+    ...opts,
+    inlineableCalls: ['importDefault', 'importAll'],
+    unstable_modeArgHelper: 'importDefault',
+  });
+  expect(dependencies.map(d => d.name)).toEqual([
+    'a-mod',
+    'c-mod',
+    'd-mod',
+    'e-mod',
+  ]);
+});
+
+test('rejects a mode argument when no helper is configured', () => {
+  const ast = astFromCode(`
+    importDefault('a-mod', 1);
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: importDefault('a-mod', 1)"`,
+  );
+});
+
+test('rejects a mode argument on a helper other than the configured one', () => {
+  const ast = astFromCode(`
+    importAll('b-mod', 1);
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+      unstable_modeArgHelper: 'importDefault',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: importAll('b-mod', 1)"`,
+  );
+});
+
+test('preserves the mode argument through inlining, in place of the debug name', () => {
+  // `opts` sets keepRequireNames, so this covers the branch where a mode-1
+  // call site keeps its mode argument and gives up the debug-name argument -
+  // the two occupy the same slot. Non-mode calls still get the debug name.
+  const ast = astFromCode(`
+    importDefault('a-mod', 1);
+    require('e-mod');
+  `);
+  collectDependencies(ast, {
+    ...opts,
+    inlineableCalls: ['importDefault', 'importAll'],
+    unstable_modeArgHelper: 'importDefault',
+  });
+  expect(codeFromAst(ast)).toEqual(
+    comparableCode(`
+      importDefault(_dependencyMap[0], 1);
+      require(_dependencyMap[1], "e-mod");
+    `),
+  );
+});
+
+test('rejects a second argument that is not the mode literal', () => {
+  const ast = astFromCode(`
+    importDefault('a-mod', 'x');
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+      unstable_modeArgHelper: 'importDefault',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: importDefault('a-mod', 'x')"`,
+  );
+});
+
+test('rejects a second argument on a call that is not a helper', () => {
+  const ast = astFromCode(`
+    require('e-mod', 'anything');
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+      unstable_modeArgHelper: 'importDefault',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: require('e-mod', 'anything')"`,
+  );
+});
+
+test('rejects a numeric second argument other than 1', () => {
+  const ast = astFromCode(`
+    importDefault('a-mod', 2);
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+      unstable_modeArgHelper: 'importDefault',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: importDefault('a-mod', 2)"`,
+  );
+});
+
+test('rejects three or more arguments on inlineable helper calls', () => {
+  const ast = astFromCode(`
+    importDefault('a-mod', 1, 'oops');
+  `);
+  expect(() =>
+    collectDependencies(ast, {
+      ...opts,
+      inlineableCalls: ['importDefault', 'importAll'],
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `"Invalid call at line 2: importDefault('a-mod', 1, 'oops')"`,
+  );
+});
+
 test('collects export from', () => {
   const ast = astFromCode(`
     export type {Apple} from 'Apple';

@@ -239,6 +239,7 @@ function shouldPrintRequireCycle(modules: ReadonlyArray<?string>): boolean {
 
 function metroImportDefault(
   moduleId: ModuleID | VerboseModuleNameForDev,
+  experimentalMode?: number,
 ): any | Exports {
   if (__DEV__ && typeof moduleId === 'string') {
     const verboseName = moduleId;
@@ -247,6 +248,23 @@ function metroImportDefault(
 
   //$FlowFixMe[incompatible-type]: at this point we know that moduleId is a number
   const moduleIdReallyIsNumber: number = moduleId;
+
+  if (experimentalMode === 1) {
+    // Mode 1: namespace-shaped return. Consumers do `ns.default` at each read
+    // site (the default-import emission under `unstable_liveBindings`). For
+    // ESM the exports object already has `.default`; for CJS we wrap it as
+    // `{default: exports}` so the accessor resolves to the module's exports,
+    // which for CJS is the default.
+    //
+    // Deliberately not memoised, unlike the value-shaped path below. The CJS
+    // wrapper is allocated per call, and caching it would pin `.default` to
+    // whichever exports object was current on the first call - hiding a later
+    // `module.exports = X`. Re-resolving keeps the read live. Under the
+    // serialiser rewrite for proven-classified deps this helper is bypassed
+    // entirely, so only the unclassified-fallback slice reaches here.
+    const exports: Exports = metroRequire(moduleIdReallyIsNumber);
+    return exports && exports.__esModule ? exports : {default: exports};
+  }
 
   const maybeInitializedModule = modules.get(moduleIdReallyIsNumber);
 

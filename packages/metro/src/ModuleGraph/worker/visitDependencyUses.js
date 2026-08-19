@@ -95,6 +95,9 @@ export default function visitDependencyUses(
     importAllParamBinding,
     depMapParamBinding,
   } = bindModuleIRElements(file);
+  // `importDefaultParamBinding` is a getter that redoes a scope lookup on each
+  // access, and this is read once per reference below - so resolve it once.
+  const modeArgHelperName = importDefaultParamBinding.identifier.name;
   for (const path of requireParamBinding.referencePaths.concat(
     importDefaultParamBinding.referencePaths,
   )) {
@@ -107,7 +110,10 @@ export default function visitDependencyUses(
     if (dependencyFilter != null && !dependencyFilter(dep)) {
       continue;
     }
-    for (const {path: referencePath} of walkReferences(req.exprPath)) {
+    for (const {path: referencePath} of walkReferences(
+      req.exprPath,
+      modeArgHelperName,
+    )) {
       if (
         referencePath.parentPath &&
         referencePath.parentPath.node.type === 'CallExpression' &&
@@ -130,18 +136,40 @@ export default function visitDependencyUses(
     if (dependencyFilter != null && !dependencyFilter(dep)) {
       continue;
     }
-    for (const {path: referencePath} of walkReferences(req.exprPath)) {
+    for (const {path: referencePath} of walkReferences(
+      req.exprPath,
+      modeArgHelperName,
+    )) {
       visitOther(referencePath, dep);
     }
   }
 }
 
+/**
+ * `modeArgHelperName` is the importDefault helper's local name - the only
+ * callee that may carry a mode argument. It is passed for `require` and
+ * importAll references too; those simply never match the callee check, which
+ * is what keeps the mode-1 walk from applying to them.
+ */
 function* walkReferences(
   initialCandidateUse: NodePath<>,
+  modeArgHelperName: string,
 ): Iterable<{path: NodePath<>}> {
   const candidateUses = new Map<Node, NodePath<>>([
     [initialCandidateUse.node, initialCandidateUse],
   ]);
+  // References that came from - directly or transitively via a constant
+  // binding - a mode-1 helper call (`_$_IMPORT_DEFAULT(id, 1)`). For these
+  // we walk through the `.default` accessor because the accessor holds the
+  // actual value; the wrapper's `.default` slot is a shape convention, not a
+  // meaningful semantic operation. We do NOT walk `.default` on arbitrary
+  // require results (e.g. `require("X").default` on a CJS module) because
+  // there the accessor IS the observable semantic operation and downstream
+  // analysers rely on seeing it.
+  const mode1Refs = new Set<Node>();
+  if (isMode1HelperCall(initialCandidateUse.node, modeArgHelperName)) {
+    mode1Refs.add(initialCandidateUse.node);
+  }
   for (const p of candidateUses.values()) {
     const parentPath = nullthrows(p.parentPath);
     if (
@@ -154,6 +182,7 @@ function* walkReferences(
         parentPath.scope.getBinding(varIdNode.name),
       );
       if (depBinding.constant) {
+        const isMode1Source = mode1Refs.has(p.node);
         for (const depRefPath of depBinding.referencePaths) {
           if (depRefPath.node === varIdNode) {
             continue;
@@ -162,12 +191,49 @@ function* walkReferences(
             continue;
           }
           candidateUses.set(depRefPath.node, depRefPath);
+          if (isMode1Source) {
+            mode1Refs.add(depRefPath.node);
+          }
         }
         continue;
       }
     }
+    if (
+      mode1Refs.has(p.node) &&
+      parentPath.node.type === 'MemberExpression' &&
+      parentPath.node.object === p.node &&
+      !parentPath.node.computed &&
+      parentPath.node.property.type === 'Identifier' &&
+      parentPath.node.property.name === 'default'
+    ) {
+      if (!candidateUses.has(parentPath.node)) {
+        // Deliberately not added to `mode1Refs`. The accessor's value is the
+        // imported binding, not a further mode-1 wrapper, so a chained
+        // `helper(id, 1).default.default` must not have its second accessor
+        // walked through as well.
+        candidateUses.set(parentPath.node, parentPath);
+      }
+      continue;
+    }
     yield {path: p};
   }
+}
+
+/**
+ * True only for the importDefault helper invoked as `helper(id, 1)`. The
+ * callee is checked as well as the literal, so an unrelated two-argument call
+ * ending in `1` - `require(id)(x, 1)`, say - is not mistaken for the mode-1
+ * shape and does not have a genuine `.default` swallowed.
+ */
+function isMode1HelperCall(node: Node, modeArgHelperName: string): boolean {
+  return (
+    node.type === 'CallExpression' &&
+    node.callee.type === 'Identifier' &&
+    node.callee.name === modeArgHelperName &&
+    node.arguments.length === 2 &&
+    node.arguments[1].type === 'NumericLiteral' &&
+    node.arguments[1].value === 1
+  );
 }
 
 function bindRequireCallElements(
