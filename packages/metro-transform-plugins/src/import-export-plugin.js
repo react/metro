@@ -35,13 +35,21 @@ import nullthrows from 'nullthrows';
 export type Options = Readonly<{
   importDefault: string,
   importAll: string,
+  liveBindings?: boolean,
   resolve: boolean,
   out?: {isESModule: boolean, ...},
 }>;
 
 type State = {
   exportAll: Array<{file: string, loc: ?SourceLocation, ...}>,
+  exportAllLive: Array<{source: Node, loc: ?SourceLocation, ...}>,
   exportDefault: Array<{local: string, loc: ?SourceLocation, ...}>,
+  exportGetters: Array<{
+    remote: string,
+    value: Expression,
+    loc: ?SourceLocation,
+    ...
+  }>,
   exportNamed: Array<{
     local: string,
     remote: string,
@@ -99,6 +107,64 @@ const exportAllTemplate = template.statements(`
  */
 const exportTemplate = template.statement(`
   exports.REMOTE = LOCAL;
+`);
+
+/**
+ * Live re-export forwarding ("export {x} from '...'"): defines a getter on
+ * exports so that reads observe the current value in the source module, which
+ * may change after this module is evaluated.
+ */
+const exportGetterTemplate = template.statement(`
+  Object.defineProperty(exports, REMOTE, {
+    enumerable: true,
+    configurable: true,
+    get: function () {
+      return VALUE;
+    },
+  });
+`);
+
+/**
+ * Reads a named binding from a required module, used inside a live re-export
+ * getter.
+ */
+const requireMemberTemplate = template.expression(`
+  require(FILE).REMOTE
+`);
+
+/**
+ * Calls an import helper, used inside a live default re-export getter.
+ */
+const importCallTemplate = template.expression(`
+  IMPORT(FILE)
+`);
+
+/**
+ * Live "export all" ("export * from '...'"): defines a getter for each of the
+ * source module's own enumerable names, except "default"/"__esModule" and names
+ * already exported by this module (explicit exports take precedence). Reads stay
+ * live.
+ */
+const exportAllLiveTemplate = template.statements(`
+  var REQUIRED = require(FILE);
+
+  Object.keys(REQUIRED).forEach(function (KEY) {
+    if (
+      KEY === "default" ||
+      KEY === "__esModule" ||
+      Object.prototype.hasOwnProperty.call(exports, KEY)
+    ) {
+      return;
+    }
+
+    Object.defineProperty(exports, KEY, {
+      enumerable: true,
+      configurable: true,
+      get: function () {
+        return REQUIRED[KEY];
+      },
+    });
+  });
 `);
 
 /**
@@ -179,14 +245,24 @@ export default function importExportPlugin({
           loc,
         });
 
-        withLocation(
-          exportAllTemplate({
-            FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
-            REQUIRED: path.scope.generateUidIdentifier(file.value),
-            KEY: path.scope.generateUidIdentifier('key'),
-          }),
-          loc,
-        ).forEach(node => state.imports.push({node}));
+        if (state.opts.liveBindings === true) {
+          // Defer emission to Program.exit so explicit exports (which take
+          // precedence) are already defined on `exports` when the live getters
+          // are installed.
+          state.exportAllLive.push({
+            source: resolvePath(t.cloneNode(file), state.opts.resolve),
+            loc,
+          });
+        } else {
+          withLocation(
+            exportAllTemplate({
+              FILE: resolvePath(t.cloneNode(file), state.opts.resolve),
+              REQUIRED: path.scope.generateUidIdentifier(file.value),
+              KEY: path.scope.generateUidIdentifier('key'),
+            }),
+            loc,
+          ).forEach(node => state.imports.push({node}));
+        }
 
         path.remove();
       },
@@ -294,6 +370,39 @@ export default function importExportPlugin({
             const local = s.local;
 
             if (path.node.source) {
+              const source = nullthrows(path.node.source);
+
+              if (state.opts.liveBindings === true) {
+                // Re-export forwarding must be live: the source binding can be
+                // reassigned after this module is evaluated, so we install a
+                // getter rather than snapshotting the value.
+                const value: Expression =
+                  // $FlowFixMe[incompatible-use]
+                  local.name === 'default'
+                    ? importCallTemplate({
+                        IMPORT: t.cloneNode(state.importDefault),
+                        FILE: resolvePath(
+                          t.cloneNode(source),
+                          state.opts.resolve,
+                        ),
+                      })
+                    : requireMemberTemplate({
+                        FILE: resolvePath(
+                          t.cloneNode(source),
+                          state.opts.resolve,
+                        ),
+                        // $FlowFixMe[incompatible-call]
+                        REMOTE: t.cloneNode(local),
+                      });
+
+                state.exportGetters.push({
+                  remote: remote.name,
+                  value,
+                  loc,
+                });
+                return;
+              }
+
               // $FlowFixMe[incompatible-use]
               const temp = path.scope.generateUidIdentifier(local.name);
 
@@ -511,7 +620,9 @@ export default function importExportPlugin({
       Program: {
         enter(path: NodePath<Program>, state: State): void {
           state.exportAll = [];
+          state.exportAllLive = [];
           state.exportDefault = [];
+          state.exportGetters = [];
           state.exportNamed = [];
 
           state.imports = [];
@@ -564,10 +675,48 @@ export default function importExportPlugin({
             },
           );
 
+          // Live re-export forwarding getters (named/default `export … from`).
+          // Emitted after the explicit data-property exports above so that, by
+          // the time the live `export *` loops below run, `exports` already owns
+          // every explicitly-exported name.
+          state.exportGetters.forEach(
+            (e: {
+              remote: string,
+              value: Expression,
+              loc: ?SourceLocation,
+              ...
+            }) => {
+              body.push(
+                withLocation(
+                  exportGetterTemplate({
+                    REMOTE: t.stringLiteral(e.remote),
+                    VALUE: e.value,
+                  }),
+                  e.loc,
+                ),
+              );
+            },
+          );
+
+          // Live `export * from` forwarding loops.
+          state.exportAllLive.forEach(
+            (e: {source: Node, loc: ?SourceLocation, ...}) => {
+              withLocation(
+                exportAllLiveTemplate({
+                  REQUIRED: path.scope.generateUidIdentifier('exportAll'),
+                  FILE: e.source,
+                  KEY: path.scope.generateUidIdentifier('key'),
+                }),
+                e.loc,
+              ).forEach(node => body.push(node));
+            },
+          );
+
           if (
             state.exportDefault.length ||
             state.exportAll.length ||
-            state.exportNamed.length
+            state.exportNamed.length ||
+            state.exportGetters.length
           ) {
             body.unshift(esModuleExportTemplate());
             if (state.opts.out) {
@@ -575,6 +724,116 @@ export default function importExportPlugin({
             }
           } else if (state.opts.out) {
             state.opts.out.isESModule = false;
+          }
+
+          if (state.opts.liveBindings === true) {
+            // Recompute scope information now that import/export declarations
+            // have been rewritten, so that `constantViolations` reflect the
+            // final tree.
+            path.scope.crawl();
+
+            // Map each exported local binding to the remote name(s) it is
+            // exposed as.
+            const localToRemotes: Map<string, Array<string>> = new Map();
+            const addLocalRemote = (local: string, remote: string): void => {
+              const remotes = localToRemotes.get(local);
+              if (remotes != null) {
+                remotes.push(remote);
+              } else {
+                localToRemotes.set(local, [remote]);
+              }
+            };
+            state.exportNamed.forEach(e => addLocalRemote(e.local, e.remote));
+            state.exportDefault.forEach(e =>
+              addLocalRemote(e.local, 'default'),
+            );
+
+            const exportsMember = (remote: string) =>
+              t.memberExpression(t.identifier('exports'), t.identifier(remote));
+
+            // value  ->  exports.r1 = exports.r2 = ... = value
+            const mirrorInto = (
+              remotes: Array<string>,
+              value: Expression,
+            ): Expression => {
+              let expr: Expression = value;
+              for (const remote of remotes) {
+                expr = t.assignmentExpression('=', exportsMember(remote), expr);
+              }
+              return expr;
+            };
+
+            // True where the update expression's own value cannot be observed,
+            // so a postfix update may be rewritten without preserving it.
+            const isValueDiscarded = (violation: NodePath<>): boolean => {
+              const parent = violation.parentPath;
+              if (parent == null) {
+                return false;
+              }
+              return (
+                parent.isExpressionStatement() ||
+                (parent.isForStatement() &&
+                  parent.node.update === violation.node)
+              );
+            };
+
+            for (const [local, remotes] of localToRemotes) {
+              const binding = path.scope.getBinding(local);
+              if (binding == null) {
+                continue;
+              }
+              for (const violation of binding.constantViolations) {
+                const vnode = violation.node;
+                if (t.isAssignmentExpression(vnode)) {
+                  if (!t.isIdentifier(vnode.left, {name: local})) {
+                    // Deferred: destructuring / non-identifier assignment
+                    // targets.
+                    continue;
+                  }
+                  // x <op>= v  ->  exports.r1 = exports.r2 = (x <op>= v)
+                  violation.replaceWith(mirrorInto(remotes, vnode));
+                  violation.skip();
+                } else if (t.isUpdateExpression(vnode)) {
+                  if (!t.isIdentifier(vnode.argument, {name: local})) {
+                    continue;
+                  }
+                  if (vnode.prefix === true || isValueDiscarded(violation)) {
+                    // ++x  ->  exports.r1 = ++x
+                    //
+                    // Postfix takes this path too where its value is
+                    // unobservable: prefix and postfix have identical side
+                    // effects, so switching form avoids needing a temporary.
+                    violation.replaceWith(
+                      mirrorInto(
+                        remotes,
+                        t.updateExpression(
+                          vnode.operator,
+                          vnode.argument,
+                          true,
+                        ),
+                      ),
+                    );
+                    violation.skip();
+                    continue;
+                  }
+                  // x++  ->  (t = x++, exports.r1 = x, t)
+                  //
+                  // Postfix evaluates to the *old* value, so it must be held in
+                  // a temporary: mirroring reads the new value, and the outer
+                  // expression has to keep yielding the old one.
+                  const temp = path.scope.generateUidIdentifier(local);
+                  path.scope.push({id: t.cloneNode(temp)});
+                  violation.replaceWith(
+                    t.sequenceExpression([
+                      t.assignmentExpression('=', t.cloneNode(temp), vnode),
+                      mirrorInto(remotes, t.identifier(local)),
+                      t.cloneNode(temp),
+                    ]),
+                  );
+                  violation.skip();
+                }
+              }
+            }
           }
         },
       },
