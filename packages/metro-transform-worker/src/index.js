@@ -54,6 +54,10 @@ import {
 } from 'metro-source-map';
 import metroTransformPlugins from 'metro-transform-plugins';
 import collectDependencies from 'metro/private/ModuleGraph/worker/collectDependencies';
+import {
+  canDefineESModuleInterop,
+  definesESModuleInterop,
+} from 'metro/private/ModuleGraph/worker/esmClassification';
 import generateImportNames from 'metro/private/ModuleGraph/worker/generateImportNames';
 import {
   importLocationsPlugin,
@@ -173,6 +177,26 @@ export type JsOutput = Readonly<{
     lineCount: number,
     map: VlqMap,
     functionMap: ?FBSourceFunctionMap,
+    // ESM-interop signal.
+    //
+    //   `true`  - definitely an ES module (a truthy top-level
+    //             `exports.__esModule`, as emitted by Metro's own ESM
+    //             transform or by ESM precompiled to CJS by Babel/tsc, i.e.
+    //             a module with a real `.default`).
+    //   `false` - provably NOT an ES module: either trivially (JSON) or
+    //             because the module has no ESM interop marker AND no
+    //             dependencies at all, so it cannot expose ESM interop at
+    //             runtime (nothing to re-export via `module.exports =
+    //             require('./esm')`). Common at FBiOS scale via generated
+    //             Relay fragments and similar build-generated data modules.
+    //   unset   - undetermined. A module with `require(...)` calls but no
+    //             ESM marker could still expose ESM interop at runtime, so
+    //             the classifier stays silent. Consumers must fall back to
+    //             the runtime interop helper.
+    //
+    // Serialiser-level rewrites use this tri-state to bypass the runtime
+    // interop helper for definitively-classified reads.
+    isESModule?: boolean,
   }>,
   type: JSFileType,
 }>;
@@ -299,12 +323,18 @@ async function transformJS(
   // fold requires and perform constant folding (if in dev).
   const plugins: Array<PluginEntry> = [];
 
+  // Positive-only ESM hint from the import-export-plugin (set to `true` for a
+  // definite ES module, left unset otherwise). Forwarded to collectDependencies,
+  // which falls back to AST detection when it is unset.
+  const importExportOut: {isESModule?: boolean} = {};
+
   if (options.experimentalImportSupport === true) {
     plugins.push([
       metroTransformPlugins.importExportPlugin,
       {
         importAll,
         importDefault,
+        out: importExportOut,
         resolve: false,
       } as ImportExportPluginOptions,
     ]);
@@ -376,6 +406,19 @@ async function transformJS(
 
   let dependencyMapName = '';
   let dependencies;
+  let isESModule = false;
+  // No ESM marker, no dependencies, and no expression anywhere in the module
+  // that could define `exports.__esModule` out of view of the top-level scan
+  // (see `canDefineESModuleInterop`). The dependency check is retained
+  // separately because a module with dependencies could re-export an ES module
+  // wholesale - `module.exports = require('./esm.js')` - which is a runtime
+  // property of the graph rather than of this module's syntax.
+  //
+  // Note this establishes the absence of ESM interop, not the presence of
+  // CommonJS - a script or an empty module qualifies too. Sufficient to cover
+  // the common FBiOS case: generated Relay fragments and other build-generated
+  // data modules that literal-export constants and never require anything else.
+  let hasNoESModuleInterop = false;
   let wrappedAst;
 
   // If the module to transform is a script (meaning that is not part of the
@@ -410,6 +453,14 @@ async function transformJS(
             : null,
       };
       ({ast, dependencies, dependencyMapName} = collectDependencies(ast, opts));
+      // Positive-only hint from the import-export-plugin (a definite ES module),
+      // otherwise infer from the AST (catches ESM already lowered to CJS by
+      // Babel/tsc, where the plugin saw no ESM syntax).
+      isESModule = importExportOut.isESModule ?? definesESModuleInterop(ast);
+      hasNoESModuleInterop =
+        !isESModule &&
+        dependencies.length === 0 &&
+        !canDefineESModuleInterop(ast);
     } catch (error) {
       if (error instanceof InternalInvalidRequireCallError) {
         throw new InvalidRequireCallError(error, file.filename);
@@ -513,6 +564,18 @@ async function transformJS(
         functionMap: file.functionMap,
         lineCount,
         map,
+        // A tri-state signal (see JsOutput.data.isESModule):
+        //   `true`  - definitely an ES module (positive ESM check).
+        //   `false` - definitely no ESM interop: no marker, no dependencies,
+        //             and no expression that could define the marker out of
+        //             view. Not a claim that the module is CommonJS.
+        //   unset   - undetermined; consumers must fall back to helper
+        //             behaviour.
+        ...(isESModule
+          ? {isESModule: true}
+          : hasNoESModuleInterop
+            ? {isESModule: false}
+            : null),
       },
       type: file.type,
     },
@@ -638,7 +701,16 @@ async function transformJSON(
   const outputMap = vlqMapFromTuples(map);
   const output: Array<JsOutput> = [
     {
-      data: {code, functionMap: null, lineCount, map: outputMap},
+      data: {
+        code,
+        functionMap: null,
+        lineCount,
+        map: outputMap,
+        // JSON is trivially never an ES module, so we can assert a definite
+        // `false` here (unlike the JS path, where an undetected runtime ESM
+        // means we must leave the hint unset rather than emit a false negative).
+        isESModule: false,
+      },
       type: jsType,
     },
   ];
