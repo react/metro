@@ -36,7 +36,7 @@ export type Options = Readonly<{
   importDefault: string,
   importAll: string,
   resolve: boolean,
-  out?: {isESModule: boolean, ...},
+  out?: {isESModule?: boolean, ...},
 }>;
 
 type State = {
@@ -570,11 +570,11 @@ export default function importExportPlugin({
             state.exportNamed.length
           ) {
             body.unshift(esModuleExportTemplate());
+            // Only ever set a positive signal: a definite ES module by
+            // presence of export syntax.
             if (state.opts.out) {
               state.opts.out.isESModule = true;
             }
-          } else if (state.opts.out) {
-            state.opts.out.isESModule = false;
           }
         },
       },

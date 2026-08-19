@@ -265,6 +265,159 @@ test('transforms import/export syntax when experimental flag is on', async () =>
   ]);
 });
 
+describe('isESModule', () => {
+  test('is true for an ES module (positive hint from import-export-plugin)', async () => {
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('export default 42;', 'utf8'),
+      {...baseTransformOptions, experimentalImportSupport: true},
+    );
+
+    expect(result.output[0].data.isESModule).toBe(true);
+  });
+
+  test('is true for ESM already lowered to CJS by Babel (AST fallback)', async () => {
+    const contents = [
+      'Object.defineProperty(exports, "__esModule", { value: true });',
+      'exports.default = 42;',
+    ].join('\n');
+
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from(contents, 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBe(true);
+  });
+
+  test('is true for the `exports.__esModule = true` assignment form', async () => {
+    const contents = [
+      'exports.__esModule = true;',
+      'exports.default = 42;',
+    ].join('\n');
+
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from(contents, 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBe(true);
+  });
+
+  test('is true for the sequence-expression assignment form (`@babel/runtime` helpers)', async () => {
+    // Shape emitted by every helper under `@babel/runtime/helpers/`:
+    //   module.exports = fn, module.exports.__esModule = true,
+    //     module.exports["default"] = module.exports;
+    const contents = [
+      'function _interopRequireDefault(e) { return e; }',
+      'module.exports = _interopRequireDefault,',
+      '  module.exports.__esModule = true,',
+      '  module.exports["default"] = module.exports;',
+    ].join('\n');
+
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from(contents, 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBe(true);
+  });
+
+  test('is unset (never false) for a module with no ESM marker but WITH dependencies', async () => {
+    // A module with any require call could resolve to an ES module at
+    // runtime (e.g. `module.exports = require('./esm-thing')`), so we can't
+    // rule out ESM interop without whole-graph analysis. The provably-not-ESM
+    // rule requires zero dependencies.
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from("var x = require('./other'); module.exports = x;", 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBeUndefined();
+  });
+
+  test('is false for a module with no ESM marker and no dependencies', async () => {
+    // Not ESM: no marker AND no dependencies means the module would have to
+    // be deliberately obfuscating emission of `__esModule` at runtime, this is
+    // sufficient proof of non-ESM for our purposes.
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('module.exports = 42;', 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBe(false);
+  });
+
+  test('is unset (never false) for a CommonJS re-export of an ES module', async () => {
+    // At runtime this module IS an ES module: it re-exports `./esm`, whose
+    // `exports.__esModule` is truthy. In isolation, though, the marker isn't
+    // statically visible here, so we must leave the hint unset rather than
+    // asserting a misleading `false` (a false negative).
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from("module.exports = require('./esm');", 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBeUndefined();
+  });
+
+  test('is false for a JSON module (trivially never an ES module)', async () => {
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.json',
+      Buffer.from('{"foo": 1}', 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(result.output[0].data.isESModule).toBe(false);
+  });
+
+  test('is unset (never false) for a module that only imports (no exports)', async () => {
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('import "./c";', 'utf8'),
+      {...baseTransformOptions, experimentalImportSupport: true},
+    );
+
+    expect(result.output[0].data.isESModule).toBeUndefined();
+  });
+
+  test('is unset (never false) for a script', async () => {
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('doStuff();', 'utf8'),
+      {...baseTransformOptions, type: 'script'},
+    );
+
+    expect(result.output[0].data.isESModule).toBeUndefined();
+  });
+});
+
 test('does not add "use strict" on non-modules', async () => {
   const result = await Transformer.transform(
     baseConfig,
