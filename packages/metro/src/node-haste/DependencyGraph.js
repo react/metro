@@ -22,9 +22,11 @@ import type {
   FileSystem,
   HasteMap,
   HealthCheckResult,
+  StaticFile,
   WatcherStatus,
   default as MetroFileMap,
 } from 'metro-file-map';
+import type {PackageJson} from 'metro-resolver/private/types';
 
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
@@ -35,7 +37,11 @@ import {
   PackageResolutionError,
 } from 'metro-core';
 import canonicalize from 'metro-core/private/canonicalize';
-import {DuplicateHasteCandidatesError} from 'metro-file-map';
+import {
+  DuplicateHasteCandidatesError,
+  NoopCacheManager,
+  createStaticCrawler,
+} from 'metro-file-map';
 import {InvalidPackageError} from 'metro-resolver';
 import EventEmitter from 'node:events';
 import path from 'node:path';
@@ -44,6 +50,46 @@ import nullthrows from 'nullthrows';
 const {createActionStartEntry, createActionEndEntry, log} = Logger;
 
 const NULL_PLATFORM = Symbol();
+
+function toStaticFiles(
+  files: Iterable<Readonly<{path: string, hasteId?: ?string}>>,
+): ReadonlyArray<StaticFile> {
+  const staticFiles: Array<StaticFile> = [];
+  for (const file of files) {
+    staticFiles.push({
+      path: file.path,
+      pluginData: file.hasteId != null ? {haste: file.hasteId} : null,
+    });
+  }
+  return staticFiles;
+}
+
+/**
+ * Options for building a graph from a known file listing rather than by
+ * crawling the filesystem. Unstable: the shape is still settling.
+ */
+export type StaticFileMapOptions = Readonly<{
+  /**
+   * Every file in the graph. Paths are absolute, or relative to
+   * `config.projectRoot`, using system separators.
+   *
+   * `hasteId` is registered as-is - unlike a crawl, it is not filtered by
+   * extension or by `node_modules`. Callers must apply their own policy.
+   */
+  files: Iterable<Readonly<{path: string, hasteId?: ?string}>>,
+
+  /**
+   * Supplies parsed `package.json` contents in place of reading them.
+   */
+  readPackageJson?: (absolutePackageJsonPath: string) => PackageJson,
+
+  /**
+   * Let `DuplicateHasteCandidatesError` and `InvalidPackageError` propagate
+   * from `resolveDependency` instead of being wrapped in
+   * `AmbiguousModuleResolutionError` / `PackageResolutionError`.
+   */
+  unstable_rawResolutionErrors?: boolean,
+}>;
 
 function getOrCreateMap<T>(
   map: Map<string | symbol, Map<string | symbol, T>>,
@@ -83,28 +129,63 @@ export default class DependencyGraph extends EventEmitter {
     >,
   >;
   _initializedPromise: Promise<void>;
+  #staticOptions: ?StaticFileMapOptions;
+
+  /**
+   * Build a graph from a known set of files, without crawling or reading the
+   * filesystem. Resolves once the graph is ready to use.
+   */
+  static async unstable_fromStaticFileMap(
+    config: ConfigT,
+    options: StaticFileMapOptions,
+  ): Promise<DependencyGraph> {
+    const graph = new DependencyGraph(config, {
+      unstable_staticFileMap: options,
+      watch: false,
+    });
+    await graph.ready();
+    return graph;
+  }
 
   constructor(
     config: ConfigT,
     options?: {
       readonly hasReducedPerformance?: boolean,
       readonly watch?: boolean,
+      readonly unstable_staticFileMap?: ?StaticFileMapOptions,
     },
   ) {
     super();
 
     this._config = config;
 
-    const {hasReducedPerformance, watch} = options ?? {};
-    const initializingMetroLogEntry = log(
-      createActionStartEntry('Initializing Metro'),
-    );
+    const {hasReducedPerformance, watch, unstable_staticFileMap} =
+      options ?? {};
+    this.#staticOptions = unstable_staticFileMap;
 
-    config.reporter.update({
-      type: 'dep_graph_loading',
-      hasReducedPerformance: !!hasReducedPerformance,
-    });
+    // Startup progress reporting describes crawling a filesystem and starting a
+    // server. Neither applies when the graph is built from a supplied listing,
+    // and consumers there may not have a terminal to report to.
+    const isStatic = unstable_staticFileMap != null;
+    const initializingMetroLogEntry = isStatic
+      ? null
+      : log(createActionStartEntry('Initializing Metro'));
+
+    if (!isStatic) {
+      config.reporter.update({
+        type: 'dep_graph_loading',
+        hasReducedPerformance: !!hasReducedPerformance,
+      });
+    }
     const {fileMap, hasteMap, dependencyPlugin} = createFileMap(config, {
+      // A supplied listing is already in memory - there is nothing to warm up.
+      cacheManagerFactory: isStatic ? () => new NoopCacheManager() : null,
+      crawlerFactory:
+        unstable_staticFileMap != null
+          ? createStaticCrawler({
+              files: toStaticFiles(unstable_staticFileMap.files),
+            })
+          : null,
       throwOnModuleCollision: false,
       watch,
     });
@@ -117,8 +198,10 @@ export default class DependencyGraph extends EventEmitter {
     this._haste.on('status', status => this._onWatcherStatus(status));
 
     this._initializedPromise = fileMap.build().then(({fileSystem}) => {
-      log(createActionEndEntry(initializingMetroLogEntry));
-      config.reporter.update({type: 'dep_graph_loaded'});
+      if (initializingMetroLogEntry != null) {
+        log(createActionEndEntry(initializingMetroLogEntry));
+        config.reporter.update({type: 'dep_graph_loaded'});
+      }
 
       this._fileSystem = fileSystem;
       this._hasteMap = hasteMap;
@@ -132,6 +215,7 @@ export default class DependencyGraph extends EventEmitter {
       this.#packageCache = new PackageCache({
         getClosestPackage: absoluteModulePath =>
           this._getClosestPackage(absoluteModulePath),
+        readPackageJson: this.#staticOptions?.readPackageJson,
       });
       this._createModuleResolver();
     });
@@ -165,9 +249,10 @@ export default class DependencyGraph extends EventEmitter {
   }
 
   _createModuleResolver() {
+    const fileSystem = this._fileSystem;
     this._moduleResolver = createModuleResolver({
       config: this._config,
-      fileSystem: this._fileSystem,
+      fileSystem,
       hasteMap: this._hasteMap,
       packageCache: this.#packageCache,
     });
@@ -295,6 +380,9 @@ export default class DependencyGraph extends EventEmitter {
           resolverOptions,
         );
       } catch (error) {
+        if (this.#staticOptions?.unstable_rawResolutionErrors === true) {
+          throw error;
+        }
         if (error instanceof DuplicateHasteCandidatesError) {
           throw new AmbiguousModuleResolutionError(originModulePath, error);
         }

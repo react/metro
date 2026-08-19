@@ -10,7 +10,12 @@
  */
 
 import type {ConfigT} from 'metro-config';
-import type {HasteMap, InputFileMapPlugin} from 'metro-file-map';
+import type {
+  CacheManagerFactory,
+  CrawlerFactory,
+  HasteMap,
+  InputFileMapPlugin,
+} from 'metro-file-map';
 
 import MetroFileMap, {
   DependencyPlugin,
@@ -54,6 +59,8 @@ export default function createFileMap(
     watch?: boolean,
     throwOnModuleCollision?: boolean,
     cacheFilePrefix?: string,
+    cacheManagerFactory?: ?CacheManagerFactory,
+    crawlerFactory?: ?CrawlerFactory,
   }>,
 ): {
   fileMap: MetroFileMap,
@@ -97,6 +104,7 @@ export default function createFileMap(
 
   const fileMap = new MetroFileMap({
     cacheManagerFactory:
+      options?.cacheManagerFactory ??
       config?.unstable_fileMapCacheManagerFactory ??
       (factoryParams =>
         new DiskCacheManager(factoryParams, {
@@ -105,6 +113,7 @@ export default function createFileMap(
           cacheFilePrefix: options?.cacheFilePrefix,
           autoSave,
         })),
+    crawlerFactory: options?.crawlerFactory,
     perfLoggerFactory: config.unstable_perfLoggerFactory,
     computeSha1: !config.watcher.unstable_lazySha1,
     enableSymlinks: true,
