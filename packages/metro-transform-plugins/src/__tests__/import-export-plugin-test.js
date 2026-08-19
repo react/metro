@@ -25,6 +25,12 @@ const opts = {
   importDefault: '_$$_IMPORT_DEFAULT',
 };
 
+const liveOpts = {
+  importAll: '_$$_IMPORT_ALL',
+  importDefault: '_$$_IMPORT_DEFAULT',
+  liveBindings: true,
+};
+
 test('correctly transforms and extracts "import" statements', () => {
   const code = `
     import v from 'foo';
@@ -530,6 +536,245 @@ test('re-export dependencies evaluate before module body at runtime', () => {
   expect(events).toEqual(['require foo', 'require bar', 'body']);
   expect(context.exports.value).toBe('foo value');
   expect(context.exports.star).toBe('bar star');
+});
+
+describe('unstable_liveBindings', () => {
+  test('the import side is untouched by this option', () => {
+    const code = `
+      import v from 'foo';
+      import {default as w} from 'bar';
+      import {x} from 'baz';
+    `;
+
+    const expected = `
+      var v = _$$_IMPORT_DEFAULT('foo');
+      var w = _$$_IMPORT_DEFAULT('bar');
+      var x = require('baz').x;
+    `;
+
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('reassigned named exports are mirrored into exports', () => {
+    const code = `
+      export let x = 1;
+      x = 2;
+      x += 3;
+      x++;
+      ++x;
+    `;
+
+    const expected = `
+      Object.defineProperty(exports, '__esModule', {
+        value: true
+      });
+      let x = 1;
+      exports.x = x = 2;
+      exports.x = x += 3;
+      exports.x = ++x;
+      exports.x = ++x;
+      exports.x = x;
+    `;
+
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('postfix update in value position preserves the old value', () => {
+    const code = `
+      export let x = 1;
+      export const y = x++;
+    `;
+
+    const expected = `
+      var _x;
+      Object.defineProperty(exports, '__esModule', {
+        value: true
+      });
+      let x = 1;
+      const y = (_x = x++, exports.x = x, _x);
+      exports.x = x;
+      exports.y = y;
+    `;
+
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('postfix update value and mirrored export agree at runtime', () => {
+    const transformedCode = generate(
+      transformToAst(
+        [importExportPlugin],
+        `
+          export let x = 0;
+          export function postfix() { return x++; }
+          export function prefix() { return ++x; }
+        `,
+        liveOpts,
+      ),
+    ).code;
+
+    const context = {
+      exports: {} as {[string]: $FlowFixMe},
+      require: () => ({}),
+    };
+
+    vm.runInNewContext(transformedCode, context);
+
+    // `x++` must evaluate to the pre-increment value while still publishing the
+    // post-increment value to `exports`.
+    expect(context.exports.postfix()).toBe(0);
+    expect(context.exports.x).toBe(1);
+    expect(context.exports.prefix()).toBe(2);
+    expect(context.exports.x).toBe(2);
+  });
+
+  test('exports aliased under multiple remote names are all mirrored', () => {
+    const code = `
+      let x = 1;
+      export {x, x as y};
+      x = 2;
+    `;
+
+    const expected = `
+      Object.defineProperty(exports, '__esModule', {
+        value: true
+      });
+      let x = 1;
+      exports.y = exports.x = x = 2;
+      exports.x = x;
+      exports.y = x;
+    `;
+
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('destructuring reassignment targets are left untouched (deferred)', () => {
+    const code = `
+      export let x = 1;
+      ({x} = {x: 2});
+    `;
+
+    const expected = `
+      Object.defineProperty(exports, '__esModule', {
+        value: true
+      });
+      let x = 1;
+      ({
+        x
+      } = {
+        x: 2
+      });
+      exports.x = x;
+    `;
+
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('mutable named exports are observable at runtime', () => {
+    const transformedCode = generate(
+      transformToAst(
+        [importExportPlugin],
+        `
+          export let counter = 0;
+          export function increment() { counter++; }
+          export function setCounter(v) { counter = v; }
+        `,
+        liveOpts,
+      ),
+    ).code;
+
+    const context = {
+      exports: {} as {[string]: $FlowFixMe},
+      require: () => ({}),
+    };
+
+    vm.runInNewContext(transformedCode, context);
+
+    expect(context.exports.counter).toBe(0);
+    context.exports.increment();
+    expect(context.exports.counter).toBe(1);
+    context.exports.setCounter(42);
+    expect(context.exports.counter).toBe(42);
+  });
+
+  test('named re-exports forward via live getters', () => {
+    const code = `export {x} from './foo';`;
+    const expected = `
+      Object.defineProperty(exports, '__esModule', {
+        value: true
+      });
+      Object.defineProperty(exports, "x", {
+        enumerable: true,
+        configurable: true,
+        get: function () {
+          return require('./foo').x;
+        }
+      });
+    `;
+    compare([importExportPlugin], code, expected, liveOpts);
+  });
+
+  test('re-exported named binding is observed live at runtime', () => {
+    const transformedCode = generate(
+      transformToAst(
+        [importExportPlugin],
+        `export {counter} from './source';`,
+        liveOpts,
+      ),
+    ).code;
+
+    const sourceExports = {counter: 1} as {[string]: $FlowFixMe};
+    const context = {
+      exports: {} as {[string]: $FlowFixMe},
+      require: (id: string) => {
+        if (id !== './source') {
+          throw new Error(`Unexpected module: ${id}`);
+        }
+        return sourceExports;
+      },
+    };
+
+    vm.runInNewContext(transformedCode, context);
+
+    expect(context.exports.counter).toBe(1);
+    // Reassignment in the source module is observed through the re-export.
+    sourceExports.counter = 42;
+    expect(context.exports.counter).toBe(42);
+  });
+
+  test('export * forwards live and respects explicit-export precedence', () => {
+    const transformedCode = generate(
+      transformToAst(
+        [importExportPlugin],
+        `
+          export * from './source';
+          export const own = 'own';
+        `,
+        liveOpts,
+      ),
+    ).code;
+
+    const sourceExports = {
+      a: 1,
+      own: 'star should not win',
+      default: 'star default',
+      __esModule: true,
+    } as {[string]: $FlowFixMe};
+    const context = {
+      exports: {} as {[string]: $FlowFixMe},
+      require: (_id: string) => sourceExports,
+    };
+
+    vm.runInNewContext(transformedCode, context);
+
+    expect(context.exports.a).toBe(1);
+    // Explicit export wins over `export *`.
+    expect(context.exports.own).toBe('own');
+    // `export *` never forwards `default` or `__esModule`.
+    expect(context.exports.default).toBeUndefined();
+    // Forwarded names are live.
+    sourceExports.a = 2;
+    expect(context.exports.a).toBe(2);
+  });
 });
 
 test('enables module exporting when something is exported', () => {

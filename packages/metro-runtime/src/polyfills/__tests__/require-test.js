@@ -904,6 +904,216 @@ describe('require', () => {
       moduleSystem.__r(0);
     });
 
+    test('mode=1 returns exports directly for ES6 modules (namespace-shaped return)', () => {
+      createModuleSystem(moduleSystem, false, '');
+
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          const ns = importDefault(1, 1);
+          expect(ns.default).toEqual({bar: 'bar'});
+          // For ESM, the helper returns exports itself (which has .default).
+          expect(ns).toBe(require(1));
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          exports.__esModule = true;
+          exports.default = {bar: 'bar'};
+          exports.other = 'other';
+        },
+      );
+
+      expect.assertions(2);
+      moduleSystem.__r(0);
+    });
+
+    test('mode=1 wraps CJS exports as {default: exports} (namespace-shaped return)', () => {
+      createModuleSystem(moduleSystem, false, '');
+
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          const ns = importDefault(1, 1);
+          expect(ns.default).toEqual({bar: 'bar'});
+          // Wrapper's .default IS the module's exports (for CJS).
+          expect(ns.default).toBe(require(1));
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          module.exports = {bar: 'bar'};
+        },
+      );
+
+      expect.assertions(2);
+      moduleSystem.__r(0);
+    });
+
+    test('mode=1 preserves CJS liveness for module.exports=X post-init reassignment', () => {
+      createModuleSystem(moduleSystem, false, '');
+
+      let saved;
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          // First read - captures the initial exports.
+          const first = importDefault(1, 1).default;
+          expect(first).toEqual({tag: 'initial'});
+
+          // Reassign source module.exports via saved reference (mimics a
+          // captured `module` in a lazy handler).
+          saved.exports = {tag: 'REASSIGNED'};
+
+          // Second read - must see the fresh exports, not the cached wrapper.
+          // The helper is non-memoising: each call re-invokes metroRequire
+          // (which returns publicModule.exports fresh) and rewraps.
+          const second = importDefault(1, 1).default;
+          expect(second).toEqual({tag: 'REASSIGNED'});
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          module.exports = {tag: 'initial'};
+          saved = module;
+        },
+      );
+
+      expect.assertions(2);
+      moduleSystem.__r(0);
+    });
+
+    test('mode=0/undefined keeps memoising, unchanged by the mode argument', () => {
+      // The legacy 1-arg path is deliberately left as it was: the first
+      // resolution is cached on the module definition and reused. This is the
+      // contrast to the mode=1 test above, and pins the fact that adding the
+      // mode argument did not alter behaviour for existing callers.
+      createModuleSystem(moduleSystem, false, '');
+
+      let saved;
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          const first = importDefault(1);
+          expect(first).toEqual({tag: 'initial'});
+
+          saved.exports = {tag: 'REASSIGNED'};
+
+          // Memoised: still the value captured on the first call.
+          const second = importDefault(1);
+          expect(second).toEqual({tag: 'initial'});
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          module.exports = {tag: 'initial'};
+          saved = module;
+        },
+      );
+
+      expect.assertions(2);
+      moduleSystem.__r(0);
+    });
+
+    test('mode=1 for ESM preserves live default reassignment', () => {
+      createModuleSystem(moduleSystem, false, '');
+
+      let sourceExports;
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          const first = importDefault(1, 1).default;
+          expect(first).toBe('a');
+
+          sourceExports.default = 'b';
+
+          // ESM path: helper returns exports directly. `.default` on that is
+          // a live property read.
+          const second = importDefault(1, 1).default;
+          expect(second).toBe('b');
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          exports.__esModule = true;
+          exports.default = 'a';
+          sourceExports = exports;
+        },
+      );
+
+      expect.assertions(2);
+      moduleSystem.__r(0);
+    });
+
+    test('mode=0/undefined preserves the legacy value-shaped return', () => {
+      createModuleSystem(moduleSystem, false, '');
+
+      createModule(
+        moduleSystem,
+        0,
+        'foo.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          // No mode arg = legacy behaviour = returns the value directly.
+          expect(importDefault(1)).toEqual({bar: 'bar'});
+          expect(importDefault(1, 0)).toEqual({bar: 'bar'});
+          expect(importDefault(2)).toBe(null);
+          expect(importDefault(2, 0)).toBe(null);
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        1,
+        'bar.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          exports.__esModule = true;
+          exports.default = {bar: 'bar'};
+        },
+      );
+
+      createModule(
+        moduleSystem,
+        2,
+        'nullcjs.js',
+        (global, require, importDefault, importAll, module, exports) => {
+          module.exports = null;
+        },
+      );
+
+      expect.assertions(4);
+      moduleSystem.__r(0);
+    });
+
     test('supports named imports', () => {
       createModuleSystem(moduleSystem, false, '');
 
