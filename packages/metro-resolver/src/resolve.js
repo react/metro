@@ -844,7 +844,7 @@ function resolveSourceFileForExt(
 }
 
 function isRelativeImport(filePath: string) {
-  return /^[.][.]?(?:[/]|$)/.test(filePath);
+  return /^\.\.?(?:\/|\\|$)/.test(filePath);
 }
 
 function isSubpathImport(filePath: string) {
