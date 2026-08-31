@@ -12,7 +12,6 @@ jest.mock('../../../Assets');
 
 import {getAssetData, getAssetUrlPath} from '../../../Assets';
 import getAssets from '../getAssets';
-import path from 'node:path';
 
 beforeEach(() => {
   getAssetData.mockImplementation(async (path, localPath) => ({
@@ -111,7 +110,7 @@ test('should return the bundle assets', async () => {
     {path: '/tmp/5.mov', localPath: '5.mov'},
     {
       path: '/external/6.png',
-      localPath: path.join('[metro-watchFolders]', '1', '6.png'),
+      localPath: '[metro-watchFolders]/1/6.png',
     },
   ]);
 });
