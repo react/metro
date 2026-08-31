@@ -450,6 +450,7 @@ export default class Server {
       platform,
       projectRoot: this._getServerRootDir(),
       publicPath: this._config.transformer.publicPath,
+      watchFolders: this._config.watchFolders,
     });
   }
 
@@ -570,9 +571,12 @@ export default class Server {
 
     try {
       const depGraph = await this._bundler.getBundler().getDependencyGraph();
+      const resolvedAssetPath = this._resolveWatchFolderPrefix(
+        './' + assetPath,
+      );
       const data = await getAsset(
-        assetPath,
-        this._config.projectRoot,
+        resolvedAssetPath?.filePath ?? assetPath,
+        resolvedAssetPath?.rootDir ?? this._config.projectRoot,
         this._config.watchFolders,
         urlObj.searchParams.get('platform'),
         this._config.resolver.assetExts,
@@ -1372,6 +1376,7 @@ export default class Server {
         platform: transformOptions.platform,
         publicPath: this._config.transformer.publicPath,
         projectRoot: this._config.projectRoot,
+        watchFolders: this._config.watchFolders,
       });
     },
     finish({mres, result}) {

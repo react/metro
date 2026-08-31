@@ -243,6 +243,43 @@ export async function getAssetData(
   return await applyAssetDataPlugins(assetDataPlugins, assetData);
 }
 
+/**
+ * Returns the path used to identify an asset in its development server URL.
+ * Assets outside projectRoot use an indexed watch folder prefix so that the
+ * URL unambiguously identifies their configured root.
+ */
+export function getAssetUrlPath(
+  assetPath: string,
+  projectRoot: string,
+  watchFolders: ReadonlyArray<string>,
+): string {
+  const projectRelativePath = path.relative(projectRoot, assetPath);
+  if (isPathInsideRoot(projectRelativePath)) {
+    return projectRelativePath;
+  }
+
+  for (let i = 0; i < watchFolders.length; i++) {
+    const watchFolderRelativePath = path.relative(watchFolders[i], assetPath);
+    if (isPathInsideRoot(watchFolderRelativePath)) {
+      return path.join(
+        '[metro-watchFolders]',
+        String(i),
+        watchFolderRelativePath,
+      );
+    }
+  }
+
+  return projectRelativePath;
+}
+
+function isPathInsideRoot(relativePath: string): boolean {
+  return (
+    relativePath !== '..' &&
+    !relativePath.startsWith('..' + path.sep) &&
+    !path.isAbsolute(relativePath)
+  );
+}
+
 async function applyAssetDataPlugins(
   assetDataPlugins: ReadonlyArray<string>,
   assetData: AssetData,

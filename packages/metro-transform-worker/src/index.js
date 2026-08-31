@@ -162,6 +162,7 @@ type JSONFile = {
 };
 
 type TransformationContext = Readonly<{
+  assetUrlPath?: string,
   config: JsTransformerConfig,
   projectRoot: AbsolutePath,
   options: JsTransformOptions,
@@ -537,6 +538,7 @@ async function transformAsset(
     getBabelTransformArgs(file, context),
     assetRegistryPath,
     assetPlugins,
+    context.assetUrlPath,
   );
 
   const jsFile = {
@@ -677,8 +679,10 @@ export const transform = async (
   projectRelativePath: string,
   data: Buffer,
   options: JsTransformOptions,
+  assetUrlPath?: string,
 ): Promise<TransformResponse> => {
   const context: TransformationContext = {
+    assetUrlPath,
     config,
     options,
     projectRoot,

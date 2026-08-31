@@ -20,7 +20,12 @@ jest.mock('../lib/imageSize', () => ({
 
 jest.useRealTimers();
 
-const {getAsset, getAssetData, getAssetSize} = require('../Assets');
+const {
+  getAsset,
+  getAssetData,
+  getAssetSize,
+  getAssetUrlPath,
+} = require('../Assets');
 const getImageDimensions = require('../lib/imageSize').getImageDimensions;
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -29,6 +34,26 @@ const fs = jest.requireMock('node:fs');
 
 const mockImageWidth = 300;
 const mockImageHeight = 200;
+
+describe('getAssetUrlPath', () => {
+  test('uses a project-relative path for assets within projectRoot', () => {
+    expect(
+      getAssetUrlPath('/root/imgs/a.png', '/root', ['/root', '/external']),
+    ).toBe(path.join('imgs', 'a.png'));
+  });
+
+  test('uses an indexed path for assets within a watch folder', () => {
+    expect(
+      getAssetUrlPath('/external/imgs/a.png', '/root', ['/root', '/external']),
+    ).toBe(path.join('[metro-watchFolders]', '1', 'imgs', 'a.png'));
+  });
+
+  test('falls back to a project-relative path outside configured roots', () => {
+    expect(
+      getAssetUrlPath('/other/imgs/a.png', '/root', ['/root', '/external']),
+    ).toBe(path.join('..', 'other', 'imgs', 'a.png'));
+  });
+});
 
 describe('getAssetSize', () => {
   test('returns null for non-image assets', () => {

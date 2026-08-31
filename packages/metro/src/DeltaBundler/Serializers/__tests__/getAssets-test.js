@@ -10,14 +10,18 @@
 
 jest.mock('../../../Assets');
 
-import {getAssetData} from '../../../Assets';
+import {getAssetData, getAssetUrlPath} from '../../../Assets';
 import getAssets from '../getAssets';
+import path from 'node:path';
 
 beforeEach(() => {
   getAssetData.mockImplementation(async (path, localPath) => ({
     path,
     localPath,
   }));
+  getAssetUrlPath.mockImplementation(
+    jest.requireActual('../../../Assets').getAssetUrlPath,
+  );
 });
 
 test('should return the bundle assets', async () => {
@@ -82,16 +86,32 @@ test('should return the bundle assets', async () => {
         ],
       },
     ],
+    [
+      '/external/6.png',
+      {
+        path: '/external/6.png',
+        output: [
+          {
+            type: 'js/module/asset',
+            data: {code: '//', lineCount: 1, map: [], functionMap: null},
+          },
+        ],
+      },
+    ],
   ]);
 
   expect(
     await getAssets(dependencies, {
       projectRoot: '/tmp',
-      watchFolders: ['/tmp'],
+      watchFolders: ['/tmp', '/external'],
       processModuleFilter: () => true,
     }),
   ).toEqual([
     {path: '/tmp/3.png', localPath: '3.png'},
     {path: '/tmp/5.mov', localPath: '5.mov'},
+    {
+      path: '/external/6.png',
+      localPath: path.join('[metro-watchFolders]', '1', '6.png'),
+    },
   ]);
 });

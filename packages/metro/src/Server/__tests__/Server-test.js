@@ -893,6 +893,24 @@ describe('processRequest', () => {
       );
     });
 
+    test('should resolve an indexed watch folder asset path', async () => {
+      getAsset.mockResolvedValue(Promise.resolve('i am image'));
+
+      const response = await makeRequest(
+        '/assets/[metro-watchFolders]/0/imgs/a.png?platform=ios',
+      );
+      expect(response._getString()).toBe('i am image');
+
+      expect(getAsset).toBeCalledWith(
+        './imgs/a.png',
+        '/root',
+        ['/root'],
+        'ios',
+        expect.any(Array),
+        expect.any(Function),
+      );
+    });
+
     test('should serve range request', async () => {
       const mockData = 'i am image';
       getAsset.mockResolvedValue(mockData);
