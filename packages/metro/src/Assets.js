@@ -255,21 +255,19 @@ export function getAssetUrlPath(
 ): string {
   const projectRelativePath = path.relative(projectRoot, assetPath);
   if (isPathInsideRoot(projectRelativePath)) {
-    return projectRelativePath;
+    return normalizePathSeparatorsToPosix(projectRelativePath);
   }
 
   for (let i = 0; i < watchFolders.length; i++) {
     const watchFolderRelativePath = path.relative(watchFolders[i], assetPath);
     if (isPathInsideRoot(watchFolderRelativePath)) {
-      return path.join(
-        '[metro-watchFolders]',
-        String(i),
-        watchFolderRelativePath,
+      return normalizePathSeparatorsToPosix(
+        path.join('[metro-watchFolders]', String(i), watchFolderRelativePath),
       );
     }
   }
 
-  return projectRelativePath;
+  return normalizePathSeparatorsToPosix(projectRelativePath);
 }
 
 function isPathInsideRoot(relativePath: string): boolean {
