@@ -165,7 +165,7 @@ class SymbolicationContext<ModuleIdsT> {
   //  IOS: foo.js:57:foo, Android: bar.js:75:bar
   symbolicate(stackTrace: string): string {
     return stackTrace.replace(
-      /(?:([^@: \n(]+)(@|:))?(?:(?:([^@: \n(]+):)?(\d+):(\d+)|\[native code\])/g,
+      /(?:([^@: \n(]+)(@|:))?(?:(?:([^@: \n(]+):)?(\d+):(\d+)|\[native code\](?::\d+:\d+)?)/g,
       (match, func, delimiter, fileName, line, column) => {
         if (delimiter === ':' && func && !fileName) {
           fileName = func;
@@ -694,10 +694,25 @@ class SingleMapSymbolicationContext extends SymbolicationContext<SingleMapModule
       }
       moduleLineOffset = moduleOffsets[localId];
     }
-    const original = metadata.consumer.originalPositionFor({
-      line: Number(lineNumber) + moduleLineOffset,
-      column: Number(columnNumber),
-    });
+    const line = Number(lineNumber) + moduleLineOffset;
+    const column = Number(columnNumber);
+
+    // Crash reporters normalise frames that have no JS location - native
+    // frames in particular - to line 0, column 0. `originalPositionFor` throws
+    // on an out-of-range position, so report these as unresolved instead,
+    // matching what we already do for a bare `[native code]` frame.
+    if (line <= 0 || column < 0) {
+      return {
+        line: null,
+        column: null,
+        source: null,
+        functionName: null,
+        name: null,
+        isIgnored: false,
+      };
+    }
+
+    const original = metadata.consumer.originalPositionFor({line, column});
     if (metadata.sourceFunctionsConsumer) {
       original.functionName =
         metadata.sourceFunctionsConsumer.functionNameFor(original) || null;
