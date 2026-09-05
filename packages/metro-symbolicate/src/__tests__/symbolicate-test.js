@@ -215,6 +215,11 @@ test('symbolicating a stack trace in Node format', async () =>
     execute([TESTFILE_MAP], read('testfile.node.stack')),
   ).resolves.toMatchSnapshot());
 
+test('symbolicating a crash reporter stack trace with 0:0 native frames', async () =>
+  await expect(
+    execute([TESTFILE_MAP], read('testfile.crashreporter.stack')),
+  ).resolves.toMatchSnapshot());
+
 test('symbolicating a single entry', async () =>
   await expect(execute([TESTFILE_MAP, '1', '161'])).resolves.toEqual(
     'thrower.js:18:null\n',
