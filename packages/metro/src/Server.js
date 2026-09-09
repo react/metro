@@ -449,7 +449,10 @@ export default class Server {
       processModuleFilter: this._config.serializer.processModuleFilter,
       assetPlugins: this._config.transformer.assetPlugins,
       platform,
-      projectRoot: this._getServerRootDir(),
+      // Asset URLs are anchored on projectRoot, not the server root: the
+      // /assets endpoint resolves a bare relative path against projectRoot,
+      // and [metro-project] means projectRoot in _sourceRequestRoutingMap.
+      projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
     });
   }
@@ -1369,13 +1372,10 @@ export default class Server {
         {onProgress, shallow: false, lazy: false},
       );
 
-      return await getAssets(dependencies, {
-        processModuleFilter: this._config.serializer.processModuleFilter,
-        assetPlugins: this._config.transformer.assetPlugins,
-        platform: transformOptions.platform,
-        publicPath: this._config.transformer.publicPath,
-        projectRoot: this._config.projectRoot,
-      });
+      return await this._getAssetsFromDependencies(
+        dependencies,
+        transformOptions.platform,
+      );
     },
     finish({mres, result}) {
       mres.setHeader('Content-Type', 'application/json');
