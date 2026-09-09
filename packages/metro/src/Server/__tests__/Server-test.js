@@ -63,6 +63,7 @@ describe('processRequest', () => {
   let getTransformFn;
   let getResolveDependencyFn;
   let getAsset;
+  let getAssetsSerializer;
 
   beforeEach(() => {
     jest.resetModules();
@@ -76,6 +77,7 @@ describe('processRequest', () => {
     getTransformFn = jest.fn();
     getResolveDependencyFn = jest.fn();
     getAsset = jest.fn();
+    getAssetsSerializer = jest.fn().mockResolvedValue([]);
 
     let i = 0;
     jest.doMock('node:crypto', () => ({
@@ -113,6 +115,11 @@ describe('processRequest', () => {
       .spyOn(DeltaBundler.prototype, 'buildGraph')
       .mockImplementation(buildGraph);
     jest.spyOn(DeltaBundler.prototype, 'getDelta').mockImplementation(getDelta);
+
+    jest.doMock('../../DeltaBundler/Serializers/getAssets', () => ({
+      __esModule: true,
+      default: getAssetsSerializer,
+    }));
 
     Server = require('../../Server').default;
   });
@@ -894,6 +901,24 @@ describe('processRequest', () => {
       );
     });
 
+    test('should resolve an indexed watch folder asset path', async () => {
+      getAsset.mockResolvedValue(Promise.resolve('i am image'));
+
+      const response = await makeRequest(
+        '/assets/[metro-watchFolders]/0/imgs/a.png?platform=ios',
+      );
+      expect(response._getString()).toBe('i am image');
+
+      expect(getAsset).toBeCalledWith(
+        './imgs/a.png',
+        '/root',
+        ['/root'],
+        'ios',
+        expect.any(Array),
+        expect.any(Function),
+      );
+    });
+
     test('should serve range request', async () => {
       const mockData = 'i am image';
       getAsset.mockResolvedValue(mockData);
@@ -1521,6 +1546,27 @@ describe('processRequest', () => {
     );
   });
 
+  describe('asset URL roots', () => {
+    test('anchors asset URLs on projectRoot, not unstable_serverRoot', async () => {
+      // $FlowFixMe[unclear-type] - reaching for a private method under test.
+      const serverRootServer: any = new Server(
+        mergeConfig(config, {
+          server: {unstable_serverRoot: '/'},
+        } as InputConfigT),
+      );
+
+      await serverRootServer._getAssetsFromDependencies(new Map(), 'ios');
+
+      expect(getAssetsSerializer).toBeCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          projectRoot: '/root',
+          watchFolders: ['/root'],
+        }),
+      );
+    });
+  });
+
   describe('watchFolder prefix resolution', () => {
     let watchFolderServer: $FlowFixMe;
 
@@ -1602,5 +1648,32 @@ describe('processRequest', () => {
         '/project/mybundle',
       );
     });
+
+    test.each([
+      '/project/imgs/a.png',
+      '/project/nested/deep/b.png',
+      '/external/packages/imgs/c.png',
+      '/external/packages/d.png',
+    ])(
+      'asset URL path for %s round-trips back to the same file',
+      absolutePath => {
+        const {getAssetUrlPath} = require('../../Assets');
+        const urlPath = getAssetUrlPath(absolutePath, '/project', [
+          '/project',
+          '/external/packages',
+        ]);
+
+        // Mirrors how _processSingleAssetRequest resolves an incoming URL.
+        const resolved = watchFolderServer._resolveWatchFolderPrefix(
+          './' + urlPath,
+        );
+        expect(
+          path.resolve(
+            resolved?.rootDir ?? '/project',
+            resolved?.filePath ?? urlPath,
+          ),
+        ).toBe(absolutePath);
+      },
+    );
   });
 });
