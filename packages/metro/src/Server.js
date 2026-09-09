@@ -454,6 +454,7 @@ export default class Server {
       // and [metro-project] means projectRoot in _sourceRequestRoutingMap.
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
+      watchFolders: this._config.watchFolders,
     });
   }
 
@@ -574,9 +575,12 @@ export default class Server {
 
     try {
       const depGraph = await this._bundler.getBundler().getDependencyGraph();
+      const resolvedAssetPath = this._resolveWatchFolderPrefix(
+        './' + assetPath,
+      );
       const data = await getAsset(
-        assetPath,
-        this._config.projectRoot,
+        resolvedAssetPath?.filePath ?? assetPath,
+        resolvedAssetPath?.rootDir ?? this._config.projectRoot,
         this._config.watchFolders,
         urlObj.searchParams.get('platform'),
         this._config.resolver.assetExts,
