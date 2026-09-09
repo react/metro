@@ -20,6 +20,7 @@ export async function transform(
   {filename, options, src}: BabelTransformerArgs,
   assetRegistryPath: string,
   assetDataPlugins: ReadonlyArray<string>,
+  assetUrlPath?: string,
 ): Promise<{ast: File, ...}> {
   options = options || {
     platform: '',
@@ -32,7 +33,7 @@ export async function transform(
 
   const data = await getAssetData(
     absolutePath,
-    filename,
+    assetUrlPath ?? filename,
     assetDataPlugins,
     options.platform,
     options.publicPath,
