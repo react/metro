@@ -22,6 +22,7 @@ jest
 const Transformer = require('../Transformer').default;
 const {getDefaultValues} = require('metro-config').getDefaultConfig;
 const {mergeConfig} = require('metro-config/private/loadConfig');
+const path = require('node:path');
 
 const fs = jest.requireMock('node:fs');
 
@@ -214,5 +215,38 @@ describe('Transformer', function () {
     await transformerInstance.transformFile('./foo.js', {});
 
     expect(require('../getTransformCacheKey')).not.toBeCalled();
+  });
+
+  test('passes an indexed watch folder URL path to asset transforms', async () => {
+    const workerTransform =
+      require('../WorkerFarm').default.prototype.transform;
+    workerTransform.mockClear();
+    workerTransform.mockReturnValue({
+      sha1: 'abcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      result: {},
+    });
+    fs.mkdirSync('/external', {recursive: true});
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [],
+        watchFolders: ['/root', '/external'],
+      },
+      {getOrComputeSha1},
+    );
+
+    await transformerInstance.transformFile('/external/imgs/a.png', {
+      type: 'asset',
+    });
+
+    expect(workerTransform).toHaveBeenCalledWith(
+      path.join('..', 'external', 'imgs', 'a.png'),
+      {
+        type: 'asset',
+        assetUrlPath: '[metro-watchFolders]/1/imgs/a.png',
+      },
+      undefined,
+    );
   });
 });

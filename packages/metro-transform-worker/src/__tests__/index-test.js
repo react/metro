@@ -135,6 +135,27 @@ test('transforms a simple module', async () => {
   expect(result.dependencies).toEqual([]);
 });
 
+test('uses the indexed watch folder path for asset URLs', async () => {
+  fs.mkdirSync('/root/external', {recursive: true});
+  fs.writeFileSync('/root/external/test.mp4', 'asset data');
+
+  const result = await Transformer.transform(
+    baseConfig,
+    '/root',
+    'external/test.mp4',
+    Buffer.from('asset data'),
+    {
+      ...baseTransformOptions,
+      type: 'asset',
+    },
+    {assetUrlPath: '[metro-watchFolders]/1/test.mp4'},
+  );
+
+  expect(result.output[0].data.code).toContain(
+    '"httpServerLocation": "/assets/[metro-watchFolders]/1"',
+  );
+});
+
 test('transforms a module with dependencies', async () => {
   const contents = [
     '"use strict";',

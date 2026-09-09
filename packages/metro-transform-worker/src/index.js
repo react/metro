@@ -133,6 +133,15 @@ export type JsTransformOptions = Readonly<{
   unstable_transformProfile: TransformProfile,
 }>;
 
+/**
+ * Inputs computed by Metro and passed alongside the public transform options.
+ * Kept out of JsTransformOptions because those are spread into
+ * BabelTransformerArgs, and these are for the default transformer only.
+ */
+export type TransformExtras = Readonly<{
+  assetUrlPath?: string,
+}>;
+
 opaque type AbsolutePath = string;
 opaque type ProjectRelativePath = string;
 
@@ -164,6 +173,7 @@ type JSONFile = {
 
 type TransformationContext = Readonly<{
   config: JsTransformerConfig,
+  extras: TransformExtras,
   projectRoot: AbsolutePath,
   options: JsTransformOptions,
 }>;
@@ -538,6 +548,7 @@ async function transformAsset(
     getBabelTransformArgs(file, context),
     assetRegistryPath,
     assetPlugins,
+    context.extras.assetUrlPath,
   );
 
   const jsFile = {
@@ -678,8 +689,10 @@ export const transform = async (
   projectRelativePath: string,
   data: Buffer,
   options: JsTransformOptions,
+  extras?: TransformExtras = {},
 ): Promise<TransformResponse> => {
   const context: TransformationContext = {
+    extras,
     config,
     options,
     projectRoot,
