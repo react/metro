@@ -386,7 +386,7 @@ describe('Buck worker:', () => {
       });
     });
 
-    test('responds with success if the command finishes succesfully', () => {
+    test('responds with success if the command finishes successfully', () => {
       commands.transform = (args, _) => {};
       mockFiles({path: {to: {args: 'transform'}}});
       inStream.write(
