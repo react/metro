@@ -46,7 +46,12 @@ export default class Bundler {
           type: 'transformer_load_failed',
           error,
         });
+        throw error;
       });
+
+    // Observe initialization failures immediately so callers can await the
+    // original promise later without triggering an unhandled rejection.
+    this._initializedPromise.catch(() => {});
   }
 
   getWatcher(): EventEmitter {
