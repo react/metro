@@ -122,6 +122,85 @@ describe('Metro development server serves bundles via HTTP', () => {
     );
   });
 
+  // TODO(T000000): Fix virtual-prefix URL resolution on Windows.
+  // path.sep differences cause entry point resolution to fail.
+  (process.platform === 'win32' ? test.skip : test)(
+    'should serve bundles with [metro-watchFolders] entry point',
+    async () => {
+      expect(
+        await downloadAndExec(
+          '/[metro-watchFolders]/1/metro/src/integration_tests/basic_bundle/TestBundle.bundle?platform=ios&dev=true&minify=false',
+        ),
+      ).toBeDefined();
+    },
+  );
+
+  (process.platform === 'win32' ? test.skip : test)(
+    'should serve bundles with [metro-project] entry point',
+    async () => {
+      expect(
+        await downloadAndExec(
+          '/[metro-project]/TestBundle.bundle?platform=ios&dev=true&minify=false',
+        ),
+      ).toBeDefined();
+    },
+  );
+
+  (process.platform === 'win32' ? test.skip : test)(
+    '[metro-project] source map resolves same modules as non-prefixed',
+    async () => {
+      const directResponse = await fetchAndClose(
+        'http://localhost:' +
+          httpServer.address().port +
+          '/TestBundle.map?platform=ios&dev=true&minify=false',
+      );
+      const prefixedResponse = await fetchAndClose(
+        'http://localhost:' +
+          httpServer.address().port +
+          '/[metro-project]/TestBundle.map?platform=ios&dev=true&minify=false',
+      );
+      expect(directResponse.ok).toBe(true);
+      expect(prefixedResponse.ok).toBe(true);
+      const directMap = await directResponse.json();
+      const prefixedMap = await prefixedResponse.json();
+      expect([...prefixedMap.sources].sort()).toEqual(
+        [...directMap.sources].sort(),
+      );
+    },
+  );
+
+  (process.platform === 'win32' ? test.skip : test)(
+    '[metro-watchFolders] source map resolves same modules as non-prefixed',
+    async () => {
+      const directResponse = await fetchAndClose(
+        'http://localhost:' +
+          httpServer.address().port +
+          '/TestBundle.map?platform=ios&dev=true&minify=false',
+      );
+      const watchFolderResponse = await fetchAndClose(
+        'http://localhost:' +
+          httpServer.address().port +
+          '/[metro-watchFolders]/1/metro/src/integration_tests/basic_bundle/TestBundle.map?platform=ios&dev=true&minify=false',
+      );
+      expect(directResponse.ok).toBe(true);
+      expect(watchFolderResponse.ok).toBe(true);
+      const directMap = await directResponse.json();
+      const watchFolderMap = await watchFolderResponse.json();
+      expect([...watchFolderMap.sources].sort()).toEqual(
+        [...directMap.sources].sort(),
+      );
+    },
+  );
+
+  test('responds with 404 for [metro-watchFolders] with out-of-bounds index', async () => {
+    const response = await fetchAndClose(
+      'http://localhost:' +
+        httpServer.address().port +
+        '/[metro-watchFolders]/99/TestBundle.bundle?platform=ios&dev=true&minify=false',
+    );
+    expect(response.status).toBe(404);
+  });
+
   test('responds with 404 when the bundle cannot be resolved', async () => {
     const response = await fetchAndClose(
       'http://localhost:' + httpServer.address().port + '/doesnotexist.bundle',
