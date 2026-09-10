@@ -449,9 +449,6 @@ export default class Server {
       processModuleFilter: this._config.serializer.processModuleFilter,
       assetPlugins: this._config.transformer.assetPlugins,
       platform,
-      // Asset URLs are anchored on projectRoot, not the server root: the
-      // /assets endpoint resolves a bare relative path against projectRoot,
-      // and [metro-project] means projectRoot in _sourceRequestRoutingMap.
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
     });
