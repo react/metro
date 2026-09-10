@@ -51,6 +51,7 @@ const siteConfig = {
   url: 'https://metrobundler.dev',
   baseUrl: '/',
   favicon: 'img/favicon.png',
+  onBrokenAnchors: 'throw',
   themeConfig: {
     navbar: {
       title: 'Metro',

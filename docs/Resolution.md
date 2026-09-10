@@ -70,7 +70,7 @@ Parameters: (*context*, *moduleName*, *platform*)
     1. Throw an error. This will be replaced with subpath imports support in a non-breaking future release.
 4. If *moduleName* parses as a URL, let *scheme* be the lowercased scheme (the prefix before `':'`), then
     1. If [`context.schemeResolvers`](#schemeresolvers-readonlyscheme-string-customresolver) has a resolver registered for *scheme*, return the result of calling it with (*context*, *moduleName*, *platform*), where *context.resolveRequest* is set to the default resolver for chaining.
-    2. Otherwise, continue to the following steps, but if none of them resolve *moduleName*, throw a scheme-specific error at step 11 rather than a generic resolution failure. (This fallback exists for backwards compatibility with projects using scheme-like specifiers via Haste or [`extraNodeModules`](#extranodemodules), and is deprecated.)
+    2. Otherwise, continue to the following steps, but if none of them resolve *moduleName*, throw a scheme-specific error at step 11 rather than a generic resolution failure. (This fallback exists for backwards compatibility with projects using scheme-like specifiers via Haste or [`extraNodeModules`](#extranodemodules-string-string), and is deprecated.)
 5. Apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to *moduleName*. If this is `false`:
     1. Return the empty module.
 6. If [Haste resolutions are allowed](#allowhaste-boolean), then
@@ -78,10 +78,10 @@ Parameters: (*context*, *moduleName*, *platform*)
     2. If resolved as a Haste package path, then
         1. Perform the algorithm for resolving a path (step 2 above). Throw an error if this resolution fails.
             For example, if the Haste package path for `'a/b'` is `foo/package.json`, perform step 2 as if _moduleName_ was `foo/c`.
-7. If [`context.enablePackageExports`](#enablepackageexports-boolean) is enabled, then
+7. If [`context.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled, then
     1. Get the result of [**PACKAGE_SELF_RESOLVE**](#package_self_resolve)(*context*, *moduleName*, *platform*).
     2. If resolved, return result.
-8. If [`context.disableHierarchicalLookup`](#disableHierarchicalLookup-boolean) is not `true`, then
+8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
     1. Try resolving _moduleName_ under `node_modules` from the current directory (i.e. parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory.
     2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
 9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
@@ -111,7 +111,7 @@ Parameters: (*context*, *moduleName*, *platform*)
 
 Parameters: (*context*, *moduleName*, *platform*)
 
-1. If `context.enablePackageExports` is enabled, and a containing `package.json` file contains the field `"exports"`, get result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package-exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*).
+1. If `context.unstable_enablePackageExports` is enabled, and a containing `package.json` file contains the field `"exports"`, get result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*).
     1. If resolved path exists, return result.
     2. Else, log either a package configuration or package encapsulation warning.
 2. Return the result of [**RESOLVE_MODULE**](#resolve_module)(*context*, *filePath*, *platform*).
@@ -124,7 +124,7 @@ Parameters: (*context*, *moduleName*, *platform*)
 2. If the package does not declare both a `"name"` field and an `"exports"` field, return no resolution.
 3. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
 4. If the package name does not match the current package's `"name"` field, return no resolution.
-5. Get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package-exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*) against the current package's `"exports"` field.
+5. Get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*) against the current package's `"exports"` field.
     1. If resolved path exists, return result.
     2. Else, log either a package configuration or package encapsulation warning, then continue with normal resolution.
 
@@ -149,8 +149,8 @@ Parameters: (*context*, *filePath*, *platform*)
 
 1. If the path refers to an [asset](#assetexts-readonlysetstring), then
     1. Return the result of [**RESOLVE_ASSET**](#resolve_asset)(*context*, *filePath*, *platform*).
-2. Otherwise, if the path [exists](#doesfileexist-string--boolean), then
-    1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first one that [exists](#doesfileexist-string--boolean) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try this sequence of potential file names:
+2. Otherwise, if the path [exists](#doesfileexist-string--boolean-deprecated), then
+    1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first one that [exists](#doesfileexist-string--boolean-deprecated) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try this sequence of potential file names:
         1. _moduleName_ + `'.android.js'`
         2. _moduleName_ + `'.native.js'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
         3. _moduleName_ + `'.js'`
@@ -301,7 +301,7 @@ Any custom options passed to the resolver. By default, Metro populates this base
 
 #### `resolveRequest: CustomResolver`
 
-A alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolvereqeuest).
+A alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolverequest).
 
 Metro expects `resolveRequest` to have the following signature:
 
@@ -366,7 +366,7 @@ Resolver results may be cached under the following conditions:
 
 1. For given origin module paths _A_ and _B_ and target module name _M_, the resolution for _M_ may be reused if **all** of the following conditions hold:
     1. _A_ and _B_ are in the same directory.
-    2. The contents of [`dev`](#dev) and [`customResolverOptions`](#customresolveroptions-string-mixed) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
+    2. The contents of [`dev`](#dev-boolean) and [`customResolverOptions`](#customresolveroptions-string-mixed) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
 2. Any cache of resolutions must be invalidated if any file in the project has changed.
 
 Custom resolvers must adhere to these assumptions, e.g. they may not return different resolutions for origin modules in the same directory under the same `customResolverOptions`.

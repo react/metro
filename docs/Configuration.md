@@ -233,6 +233,12 @@ Type: `Array<string>`
 
 The list of asset file extensions to include in the bundle. For example, including `'ttf'` allows Metro bundles to reference `.ttf` files. This is used primarily to enable React Native's [image asset support](https://reactnative.dev/docs/images). The default list includes many common image, video and audio file extensions. See [Metro's source code](https://github.com/facebook/metro/blob/main/packages/metro-config/src/defaults/defaults.js#L16) for the full list.
 
+#### `assetResolutions`
+
+Type: `Array<string>` (default: `['1', '1.5', '2', '3', '4']`)
+
+The list of asset density suffixes Metro will look for when resolving an asset. For each entry, the default `resolveAsset` implementation tries `${assetName}@${resolution}x${extension}` alongside the unsuffixed file, so `icon.png` also matches `icon@2x.png` and `icon@3x.png`.
+
 #### `sourceExts`
 
 Type: `Array<string>`
