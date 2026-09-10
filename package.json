@@ -4,7 +4,6 @@
   "private": true,
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@babel/plugin-syntax-class-properties": "^7.12.13",
     "@babel/plugin-transform-flow-strip-types": "^7.25.2",
     "@babel/plugin-transform-modules-commonjs": "^7.24.8",
     "@babel/plugin-transform-react-jsx": "^7.25.2",

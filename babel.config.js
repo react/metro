@@ -22,7 +22,6 @@ const plugins = [
   'babel-plugin-transform-flow-enums',
   '@babel/plugin-transform-flow-strip-types',
   '@babel/plugin-transform-modules-commonjs',
-  '@babel/plugin-syntax-class-properties',
   '@babel/plugin-transform-react-jsx',
 ];
 
