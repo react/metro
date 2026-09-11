@@ -1,12 +1,14 @@
-name: facebook/metro/build-test-and-deploy
+name: react/metro/build-test-and-deploy
 on:
   pull_request:
-    types: [opened, synchronize]
   push:
+    branches:
+      - main
     tags:
 # The job is triggered for any tag push. Tag format validation will be done
 # as part of the deploy job for clearer error reporting for bad tag formatting
       - '**'
+  workflow_dispatch:
 
 # ref us unique per PR (refs/pull/<pr_number>/merge)
 # and per pushed tag (refs/tags/<tag_name>)

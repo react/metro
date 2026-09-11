@@ -23,7 +23,7 @@ const siteConfig = {
           editUrl: fbContent({
             internal:
               'https://www.internalfb.com/intern/diffusion/FBS/browse/master/xplat/js/tools/metro/docs/',
-            external: 'https://github.com/facebook/metro/edit/main/docs',
+            external: 'https://github.com/react/metro/edit/main/docs',
           }),
           sidebarPath: require.resolve('./sidebars.json'),
           showLastUpdateTime: fbContent({
@@ -51,6 +51,7 @@ const siteConfig = {
   url: 'https://metrobundler.dev',
   baseUrl: '/',
   favicon: 'img/favicon.png',
+  onBrokenAnchors: 'throw',
   themeConfig: {
     navbar: {
       title: 'Metro',
@@ -69,7 +70,7 @@ const siteConfig = {
         },
         {
           label: 'GitHub',
-          href: 'https://github.com/facebook/metro',
+          href: 'https://github.com/react/metro',
           position: 'right',
         },
       ],
@@ -94,7 +95,7 @@ const siteConfig = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/metro',
+              href: 'https://github.com/react/metro',
             },
             {
               label: 'Stack Overflow',

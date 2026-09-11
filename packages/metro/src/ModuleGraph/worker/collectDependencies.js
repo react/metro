@@ -472,7 +472,7 @@ function collectImports(path: NodePath<>, state: State): void {
     invariant(
       path.node.source.type === 'StringLiteral',
       `Expected import source to be a string. Maybe you're using 'createImportExpressions', which is not currently supported.
-See: https://github.com/facebook/metro/pull/1343`,
+See: https://github.com/react/metro/pull/1343`,
     );
 
     registerDependency(

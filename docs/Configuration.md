@@ -135,7 +135,7 @@ Type: `string`
 
 The absolute path of a module (or a package name resolvable from the `metro` package) that implements a transformer.
 
-See the implementation of Metro's default transformer ([`metro-transform-worker`](https://github.com/facebook/metro/blob/main/packages/metro-transform-worker/src/index.js)) for more information about the transformer interface.
+See the implementation of Metro's default transformer ([`metro-transform-worker`](https://github.com/react/metro/blob/main/packages/metro-transform-worker/src/index.js)) for more information about the transformer interface.
 
 #### `reporter`
 
@@ -143,7 +143,7 @@ Type: `{update: (event: ReportableEvent) => void}`
 
 Used to report the status of the bundler during the bundling process. The default implementation prints most events to the terminal.
 
-See also the [definition of `ReportableEvent`](https://github.com/facebook/metro/blob/main/packages/metro/src/lib/reporting.js) in Metro's source code.
+See also the [definition of `ReportableEvent`](https://github.com/react/metro/blob/main/packages/metro/src/lib/reporting.js) in Metro's source code.
 
 #### `resetCache`
 
@@ -198,11 +198,11 @@ function unstable_perfLoggerFactory(
 };
 ```
 
-* **`type`** Type of event being logged, e.g. `'STARTUP'`, `'BUNDLING_REQUEST'`, `'HMR'`. See type definition of [PerfLoggerFactory](https://github.com/facebook/metro/blob/main/packages/metro-config/src/types.js) for a full list of event types.
+* **`type`** Type of event being logged, e.g. `'STARTUP'`, `'BUNDLING_REQUEST'`, `'HMR'`. See type definition of [PerfLoggerFactory](https://github.com/react/metro/blob/main/packages/metro-config/src/types.js) for a full list of event types.
 * **`opts`**
   * **`key`**: An opaque identifier to distinguish between instances of an event type (e.g. multiple, possibly concurrent, HMR requests).
 
-`unstable_perfLoggerFactory` should return an object implementing the [RootPerfLogger](https://github.com/facebook/metro/blob/main/packages/metro-config/src/types.js) interface. For example, a factory function returning a no-op RootPerfLogger could be implemented as follows:
+`unstable_perfLoggerFactory` should return an object implementing the [RootPerfLogger](https://github.com/react/metro/blob/main/packages/metro-config/src/types.js) interface. For example, a factory function returning a no-op RootPerfLogger could be implemented as follows:
 
 
 ```javascript
@@ -231,7 +231,13 @@ const unstable_perfLoggerFactory = (type, factoryOpts) => {
 
 Type: `Array<string>`
 
-The list of asset file extensions to include in the bundle. For example, including `'ttf'` allows Metro bundles to reference `.ttf` files. This is used primarily to enable React Native's [image asset support](https://reactnative.dev/docs/images). The default list includes many common image, video and audio file extensions. See [Metro's source code](https://github.com/facebook/metro/blob/main/packages/metro-config/src/defaults/defaults.js#L16) for the full list.
+The list of asset file extensions to include in the bundle. For example, including `'ttf'` allows Metro bundles to reference `.ttf` files. This is used primarily to enable React Native's [image asset support](https://reactnative.dev/docs/images). The default list includes many common image, video and audio file extensions. See [Metro's source code](https://github.com/react/metro/blob/main/packages/metro-config/src/defaults/defaults.js#L16) for the full list.
+
+#### `assetResolutions`
+
+Type: `Array<string>` (default: `['1', '1.5', '2', '3', '4']`)
+
+The list of asset density suffixes Metro will look for when resolving an asset. For each entry, the default `resolveAsset` implementation tries `${assetName}@${resolution}x${extension}` alongside the unsuffixed file, so `icon.png` also matches `icon@2x.png` and `icon@3x.png`.
 
 #### `sourceExts`
 
@@ -466,7 +472,7 @@ In a future release of Metro, this option will be removed.
 
 Type: `string`
 
-The name of a module that provides the `asyncRequire` function, which is used to implement [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro-runtime/src/modules/asyncRequire`](https://github.com/facebook/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
+The name of a module that provides the `asyncRequire` function, which is used to implement [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro-runtime/src/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
 
 :::note
 The module named by `asyncRequireModulePath` is [resolved](./Resolution.md) relative to the module containing the original `import()` call. In particular, assuming the default value of `asyncRequireModulePath` is in use, the project must have a compatible version of `metro-runtime` installed in `node_modules`.
@@ -577,7 +583,7 @@ Type: `string`
 
 The name of a module that compiles code with Babel, returning an AST and optional metadata. Defaults to `metro-babel-transformer`.
 
-Refer to the source code of [`metro-babel-transformer`](https://github.com/facebook/metro/blob/main/packages/metro-babel-transformer/src/index.js) and [`@react-native/metro-babel-transformer`](https://github.com/facebook/react-native/blob/main/packages/react-native-babel-transformer/src/index.js) for details on implementing a custom Babel transformer.
+Refer to the source code of [`metro-babel-transformer`](https://github.com/react/metro/blob/main/packages/metro-babel-transformer/src/index.js) and [`@react-native/metro-babel-transformer`](https://github.com/facebook/react-native/blob/main/packages/react-native-babel-transformer/src/index.js) for details on implementing a custom Babel transformer.
 
 :::note
 This option only has an effect under the default [`transformerPath`](#transformerpath). Custom transformers may ignore it.
@@ -713,7 +719,7 @@ The input may be either an absolute URL (e.g. `https://example.com/foo/bar?baz=q
 
 Type: `boolean`
 
-Enable forwarding of `client_log` events (when client logs are [configured](https://github.com/facebook/metro/blob/614ad14a85b22958129ee94e04376b096f03ccb1/packages/metro/src/lib/createWebsocketServer.js#L20)) to the reporter. Defaults to `true`.
+Enable forwarding of `client_log` events (when client logs are [configured](https://github.com/react/metro/blob/614ad14a85b22958129ee94e04376b096f03ccb1/packages/metro/src/lib/createWebsocketServer.js#L20)) to the reporter. Defaults to `true`.
 
 #### `tls`
 

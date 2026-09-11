@@ -9,7 +9,7 @@ Introduced in Node.js 12.7.0, Package Exports is a modern approach for npm packa
 
 `exports` also supports different targets for a given subpath dependent on [*conditions*](https://nodejs.org/api/packages.html#conditional-exports), such as whether building for a browser or Node.js, and whether `import` or `require` is used by the consumer.
 
-Package Exports support has been enabled by default in Metro since [0.82](https://github.com/facebook/metro/releases/tag/v0.82.0) (or React Native 0.79).
+Package Exports support has been enabled by default in Metro since [0.82](https://github.com/react/metro/releases/tag/v0.82.0) (or React Native 0.79).
 
 - [Node.js spec](https://nodejs.org/docs/latest-v19.x/api/packages.html#package-entry-points)
 - [RFC for Package Exports in Metro](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0534-metro-package-exports-support.md)

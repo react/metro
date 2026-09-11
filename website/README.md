@@ -35,7 +35,7 @@ DEPLOY_USER=facebook GIT_USER=metro-bot CIRCLE_PROJECT_USERNAME=facebook CIRCLE_
 
 ## Staging
 
-Run the above command against your own fork of `facebook/metro`:
+Run the above command against your own fork of `react/metro`:
 
 ```
 DEPLOY_USER=YOUR_GITHUB_USERNAME GIT_USER=YOUR_GITHUB_USERNAME CIRCLE_PROJECT_USERNAME=YOUR_GITHUB_USERNAME CIRCLE_PROJECT_REPONAME=metro npm run gh-pages

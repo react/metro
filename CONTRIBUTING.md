@@ -23,7 +23,7 @@ The core team will be monitoring for pull requests. When we get one, we'll run s
 1. Fork the repo and create your branch from `main`.
 
    ```sh
-   git clone https://github.com/facebook/metro
+   git clone https://github.com/react/metro
    cd metro
    git checkout -b my_branch
    ```
@@ -39,8 +39,9 @@ The core team will be monitoring for pull requests. When we get one, we'll run s
 5. If you've changed APIs:
     1. Update the documentation if necessary.
     2. Update any relevant `.d.ts` files under the package's `types/` directory.
-6. Ensure the test suite passes via `npm test`.
-7. If you haven't already, complete the CLA.
+6. Format the repository with `yarn format`.
+7. Ensure the test suite passes via `yarn test`.
+8. If you haven't already, complete the CLA.
 
 ### Contributor License Agreement (CLA)
 

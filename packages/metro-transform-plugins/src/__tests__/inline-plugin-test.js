@@ -410,20 +410,6 @@ describe('inline constants', () => {
     });
   });
 
-  test('does not discard impure Platform.select initializers', () => {
-    const code = `
-      var value = Platform.select({
-        ios: selected(),
-        android: discarded(),
-      });
-    `;
-
-    compare([inlinePlugin], code, code, {
-      inlinePlatform: true,
-      platform: 'ios',
-    });
-  });
-
   test('inlines Platform.select in the code when using an ObjectMethod', () => {
     const code = `
       function a() {

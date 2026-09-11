@@ -19,7 +19,7 @@ git fetch origin main
 TAG_ON_MAIN=$(git branch -a --contains "$RAW_TAG_NAME" | grep -cFx '  remotes/origin/main' || true)
 echo "Tag is on main branch: $TAG_ON_MAIN"
 
-# See https://github.com/facebook/metro/pull/1086 regarding handling of hotfix tags
+# See https://github.com/react/metro/pull/1086 regarding handling of hotfix tags
 # Deduce the expected name of a release branch for a tag based on Metro's release branch naming convention, eg v0.1.2-alpha.3 -> 0.1.x
 RELEASE_BRANCH=$(echo "$RAW_TAG_NAME" | awk -F. '{print substr($1, 2) "." $2 ".x"}')
 
