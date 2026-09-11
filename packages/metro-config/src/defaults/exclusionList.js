@@ -11,7 +11,15 @@
 
 import path from 'node:path';
 
-const list = [/\/__tests__\/.*/];
+const list = [
+  /\/__tests__\/.*/,
+  /(^|\/)\.cxx($|\/.*)/,
+  /(^|\/)android\/\.gradle($|\/.*)/,
+  /(^|\/)android\/build($|\/.*)/,
+  /(^|\/)android\/app\/build($|\/.*)/,
+  /(^|\/)ios\/build($|\/.*)/,
+  /(^|\/)ios\/DerivedData($|\/.*)/,
+];
 
 function escapeRegExp(pattern: RegExp | string) {
   if (pattern instanceof RegExp) {

@@ -30,6 +30,18 @@ describe('exclusionList', () => {
     path.sep = originalSeparator;
   });
 
+  const asPlatformPath = (filepath: string) =>
+    filepath.replaceAll('/', path.sep);
+
+  const nativeBuildOutputPaths = [
+    '.cxx',
+    'android/.gradle',
+    'android/build',
+    'android/app/build',
+    'ios/build',
+    'ios/DerivedData',
+  ];
+
   test('proves we can write to path.sep for setting up the tests', () => {
     setPathSeperator('/');
     expect(require('node:path').sep).toBe('/');
@@ -71,6 +83,25 @@ describe('exclusionList', () => {
       );
       expect('/foo/bar').toMatch(exclusionList([/.*[\/\\]foo[\/\\]bar/]));
     });
+
+    test.each(nativeBuildOutputPaths)(
+      'excludes React Native native build output %s',
+      buildOutputPath => {
+        const exclusion = exclusionList();
+
+        expect(asPlatformPath(buildOutputPath)).toMatch(exclusion);
+        expect(asPlatformPath(`${buildOutputPath}/generated/file.o`)).toMatch(
+          exclusion,
+        );
+      },
+    );
+
+    test('does not exclude adjacent source paths', () => {
+      const exclusion = exclusionList();
+
+      expect('src/android/app.js').not.toMatch(exclusion);
+      expect('src/ios/DerivedDataExample.js').not.toMatch(exclusion);
+    });
   });
 
   describe('simulate windows enviornment', () => {
@@ -106,6 +137,27 @@ describe('exclusionList', () => {
         exclusionList([new RegExp('.*[\\/\\\\]foo[\\/\\\\]bar')]),
       );
       expect('\\foo\\bar').toMatch(exclusionList([/.*[\/\\]foo[\/\\]bar/]));
+    });
+
+    test.each(nativeBuildOutputPaths)(
+      'excludes React Native native build output %s',
+      buildOutputPath => {
+        const exclusion = exclusionList();
+
+        expect(asPlatformPath(buildOutputPath)).toMatch(exclusion);
+        expect(asPlatformPath(`${buildOutputPath}/generated/file.o`)).toMatch(
+          exclusion,
+        );
+      },
+    );
+
+    test('does not exclude adjacent source paths', () => {
+      const exclusion = exclusionList();
+
+      expect(asPlatformPath('src/android/app.js')).not.toMatch(exclusion);
+      expect(asPlatformPath('src/ios/DerivedDataExample.js')).not.toMatch(
+        exclusion,
+      );
     });
   });
 });
