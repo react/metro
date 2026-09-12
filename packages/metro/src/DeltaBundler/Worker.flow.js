@@ -14,6 +14,7 @@ import type {LogEntry} from 'metro-core/private/Logger';
 import type {
   JsTransformerConfig,
   JsTransformOptions,
+  TransformExtras,
 } from 'metro-transform-worker';
 
 import traverse from '@babel/traverse';
@@ -21,7 +22,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type {JsTransformOptions as TransformOptions} from 'metro-transform-worker';
+export type TransformOptions = Readonly<{
+  ...JsTransformOptions,
+  // Split out of the options before they reach the transformer, which receives
+  // them as a separate TransformExtras argument, so that they are not spread
+  // into BabelTransformerArgs along with the public options.
+  assetUrlPath?: string,
+}>;
 
 type TransformerInterface = {
   transform(
@@ -30,6 +37,7 @@ type TransformerInterface = {
     string,
     Buffer,
     JsTransformOptions,
+    TransformExtras,
   ): Promise<TransformResult<>>,
 };
 
@@ -68,7 +76,7 @@ function asDeserializedBuffer(value: any): Buffer | null {
 
 export const transform = (
   filename: string,
-  transformOptions: JsTransformOptions,
+  transformOptions: TransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
   fileBuffer?: Buffer,
@@ -97,7 +105,7 @@ export type Worker = {
 async function transformFile(
   projectRelativePath: string,
   data: Buffer,
-  transformOptions: JsTransformOptions,
+  transformOptions: TransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
 ): Promise<Data> {
@@ -117,12 +125,14 @@ async function transformFile(
 
   const sha1 = crypto.createHash('sha1').update(data).digest('hex');
 
+  const {assetUrlPath, ...publicTransformOptions} = transformOptions;
   const result = await Transformer.transform(
     transformerConfig.transformerConfig,
     projectRoot,
     projectRelativePath,
     data,
-    transformOptions,
+    publicTransformOptions,
+    {assetUrlPath},
   );
 
   // The babel cache caches scopes and pathes for already traversed AST nodes.
