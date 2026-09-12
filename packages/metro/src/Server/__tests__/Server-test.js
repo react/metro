@@ -63,6 +63,7 @@ describe('processRequest', () => {
   let getTransformFn;
   let getResolveDependencyFn;
   let getAsset;
+  let getAssetsSerializer;
 
   beforeEach(() => {
     jest.resetModules();
@@ -76,6 +77,7 @@ describe('processRequest', () => {
     getTransformFn = jest.fn();
     getResolveDependencyFn = jest.fn();
     getAsset = jest.fn();
+    getAssetsSerializer = jest.fn().mockResolvedValue([]);
 
     let i = 0;
     jest.doMock('node:crypto', () => ({
@@ -113,6 +115,11 @@ describe('processRequest', () => {
       .spyOn(DeltaBundler.prototype, 'buildGraph')
       .mockImplementation(buildGraph);
     jest.spyOn(DeltaBundler.prototype, 'getDelta').mockImplementation(getDelta);
+
+    jest.doMock('../../DeltaBundler/Serializers/getAssets', () => ({
+      __esModule: true,
+      default: getAssetsSerializer,
+    }));
 
     Server = require('../../Server').default;
   });
@@ -1519,6 +1526,24 @@ describe('processRequest', () => {
         expect(errorSpy).not.toBeCalled();
       },
     );
+  });
+
+  describe('asset URL roots', () => {
+    test('anchors asset URLs on projectRoot, not unstable_serverRoot', async () => {
+      // $FlowFixMe[unclear-type] - reaching for a private method under test.
+      const serverRootServer: any = new Server(
+        mergeConfig(config, {
+          server: {unstable_serverRoot: '/'},
+        } as InputConfigT),
+      );
+
+      await serverRootServer._getAssetsFromDependencies(new Map(), 'ios');
+
+      expect(getAssetsSerializer).toBeCalledWith(
+        expect.anything(),
+        expect.objectContaining({projectRoot: '/root'}),
+      );
+    });
   });
 
   describe('watchFolder prefix resolution', () => {
