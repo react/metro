@@ -46,7 +46,7 @@ const siteConfig = {
   plugins: ['docusaurus-plugin-sass'],
   title: 'Metro',
   tagline: '\ud83d\ude87 The JavaScript bundler for React Native',
-  organizationName: 'facebook',
+  organizationName: 'react',
   projectName: 'metro',
   url: 'https://metrobundler.dev',
   baseUrl: '/',
