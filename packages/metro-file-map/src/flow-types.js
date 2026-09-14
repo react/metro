@@ -292,7 +292,8 @@ export type FileMetadata = [
   /* size */ number,
   /* visited */ 0 | 1,
   /* sha1 */ ?string,
-  /* symlink */ 0 | 1 | string, // string specifies target, if known
+  // A string is the symlink's target, resolved to a normal path, if known.
+  /* symlink */ 0 | 1 | string,
   /* plugindata */
   ...
 ];
