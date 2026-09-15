@@ -1,6 +1,6 @@
 {
   "name": "metro-transform-plugins",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "🚇 Transform plugins for Metro.",
   "main": "src/index.js",
   "exports": {
@@ -33,7 +33,7 @@
     "@babel/plugin-transform-modules-commonjs": "^7.24.8",
     "@babel/types": "^7.29.0",
     "babel-plugin-tester": "^6.0.1",
-    "metro": "0.87.0"
+    "metro": "0.87.1"
   },
   "engines": {
     "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"

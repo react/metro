@@ -1,12 +1,12 @@
 # In order to be updated when nightlies fail, please subscribe for updates on PR:
-# ---> https://github.com/facebook/metro/pull/1314 <---
+# ---> https://github.com/react/metro/pull/1314 <---
 # where comments will be published on fail.
 
 # This is a bit of a workaround tackling the lack of an organic way
 # to notify certain people when a Github workflow fails:
 # https://github.com/orgs/community/discussions/18039
 
-name: facebook/metro/nightly-tests
+name: react/metro/nightly-tests
 on:
   schedule:
     # Daily at at 5:00 UTC
@@ -47,7 +47,7 @@ jobs:
         with:
           script: |
             github.rest.issues.createComment({
-              // see https://github.com/facebook/metro/pull/1314
+              // see https://github.com/react/metro/pull/1314
               issue_number: 1314,
               owner: context.repo.owner,
               repo: context.repo.repo,

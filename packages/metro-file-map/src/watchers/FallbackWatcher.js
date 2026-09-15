@@ -182,9 +182,17 @@ export default class FallbackWatcher extends AbstractWatcher {
     if (this.#watched[dir]) {
       return false;
     }
-    const watcher = fs.watch(dir, {persistent: true}, (event, filename) =>
-      this.#normalizeChange(dir, event, filename),
-    );
+    let watcher: FSWatcher;
+    try {
+      watcher = fs.watch(dir, {persistent: true}, (event, filename) =>
+        this.#normalizeChange(dir, event, filename),
+      );
+    } catch (error) {
+      // A directory we cannot watch is still worth crawling, so report the
+      // error and carry on rather than losing the subtree under it.
+      this.#checkedEmitError(error);
+      return false;
+    }
     this.#watched[dir] = watcher;
 
     watcher.on('error', this.#checkedEmitError);
@@ -424,7 +432,7 @@ function isIgnorableFileError(error: Error | {code: string}) {
     // reading locked files (pending further writes or pending deletion).
     // In such cases, we'll receive a subsequent event when the file is
     // deleted or ready to read.
-    // https://github.com/facebook/metro/issues/1001
+    // https://github.com/react/metro/issues/1001
     // https://github.com/nodejs/node-v0.x-archive/issues/4337
     (error.code === 'EPERM' && platform === 'win32')
   );
@@ -463,12 +471,14 @@ async function recReaddir(
       if (ignored != null && common.posixPathMatchesPattern(ignored, entry)) {
         return;
       }
+      // Report the directory before listing it. A consumer that starts watching
+      // here would otherwise miss anything written between the two.
+      dirCallback(entry, stats);
       names = await fsPromises.readdir(entry);
     } catch (error) {
       errorCallback(error);
       return;
     }
-    dirCallback(entry, stats);
     for (const name of names) {
       pending.push(path.join(entry, name));
     }

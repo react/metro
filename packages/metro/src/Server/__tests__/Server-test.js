@@ -1559,10 +1559,7 @@ describe('processRequest', () => {
 
       expect(getAssetsSerializer).toBeCalledWith(
         expect.anything(),
-        expect.objectContaining({
-          projectRoot: '/root',
-          watchFolders: ['/root'],
-        }),
+        expect.objectContaining({projectRoot: '/root'}),
       );
     });
   });

@@ -353,7 +353,7 @@ async function transformJS(
       babelrc: false,
       // Not-Cloning the input AST here should be safe because other code paths above this call
       // are mutating the AST as well and no code is depending on the original AST.
-      // However, switching the flag to false caused issues with ES Modules if `experimentalImportSupport` isn't used https://github.com/facebook/metro/issues/641
+      // However, switching the flag to false caused issues with ES Modules if `experimentalImportSupport` isn't used https://github.com/react/metro/issues/641
       // either because one of the plugins is doing something funky or Babel messes up some caches.
       // Make sure to test the above mentioned case before flipping the flag back to false.
       cloneInputAst: true,

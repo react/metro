@@ -1,6 +1,6 @@
 {
   "name": "buck-worker-tool",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "Implementation of the Buck worker protocol for Node.js.",
   "license": "MIT",
   "repository": {

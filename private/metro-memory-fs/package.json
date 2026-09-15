@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git@github.com:react/metro.git"
   },
   "license": "MIT",
   "dependencies": {

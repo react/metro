@@ -200,17 +200,8 @@ export default function inlinePlugin(
               findProperty(arg, 'native', () =>
                 findProperty(arg, 'default', () => t.identifier('undefined')),
               );
-            const selected = findProperty(arg, opts.platform, fallback);
 
-            if (
-              arg.properties.every(
-                property =>
-                  (isObjectProperty(property) && property.value === selected) ||
-                  scope.isPure(property),
-              )
-            ) {
-              path.replaceWith(selected);
-            }
+            path.replaceWith(findProperty(arg, opts.platform, fallback));
           }
         }
       },

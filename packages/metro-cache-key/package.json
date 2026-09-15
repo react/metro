@@ -1,6 +1,6 @@
 {
   "name": "metro-cache-key",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "🚇 Cache key utility.",
   "main": "src/index.js",
   "exports": {
