@@ -167,7 +167,13 @@ export type ResolutionContext = Readonly<{
    * for a given absolute candidate path (which need not exist), or null if
    * there is no package.json closer than the nearest node_modules directory.
    *
-   * @deprecated See https://github.com/facebook/metro/commit/29c77bff31e2475a086bc3f04073f485da8f9ff0
+   * The scope is that of the real path: a path through a symlinked directory
+   * belongs to the package containing the link target. A path that does not
+   * exist belongs to the package of its deepest existing ancestor, unless the
+   * first missing segment is `node_modules`.
+   *
+   * The resolver calls this at most a few times per resolution, so it must be
+   * cheap: Metro backs it with an index of `package.json` files.
    */
   getPackageForModule: (absoluteModulePath: string) => ?PackageForModule,
 
