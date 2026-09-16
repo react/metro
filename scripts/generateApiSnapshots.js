@@ -24,6 +24,7 @@ import {
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import * as prettier from 'prettier';
 
 const WORKSPACE_ROOT = path.resolve(__dirname, '..');
 const PACKAGES_DIR = path.join(WORKSPACE_ROOT, 'packages');
@@ -262,6 +263,29 @@ function cleanReport(report: string): string {
   return result.join('\n');
 }
 
+// Reformat the TypeScript code block of a cleaned report with Prettier. API
+// Extractor strips the leading whitespace from every line of a declaration and
+// re-indents only between `{` and `}`, so any declaration Prettier wrapped in
+// the source `.d.ts` (parameter lists, type arguments) otherwise loses its
+// indentation. The options match the `.d.ts` generator's, so declarations wrap
+// as they do in the published definitions.
+async function formatReport(report: string): Promise<string> {
+  const match = report.match(/^([\s\S]*?```ts\n)([\s\S]*)(```\n?)$/);
+  if (match == null) {
+    throw new Error('Could not find the TypeScript code block in the report');
+  }
+  const [, header, code, footer] = match;
+  const filepath = path.join(__dirname, 'dummy.d.ts');
+  const formatted = await prettier.format(code, {
+    ...(await prettier.resolveConfig(filepath)),
+    filepath,
+    printWidth: 200,
+    requirePragma: false,
+  });
+  // Keep the blank lines API Extractor leaves inside the fences.
+  return header + '\n' + (formatted === '' ? '' : formatted + '\n') + footer;
+}
+
 // Build the API Extractor config for one entry point. The report is written to
 // a scratch folder; the caller owns writing it to its committed location so we
 // control the file name, path, and post-processing.
@@ -448,7 +472,7 @@ export async function generateApiSnapshots(
               continue;
             }
 
-            const snapshot = cleanReport(report);
+            const snapshot = await formatReport(cleanReport(report));
             const outputPath = path.join(
               entryPoint.packageDir,
               entryPoint.outputFileName,
