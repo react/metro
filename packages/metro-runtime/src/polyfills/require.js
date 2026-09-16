@@ -95,6 +95,7 @@ const CYCLE_DETECTED = {};
 const {hasOwnProperty} = {};
 
 if (__DEV__) {
+  global.HMRClientOnUpdate = [];
   global.$RefreshReg$ = global.$RefreshReg$ ?? (() => {});
   global.$RefreshSig$ = global.$RefreshSig$ ?? (() => type => type);
 }
