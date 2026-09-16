@@ -5,15 +5,15 @@
 ```ts
 
 import EventEmitter from 'node:events';
-import type { HandleFunction } from 'connect';
-import type { IncomingMessage } from 'connect';
-import type { Server as Server_2 } from 'connect';
-import type { ServerResponse } from 'node:http';
+import type {HandleFunction} from 'connect';
+import type {IncomingMessage} from 'connect';
+import type {Server as Server_2} from 'connect';
+import type {ServerResponse} from 'node:http';
 
 export type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult>>;
 
 export type ConfigT = Readonly<
-MetalConfigT & {
+  MetalConfigT & {
     cacheStores: CacheStoresConfigT;
     resolver: Readonly<ResolverConfigT>;
     server: Readonly<ServerConfigT>;
@@ -21,90 +21,90 @@ MetalConfigT & {
     symbolicator: Readonly<SymbolicatorConfigT>;
     transformer: Readonly<TransformerConfigT>;
     watcher: Readonly<WatcherConfigT>;
-}
+  }
 >;
 
 export type ExtraTransformOptions = Readonly<{
-    preloadedModules?: Readonly<{[path: string]: true}> | false | undefined;
-    ramGroups?: ReadonlyArray<string> | undefined;
-    transform?:
+  preloadedModules?: Readonly<{[path: string]: true}> | false | undefined;
+  ramGroups?: ReadonlyArray<string> | undefined;
+  transform?:
     | Readonly<{
         experimentalImportSupport?: boolean | undefined;
         inlineRequires?:
-        | Readonly<{
-            blockList: Readonly<{[absoluteModulePath: string]: true}>;
-        }>
-        | boolean
-        | undefined;
+          | Readonly<{
+              blockList: Readonly<{[absoluteModulePath: string]: true}>;
+            }>
+          | boolean
+          | undefined;
         nonInlinedRequires?: ReadonlyArray<string> | undefined;
         unstable_memoizeInlineRequires?: boolean | undefined;
         unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
-    }>
+      }>
     | undefined;
 }>;
 
 export const getDefaultConfig: {
-    (rootPath?: string): Promise<ConfigT>;
-    getDefaultValues: (rootPath?: string) => ConfigT;
+  (rootPath?: string): Promise<ConfigT>;
+  getDefaultValues: (rootPath?: string) => ConfigT;
 };
 
 export type getDefaultConfig = typeof getDefaultConfig;
 
 export type GetTransformOptions = (
-entryPoints: ReadonlyArray<string>,
-options: GetTransformOptionsOpts,
-getDependenciesOf: (absoluteFilePath: string) => Promise<Array<string>>,
+  entryPoints: ReadonlyArray<string>,
+  options: GetTransformOptionsOpts,
+  getDependenciesOf: (absoluteFilePath: string) => Promise<Array<string>>,
 ) => Promise<Partial<ExtraTransformOptions>>;
 
 export type GetTransformOptionsOpts = {
-    dev: boolean;
-    hot: true;
-    platform: null | undefined | string;
+  dev: boolean;
+  hot: true;
+  platform: null | undefined | string;
 };
 
 export type InputConfigT = Partial<
-Readonly<
-MetalConfigT & {
-    cacheStores: CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT);
-    resolver: Readonly<Partial<ResolverConfigT>>;
-    server: Readonly<Partial<ServerConfigT>>;
-    serializer: Readonly<Partial<SerializerConfigT>>;
-    symbolicator: Readonly<Partial<SymbolicatorConfigT>>;
-    transformer: Readonly<Partial<TransformerConfigT>>;
-    watcher: Partial<
-    Readonly<
-    Omit<WatcherConfigT, 'healthCheck' | 'unstable_autoSaveCache' | 'watchman'> & {
-        healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>;
-        unstable_autoSaveCache: Partial<Readonly<WatcherConfigT['unstable_autoSaveCache']>>;
-        watchman: Partial<Readonly<WatcherConfigT['watchman']>>;
+  Readonly<
+    MetalConfigT & {
+      cacheStores: CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT);
+      resolver: Readonly<Partial<ResolverConfigT>>;
+      server: Readonly<Partial<ServerConfigT>>;
+      serializer: Readonly<Partial<SerializerConfigT>>;
+      symbolicator: Readonly<Partial<SymbolicatorConfigT>>;
+      transformer: Readonly<Partial<TransformerConfigT>>;
+      watcher: Partial<
+        Readonly<
+          Omit<WatcherConfigT, 'healthCheck' | 'unstable_autoSaveCache' | 'watchman'> & {
+            healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>;
+            unstable_autoSaveCache: Partial<Readonly<WatcherConfigT['unstable_autoSaveCache']>>;
+            watchman: Partial<Readonly<WatcherConfigT['watchman']>>;
+          }
+        >
+      >;
     }
-    >
-    >;
-}
->
+  >
 >;
 
 export function loadConfig(argvInput?: YargArguments, defaultConfigOverrides?: InputConfigT): Promise<ConfigT>;
 
 export function mergeConfig<T extends InputConfigT, R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT) | ((baseConfig: T) => Promise<InputConfigT>)>>(
-base: T | (() => T),
-...configs: R
+  base: T | (() => T),
+  ...configs: R
 ): R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT)> ? T : Promise<T>;
 
 export type MetalConfigT = {
-    cacheVersion: string;
-    fileMapCacheDirectory?: string | undefined;
-    hasteMapCacheDirectory?: string | undefined;
-    unstable_fileMapCacheManagerFactory?: CacheManagerFactory | undefined;
-    unstable_fileMapPlugins?: ReadonlyArray<InputFileMapPlugin> | undefined;
-    maxWorkers: number;
-    unstable_perfLoggerFactory?: null | undefined | PerfLoggerFactory;
-    projectRoot: string;
-    stickyWorkers: boolean;
-    transformerPath: string;
-    reporter: Reporter;
-    resetCache: boolean;
-    watchFolders: ReadonlyArray<string>;
+  cacheVersion: string;
+  fileMapCacheDirectory?: string | undefined;
+  hasteMapCacheDirectory?: string | undefined;
+  unstable_fileMapCacheManagerFactory?: CacheManagerFactory | undefined;
+  unstable_fileMapPlugins?: ReadonlyArray<InputFileMapPlugin> | undefined;
+  maxWorkers: number;
+  unstable_perfLoggerFactory?: null | undefined | PerfLoggerFactory;
+  projectRoot: string;
+  stickyWorkers: boolean;
+  transformerPath: string;
+  reporter: Reporter;
+  resetCache: boolean;
+  watchFolders: ReadonlyArray<string>;
 };
 
 export type MetroConfig = InputConfigT;
@@ -112,20 +112,20 @@ export type MetroConfig = InputConfigT;
 export type Middleware = HandleFunction;
 
 export type PerfAnnotations = Partial<{
-    string: Readonly<{[key: string]: string}>;
-    int: Readonly<{[key: string]: number}>;
-    double: Readonly<{[key: string]: number}>;
-    bool: Readonly<{[key: string]: boolean}>;
-    string_array: Readonly<{[key: string]: ReadonlyArray<string>}>;
-    int_array: Readonly<{[key: string]: ReadonlyArray<number>}>;
-    double_array: Readonly<{[key: string]: ReadonlyArray<number>}>;
-    bool_array: Readonly<{[key: string]: ReadonlyArray<boolean>}>;
+  string: Readonly<{[key: string]: string}>;
+  int: Readonly<{[key: string]: number}>;
+  double: Readonly<{[key: string]: number}>;
+  bool: Readonly<{[key: string]: boolean}>;
+  string_array: Readonly<{[key: string]: ReadonlyArray<string>}>;
+  int_array: Readonly<{[key: string]: ReadonlyArray<number>}>;
+  double_array: Readonly<{[key: string]: ReadonlyArray<number>}>;
+  bool_array: Readonly<{[key: string]: ReadonlyArray<boolean>}>;
 }>;
 
 export interface PerfLogger {
-    annotate(annotations: PerfAnnotations): void;
-    point(name: string, opts?: PerfLoggerPointOptions): void;
-    subSpan(label: string): PerfLogger;
+  annotate(annotations: PerfAnnotations): void;
+  point(name: string, opts?: PerfLoggerPointOptions): void;
+  subSpan(label: string): PerfLogger;
 }
 
 export type PerfLoggerFactory = (type: 'START_UP' | 'BUNDLING_REQUEST' | 'HMR', opts?: PerfLoggerFactoryOptions) => RootPerfLogger;
@@ -137,120 +137,120 @@ export type PerfLoggerPointOptions = Readonly<{timestamp?: number | undefined}>;
 export function resolveConfig(filePath?: string, cwd?: string): Promise<ResolveConfigResult>;
 
 export type ResolverConfigT = {
-    assetExts: ReadonlyArray<string>;
-    assetResolutions: ReadonlyArray<string>;
-    blockList: RegExp | Array<RegExp>;
-    disableHierarchicalLookup: boolean;
-    dependencyExtractor: null | undefined | string;
-    emptyModulePath: string;
-    enableGlobalPackages: boolean;
-    extraNodeModules: {[packageName: string]: string};
-    hasteImplModulePath: null | undefined | string;
-    nodeModulesPaths: ReadonlyArray<string>;
-    platforms: ReadonlyArray<string>;
-    resolveRequest: null | undefined | CustomResolver;
-    resolverMainFields: ReadonlyArray<string>;
-    schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>;
-    sourceExts: ReadonlyArray<string>;
-    unstable_conditionNames: ReadonlyArray<string>;
-    unstable_conditionsByPlatform: Readonly<{
-        [platform: string]: ReadonlyArray<string>;
-    }>;
-    unstable_enablePackageExports: boolean;
-    unstable_incrementalResolution: boolean;
-    useWatchman: boolean;
-    requireCycleIgnorePatterns: ReadonlyArray<RegExp>;
-    unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>;
+  assetExts: ReadonlyArray<string>;
+  assetResolutions: ReadonlyArray<string>;
+  blockList: RegExp | Array<RegExp>;
+  disableHierarchicalLookup: boolean;
+  dependencyExtractor: null | undefined | string;
+  emptyModulePath: string;
+  enableGlobalPackages: boolean;
+  extraNodeModules: {[packageName: string]: string};
+  hasteImplModulePath: null | undefined | string;
+  nodeModulesPaths: ReadonlyArray<string>;
+  platforms: ReadonlyArray<string>;
+  resolveRequest: null | undefined | CustomResolver;
+  resolverMainFields: ReadonlyArray<string>;
+  schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>;
+  sourceExts: ReadonlyArray<string>;
+  unstable_conditionNames: ReadonlyArray<string>;
+  unstable_conditionsByPlatform: Readonly<{
+    [platform: string]: ReadonlyArray<string>;
+  }>;
+  unstable_enablePackageExports: boolean;
+  unstable_incrementalResolution: boolean;
+  useWatchman: boolean;
+  requireCycleIgnorePatterns: ReadonlyArray<RegExp>;
+  unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>;
 };
 
 export interface RootPerfLogger extends PerfLogger {
-    end(status: 'SUCCESS' | 'FAIL' | 'CANCEL', opts?: PerfLoggerPointOptions): void;
-    start(opts?: PerfLoggerPointOptions): void;
+  end(status: 'SUCCESS' | 'FAIL' | 'CANCEL', opts?: PerfLoggerPointOptions): void;
+  start(opts?: PerfLoggerPointOptions): void;
 }
 
 export type SerializerConfigT = {
-    createModuleIdFactory: () => (path: string) => number;
-    customSerializer: null | undefined | ((entryPoint: string, preModules: ReadonlyArray<Module>, graph: ReadOnlyGraph, options: SerializerOptions) => Promise<string | {code: string; map: string}>);
-    experimentalSerializerHook: (graph: ReadOnlyGraph, delta: DeltaResult) => unknown;
-    getModulesRunBeforeMainModule: (entryFilePath: string) => Array<string>;
-    getPolyfills: (ctx: {platform: null | undefined | string}) => ReadonlyArray<string>;
-    getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
-    polyfillModuleNames: ReadonlyArray<string>;
-    processModuleFilter: (modules: Module) => boolean;
-    isThirdPartyModule: (module: Readonly<{path: string}>) => boolean;
-    unstable_inlineDependencyMap: boolean;
-    unstable_lazilyDefineModules: boolean;
+  createModuleIdFactory: () => (path: string) => number;
+  customSerializer: null | undefined | ((entryPoint: string, preModules: ReadonlyArray<Module>, graph: ReadOnlyGraph, options: SerializerOptions) => Promise<string | {code: string; map: string}>);
+  experimentalSerializerHook: (graph: ReadOnlyGraph, delta: DeltaResult) => unknown;
+  getModulesRunBeforeMainModule: (entryFilePath: string) => Array<string>;
+  getPolyfills: (ctx: {platform: null | undefined | string}) => ReadonlyArray<string>;
+  getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
+  polyfillModuleNames: ReadonlyArray<string>;
+  processModuleFilter: (modules: Module) => boolean;
+  isThirdPartyModule: (module: Readonly<{path: string}>) => boolean;
+  unstable_inlineDependencyMap: boolean;
+  unstable_lazilyDefineModules: boolean;
 };
 
 export type ServerConfigT = {
-    enhanceMiddleware: (middleware: Middleware, server: Server) => Middleware | Server_2;
-    forwardClientLogs: boolean;
-    port: number;
-    rewriteRequestUrl: (url: string) => string;
-    unstable_serverRoot: null | undefined | string;
-    useGlobalHotkey: boolean;
-    verifyConnections: boolean;
-    tls:
+  enhanceMiddleware: (middleware: Middleware, server: Server) => Middleware | Server_2;
+  forwardClientLogs: boolean;
+  port: number;
+  rewriteRequestUrl: (url: string) => string;
+  unstable_serverRoot: null | undefined | string;
+  useGlobalHotkey: boolean;
+  verifyConnections: boolean;
+  tls:
     | false
     | {
         ca?: string | Buffer | undefined;
         cert?: string | Buffer | undefined;
         key?: string | Buffer | undefined;
         requestCert?: boolean | undefined;
-    };
+      };
 };
 
 export type SymbolicatorConfigT = {
-    customizeFrame: (frame: {
-        readonly file: null | undefined | string;
-        readonly lineNumber: null | undefined | number;
-        readonly column: null | undefined | number;
-        readonly methodName: null | undefined | string;
-    }) => (null | undefined | {readonly collapse?: boolean | undefined}) | Promise<null | undefined | {readonly collapse?: boolean | undefined}>;
-    customizeStack: (symbolicatedStack: Array<IntermediateStackFrame>, extraData: unknown) => Array<IntermediateStackFrame> | Promise<Array<IntermediateStackFrame>>;
+  customizeFrame: (frame: {
+    readonly file: null | undefined | string;
+    readonly lineNumber: null | undefined | number;
+    readonly column: null | undefined | number;
+    readonly methodName: null | undefined | string;
+  }) => (null | undefined | {readonly collapse?: boolean | undefined}) | Promise<null | undefined | {readonly collapse?: boolean | undefined}>;
+  customizeStack: (symbolicatedStack: Array<IntermediateStackFrame>, extraData: unknown) => Array<IntermediateStackFrame> | Promise<Array<IntermediateStackFrame>>;
 };
 
 export type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_workerThreads'> & {
-    getTransformOptions: GetTransformOptions;
-    transformVariants: {
-        readonly [name: string]: Partial<ExtraTransformOptions>;
-    };
-    publicPath: string;
-    unstable_workerThreads: boolean;
+  getTransformOptions: GetTransformOptions;
+  transformVariants: {
+    readonly [name: string]: Partial<ExtraTransformOptions>;
+  };
+  publicPath: string;
+  unstable_workerThreads: boolean;
 };
 
 export type WatcherConfigT = {
-    additionalExts: ReadonlyArray<string>;
-    healthCheck: Readonly<{
-        enabled: boolean;
-        interval: number;
-        timeout: number;
-        filePrefix: string;
-    }>;
-    unstable_autoSaveCache: Readonly<{
-        enabled: boolean;
-        debounceMs?: number | undefined;
-    }>;
-    unstable_lazySha1: boolean;
-    watchman: Readonly<{deferStates: ReadonlyArray<string>}>;
+  additionalExts: ReadonlyArray<string>;
+  healthCheck: Readonly<{
+    enabled: boolean;
+    interval: number;
+    timeout: number;
+    filePrefix: string;
+  }>;
+  unstable_autoSaveCache: Readonly<{
+    enabled: boolean;
+    debounceMs?: number | undefined;
+  }>;
+  unstable_lazySha1: boolean;
+  watchman: Readonly<{deferStates: ReadonlyArray<string>}>;
 };
 
 export type YargArguments = Readonly<{
-    config?: string | undefined;
-    cwd?: string | undefined;
-    port?: string | number | undefined;
-    host?: string | undefined;
-    projectRoot?: string | undefined;
-    watchFolders?: Array<string> | undefined;
-    assetExts?: Array<string> | undefined;
-    sourceExts?: Array<string> | undefined;
-    platforms?: Array<string> | undefined;
-    'max-workers'?: string | number | undefined;
-    maxWorkers?: string | number | undefined;
-    transformer?: string | undefined;
-    'reset-cache'?: boolean | undefined;
-    resetCache?: boolean | undefined;
-    verbose?: boolean | undefined;
+  config?: string | undefined;
+  cwd?: string | undefined;
+  port?: string | number | undefined;
+  host?: string | undefined;
+  projectRoot?: string | undefined;
+  watchFolders?: Array<string> | undefined;
+  assetExts?: Array<string> | undefined;
+  sourceExts?: Array<string> | undefined;
+  platforms?: Array<string> | undefined;
+  'max-workers'?: string | number | undefined;
+  maxWorkers?: string | number | undefined;
+  transformer?: string | undefined;
+  'reset-cache'?: boolean | undefined;
+  resetCache?: boolean | undefined;
+  verbose?: boolean | undefined;
 }>;
 
 ```

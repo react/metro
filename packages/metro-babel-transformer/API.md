@@ -4,52 +4,52 @@
 
 ```ts
 
-import type { BabelFileMetadata } from '@babel/core';
-import type { File as File_2 } from '@babel/types';
-import { transformFromAstSync } from '@babel/core';
+import type {BabelFileMetadata} from '@babel/core';
+import type {File as File_2} from '@babel/types';
+import {transformFromAstSync} from '@babel/core';
 
 export type BabelFileFunctionMapMetadata = Readonly<{
-    names: ReadonlyArray<string>;
-    mappings: string;
+  names: ReadonlyArray<string>;
+  mappings: string;
 }>;
 
 export type BabelFileImportLocsMetadata = ReadonlySet<string>;
 
 export type BabelTransformer = Readonly<{
-    transform: (transformerArgs: BabelTransformerArgs) => Readonly<{
-        ast: File_2;
-        functionMap?: BabelFileFunctionMapMetadata | undefined;
-        metadata?: MetroBabelFileMetadata | undefined;
-    }>;
-    getCacheKey?: ((options?: BabelTransformerCacheKeyOptions) => string) | undefined;
+  transform: (transformerArgs: BabelTransformerArgs) => Readonly<{
+    ast: File_2;
+    functionMap?: BabelFileFunctionMapMetadata | undefined;
+    metadata?: MetroBabelFileMetadata | undefined;
+  }>;
+  getCacheKey?: ((options?: BabelTransformerCacheKeyOptions) => string) | undefined;
 }>;
 
 export type BabelTransformerArgs = Readonly<{
-    filename: string;
-    options: BabelTransformerOptions;
-    plugins?: BabelTransformOptions['plugins'] | undefined;
-    src: string;
+  filename: string;
+  options: BabelTransformerOptions;
+  plugins?: BabelTransformOptions['plugins'] | undefined;
+  src: string;
 }>;
 
 export type BabelTransformerCacheKeyOptions = Readonly<{
-    projectRoot?: string | undefined;
-    enableBabelRCLookup?: boolean | undefined;
+  projectRoot?: string | undefined;
+  enableBabelRCLookup?: boolean | undefined;
 }>;
 
 export type CustomTransformOptions = {
-    [key: string]: unknown;
+  [key: string]: unknown;
 };
 
 export function getCacheKey(options?: BabelTransformerCacheKeyOptions): string;
 
 export type MetroBabelFileMetadata = Omit<BabelFileMetadata, 'metro'> & {
-    metro?:
+  metro?:
     | null
     | undefined
     | {
         functionMap?: null | undefined | BabelFileFunctionMapMetadata;
         unstable_importDeclarationLocs?: null | undefined | BabelFileImportLocsMetadata;
-    };
+      };
 };
 
 export function transform(opts: BabelTransformerArgs): ReturnType<BabelTransformer['transform']>;

@@ -11,38 +11,38 @@ export type CustomResolutionContext = Readonly<Omit<ResolutionContext, 'resolveR
 export type CustomResolver = (context: CustomResolutionContext, moduleName: string, platform: string | null) => Resolution;
 
 export type CustomResolverOptions = {
-    readonly [key: string]: unknown;
+  readonly [key: string]: unknown;
 };
 
 export type DoesFileExist = (filePath: string) => boolean;
 
 export class FailedToResolveNameError extends Error {
-    constructor(dirPaths: ReadonlyArray<string>, extraPaths: ReadonlyArray<string>);
-    dirPaths: ReadonlyArray<string>;
-    extraPaths: ReadonlyArray<string>;
+  constructor(dirPaths: ReadonlyArray<string>, extraPaths: ReadonlyArray<string>);
+  dirPaths: ReadonlyArray<string>;
+  extraPaths: ReadonlyArray<string>;
 }
 
 export class FailedToResolvePathError extends Error {
-    constructor(candidates: FileAndDirCandidates);
-    candidates: FileAndDirCandidates;
+  constructor(candidates: FileAndDirCandidates);
+  candidates: FileAndDirCandidates;
 }
 
 export class FailedToResolveUnsupportedError extends Error {
-    constructor(message: string, options?: {cause?: unknown | undefined});
+  constructor(message: string, options?: {cause?: unknown | undefined});
 }
 
 export type FileAndDirCandidates = {
-    readonly dir: null | undefined | FileCandidates;
-    readonly file: null | undefined | FileCandidates;
+  readonly dir: null | undefined | FileCandidates;
+  readonly file: null | undefined | FileCandidates;
 };
 
 export type FileCandidates =
-| {readonly type: 'asset'; readonly name: string}
-| {
-    readonly type: 'sourceFile';
-    filePathPrefix: string;
-    readonly candidateExts: ReadonlyArray<string>;
-};
+  | {readonly type: 'asset'; readonly name: string}
+  | {
+      readonly type: 'sourceFile';
+      filePathPrefix: string;
+      readonly candidateExts: ReadonlyArray<string>;
+    };
 
 export type FileResolution = AssetResolution | SourceFileResolution;
 
@@ -51,46 +51,46 @@ export type FileSystemLookup = (absoluteOrProjectRelativePath: string) => {exist
 export function formatFileCandidates(candidates: FileCandidates): string;
 
 export class InvalidPackageError extends Error {
-    constructor(opts: {readonly fileCandidates: FileCandidates; readonly indexCandidates: FileCandidates; readonly mainModulePath: string; readonly packageJsonPath: string});
-    fileCandidates: FileCandidates;
-    indexCandidates: FileCandidates;
-    mainModulePath: string;
-    packageJsonPath: string;
+  constructor(opts: {readonly fileCandidates: FileCandidates; readonly indexCandidates: FileCandidates; readonly mainModulePath: string; readonly packageJsonPath: string});
+  fileCandidates: FileCandidates;
+  indexCandidates: FileCandidates;
+  mainModulePath: string;
+  packageJsonPath: string;
 }
 
 export type Resolution = FileResolution | VirtualResolution | {readonly type: 'empty'};
 
 export type ResolutionContext = Readonly<{
-    allowHaste: boolean;
-    assetExts: ReadonlySet<string>;
-    customResolverOptions: CustomResolverOptions;
-    disableHierarchicalLookup: boolean;
-    doesFileExist: DoesFileExist;
-    extraNodeModules: null | undefined | {[packageName: string]: string};
-    dev: boolean;
-    getPackage: (packageJsonPath: string) => null | undefined | PackageJson;
-    getPackageForModule: (absoluteModulePath: string) => null | undefined | PackageForModule;
-    dependency?: TransformResultDependency | undefined;
-    isESMImport?: boolean | undefined;
-    fileSystemLookup: FileSystemLookup;
-    mainFields: ReadonlyArray<string>;
-    originModulePath: string;
-    nodeModulesPaths: ReadonlyArray<string>;
-    preferNativePlatform: boolean;
-    resolveAsset: ResolveAsset;
-    redirectModulePath: (modulePath: string) => string | false;
-    resolveHasteModule: (name: string) => null | undefined | string;
-    resolveHastePackage: (name: string) => null | undefined | string;
-    resolveRequest?: null | undefined | CustomResolver;
-    schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}> | undefined;
-    sourceExts: ReadonlyArray<string>;
-    unstable_conditionNames: ReadonlyArray<string>;
-    unstable_conditionsByPlatform: Readonly<{
-        [platform: string]: ReadonlyArray<string>;
-    }>;
-    unstable_enablePackageExports: boolean;
-    unstable_incrementalResolution: boolean;
-    unstable_logWarning: (message: string) => void;
+  allowHaste: boolean;
+  assetExts: ReadonlySet<string>;
+  customResolverOptions: CustomResolverOptions;
+  disableHierarchicalLookup: boolean;
+  doesFileExist: DoesFileExist;
+  extraNodeModules: null | undefined | {[packageName: string]: string};
+  dev: boolean;
+  getPackage: (packageJsonPath: string) => null | undefined | PackageJson;
+  getPackageForModule: (absoluteModulePath: string) => null | undefined | PackageForModule;
+  dependency?: TransformResultDependency | undefined;
+  isESMImport?: boolean | undefined;
+  fileSystemLookup: FileSystemLookup;
+  mainFields: ReadonlyArray<string>;
+  originModulePath: string;
+  nodeModulesPaths: ReadonlyArray<string>;
+  preferNativePlatform: boolean;
+  resolveAsset: ResolveAsset;
+  redirectModulePath: (modulePath: string) => string | false;
+  resolveHasteModule: (name: string) => null | undefined | string;
+  resolveHastePackage: (name: string) => null | undefined | string;
+  resolveRequest?: null | undefined | CustomResolver;
+  schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}> | undefined;
+  sourceExts: ReadonlyArray<string>;
+  unstable_conditionNames: ReadonlyArray<string>;
+  unstable_conditionsByPlatform: Readonly<{
+    [platform: string]: ReadonlyArray<string>;
+  }>;
+  unstable_enablePackageExports: boolean;
+  unstable_incrementalResolution: boolean;
+  unstable_logWarning: (message: string) => void;
 }>;
 
 export function resolve(context: ResolutionContext, specifier: string, platform: string | null): Resolution;
