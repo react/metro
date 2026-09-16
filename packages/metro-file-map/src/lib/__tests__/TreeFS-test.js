@@ -90,6 +90,20 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     expect(tfs.exists(p('/project/link-to-nowhere'))).toBe(false);
   });
 
+  test('traverses a snapshot deserialized in another realm', () => {
+    // Under Jest, `node:v8` is a host module, so `deserialize` returns `Map`s
+    // whose prototype is not the sandbox's `Map.prototype`.
+    const {deserialize, serialize} = require('node:v8');
+    const deserialized = TreeFS.fromDeserializedSnapshot({
+      rootDir: p('/project'),
+      fileSystemData: deserialize(serialize(tfs.getSerializableSnapshot())),
+      processFile: () => {
+        throw new Error('Not implemented');
+      },
+    });
+    expect(deserialized.exists(p('/project/foo/another.js'))).toBe(true);
+  });
+
   test('implements linkStats()', () => {
     expect(tfs.linkStats(p('/project/link-to-foo/another.js'))).toEqual({
       fileType: 'f',
