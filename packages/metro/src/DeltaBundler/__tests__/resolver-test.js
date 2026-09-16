@@ -113,6 +113,10 @@ function dep(name: string): TransformResultDependency {
     maxWorkers: 1,
     projectRoot: p('/root'),
     reporter: require('../../lib/reporting').nullReporter,
+    // Tests that create a second resolver must not read the first's file map
+    // cache: `v8.deserialize` runs outside the Jest sandbox, so a cached tree
+    // holds `Map`s from another realm that fail TreeFS's `instanceof` checks.
+    resetCache: true,
     transformer: {},
     watchFolders: [p('/root')],
   };
