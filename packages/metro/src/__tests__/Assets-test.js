@@ -10,7 +10,13 @@
 
 'use strict';
 
-jest.mock('node:fs', () => new (require('metro-memory-fs'))());
+jest.mock(
+  'node:fs',
+  () =>
+    new (require('metro-memory-fs'))({
+      platform: process.platform === 'win32' ? 'win32' : 'posix',
+    }),
+);
 jest.mock('../lib/imageSize', () => ({
   getImageDimensions: jest.fn(() => ({
     width: mockImageWidth,
@@ -22,6 +28,9 @@ jest.useRealTimers();
 
 const {getAsset, getAssetData, getAssetSize} = require('../Assets');
 const getImageDimensions = require('../lib/imageSize').getImageDimensions;
+const {
+  posixToSystemPath: p,
+} = require('metro-resolver/private/__tests__/utils');
 const crypto = require('node:crypto');
 const path = require('node:path');
 
@@ -47,14 +56,14 @@ describe('getAssetSize', () => {
 describe('getAsset', () => {
   beforeEach(() => {
     fs.reset();
-    fs.mkdirSync('/root/imgs', {recursive: true});
+    fs.mkdirSync(p('/root/imgs'), {recursive: true});
   });
 
   test('should fail if the extension is not registerd', async () => {
     writeImages({'b.png': 'b image', 'b@2x.png': 'b2 image'});
 
     await expect(
-      getAssetStr('imgs/b.png', '/root', [], ['jpg']),
+      getAssetStr('imgs/b.png', p('/root'), [], ['jpg']),
     ).rejects.toThrow(Error);
   });
 
@@ -62,8 +71,8 @@ describe('getAsset', () => {
     writeImages({'b.png': 'b image', 'b@2x.png': 'b2 image'});
 
     return Promise.all([
-      getAssetStr('imgs/b.png', '/root', [], null, ['png']),
-      getAssetStr('imgs/b@1x.png', '/root', [], null, ['png']),
+      getAssetStr('imgs/b.png', p('/root'), [], null, ['png']),
+      getAssetStr('imgs/b@1x.png', p('/root'), [], null, ['png']),
     ]).then(resp => resp.forEach(data => expect(data).toBe('b image')));
   });
 
@@ -77,11 +86,11 @@ describe('getAsset', () => {
 
     expect(
       await Promise.all([
-        getAssetStr('imgs/b.png', '/root', [], 'ios', ['png']),
-        getAssetStr('imgs/b.png', '/root', [], 'android', ['png']),
-        getAssetStr('imgs/c.png', '/root', [], 'android', ['png']),
-        getAssetStr('imgs/c.png', '/root', [], 'ios', ['png']),
-        getAssetStr('imgs/c.png', '/root', [], null, ['png']),
+        getAssetStr('imgs/b.png', p('/root'), [], 'ios', ['png']),
+        getAssetStr('imgs/b.png', p('/root'), [], 'android', ['png']),
+        getAssetStr('imgs/c.png', p('/root'), [], 'android', ['png']),
+        getAssetStr('imgs/c.png', p('/root'), [], 'ios', ['png']),
+        getAssetStr('imgs/c.png', p('/root'), [], null, ['png']),
       ]),
     ).toEqual([
       'b ios image',
@@ -99,8 +108,8 @@ describe('getAsset', () => {
     });
 
     return Promise.all([
-      getAssetStr('imgs/b.jpg', '/root', [], null, ['jpg']),
-      getAssetStr('imgs/b.png', '/root', [], null, ['png']),
+      getAssetStr('imgs/b.jpg', p('/root'), [], null, ['jpg']),
+      getAssetStr('imgs/b.png', p('/root'), [], null, ['png']),
     ]).then(data => expect(data).toEqual(['jpeg image', 'png image']));
   });
 
@@ -112,9 +121,9 @@ describe('getAsset', () => {
       'b@4.5x.png': 'b4.5 image',
     });
 
-    expect(await getAssetStr('imgs/b@3x.png', '/root', [], null, ['png'])).toBe(
-      'b4 image',
-    );
+    expect(
+      await getAssetStr('imgs/b@3x.png', p('/root'), [], null, ['png']),
+    ).toBe('b4 image');
   });
 
   test('should pick the bigger one with platform ext', async () => {
@@ -131,14 +140,14 @@ describe('getAsset', () => {
 
     expect(
       await Promise.all([
-        getAssetStr('imgs/b@3x.png', '/root', [], null, ['png']),
-        getAssetStr('imgs/b@3x.png', '/root', [], 'ios', ['png']),
+        getAssetStr('imgs/b@3x.png', p('/root'), [], null, ['png']),
+        getAssetStr('imgs/b@3x.png', p('/root'), [], 'ios', ['png']),
       ]),
     ).toEqual(['b4 image', 'b4 ios image']);
   });
 
   test('should find an image located on a watchFolder', async () => {
-    fs.mkdirSync('/anotherfolder', {recursive: true});
+    fs.mkdirSync(p('/anotherfolder'), {recursive: true});
 
     writeImages({
       '../../anotherfolder/b.png': 'b image',
@@ -147,8 +156,8 @@ describe('getAsset', () => {
     expect(
       await getAssetStr(
         '../anotherfolder/b.png',
-        '/root',
-        ['/anotherfolder'],
+        p('/root'),
+        [p('/anotherfolder')],
         null,
         ['png'],
       ),
@@ -156,14 +165,14 @@ describe('getAsset', () => {
   });
 
   test('should throw an error if an image is not located on any watchFolder', async () => {
-    fs.mkdirSync('/anotherfolder', {recursive: true});
+    fs.mkdirSync(p('/anotherfolder'), {recursive: true});
 
     writeImages({
       '../../anotherfolder/b.png': 'b image',
     });
 
     await expect(
-      getAssetStr('../anotherfolder/b.png', '/root', [], null, ['png']),
+      getAssetStr('../anotherfolder/b.png', p('/root'), [], null, ['png']),
     ).rejects.toBeInstanceOf(Error);
   });
 
@@ -171,7 +180,14 @@ describe('getAsset', () => {
     writeImages({'b.png': 'b image'});
 
     expect(
-      await getAssetStr('imgs/b.png', '/root', [], null, ['png'], () => true),
+      await getAssetStr(
+        'imgs/b.png',
+        p('/root'),
+        [],
+        null,
+        ['png'],
+        () => true,
+      ),
     ).toBe('b image');
   });
 
@@ -179,7 +195,7 @@ describe('getAsset', () => {
     writeImages({'b.png': 'b image'});
 
     await expect(
-      getAssetStr('imgs/b.png', '/root', [], null, ['png'], () => false),
+      getAssetStr('imgs/b.png', p('/root'), [], null, ['png'], () => false),
     ).rejects.toBeInstanceOf(Error);
   });
 
@@ -192,7 +208,7 @@ describe('getAsset', () => {
     expect(
       await getAssetStr(
         'imgs/b@2x.png',
-        '/root',
+        p('/root'),
         [],
         null,
         ['png'],
@@ -208,7 +224,7 @@ describe('getAsset', () => {
     });
 
     await expect(
-      getAssetStr('imgs/b@2x.png', '/root', [], null, ['png'], () => false),
+      getAssetStr('imgs/b@2x.png', p('/root'), [], null, ['png'], () => false),
     ).rejects.toBeInstanceOf(Error);
   });
 
@@ -221,7 +237,7 @@ describe('getAsset', () => {
     const checkedPaths = [];
     const result = await getAssetStr(
       'imgs/b@2x.png',
-      '/root',
+      p('/root'),
       [],
       null,
       ['png'],
@@ -232,7 +248,7 @@ describe('getAsset', () => {
     );
 
     expect(result).toBe('b2 image');
-    expect(checkedPaths).toEqual(['/root/imgs/b@2x.png']);
+    expect(checkedPaths).toEqual([p('/root/imgs/b@2x.png')]);
   });
 
   test('should check fileExistsInFileMap for the fallback (highest scale) file', async () => {
@@ -244,7 +260,7 @@ describe('getAsset', () => {
     const checkedPaths = [];
     const result = await getAssetStr(
       'imgs/b@3x.png',
-      '/root',
+      p('/root'),
       [],
       null,
       ['png'],
@@ -255,14 +271,14 @@ describe('getAsset', () => {
     );
 
     expect(result).toBe('b2 image');
-    expect(checkedPaths).toEqual(['/root/imgs/b@2x.png']);
+    expect(checkedPaths).toEqual([p('/root/imgs/b@2x.png')]);
   });
 });
 
 describe('getAssetData', () => {
   beforeEach(() => {
     fs.reset();
-    fs.mkdirSync('/root/imgs', {recursive: true});
+    fs.mkdirSync(p('/root/imgs'), {recursive: true});
   });
 
   test('should get assetData', () => {
@@ -274,8 +290,8 @@ describe('getAssetData', () => {
     });
 
     return getAssetData(
-      '/root/imgs/b.png',
-      'imgs/b.png',
+      p('/root/imgs/b.png'),
+      p('imgs/b.png'),
       [],
       null,
       '/assets',
@@ -286,13 +302,13 @@ describe('getAssetData', () => {
           type: 'png',
           name: 'b',
           scales: [1, 2, 4, 4.5],
-          fileSystemLocation: '/root/imgs',
+          fileSystemLocation: p('/root/imgs'),
           httpServerLocation: '/assets/imgs',
           files: [
-            '/root/imgs/b@1x.png',
-            '/root/imgs/b@2x.png',
-            '/root/imgs/b@4x.png',
-            '/root/imgs/b@4.5x.png',
+            p('/root/imgs/b@1x.png'),
+            p('/root/imgs/b@2x.png'),
+            p('/root/imgs/b@4x.png'),
+            p('/root/imgs/b@4.5x.png'),
           ],
         }),
       );
@@ -302,12 +318,18 @@ describe('getAssetData', () => {
   test('parses dimensions from the first asset file buffer', async () => {
     writeImages({'b@1x.png': 'b1 image', 'b@2x.png': 'b2 image'});
 
-    await getAssetData('/root/imgs/b.png', 'imgs/b.png', [], null, '/assets');
+    await getAssetData(
+      p('/root/imgs/b.png'),
+      p('imgs/b.png'),
+      [],
+      null,
+      '/assets',
+    );
 
     expect(getImageDimensions).toHaveBeenCalledWith(
       'png',
       Buffer.from('b1 image'),
-      '/root/imgs/b@1x.png',
+      p('/root/imgs/b@1x.png'),
     );
   });
 
@@ -320,8 +342,8 @@ describe('getAssetData', () => {
     });
 
     const data = await getAssetData(
-      '/root/imgs/b.jpg',
-      'imgs/b.jpg',
+      p('/root/imgs/b.jpg'),
+      p('imgs/b.jpg'),
       [],
       null,
       '/assets',
@@ -333,13 +355,13 @@ describe('getAssetData', () => {
         type: 'jpg',
         name: 'b',
         scales: [1, 2, 4, 4.5],
-        fileSystemLocation: '/root/imgs',
+        fileSystemLocation: p('/root/imgs'),
         httpServerLocation: '/assets/imgs',
         files: [
-          '/root/imgs/b@1x.jpg',
-          '/root/imgs/b@2x.jpg',
-          '/root/imgs/b@4x.jpg',
-          '/root/imgs/b@4.5x.jpg',
+          p('/root/imgs/b@1x.jpg'),
+          p('/root/imgs/b@2x.jpg'),
+          p('/root/imgs/b@4x.jpg'),
+          p('/root/imgs/b@4.5x.jpg'),
         ],
       }),
     );
@@ -354,8 +376,8 @@ describe('getAssetData', () => {
     });
 
     const data = await getAssetData(
-      '/root/imgs/b.jpg',
-      'imgs/b.jpg',
+      p('/root/imgs/b.jpg'),
+      p('imgs/b.jpg'),
       [],
       null,
       '/public_paths/foo-boar/',
@@ -367,13 +389,13 @@ describe('getAssetData', () => {
         type: 'jpg',
         name: 'b',
         scales: [1, 2, 4, 4.5],
-        fileSystemLocation: '/root/imgs',
+        fileSystemLocation: p('/root/imgs'),
         httpServerLocation: '/public_paths/foo-boar/imgs',
         files: [
-          '/root/imgs/b@1x.jpg',
-          '/root/imgs/b@2x.jpg',
-          '/root/imgs/b@4x.jpg',
-          '/root/imgs/b@4.5x.jpg',
+          p('/root/imgs/b@1x.jpg'),
+          p('/root/imgs/b@2x.jpg'),
+          p('/root/imgs/b@4x.jpg'),
+          p('/root/imgs/b@4.5x.jpg'),
         ],
       }),
     );
@@ -410,8 +432,8 @@ describe('getAssetData', () => {
     });
 
     const data = await getAssetData(
-      '/root/imgs/b.png',
-      'imgs/b.png',
+      p('/root/imgs/b.png'),
+      p('imgs/b.png'),
       ['mockPlugin1', 'asyncMockPlugin2'],
       null,
       '/assets',
@@ -423,12 +445,12 @@ describe('getAssetData', () => {
         type: 'png',
         name: 'b',
         scales: [1, 2, 3],
-        fileSystemLocation: '/root/imgs',
+        fileSystemLocation: p('/root/imgs'),
         httpServerLocation: '/assets/imgs',
         files: [
-          '/root/imgs/b@1x.png',
-          '/root/imgs/b@2x.png',
-          '/root/imgs/b@3x.png',
+          p('/root/imgs/b@1x.png'),
+          p('/root/imgs/b@2x.png'),
+          p('/root/imgs/b@3x.png'),
         ],
         extraPixelCount: mockImageWidth * mockImageHeight,
       }),
@@ -449,14 +471,14 @@ describe('getAssetData', () => {
     test('uses the file contents to build the hash', async () => {
       const hash = crypto.createHash('md5');
 
-      for (const name of fs.readdirSync('/root/imgs')) {
-        hash.update(fs.readFileSync(path.join('/root/imgs', name), 'utf8'));
+      for (const name of fs.readdirSync(p('/root/imgs'))) {
+        hash.update(fs.readFileSync(path.join(p('/root/imgs'), name), 'utf8'));
       }
 
       expect(
         await getAssetData(
-          '/root/imgs/b.jpg',
-          'imgs/b.jpg',
+          p('/root/imgs/b.jpg'),
+          p('imgs/b.jpg'),
           [],
           null,
           '/assets',
@@ -466,18 +488,18 @@ describe('getAssetData', () => {
 
     test('changes the hash when the passed-in file watcher emits an `all` event', async () => {
       const initialData = await getAssetData(
-        '/root/imgs/b.jpg',
-        'imgs/b.jpg',
+        p('/root/imgs/b.jpg'),
+        p('imgs/b.jpg'),
         [],
         null,
         '/assets',
       );
 
-      fs.writeFileSync('/root/imgs/b@4x.jpg', 'updated data');
+      fs.writeFileSync(p('/root/imgs/b@4x.jpg'), 'updated data');
 
       const data = await getAssetData(
-        '/root/imgs/b.jpg',
-        'imgs/b.jpg',
+        p('/root/imgs/b.jpg'),
+        p('imgs/b.jpg'),
         [],
         null,
         '/assets',
@@ -489,7 +511,7 @@ describe('getAssetData', () => {
 
 function writeImages(imgMap) {
   for (const fileName in imgMap) {
-    fs.writeFileSync(path.join('/root/imgs', fileName), imgMap[fileName]);
+    fs.writeFileSync(path.join(p('/root/imgs'), fileName), imgMap[fileName]);
   }
 }
 

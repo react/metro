@@ -1,8 +1,0 @@
-// Jest Snapshot v1, https://goo.gl/fbAQLP
-
-exports[`throws on invalid package name 1`] = `
-"The package \`/root/node_modules/invalid/package.json\` is invalid because it specifies a \`main\` module field that could not be resolved (\`/root/node_modules/invalid/main\`. None of these files exist:
-
-  * /root/node_modules/invalid/main(.js|.jsx|.json|.ts|.tsx)
-  * /root/node_modules/invalid/main/index(.js|.jsx|.json|.ts|.tsx)"
-`;

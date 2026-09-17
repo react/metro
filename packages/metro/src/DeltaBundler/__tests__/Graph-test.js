@@ -51,6 +51,7 @@ import type {
 import {deriveAbsolutePathFromContext} from '../../lib/contextModule';
 import CountingSet from '../../lib/CountingSet';
 import {Graph} from '../Graph';
+import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
 
 const {objectContaining} = expect;
@@ -157,7 +158,11 @@ const Actions = {
       Actions.createFile(path);
     }
     const deps = getMockDependency(path);
-    const depName = name ?? dependencyPath.replace('/', '');
+    // Derive a relative, posix-style specifier from the (possibly Windows)
+    // absolute path, e.g. '/foo/bar' or 'C:\foo\bar' -> 'foo/bar'.
+    const depName =
+      name ??
+      dependencyPath.replace(/^(?:[A-Za-z]:)?[\\/]/, '').replaceAll('\\', '/');
     const key = require('node:crypto')
       .createHash('sha1')
       .update([depName, data?.asyncType ?? '(null)'].join('\0'))
@@ -344,8 +349,6 @@ function getMatchingContextModules<T>(graph: Graph<T>, filePath: string) {
 }
 
 beforeEach(async () => {
-  mockedDependencies = new Set();
-  mockedDependencyTree = new Map();
   transformOverrides = new Map();
 
   mockTransform = jest
@@ -425,34 +428,44 @@ beforeEach(async () => {
     shallow: false,
   };
 
-  /*
-  Generate the initial dependency graph:
-  ┌─────────┐     ┌──────┐     ┌──────┐
-  │ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
-  └─────────┘     └──────┘     └──────┘
-                    │
-                    │
-                    ▼
-                  ┌──────┐
-                  │ /baz │
-                  └──────┘
-  */
-  entryModule = Actions.createFile('/bundle');
-  moduleFoo = Actions.createFile('/foo');
-  moduleBar = Actions.createFile('/bar');
-  moduleBaz = Actions.createFile('/baz');
+  setUpInitialGraph(posixPath => posixPath);
+});
 
-  Actions.addDependency('/bundle', '/foo');
-  Actions.addDependency('/foo', '/bar');
-  Actions.addDependency('/foo', '/baz');
+/*
+Generate the initial dependency graph:
+┌─────────┐     ┌──────┐     ┌──────┐
+│ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
+└─────────┘     └──────┘     └──────┘
+                  │
+                  │
+                  ▼
+                ┌──────┐
+                │ /baz │
+                └──────┘
+
+Paths are given as posix and mapped through `p`, so that tests exercising
+path-sensitive logic can use system paths.
+*/
+function setUpInitialGraph(p: string => string) {
+  mockedDependencies = new Set();
+  mockedDependencyTree = new Map();
+
+  entryModule = Actions.createFile(p('/bundle'));
+  moduleFoo = Actions.createFile(p('/foo'));
+  moduleBar = Actions.createFile(p('/bar'));
+  moduleBaz = Actions.createFile(p('/baz'));
+
+  Actions.addDependency(p('/bundle'), p('/foo'));
+  Actions.addDependency(p('/foo'), p('/bar'));
+  Actions.addDependency(p('/foo'), p('/baz'));
 
   files.clear();
 
   graph = new TestGraph({
-    entryPoints: new Set(['/bundle']),
+    entryPoints: new Set([p('/bundle')]),
     transformOptions: options.transformOptions,
   });
-});
+}
 
 test('should do the initial traversal correctly', async () => {
   const result = await graph.initialTraverseDependencies(options);
@@ -2931,8 +2944,13 @@ describe('only reachable errors are reported', () => {
 });
 
 describe('require.context', () => {
+  // Context modules are derived from and matched against file paths, so use
+  // system paths throughout.
+  const p = createPathNormalizer();
+
   let localOptions;
   beforeEach(() => {
+    setUpInitialGraph(p);
     localOptions = {
       ...options,
       unstable_allowRequireContext: true,
@@ -2949,14 +2967,14 @@ describe('require.context', () => {
     recursive: true,
     mode: 'sync',
     filter: /.*/,
-    from: '/ctx',
+    from: p('/ctx'),
   };
 
-  const ctxPath = deriveAbsolutePathFromContext('/ctx', ctxParams);
+  const ctxPath = deriveAbsolutePathFromContext(p('/ctx'), ctxParams);
 
   test('a context module is created when the context exists in the initial graph', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -2971,13 +2989,13 @@ describe('require.context', () => {
     // Ensure the module has been created
     expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
     // No module at /ctx - that dependency turned into the context module
-    expect(graph.dependencies.get('/ctx')).toBe(undefined);
+    expect(graph.dependencies.get(p('/ctx'))).toBe(undefined);
 
     // We can match paths against the created context
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
-    expect(getMatchingContextModules(graph, '/no-match')).toEqual(new Set());
+    expect(getMatchingContextModules(graph, p('/no-match'))).toEqual(new Set());
   });
 
   test('a context module is created incrementally', async () => {
@@ -2986,7 +3004,7 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -2998,21 +3016,21 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([ctxPath]),
       deleted: new Set([]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
     });
 
     // The transformer receives the arguments necessary to generate a context module
     expect(mockTransform).toHaveBeenCalledWith(ctxPath, ctxResolved);
 
     // We can match paths against the created context
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
   });
 
   test('context exists in initial traversal and is then removed', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3023,7 +3041,7 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     expect(
@@ -3031,27 +3049,27 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([]),
       deleted: new Set([ctxPath]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
     });
 
     // We can no longer match against this context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });
 
   test('context + matched file exist in initial traversal and are then removed', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
@@ -3059,38 +3077,38 @@ describe('require.context', () => {
 
     // Ensure the context module and the matched file are in the graph
     expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
-    expect(graph.dependencies.get('/ctx/matched-file')).not.toBe(undefined);
+    expect(graph.dependencies.get(p('/ctx/matched-file'))).not.toBe(undefined);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      deleted: new Set([ctxPath, '/ctx/matched-file']),
-      modified: new Set(['/bundle']),
+      deleted: new Set([ctxPath, p('/ctx/matched-file')]),
+      modified: new Set([p('/bundle')]),
     });
 
     // We can no longer match against this context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });
 
   test('remove a matched file incrementally from a context', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
@@ -3098,15 +3116,15 @@ describe('require.context', () => {
 
     // Ensure we recorded an inverse dependency between the matched file and the context module
     expect([
-      ...nullthrows(graph.dependencies.get('/ctx/matched-file'))
+      ...nullthrows(graph.dependencies.get(p('/ctx/matched-file')))
         .inverseDependencies,
     ]).toEqual([ctxPath]);
 
     // Delete the matched file
-    Actions.deleteFile('/ctx/matched-file', graph);
+    Actions.deleteFile(p('/ctx/matched-file'), graph);
 
     // Propagate the deletion to the context module (normally DeltaCalculator's responsibility)
-    Actions.removeInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.removeInferredDependency(ctxPath, p('/ctx/matched-file'));
     Actions.modifyFile(ctxPath);
 
     // Compute the new graph incrementally
@@ -3116,7 +3134,7 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([]),
       modified: new Set([ctxPath]),
-      deleted: new Set(['/ctx/matched-file']),
+      deleted: new Set([p('/ctx/matched-file')]),
     });
 
     // Ensure the incremental traversal re-transformed the context module
@@ -3125,23 +3143,23 @@ describe('require.context', () => {
 
   test('modify a matched file incrementally', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
     await graph.initialTraverseDependencies(localOptions);
 
     // Modify the matched file
-    Actions.modifyFile('/ctx/matched-file');
+    Actions.modifyFile(p('/ctx/matched-file'));
 
     // We do not propagate the modification to the context module. (See DeltaCalculator)
 
@@ -3151,7 +3169,7 @@ describe('require.context', () => {
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      modified: new Set(['/ctx/matched-file']),
+      modified: new Set([p('/ctx/matched-file')]),
       deleted: new Set([]),
     });
 
@@ -3161,7 +3179,7 @@ describe('require.context', () => {
 
   test('add a matched file incrementally to a context', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3172,18 +3190,18 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
     // Propagate the addition to the context module (normally DeltaCalculator's responsibility)
-    graph.markModifiedContextModules('/ctx/matched-file', files);
+    graph.markModifiedContextModules(p('/ctx/matched-file'), files);
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/ctx/matched-file']),
+      added: new Set([p('/ctx/matched-file')]),
       modified: new Set([ctxPath]),
       deleted: new Set([]),
     });
@@ -3194,14 +3212,14 @@ describe('require.context', () => {
 
   test('add a matched file incrementally to a context with two references', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create another reference to the same context module
-    Actions.addDependency('/foo', '/ctx', {
+    Actions.addDependency(p('/foo'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3212,17 +3230,17 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
     // Propagate the addition to the context module (normally DeltaCalculator's responsibility)
-    graph.markModifiedContextModules('/ctx/matched-file', files);
+    graph.markModifiedContextModules(p('/ctx/matched-file'), files);
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/ctx/matched-file']),
+      added: new Set([p('/ctx/matched-file')]),
       modified: new Set([ctxPath]),
       deleted: new Set([]),
     });
@@ -3233,14 +3251,14 @@ describe('require.context', () => {
 
   test('remove only one of two references to a context module', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create another reference to the same context module
-    Actions.addDependency('/foo', '/ctx', {
+    Actions.addDependency(p('/foo'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3251,7 +3269,7 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove one reference
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
@@ -3259,7 +3277,7 @@ describe('require.context', () => {
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
       deleted: new Set([]),
     });
 
@@ -3267,7 +3285,7 @@ describe('require.context', () => {
     expect(mockTransform).not.toHaveBeenCalledWith(ctxPath, ctxResolved);
 
     // We can still match against this context because it has not been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
   });
@@ -3283,24 +3301,24 @@ describe('require.context', () => {
       recursive: true,
       mode: 'sync',
       filter: /\.\/narrow\/.*/,
-      from: '/ctx',
+      from: p('/ctx'),
     };
 
     const narrowCtxPath = deriveAbsolutePathFromContext(
-      '/ctx',
+      p('/ctx'),
       narrowCtxParams,
     );
 
     test('creates two context modules in the initial traversal', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3321,30 +3339,30 @@ describe('require.context', () => {
       expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
       expect(graph.dependencies.get(narrowCtxPath)).not.toBe(undefined);
       // No module at /ctx or /ctx/narrow - those dependencies turned into the context modules
-      expect(graph.dependencies.get('/ctx')).toBe(undefined);
-      expect(graph.dependencies.get('/ctx/narrow')).toBe(undefined);
+      expect(graph.dependencies.get(p('/ctx'))).toBe(undefined);
+      expect(graph.dependencies.get(p('/ctx/narrow'))).toBe(undefined);
       // Not conflating the key with the virtual path
       expect(graph.dependencies.get('/ctx2')).toBe(undefined);
 
       // We can match paths against the contexts
-      expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+      expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
         new Set([ctxPath]),
       );
       expect(
-        getMatchingContextModules(graph, '/ctx/narrow/matched-file'),
+        getMatchingContextModules(graph, p('/ctx/narrow/matched-file')),
       ).toEqual(new Set([ctxPath, narrowCtxPath]));
     });
 
     test('add a file matched by both contexts', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3356,17 +3374,20 @@ describe('require.context', () => {
       await graph.initialTraverseDependencies(localOptions);
 
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
       // Propagate the addition to the context modules (normally DeltaCalculator's responsibility)
-      graph.markModifiedContextModules('/ctx/narrow/matched-file', files);
+      graph.markModifiedContextModules(p('/ctx/narrow/matched-file'), files);
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
-        added: new Set(['/ctx/narrow/matched-file']),
+        added: new Set([p('/ctx/narrow/matched-file')]),
         modified: new Set([ctxPath, narrowCtxPath]),
         deleted: new Set([]),
       });
@@ -3374,14 +3395,14 @@ describe('require.context', () => {
 
     test('deleting one context does not delete a file matched by both contexts', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3389,109 +3410,115 @@ describe('require.context', () => {
       });
 
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
 
       // Compute the initial graph
       files.clear();
       await graph.initialTraverseDependencies(localOptions);
 
       // Remove the reference to one of the context modules
-      Actions.removeDependency('/bundle', '/ctx');
+      Actions.removeDependency(p('/bundle'), p('/ctx'));
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
         added: new Set([]),
-        modified: new Set(['/bundle']),
+        modified: new Set([p('/bundle')]),
         deleted: new Set([ctxPath]),
       });
     });
 
     test('edge case: changing context params incrementally under the same key', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
           key: '/ctx',
         },
       });
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
 
       // Compute the initial graph
       files.clear();
       await graph.initialTraverseDependencies(localOptions);
 
       // Remove the reference to one of the context modules
-      Actions.removeDependency('/bundle', '/ctx');
+      Actions.removeDependency(p('/bundle'), p('/ctx'));
       // Replace it with a context with different params
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx',
         },
       });
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
         added: new Set([narrowCtxPath]),
-        modified: new Set(['/bundle']),
+        modified: new Set([p('/bundle')]),
         deleted: new Set([ctxPath]),
       });
 
       // We can match paths against the updated context
-      expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+      expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
         new Set(),
       );
       expect(
-        getMatchingContextModules(graph, '/ctx/narrow/matched-file'),
+        getMatchingContextModules(graph, p('/ctx/narrow/matched-file')),
       ).toEqual(new Set([narrowCtxPath]));
     });
   });
 
   test('edge case: replacing a generated context file with a file that happens to have the same name and key', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
         key: '/ctx',
       },
     });
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
     // Create a real file that collides with the context module's generated path
     Actions.createFile(ctxPath);
-    Actions.addDependency('/bundle', ctxPath, {data: {key: '/ctx'}});
-    Actions.createFile('/other-file');
-    Actions.removeInferredDependency(ctxPath, '/ctx/matched-file');
-    Actions.addDependency(ctxPath, '/other-file');
+    Actions.addDependency(p('/bundle'), ctxPath, {data: {key: '/ctx'}});
+    Actions.createFile(p('/other-file'));
+    Actions.removeInferredDependency(ctxPath, p('/ctx/matched-file'));
+    Actions.addDependency(ctxPath, p('/other-file'));
 
     // Compute the new graph incrementally
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/other-file']),
-      modified: new Set(['/bundle', ctxPath]),
-      deleted: new Set(['/ctx/matched-file']),
+      added: new Set([p('/other-file')]),
+      modified: new Set([p('/bundle'), ctxPath]),
+      deleted: new Set([p('/ctx/matched-file')]),
     });
 
     // We can no longer match paths against the context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });

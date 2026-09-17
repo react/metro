@@ -11,11 +11,14 @@
 
 import type {Dependency} from '../../../types';
 
+import {createPathNormalizer} from '../../../__tests__/test-utils';
 import CountingSet from '../../../../lib/CountingSet';
 import {inlineModuleIdReferences, wrapModule} from '../js';
 import {wrap as raw} from 'jest-snapshot-serializer-raw';
 import createModuleIdFactory from 'metro-config/private/defaults/createModuleIdFactory';
 import nullthrows from 'nullthrows';
+
+const p = createPathNormalizer();
 
 let myModule;
 
@@ -24,12 +27,12 @@ expect.addSnapshotSerializer(require('jest-snapshot-serializer-raw'));
 
 beforeEach(() => {
   myModule = {
-    path: '/root/foo.js',
+    path: p('/root/foo.js'),
     dependencies: new Map<string, Dependency>([
       [
         'bar',
         {
-          absolutePath: '/bar.js',
+          absolutePath: p('/bar.js'),
           data: {
             data: {asyncType: null, isESMImport: false, locs: [], key: 'bar'},
             name: 'bar',
@@ -39,7 +42,7 @@ beforeEach(() => {
       [
         'baz',
         {
-          absolutePath: '/baz.js',
+          absolutePath: p('/baz.js'),
           data: {
             data: {asyncType: null, isESMImport: false, locs: [], key: 'baz'},
             name: 'baz',
@@ -72,8 +75,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: false,
           includeAsyncPaths: false,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl: null,
         }),
       ),
@@ -87,8 +90,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: true,
           includeAsyncPaths: false,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl: null,
         }),
       ),
@@ -106,8 +109,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: true,
           includeAsyncPaths: false,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl: null,
         }),
       ),
@@ -117,18 +120,18 @@ describe('wrapModule()', () => {
   test('should use custom createModuleId param', () => {
     // Just use a createModuleId that returns the same path.
     expect(
-      raw(
-        wrapModule(myModule, {
-          createModuleId: (path: string) => path,
-          dev: false,
-          includeAsyncPaths: false,
-          projectRoot: '/root',
-          serverRoot: '/root',
-          sourceUrl: null,
-        }),
-      ),
-    ).toMatchInlineSnapshot(
-      `__d(function() { console.log("foo") },"/root/foo.js",["/bar.js","/baz.js"]);`,
+      wrapModule(myModule, {
+        createModuleId: (path: string) => path,
+        dev: false,
+        includeAsyncPaths: false,
+        projectRoot: p('/root'),
+        serverRoot: p('/root'),
+        sourceUrl: null,
+      }),
+    ).toBe(
+      `__d(function() { console.log("foo") },${JSON.stringify(
+        p('/root/foo.js'),
+      )},${JSON.stringify([p('/bar.js'), p('/baz.js')])});`,
     );
   });
 
@@ -144,8 +147,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: false,
           includeAsyncPaths: true,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl: 'http://localhost/Main.bundle?param1=true&param2=1234',
         }),
       ),
@@ -166,8 +169,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: false,
           includeAsyncPaths: true,
-          projectRoot: '/root',
-          serverRoot: '/',
+          projectRoot: p('/root'),
+          serverRoot: p('/'),
           sourceUrl: 'http://localhost/Main.bundle?param1=true&param2=1234',
         }),
       ),
@@ -188,8 +191,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: false,
           includeAsyncPaths: true,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl:
             'http://localhost/Main.bundle?modulesOnly=false&runModule=true',
         }),
@@ -210,8 +213,8 @@ describe('wrapModule()', () => {
       createModuleId: createModuleIdFactory(),
       dev: false,
       includeAsyncPaths: true,
-      projectRoot: '/root',
-      serverRoot: '/root',
+      projectRoot: p('/root'),
+      serverRoot: p('/root'),
       // Deliberately null: proves the hook does NOT require sourceUrl (the
       // default's invariant is skipped when the hook is provided).
       sourceUrl: null,
@@ -225,7 +228,7 @@ describe('wrapModule()', () => {
       },
     });
     // Hook invoked once, with the async dep only (sync dep 'baz' is skipped).
-    expect(seenPaths).toEqual(['/bar.js']);
+    expect(seenPaths).toEqual([p('/bar.js')]);
     expect(raw(output)).toMatchInlineSnapshot(
       `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":{"displayName":"bar","mobileConfig":null,"segmentIDs":[42]}}});`,
     );
@@ -243,8 +246,8 @@ describe('wrapModule()', () => {
           createModuleId: createModuleIdFactory(),
           dev: false,
           includeAsyncPaths: true,
-          projectRoot: '/root',
-          serverRoot: '/root',
+          projectRoot: p('/root'),
+          serverRoot: p('/root'),
           sourceUrl: null,
           unstable_getAsyncDependencyPath: () => null,
         }),
@@ -261,8 +264,8 @@ describe('wrapModule() with inlined module ids', () => {
   const baseInlineOptions = {
     dev: false,
     includeAsyncPaths: false,
-    projectRoot: '/root',
-    serverRoot: '/root',
+    projectRoot: p('/root'),
+    serverRoot: p('/root'),
     sourceUrl: null,
     dependencyMapReservedName: NAME,
     unstable_inlineDependencyMap: true,
