@@ -48,10 +48,12 @@ describe('getAssetUrlPath', () => {
     ).toBe('[metro-watchFolders]/1/imgs/a.png');
   });
 
-  test('falls back to a project-relative path outside configured roots', () => {
-    expect(
+  test('throws for an asset outside every configured root', () => {
+    expect(() =>
       getAssetUrlPath('/other/imgs/a.png', '/root', ['/root', '/external']),
-    ).toBe('../other/imgs/a.png');
+    ).toThrow(
+      "Asset '/other/imgs/a.png' is not within projectRoot '/root' or any watch folder (/root, /external)",
+    );
   });
 });
 

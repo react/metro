@@ -213,9 +213,11 @@ export async function getAssetData(
   // reaches the client, which composes the file name from the scale and
   // platform it needs.
   //
-  // If the path of the asset is outside of the projectRoot, we don't want to
-  // use `path.join` since this will generate an incorrect URL path. In that
-  // case we just concatenate the publicPath with the relative path.
+  // Metro itself never passes a path starting with `..` here, since assets
+  // outside projectRoot are addressed by watch folder index. Custom
+  // transformers that call this with a project-relative path still can, and
+  // `path.join` would collapse the `..` against publicPath, so concatenate
+  // instead to preserve it.
   let httpServerLocation = urlPath.startsWith('..')
     ? publicPath.replace(/\/$/, '') + '/' + path.dirname(urlPath)
     : path.join(publicPath, path.dirname(urlPath));
@@ -283,7 +285,10 @@ export function getAssetUrlPath(
     }
   }
 
-  return normalizePathSeparatorsToPosix(projectRelativePath);
+  throw new Error(
+    `Asset '${assetPath}' is not within projectRoot '${projectRoot}' or any ` +
+      `watch folder (${watchFolders.join(', ')})`,
+  );
 }
 
 function isPathInsideRoot(relativePath: string): boolean {
