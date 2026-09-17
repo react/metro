@@ -18,7 +18,7 @@ import path from 'node:path';
  * Data structure approximating a file tree. Should be populated with complete
  * paths mapping to file contents.
  */
-type MockFileMap = Readonly<{
+export type MockFileMap = Readonly<{
   [path: string]: ?(string | Readonly<{realPath: ?string}>),
 }>;
 
@@ -102,7 +102,9 @@ export function createResolutionContext(
  * `ResolutionContext` based on the input mock file/package.json map.
  */
 export function createPackageAccessors(
-  fileOrPackageJsonMap: MockFileMap | {[path: string]: PackageJson},
+  fileOrPackageJsonMap: Readonly<{
+    [path: string]: ?(string | Readonly<{realPath: ?string}> | PackageJson),
+  }>,
 ): Readonly<{
   getPackage: ResolutionContext['getPackage'],
   getPackageForModule: ResolutionContext['getPackageForModule'],
@@ -124,6 +126,7 @@ export function createPackageAccessors(
     const parsedPath = path.parse(modulePath);
     const root = parsedPath.root;
     let dir = path.join(parsedPath.dir, parsedPath.base);
+    let prevDir;
 
     do {
       if (path.basename(dir) === 'node_modules') {
@@ -140,8 +143,11 @@ export function createPackageAccessors(
         };
       }
 
+      prevDir = dir;
       dir = path.dirname(dir);
-    } while (dir !== '.' && dir !== root);
+      // `root` may use different separators to `dir` (e.g. '/' vs '\' on
+      // Windows), so also stop once `dirname` no longer changes the path.
+    } while (dir !== '.' && dir !== root && dir !== prevDir);
 
     return null;
   };

@@ -440,6 +440,15 @@ test('symbolicating a stack trace ignoring a function map', async () =>
   ).resolves.toMatchSnapshot());
 
 describe('directory context', () => {
+  // Stack frames with absolute paths into the test directory are echoed
+  // verbatim when unmapped. Replace the test directory with a placeholder and
+  // normalize the separators of those paths only, for a portable snapshot.
+  const replaceTestDir = (output: string) =>
+    output
+      .split(__dirname)
+      .join('<testDir>')
+      .replace(/<testDir>[^:\n]*/g, testPath => testPath.replaceAll('\\', '/'));
+
   test('symbolicating a stack trace', async () =>
     await expect(
       execute([resolve('directory')], read('directory/test.stack')),
@@ -448,16 +457,13 @@ describe('directory context', () => {
   test('symbolicating a stack trace with absolute paths', async () => {
     const dirPath = resolve('directory');
     const stack =
-      `someFunc@${dirPath}/foo.js:4:0` +
+      `someFunc@${path.join(dirPath, 'foo.js')}:4:0` +
       '\n' +
-      `someOtherFunc@${dirPath}/subdir1/bar.js:255:6` +
+      `someOtherFunc@${path.join(dirPath, 'subdir1', 'bar.js')}:255:6` +
       '\n' +
-      `fn@${dirPath}/fileThatDoesntExist.js:10:20` +
+      `fn@${path.join(dirPath, 'fileThatDoesntExist.js')}:10:20` +
       '\n';
-    const symbolicated = (await execute([dirPath], stack))
-      // No replaceAll in Node 12.x
-      .split(__dirname)
-      .join('<testDir>');
+    const symbolicated = replaceTestDir(await execute([dirPath], stack));
     expect(symbolicated).toMatchSnapshot();
   });
 
@@ -465,14 +471,11 @@ describe('directory context', () => {
     const dirPath = resolve('directory');
     const parentDirPath = path.resolve(dirPath, '..');
     const stack =
-      `func@${parentDirPath}/testfile.js:1:1` +
+      `func@${path.join(parentDirPath, 'testfile.js')}:1:1` +
       '\n' +
       'func@../testfile.js:1:1' +
       '\n';
-    const symbolicated = (await execute([dirPath], stack))
-      // No replaceAll in Node 12.x
-      .split(__dirname)
-      .join('<testDir>');
+    const symbolicated = replaceTestDir(await execute([dirPath], stack));
     expect(symbolicated).toMatchSnapshot();
   });
 });
