@@ -13,6 +13,7 @@ import type {TransformResult, TransformResultWithSource} from '../DeltaBundler';
 import type {TransformerConfig, TransformOptions} from './Worker';
 import type {ConfigT} from 'metro-config';
 
+import {getAssetUrlPath} from '../Assets';
 import {normalizePathSeparatorsToPosix} from '../lib/pathUtils';
 import getTransformCacheKey from './getTransformCacheKey';
 import WorkerFarm from './WorkerFarm';
@@ -112,6 +113,17 @@ export default class Transformer {
       this._config.projectRoot,
       filePath,
     );
+    // Assets are the only modules whose output depends on watchFolders, via
+    // the URL path baked into them, so that dependency enters the cache key
+    // per asset here and not in the base hash.
+    const assetUrlPath =
+      type === 'asset'
+        ? getAssetUrlPath(
+            filePath,
+            this._config.projectRoot,
+            this._config.watchFolders,
+          )
+        : null;
 
     const partialKey = stableHash([
       // This is the hash related to the global Bundler config.
@@ -121,6 +133,7 @@ export default class Transformer {
       // addition to content hash because transformers receive path as an
       // input, and may apply e.g. extension-based logic.
       normalizePathSeparatorsToPosix(projectRelativePath),
+      assetUrlPath,
       customTransformOptions,
       dev,
       experimentalImportSupport,
@@ -172,6 +185,7 @@ export default class Transformer {
           projectRelativePath,
           transformerOptions,
           content,
+          assetUrlPath ?? undefined,
         );
 
     // Only re-compute the full key if the SHA-1 changed. This is because
