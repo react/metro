@@ -161,11 +161,13 @@ class SymbolicationContext<ModuleIdsT> {
   //  IOS: foo@123.js:4:18131, Android: bar:123.js:4:18063
   // sample stack trace without function name:
   //  123.js:4:18131
+  // sample stack trace with a Windows absolute path:
+  //  foo@C:\app\123.js:4:18131
   // sample result:
   //  IOS: foo.js:57:foo, Android: bar.js:75:bar
   symbolicate(stackTrace: string): string {
     return stackTrace.replace(
-      /(?:([^@: \n(]+)(@|:))?(?:(?:([^@: \n(]+):)?(\d+):(\d+)|\[native code\])/g,
+      /(?:((?:[A-Za-z]:\\)?[^@: \n(]+)(@|:))?(?:(?:((?:[A-Za-z]:\\)?[^@: \n(]+):)?(\d+):(\d+)|\[native code\])/g,
       (match, func, delimiter, fileName, line, column) => {
         if (delimiter === ':' && func && !fileName) {
           fileName = func;

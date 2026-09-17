@@ -210,6 +210,18 @@ test('symbolicating a stack trace', async () =>
     execute([TESTFILE_MAP], read('testfile.stack')),
   ).resolves.toMatchSnapshot());
 
+test('symbolicating a stack trace with Windows absolute paths', async () => {
+  const stack = read('testfile.stack');
+  const windowsStack = stack.replaceAll(
+    /(^|@)(thrower\.min\.js)/gm,
+    '$1C:\\app\\$2',
+  );
+  expect(windowsStack).not.toEqual(stack);
+  expect(await execute([TESTFILE_MAP], windowsStack)).toEqual(
+    await execute([TESTFILE_MAP], stack),
+  );
+});
+
 test('symbolicating a stack trace in Node format', async () =>
   await expect(
     execute([TESTFILE_MAP], read('testfile.node.stack')),
