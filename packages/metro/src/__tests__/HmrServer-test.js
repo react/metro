@@ -19,6 +19,7 @@ import HmrServer from '../HmrServer';
 import IncrementalBundler from '../IncrementalBundler';
 import getGraphId from '../lib/getGraphId';
 import {mergeConfig} from 'metro-config';
+import {posixToSystemPath as p} from 'metro-resolver/private/__tests__/utils';
 import EventEmitter from 'node:events';
 
 const {
@@ -51,7 +52,7 @@ describe('HmrServer', () => {
   const hiModule = {
     dependencies: new Map<$FlowFixMe, $FlowFixMe>(),
     inverseDependencies: new Set<$FlowFixMe>(),
-    path: '/root/hi',
+    path: p('/root/hi'),
     getSource: () => "alert('hi');",
     output: [
       {
@@ -84,7 +85,7 @@ describe('HmrServer', () => {
   beforeEach(() => {
     mockedGraph = {
       dependencies: new Map<$FlowFixMe, $FlowFixMe>(),
-      entryPoint: '/root/EntryPoint.js',
+      entryPoint: p('/root/EntryPoint.js'),
     };
     changeHandlerPromises.clear();
 
@@ -123,7 +124,7 @@ describe('HmrServer', () => {
       },
     });
 
-    const config = mergeConfig(getDefaultValues('/root'), {
+    const config = mergeConfig(getDefaultValues(p('/root')), {
       serializer: {experimentalSerializerHook: () => {}},
       reporter: {update: jest.fn()},
       transformer: {
@@ -205,7 +206,7 @@ describe('HmrServer', () => {
 
     expect(getRevisionByGraphIdMock).toBeCalledWith(
       getGraphId(
-        '/root/EntryPoint.js',
+        p('/root/EntryPoint.js'),
         {
           customTransformOptions: {},
           dev: true,
@@ -243,7 +244,7 @@ describe('HmrServer', () => {
 
     expect(getRevisionByGraphIdMock).toBeCalledWith(
       getGraphId(
-        '/root/EntryPoint.js',
+        p('/root/EntryPoint.js'),
         {
           customTransformOptions: {},
           dev: true,
@@ -271,7 +272,7 @@ describe('HmrServer', () => {
 
     expect(getRevisionByGraphIdMock).toBeCalledWith(
       getGraphId(
-        '/root/EntryPoint.js',
+        p('/root/EntryPoint.js'),
         {
           customTransformOptions: {},
           dev: true,
@@ -299,7 +300,7 @@ describe('HmrServer', () => {
 
     expect(getRevisionByGraphIdMock).toBeCalledWith(
       getGraphId(
-        '/root/EntryPoint.js',
+        p('/root/EntryPoint.js'),
         {
           customTransformOptions: {},
           dev: true,
@@ -327,7 +328,7 @@ describe('HmrServer', () => {
     await connect('/hot?bundleEntry=EntryPoint.js&platform=ios', sendMessage);
 
     const expectedMessage = `The graph \`${getGraphId(
-      '/root/EntryPoint.js',
+      p('/root/EntryPoint.js'),
       {
         customTransformOptions: {},
         dev: true,
@@ -366,7 +367,7 @@ describe('HmrServer', () => {
       delta: {
         added: new Map(),
         modified: new Map([[hiModule.path, hiModule]]),
-        deleted: new Set(['/root/bye']),
+        deleted: new Set([p('/root/bye')]),
       },
     });
 
@@ -385,9 +386,9 @@ describe('HmrServer', () => {
           modified: [
             {
               module: [
-                id('/root/hi'),
+                id(p('/root/hi')),
                 '__d(function() { alert("hi"); },' +
-                  id('/root/hi') +
+                  id(p('/root/hi')) +
                   ',null,"hi",{});\n' +
                   '//# sourceMappingURL=http://localhost/hi.map?platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n' +
                   '//# sourceURL=http://localhost/hi.bundle//&platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n',
@@ -398,7 +399,7 @@ describe('HmrServer', () => {
                 'http://localhost/hi.bundle//&platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true',
             },
           ],
-          deleted: [id('/root/bye')],
+          deleted: [id(p('/root/bye'))],
         },
       },
       {
@@ -449,7 +450,7 @@ describe('HmrServer', () => {
       delta: {
         added: new Map(),
         modified: new Map([[hiModule.path, hiModule]]),
-        deleted: new Set(['/root/bye']),
+        deleted: new Set([p('/root/bye')]),
       },
     });
     await emitChangeEvent();
@@ -469,9 +470,9 @@ describe('HmrServer', () => {
           modified: [
             {
               module: [
-                id('/root/hi'),
+                id(p('/root/hi')),
                 '__d(function() { alert("hi"); },' +
-                  id('/root/hi') +
+                  id(p('/root/hi')) +
                   ',null,"hi",{});\n' +
                   '//# sourceMappingURL=http://localhost/hi.map?platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n' +
                   '//# sourceURL=http://localhost/hi.bundle//&platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n',
@@ -483,7 +484,7 @@ describe('HmrServer', () => {
                 'http://localhost/hi.map?platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true',
             },
           ],
-          deleted: [id('/root/bye')],
+          deleted: [id(p('/root/bye'))],
         },
       },
       {
@@ -508,7 +509,7 @@ describe('HmrServer', () => {
       delta: {
         added: new Map(),
         modified: new Map([[hiModule.path, hiModule]]),
-        deleted: new Set(['/root/bye']),
+        deleted: new Set([p('/root/bye')]),
       },
     });
 
@@ -528,9 +529,9 @@ describe('HmrServer', () => {
           modified: [
             {
               module: [
-                id('/root/hi'),
+                id(p('/root/hi')),
                 '__d(function() { alert("hi"); },' +
-                  id('/root/hi') +
+                  id(p('/root/hi')) +
                   ',null,"hi",{});\n' +
                   '//# sourceMappingURL=http://localhost/hi.map?platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n' +
                   '//# sourceURL=http://localhost/hi.bundle//&platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true\n',
@@ -539,7 +540,7 @@ describe('HmrServer', () => {
                 'http://localhost/hi.bundle//&platform=ios&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true',
             },
           ],
-          deleted: [id('/root/bye')],
+          deleted: [id(p('/root/bye'))],
         },
       },
       {
@@ -566,7 +567,7 @@ describe('HmrServer', () => {
       delta: {
         added: new Map(),
         modified: new Map([[hiModule.path, hiModule]]),
-        deleted: new Set(['/root/bye']),
+        deleted: new Set([p('/root/bye')]),
       },
     });
 
@@ -590,7 +591,7 @@ describe('HmrServer', () => {
                 'http://localhost/hi.bundle//&platform=ios&unusedExtraParam=42&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true',
             },
           ],
-          deleted: [id('/root/bye')],
+          deleted: [id(p('/root/bye'))],
         },
       },
       {
@@ -617,7 +618,7 @@ describe('HmrServer', () => {
       delta: {
         added: new Map(),
         modified: new Map([[hiModule.path, hiModule]]),
-        deleted: new Set(['/root/bye']),
+        deleted: new Set([p('/root/bye')]),
       },
     });
 
@@ -641,7 +642,7 @@ describe('HmrServer', () => {
                 'http://localhost/hi.bundle//&platform=ios&TEST_URL_WAS_REWRITTEN=true&dev=true&minify=false&modulesOnly=true&runModule=false&shallow=true',
             },
           ],
-          deleted: [id('/root/bye')],
+          deleted: [id(p('/root/bye'))],
         },
       },
       {
