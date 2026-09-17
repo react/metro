@@ -186,6 +186,7 @@ function dep(name: string): TransformResultDependency {
         ) {
           return;
         }
+        // $FlowFixMe[incompatible-type]
         originalError(...args);
       });
     });
