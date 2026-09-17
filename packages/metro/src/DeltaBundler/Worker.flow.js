@@ -12,9 +12,9 @@
 import type {TransformResult} from './types';
 import type {LogEntry} from 'metro-core/private/Logger';
 import type {
+  FileLocation,
   JsTransformerConfig,
   JsTransformOptions,
-  TransformExtras,
 } from 'metro-transform-worker';
 
 import traverse from '@babel/traverse';
@@ -22,13 +22,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type TransformOptions = Readonly<{
-  ...JsTransformOptions,
-  // Split out of the options before they reach the transformer, which receives
-  // them as a separate TransformExtras argument, so that they are not spread
-  // into BabelTransformerArgs along with the public options.
-  assetUrlPath?: string,
-}>;
+export type {JsTransformOptions as TransformOptions} from 'metro-transform-worker';
 
 type TransformerInterface = {
   transform(
@@ -37,7 +31,7 @@ type TransformerInterface = {
     string,
     Buffer,
     JsTransformOptions,
-    TransformExtras,
+    FileLocation,
   ): Promise<TransformResult<>>,
 };
 
@@ -76,10 +70,11 @@ function asDeserializedBuffer(value: any): Buffer | null {
 
 export const transform = (
   filename: string,
-  transformOptions: TransformOptions,
+  transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
   fileBuffer?: Buffer,
+  fileLocation?: FileLocation,
 ): Promise<Data> => {
   let data;
 
@@ -95,6 +90,7 @@ export const transform = (
     transformOptions,
     projectRoot,
     transformerConfig,
+    fileLocation,
   );
 };
 
@@ -105,9 +101,10 @@ export type Worker = {
 async function transformFile(
   projectRelativePath: string,
   data: Buffer,
-  transformOptions: TransformOptions,
+  transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
+  fileLocation?: FileLocation,
 ): Promise<Data> {
   // eslint-disable-next-line no-useless-call
   const Transformer: TransformerInterface = require.call(
@@ -125,14 +122,13 @@ async function transformFile(
 
   const sha1 = crypto.createHash('sha1').update(data).digest('hex');
 
-  const {assetUrlPath, ...publicTransformOptions} = transformOptions;
   const result = await Transformer.transform(
     transformerConfig.transformerConfig,
     projectRoot,
     projectRelativePath,
     data,
-    publicTransformOptions,
-    {assetUrlPath},
+    transformOptions,
+    fileLocation ?? {},
   );
 
   // The babel cache caches scopes and pathes for already traversed AST nodes.

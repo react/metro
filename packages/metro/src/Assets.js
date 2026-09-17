@@ -204,20 +204,24 @@ async function getAbsoluteAssetInfo(
 
 export async function getAssetData(
   assetPath: string,
-  localPath: string,
+  urlPath: string,
   assetDataPlugins: ReadonlyArray<string>,
   platform: ?string,
   publicPath: string,
 ): Promise<AssetData> {
+  // urlPath is the asset's path relative to publicPath. Only its directory
+  // reaches the client, which composes the file name from the scale and
+  // platform it needs.
+  //
   // If the path of the asset is outside of the projectRoot, we don't want to
   // use `path.join` since this will generate an incorrect URL path. In that
   // case we just concatenate the publicPath with the relative path.
-  let assetUrlPath = localPath.startsWith('..')
-    ? publicPath.replace(/\/$/, '') + '/' + path.dirname(localPath)
-    : path.join(publicPath, path.dirname(localPath));
+  let httpServerLocation = urlPath.startsWith('..')
+    ? publicPath.replace(/\/$/, '') + '/' + path.dirname(urlPath)
+    : path.join(publicPath, path.dirname(urlPath));
 
   // On Windows, change backslashes to slashes to get proper URL path from file path.
-  assetUrlPath = normalizePathSeparatorsToPosix(assetUrlPath);
+  httpServerLocation = normalizePathSeparatorsToPosix(httpServerLocation);
 
   const {assetInfo, firstFileContent} = await getAbsoluteAssetInfo(
     assetPath,
@@ -231,7 +235,7 @@ export async function getAssetData(
   const assetData = {
     __packager_asset: true,
     fileSystemLocation: path.dirname(assetPath),
-    httpServerLocation: assetUrlPath,
+    httpServerLocation,
     width: dimensions ? dimensions.width / scale : undefined,
     height: dimensions ? dimensions.height / scale : undefined,
     scales: assetInfo.scales,
@@ -244,12 +248,15 @@ export async function getAssetData(
 }
 
 /**
- * Returns the path used to identify an asset in its development server URL.
- * Assets outside projectRoot use an indexed watch folder prefix so that the
- * URL unambiguously identifies their configured root.
+ * Returns the path used to identify an asset in its development server URL,
+ * relative to publicPath. Assets outside projectRoot use an indexed watch
+ * folder prefix so that the URL unambiguously identifies their configured
+ * root.
  *
  * Roots are resolved as Server does when it decodes these paths, so that the
- * index here and the index it reads back refer to the same directory.
+ * index here and the index it reads back refer to the same directory. The
+ * first root to contain the asset wins, in index order, so that appending a
+ * watch folder never changes the URL of an asset under an existing one.
  */
 export function getAssetUrlPath(
   assetPath: string,

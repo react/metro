@@ -134,12 +134,18 @@ export type JsTransformOptions = Readonly<{
 }>;
 
 /**
- * Inputs computed by Metro and passed alongside the public transform options.
- * Kept out of JsTransformOptions because those are spread into
- * BabelTransformerArgs, and these are for the default transformer only.
+ * Where Metro locates this file, beyond its project-relative path. These are
+ * facts about the file that depend on the server's configuration or state,
+ * which the transformer cannot derive from the file itself. They are passed
+ * separately from JsTransformOptions so that they are not spread into
+ * BabelTransformerArgs.
  */
-export type TransformExtras = Readonly<{
-  assetUrlPath?: string,
+export type FileLocation = Readonly<{
+  /**
+   * The file's path relative to the asset server root (`publicPath`), as
+   * clients will request it. Provided for assets only.
+   */
+  urlPath?: string,
 }>;
 
 opaque type AbsolutePath = string;
@@ -173,7 +179,7 @@ type JSONFile = {
 
 type TransformationContext = Readonly<{
   config: JsTransformerConfig,
-  extras: TransformExtras,
+  fileLocation: FileLocation,
   projectRoot: AbsolutePath,
   options: JsTransformOptions,
 }>;
@@ -548,7 +554,7 @@ async function transformAsset(
     getBabelTransformArgs(file, context),
     assetRegistryPath,
     assetPlugins,
-    context.extras.assetUrlPath,
+    context.fileLocation.urlPath,
   );
 
   const jsFile = {
@@ -689,10 +695,10 @@ export const transform = async (
   projectRelativePath: string,
   data: Buffer,
   options: JsTransformOptions,
-  extras?: TransformExtras = {},
+  fileLocation?: FileLocation = {},
 ): Promise<TransformResponse> => {
   const context: TransformationContext = {
-    extras,
+    fileLocation,
     config,
     options,
     projectRoot,

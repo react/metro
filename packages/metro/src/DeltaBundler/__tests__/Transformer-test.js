@@ -242,11 +242,9 @@ describe('Transformer', function () {
 
     expect(workerTransform).toHaveBeenCalledWith(
       path.join('..', 'external', 'imgs', 'a.png'),
-      {
-        type: 'asset',
-        assetUrlPath: '[metro-watchFolders]/1/imgs/a.png',
-      },
+      {type: 'asset'},
       undefined,
+      {urlPath: '[metro-watchFolders]/1/imgs/a.png'},
     );
   });
 });

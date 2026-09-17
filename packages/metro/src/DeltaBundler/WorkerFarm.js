@@ -12,6 +12,7 @@
 import type {TransformResult} from '../DeltaBundler';
 import type {TransformerConfig, TransformOptions, Worker} from './Worker';
 import type {ConfigT} from 'metro-config';
+import type {FileLocation} from 'metro-transform-worker';
 import type {Readable} from 'node:stream';
 
 import {Worker as JestWorker} from 'jest-worker';
@@ -76,6 +77,7 @@ export default class WorkerFarm {
     filename: string,
     options: TransformOptions,
     fileBuffer?: Buffer,
+    fileLocation?: FileLocation,
   ): Promise<TransformerResult> {
     try {
       const data = await this._worker.transform(
@@ -84,6 +86,7 @@ export default class WorkerFarm {
         this._config.projectRoot,
         this._transformerConfig,
         fileBuffer,
+        fileLocation,
       );
 
       Logger.log(data.transformFileStartLogEntry);
