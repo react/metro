@@ -8,7 +8,13 @@
  * @oncall react_native
  */
 
-import TreeFS from '../../lib/TreeFS';
+import type TreeFSType from '../../lib/TreeFS';
+
+let mockPathModule;
+jest.mock('node:path', () => mockPathModule);
+
+// The platform-specific path helper `p` for the graceful-fs mock
+let mockP: string => string;
 
 jest.useRealTimers();
 
@@ -49,7 +55,7 @@ jest.mock('graceful-fs', () => {
         throw new Error('readdir: callback is not a function!');
       }
 
-      if (slash(dir) === '/project/fruits') {
+      if (dir === mockP('/project/fruits')) {
         setTimeout(
           () =>
             callback(null, [
@@ -71,7 +77,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) === '/project/fruits/directory') {
+      } else if (dir === mockP('/project/fruits/directory')) {
         setTimeout(
           () =>
             callback(null, [
@@ -83,7 +89,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) == '/error') {
+      } else if (dir === mockP('/error')) {
         setTimeout(() => callback({code: 'ENOTDIR'}, undefined), 0);
       }
     }),
@@ -92,19 +98,30 @@ jest.mock('graceful-fs', () => {
 });
 
 const pearMatcher = path => /pear/.test(path);
-const normalize = path =>
-  process.platform === 'win32' ? path.replace(/\//g, '\\') : path;
-const createMap = obj =>
-  new Map(Object.keys(obj).map(key => [normalize(key), obj[key]]));
 
-const rootDir = '/project';
-const emptyFS = new TreeFS({rootDir, files: new Map()});
-const getFS = (files: FileData) => new TreeFS({rootDir, files});
-let nodeCrawl;
+describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
+  // Convenience function to write paths with posix separators but convert them
+  // to system separators
+  const p: string => string = filePath =>
+    platform === 'win32'
+      ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
+      : filePath;
+  const createMap = obj =>
+    new Map(Object.keys(obj).map(key => [p(key), obj[key]]));
 
-describe('node crawler', () => {
+  const rootDir = p('/project');
+  let TreeFS: Class<TreeFSType>;
+  let emptyFS: TreeFSType;
+  let getFS: (files: FileData) => TreeFSType;
+  let nodeCrawl;
+
   beforeEach(() => {
     jest.resetModules();
+    mockPathModule = jest.requireActual<{}>('path')[platform];
+    mockP = p;
+    TreeFS = require('../../lib/TreeFS').default;
+    emptyFS = new TreeFS({rootDir, files: new Map()});
+    getFS = files => new TreeFS({rootDir, files});
   });
 
   test('updates only changed files', async () => {
@@ -124,7 +141,7 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     // Tomato is not included because its mtime is unchanged
@@ -154,11 +171,11 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     expect(changedFiles).toEqual(new Map());
-    expect(removedFiles).toEqual(new Set(['fruits/previouslyExisted.js']));
+    expect(removedFiles).toEqual(new Set([p('fruits/previouslyExisted.js')]));
   });
 
   test('completes with empty roots', async () => {
@@ -191,11 +208,13 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/error'],
+      roots: [p('/error')],
     });
 
     expect(mockConsole.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Error "ENOTDIR" reading contents of "/error"'),
+      expect.stringContaining(
+        `Error "ENOTDIR" reading contents of "${p('/error')}"`,
+      ),
     );
     expect(changedFiles).toEqual(new Map());
     expect(removedFiles).toEqual(new Set());
@@ -211,7 +230,7 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     expect(changedFiles).toEqual(
@@ -238,7 +257,7 @@ describe('node crawler', () => {
         extensions: ['js', 'json'],
         ignore: pearMatcher,
         rootDir,
-        roots: ['/project/fruits', '/project/vegtables'],
+        roots: [p('/project/fruits'), p('/project/vegtables')],
       }),
     ).rejects.toThrow(err);
   });
@@ -270,7 +289,7 @@ describe('node crawler', () => {
         extensions: ['js', 'json'],
         ignore: pearMatcher,
         rootDir,
-        roots: ['/project/fruits'],
+        roots: [p('/project/fruits')],
       }),
     ).rejects.toThrow(err);
   });

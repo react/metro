@@ -10,7 +10,11 @@
  */
 
 import * as Resolver from '../index';
-import {createPackageAccessors, createResolutionContext} from './utils';
+import {
+  createPackageAccessors,
+  createResolutionContext,
+  posixToSystemPath as p,
+} from './utils';
 
 describe('browser field spec', () => {
   describe('alternate main fields', () => {
@@ -22,13 +26,14 @@ describe('browser field spec', () => {
     };
     const baseContext = {
       ...createResolutionContext({
-        '/root/src/main.js': '',
-        '/root/node_modules/test-pkg/package.json': JSON.stringify(packageJson),
-        '/root/node_modules/test-pkg/index.js': '',
-        '/root/node_modules/test-pkg/index-browser.js': '',
-        '/root/node_modules/test-pkg/index-react-native.js': '',
+        [p('/root/src/main.js')]: '',
+        [p('/root/node_modules/test-pkg/package.json')]:
+          JSON.stringify(packageJson),
+        [p('/root/node_modules/test-pkg/index.js')]: '',
+        [p('/root/node_modules/test-pkg/index-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/index-react-native.js')]: '',
       }),
-      originModulePath: '/root/src/main.js',
+      originModulePath: p('/root/src/main.js'),
     };
 
     test('should resolve package entry point using passed `mainFields` in order', () => {
@@ -43,7 +48,7 @@ describe('browser field spec', () => {
         ),
       ).toEqual({
         type: 'sourceFile',
-        filePath: '/root/node_modules/test-pkg/index-browser.js',
+        filePath: p('/root/node_modules/test-pkg/index-browser.js'),
       });
 
       expect(
@@ -57,7 +62,7 @@ describe('browser field spec', () => {
         ),
       ).toEqual({
         type: 'sourceFile',
-        filePath: '/root/node_modules/test-pkg/index-react-native.js',
+        filePath: p('/root/node_modules/test-pkg/index-react-native.js'),
       });
 
       expect(
@@ -65,7 +70,7 @@ describe('browser field spec', () => {
           {
             ...baseContext,
             ...createPackageAccessors({
-              '/root/node_modules/test-pkg/package.json': {
+              [p('/root/node_modules/test-pkg/package.json')]: {
                 name: 'test-pkg',
                 main: 'index.js',
               },
@@ -77,7 +82,7 @@ describe('browser field spec', () => {
         ),
       ).toEqual({
         type: 'sourceFile',
-        filePath: '/root/node_modules/test-pkg/index.js',
+        filePath: p('/root/node_modules/test-pkg/index.js'),
       });
     });
 
@@ -85,7 +90,7 @@ describe('browser field spec', () => {
       const context = {
         ...baseContext,
         ...createPackageAccessors({
-          '/root/node_modules/test-pkg/package.json': {
+          [p('/root/node_modules/test-pkg/package.json')]: {
             ...packageJson,
             browser: 'index-browser',
           },
@@ -95,7 +100,7 @@ describe('browser field spec', () => {
 
       expect(Resolver.resolve(context, 'test-pkg', null)).toEqual({
         type: 'sourceFile',
-        filePath: '/root/node_modules/test-pkg/index-browser.js',
+        filePath: p('/root/node_modules/test-pkg/index-browser.js'),
       });
     });
   });
@@ -115,18 +120,20 @@ describe('browser field spec', () => {
       };
       const context = {
         ...createResolutionContext({
-          '/root/node_modules/origin-pkg/package.json':
+          [p('/root/node_modules/origin-pkg/package.json')]:
             JSON.stringify(packageJson),
-          '/root/node_modules/origin-pkg/lib/nested/index.js': '',
-          '/root/node_modules/origin-pkg/shims/foo.js': '',
+          [p('/root/node_modules/origin-pkg/lib/nested/index.js')]: '',
+          [p('/root/node_modules/origin-pkg/shims/foo.js')]: '',
         }),
-        originModulePath: '/root/node_modules/origin-pkg/lib/nested/index.js',
+        originModulePath: p(
+          '/root/node_modules/origin-pkg/lib/nested/index.js',
+        ),
         mainFields: ['browser', 'main'],
       };
 
       expect(Resolver.resolve(context, 'foo-pkg', null)).toEqual({
         type: 'sourceFile',
-        filePath: '/root/node_modules/origin-pkg/shims/foo.js',
+        filePath: p('/root/node_modules/origin-pkg/shims/foo.js'),
       });
     });
 
@@ -136,23 +143,23 @@ describe('browser field spec', () => {
       // misbehave. The redirect must resolve against the package root.
       const context = {
         ...createResolutionContext({
-          '/root/project/package.json': JSON.stringify({
+          [p('/root/project/package.json')]: JSON.stringify({
             name: 'project',
             main: 'src/index.js',
             browser: {
               'foo-pkg': './shims/foo.js',
             },
           }),
-          '/root/project/src/index.js': '',
-          '/root/project/shims/foo.js': '',
+          [p('/root/project/src/index.js')]: '',
+          [p('/root/project/shims/foo.js')]: '',
         }),
-        originModulePath: '/root/project/src/index.js',
+        originModulePath: p('/root/project/src/index.js'),
         mainFields: ['browser', 'main'],
       };
 
       expect(Resolver.resolve(context, 'foo-pkg', null)).toEqual({
         type: 'sourceFile',
-        filePath: '/root/project/shims/foo.js',
+        filePath: p('/root/project/shims/foo.js'),
       });
     });
   });
