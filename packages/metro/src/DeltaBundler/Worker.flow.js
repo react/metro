@@ -12,7 +12,6 @@
 import type {TransformResult} from './types';
 import type {LogEntry} from 'metro-core/private/Logger';
 import type {
-  FileLocation,
   JsTransformerConfig,
   JsTransformOptions,
 } from 'metro-transform-worker';
@@ -31,7 +30,7 @@ type TransformerInterface = {
     string,
     Buffer,
     JsTransformOptions,
-    FileLocation,
+    ?string,
   ): Promise<TransformResult<>>,
 };
 
@@ -74,7 +73,7 @@ export const transform = (
   projectRoot: string,
   transformerConfig: TransformerConfig,
   fileBuffer?: Buffer,
-  fileLocation?: FileLocation,
+  assetUrlPath?: string,
 ): Promise<Data> => {
   let data;
 
@@ -90,7 +89,7 @@ export const transform = (
     transformOptions,
     projectRoot,
     transformerConfig,
-    fileLocation,
+    assetUrlPath,
   );
 };
 
@@ -104,7 +103,7 @@ async function transformFile(
   transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
-  fileLocation?: FileLocation,
+  assetUrlPath?: string,
 ): Promise<Data> {
   // eslint-disable-next-line no-useless-call
   const Transformer: TransformerInterface = require.call(
@@ -128,7 +127,7 @@ async function transformFile(
     projectRelativePath,
     data,
     transformOptions,
-    fileLocation ?? {},
+    assetUrlPath,
   );
 
   // The babel cache caches scopes and pathes for already traversed AST nodes.

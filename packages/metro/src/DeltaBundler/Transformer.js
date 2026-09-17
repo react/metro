@@ -116,15 +116,13 @@ export default class Transformer {
     // Assets are the only modules whose output depends on watchFolders, via
     // the URL path baked into them, so that dependency enters the cache key
     // per asset here and not in the base hash.
-    const fileLocation =
+    const assetUrlPath =
       type === 'asset'
-        ? {
-            urlPath: getAssetUrlPath(
-              filePath,
-              this._config.projectRoot,
-              this._config.watchFolders,
-            ),
-          }
+        ? getAssetUrlPath(
+            filePath,
+            this._config.projectRoot,
+            this._config.watchFolders,
+          )
         : null;
 
     const partialKey = stableHash([
@@ -135,7 +133,7 @@ export default class Transformer {
       // addition to content hash because transformers receive path as an
       // input, and may apply e.g. extension-based logic.
       normalizePathSeparatorsToPosix(projectRelativePath),
-      fileLocation?.urlPath ?? null,
+      assetUrlPath,
       customTransformOptions,
       dev,
       experimentalImportSupport,
@@ -187,7 +185,7 @@ export default class Transformer {
           projectRelativePath,
           transformerOptions,
           content,
-          fileLocation ?? undefined,
+          assetUrlPath ?? undefined,
         );
 
     // Only re-compute the full key if the SHA-1 changed. This is because

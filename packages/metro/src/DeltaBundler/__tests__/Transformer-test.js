@@ -244,7 +244,7 @@ describe('Transformer', function () {
       path.join('..', 'external', 'imgs', 'a.png'),
       {type: 'asset'},
       undefined,
-      {urlPath: '[metro-watchFolders]/1/imgs/a.png'},
+      '[metro-watchFolders]/1/imgs/a.png',
     );
   });
 });

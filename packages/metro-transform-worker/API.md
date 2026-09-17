@@ -8,10 +8,6 @@ export type CustomTransformOptions = {
     [key: string]: unknown;
 };
 
-export type FileLocation = Readonly<{
-    urlPath?: string | undefined;
-}>;
-
 export const getCacheKey: (config: JsTransformerConfig, opts?: Readonly<{projectRoot: string}>) => string;
 
 export type getCacheKey = typeof getCacheKey;
@@ -84,7 +80,7 @@ projectRoot: string,
 projectRelativePath: string,
 data: Buffer,
 options: JsTransformOptions,
-fileLocation?: FileLocation,
+assetUrlPath?: string,
 ) => Promise<TransformResponse>;
 
 export type transform = typeof transform;
