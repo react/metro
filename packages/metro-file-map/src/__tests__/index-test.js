@@ -436,6 +436,36 @@ describe('FileMap', () => {
     expect(FileMap.H).toBe(require('../constants').default);
   });
 
+  test('a plugin lookup records what it observed, with a file found as content', async () => {
+    const {dependencyPlugin} = await buildNewFileMap();
+    if (dependencyPlugin == null) {
+      throw new Error('Expected a DependencyPlugin');
+    }
+    const files = dependencyPlugin.getFileSystem();
+    const observations = {
+      existence: new Set<string>(),
+      content: new Set<string>(),
+    };
+
+    // Plugin data is derived from what the file holds
+    expect(
+      files.lookup(
+        path.join('/', 'project', 'fruits', 'Banana.js'),
+        observations,
+      ),
+    ).toMatchObject({exists: true, type: 'f'});
+    files.lookup(path.join('/', 'project', 'fruits'), observations);
+    files.lookup(
+      path.join('/', 'project', 'fruits', 'Missing.js'),
+      observations,
+    );
+
+    expect(observations).toEqual({
+      content: new Set([path.join('fruits', 'Banana.js')]),
+      existence: new Set(['fruits', path.join('fruits', 'Missing.js')]),
+    });
+  });
+
   test('ignores files given a pattern', async () => {
     mockFs[path.join('/', 'project', 'fruits', 'Kiwi.js')] = `
       // Kiwi!
