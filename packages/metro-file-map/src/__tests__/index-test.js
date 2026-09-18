@@ -107,7 +107,6 @@ jest.mock('../crawlers/watchman', () => ({
               0, // visited
               hash,
               typeof contentOrLink !== 'string' ? 1 : 0,
-              null, // Haste name
             ]);
           }
         } else {
@@ -1706,6 +1705,64 @@ describe('FileMap', () => {
         [...changes.removedFiles].length
       );
     }
+
+    test('a lazy plugin processes files on demand, and its data is reset when the file changes', async () => {
+      const FileDataPlugin = require('../plugins/FileDataPlugin').default;
+      const lazyPlugin = new FileDataPlugin<?{length: number}>({
+        name: 'lazy-test-plugin',
+        cacheKey: 'lazy-test-plugin-1',
+        worker: {
+          modulePath: require.resolve('./lazy_plugin_worker.js'),
+          setupArgs: {},
+        },
+        // Not consulted for a lazy plugin
+        filter: () => true,
+        lazy: true,
+      });
+      const fileMap = new FileMap({
+        ...defaultConfig,
+        watch: true,
+        plugins: [lazyPlugin],
+      });
+      await fileMap.build();
+      try {
+        const bananaPath = path.join('/', 'project', 'fruits', 'Banana.js');
+        const getPluginData = () => {
+          const result = lazyPlugin.getFileSystem().lookup(bananaPath);
+          if (!result.exists || result.type !== 'f') {
+            throw new Error('Expected a file');
+          }
+          return result.pluginData;
+        };
+        const onMetadata = jest.fn();
+        fileMap.on('metadata', onMetadata);
+
+        // The crawl does not run a lazy plugin's worker
+        expect(getPluginData()).toBeUndefined();
+
+        const expected = {length: String(mockFs[bananaPath]).length};
+        expect(lazyPlugin.processFile(bananaPath)).toEqual(expected);
+        // The data is stored, and the cache told there is something to save
+        expect(getPluginData()).toEqual(expected);
+        expect(onMetadata).toHaveBeenCalledTimes(1);
+
+        mockFs[bananaPath] = '// A changed banana';
+        mockEmitters[path.join('/', 'project', 'fruits')].emitFileEvent({
+          event: 'touch',
+          relativePath: 'Banana.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        await waitForItToChange(fileMap);
+
+        // Nor does a change, which leaves the file unprocessed again
+        expect(getPluginData()).toBeUndefined();
+        expect(lazyPlugin.processFile(bananaPath)).toEqual({
+          length: '// A changed banana'.length,
+        });
+      } finally {
+        await fileMap.end();
+      }
+    });
 
     function mockDeleteFile(root: string, relativePath: string) {
       const e = mockEmitters[root];

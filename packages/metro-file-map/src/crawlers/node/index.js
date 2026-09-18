@@ -75,7 +75,6 @@ function find(
                   0,
                   null,
                   stat.isSymbolicLink() ? 1 : 0,
-                  null,
                 ]);
               }
             }
