@@ -12,7 +12,10 @@ import type {RequireContextParams} from '../../ModuleGraph/worker/collectDepende
 import type {ResolvedDependency, TransformResultDependency} from '../types';
 
 import {buildSubgraph} from '../buildSubgraph';
+import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
+
+const p = createPathNormalizer();
 
 const makeTransformDep = (
   name: string,
@@ -40,12 +43,12 @@ describe('GraphTraversal', () => {
 
   beforeEach(() => {
     transformDeps = new Map([
-      ['/bundle', [makeTransformDep('foo')]],
-      ['/foo', [makeTransformDep('bar'), makeTransformDep('baz')]],
-      ['/bar', []],
-      ['/baz', [makeTransformDep('qux', 'weak')]],
+      [p('/bundle'), [makeTransformDep('foo')]],
+      [p('/foo'), [makeTransformDep('bar'), makeTransformDep('baz')]],
+      [p('/bar'), []],
+      [p('/baz'), [makeTransformDep('qux', 'weak')]],
       [
-        '/entryWithContext',
+        p('/entryWithContext'),
         [
           makeTransformDep('virtual', null, false, {
             filter: {
@@ -58,10 +61,10 @@ describe('GraphTraversal', () => {
         ],
       ],
       [
-        '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+        p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
         [makeTransformDep('contextMatch')],
       ],
-      ['/contextMatch', []],
+      [p('/contextMatch'), []],
     ]);
     params = {
       resolve: jest.fn((from, dependency) => {
@@ -69,12 +72,12 @@ describe('GraphTraversal', () => {
           throw new DoesNotExistError();
         }
         return {
-          filePath: `/${dependency.name}`,
+          filePath: p(`/${dependency.name}`),
           type: 'sourceFile' as const,
         };
       }),
       transform: jest.fn(async (path, requireContext) => {
-        if (path === '/bad') {
+        if (path === p('/bad')) {
           throw new BadTransformError();
         }
         return {
@@ -92,17 +95,22 @@ describe('GraphTraversal', () => {
 
   test('traverses all nodes out from /bundle, except a weak dependency', async () => {
     const {moduleData} = await buildSubgraph(
-      new Set(['/bundle']),
+      new Set([p('/bundle')]),
       new Map(),
       params,
     );
-    expect([...moduleData.keys()]).toEqual(['/bundle', '/foo', '/bar', '/baz']);
-    expect(moduleData.get('/bundle')).toEqual({
+    expect([...moduleData.keys()]).toEqual([
+      p('/bundle'),
+      p('/foo'),
+      p('/bar'),
+      p('/baz'),
+    ]);
+    expect(moduleData.get(p('/bundle'))).toEqual({
       dependencies: new Map([
         [
           'key-foo',
           {
-            absolutePath: '/foo',
+            absolutePath: p('/foo'),
             data: makeTransformDep('foo'),
           },
         ],
@@ -115,41 +123,47 @@ describe('GraphTraversal', () => {
 
   test('resolves context and traverses context matches', async () => {
     const {moduleData} = await buildSubgraph(
-      new Set(['/entryWithContext']),
+      new Set([p('/entryWithContext')]),
       new Map(),
       params,
     );
     expect(params.transform).toHaveBeenCalledWith(
-      '/entryWithContext',
+      p('/entryWithContext'),
       undefined,
     );
     const expectedResolvedContext = {
       filter: /contextMatch.*/i,
-      from: '/virtual',
+      from: p('/virtual'),
       mode: 'sync',
       recursive: true,
     };
     expect(params.transform).toHaveBeenCalledWith(
-      '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+      p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
       expectedResolvedContext,
     );
-    expect(params.transform).toHaveBeenCalledWith('/contextMatch', undefined);
     expect(params.transform).toHaveBeenCalledWith(
-      '/entryWithContext',
+      p('/contextMatch'),
+      undefined,
+    );
+    expect(params.transform).toHaveBeenCalledWith(
+      p('/entryWithContext'),
       undefined,
     );
     expect(moduleData).toEqual(
       new Map([
         [
-          '/entryWithContext',
+          p('/entryWithContext'),
           {
             dependencies: new Map([
               [
                 'key-virtual',
                 {
-                  absolutePath:
+                  absolutePath: p(
                     '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
-                  data: nullthrows(transformDeps.get('/entryWithContext'))[0],
+                  ),
+                  data: nullthrows(
+                    transformDeps.get(p('/entryWithContext')),
+                  )[0],
                 },
               ],
             ]),
@@ -161,7 +175,7 @@ describe('GraphTraversal', () => {
           },
         ],
         [
-          '/contextMatch',
+          p('/contextMatch'),
           {
             dependencies: new Map(),
             resolvedContexts: new Map(),
@@ -170,16 +184,18 @@ describe('GraphTraversal', () => {
           },
         ],
         [
-          '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+          p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
           {
             dependencies: new Map([
               [
                 'key-contextMatch',
                 {
-                  absolutePath: '/contextMatch',
+                  absolutePath: p('/contextMatch'),
                   data: nullthrows(
                     transformDeps.get(
-                      '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+                      p(
+                        '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+                      ),
                     ),
                   )[0],
                 },
@@ -195,14 +211,22 @@ describe('GraphTraversal', () => {
   });
 
   test('returns errors thrown by the transformer', async () => {
-    transformDeps.set('/bar', [makeTransformDep('bad')]);
-    const result = await buildSubgraph(new Set(['/bundle']), new Map(), params);
-    expect([...result.errors]).toEqual([['/bad', new BadTransformError()]]);
+    transformDeps.set(p('/bar'), [makeTransformDep('bad')]);
+    const result = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      params,
+    );
+    expect([...result.errors]).toEqual([[p('/bad'), new BadTransformError()]]);
   });
 
   test('returns errors thrown by the resolver', async () => {
-    transformDeps.set('/bar', [makeTransformDep('does-not-exist')]);
-    const result = await buildSubgraph(new Set(['/bundle']), new Map(), params);
-    expect([...result.errors]).toEqual([['/bar', new DoesNotExistError()]]);
+    transformDeps.set(p('/bar'), [makeTransformDep('does-not-exist')]);
+    const result = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      params,
+    );
+    expect([...result.errors]).toEqual([[p('/bar'), new DoesNotExistError()]]);
   });
 });
