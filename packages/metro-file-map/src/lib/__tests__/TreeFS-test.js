@@ -19,6 +19,11 @@ import type TreeFSType from '../TreeFS';
 
 import H from '../../constants';
 
+const emptyObservations = () => ({
+  content: new Set<CanonicalPath>(),
+  existence: new Set<CanonicalPath>(),
+});
+
 let mockPathModule;
 jest.mock('node:path', () => mockPathModule);
 
@@ -32,6 +37,15 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
 
   let tfs: TreeFSType;
   let TreeFS: Class<TreeFSType>;
+
+  // Observations are recorded as canonical (root-relative) paths. Test tables
+  // below are written as absolute paths for readability, and converted here.
+  const canonicalTo =
+    (rootDir: string) =>
+    (absolutePath: string): CanonicalPath =>
+      mockPathModule.relative(rootDir, absolutePath);
+  const canonical = (absolutePath: string) =>
+    canonicalTo(p('/project'))(absolutePath);
 
   beforeEach(() => {
     jest.resetModules();
@@ -134,14 +148,19 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       [p('root/project/bar.js'), p('/project/bar.js'), [p('/project/root')]],
     ])(
       '%s -> %s through expected symlinks',
-      (givenPath, expectedRealPath, expectedSymlinks) =>
-        expect(tfs.lookup(givenPath)).toEqual({
+      (givenPath, expectedRealPath, expectedSymlinks) => {
+        const observations = emptyObservations();
+        expect(tfs.lookup(givenPath, observations)).toEqual({
           exists: true,
-          links: new Set(expectedSymlinks),
           realPath: expectedRealPath,
           type: 'f',
           metadata: expect.any(Array),
-        }),
+        });
+        expect(observations).toEqual({
+          content: new Set(expectedSymlinks.map(canonical)),
+          existence: new Set([canonical(expectedRealPath)]),
+        });
+      },
     );
 
     test.each([
@@ -159,24 +178,34 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       [p('/project/foo/../../project/missing'), [], p('/project/missing')],
     ])(
       'non-existence for bad paths, missing files or broken links %s',
-      (givenPath, expectedSymlinks, missingPath) =>
-        expect(tfs.lookup(givenPath)).toEqual({
-          exists: false,
-          links: new Set(expectedSymlinks),
-          missing: missingPath,
-        }),
+      (givenPath, expectedSymlinks, missingPath) => {
+        const observations = emptyObservations();
+        expect(tfs.lookup(givenPath, observations)).toEqual({exists: false});
+        expect(observations).toEqual({
+          content: new Set(expectedSymlinks.map(canonical)),
+          existence: new Set([canonical(missingPath)]),
+        });
+      },
     );
 
     test.each([
-      [p('/project/foo'), p('/project/foo')],
-      [p('/project/foo/'), p('/project/foo')],
-      [p('/project/root/outside'), p('/outside')],
-    ])('returns type: d for %s', (givenPath, expectedRealPath) =>
-      expect(tfs.lookup(givenPath)).toMatchObject({
-        exists: true,
-        type: 'd',
-        realPath: expectedRealPath,
-      }),
+      [p('/project/foo'), p('/project/foo'), []],
+      [p('/project/foo/'), p('/project/foo'), []],
+      [p('/project/root/outside'), p('/outside'), [p('/project/root')]],
+    ])(
+      'returns type: d for %s',
+      (givenPath, expectedRealPath, expectedSymlinks) => {
+        const observations = emptyObservations();
+        expect(tfs.lookup(givenPath, observations)).toEqual({
+          exists: true,
+          type: 'd',
+          realPath: expectedRealPath,
+        });
+        expect(observations).toEqual({
+          content: new Set(expectedSymlinks.map(canonical)),
+          existence: new Set([canonical(expectedRealPath)]),
+        });
+      },
     );
 
     test('traversing the same symlink multiple times does not imply a cycle', () => {
@@ -200,22 +229,21 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           throw new Error('Not implemented');
         },
       });
-      expect(tfs.lookup(p('/deep/missing/bar.js'))).toMatchObject({
-        exists: false,
-        missing: p('/deep/missing'),
-      });
-      expect(tfs.lookup(p('link-up/bar.js'))).toMatchObject({
-        exists: false,
-        missing: p('/deep/project/bar.js'),
-      });
-      expect(tfs.lookup(p('../../baz.js'))).toMatchObject({
-        exists: false,
-        missing: p('/deep/baz.js'),
-      });
-      expect(tfs.lookup(p('../../project/root/baz.js'))).toMatchObject({
-        exists: false,
-        missing: p('/deep/project/root/baz.js'),
-      });
+      const toCanonical = canonicalTo(p('/deep/project/root'));
+      const expectMissing = (givenPath: string, missingPath: string) => {
+        const observations = emptyObservations();
+        expect(tfs.lookup(givenPath, observations)).toEqual({exists: false});
+        expect(observations.existence).toEqual(
+          new Set([toCanonical(missingPath)]),
+        );
+      };
+      expectMissing(p('/deep/missing/bar.js'), p('/deep/missing'));
+      expectMissing(p('link-up/bar.js'), p('/deep/project/bar.js'));
+      expectMissing(p('../../baz.js'), p('/deep/baz.js'));
+      expectMissing(
+        p('../../project/root/baz.js'),
+        p('/deep/project/root/baz.js'),
+      );
     });
   });
 
@@ -243,13 +271,16 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     ])(
       'lookup can find files that go back towards the project root (%s)',
       (mixedPath, expectedRealPath, expectedSymlinks) => {
-        expect(tfs.lookup(mixedPath)).toEqual({
+        const observations = emptyObservations();
+        expect(tfs.lookup(mixedPath, observations)).toEqual({
           exists: true,
           realPath: expectedRealPath,
-          links: new Set(expectedSymlinks),
           type: 'f',
           metadata: expect.any(Array),
         });
+        expect(observations.content).toEqual(
+          new Set(expectedSymlinks.map(canonical)),
+        );
       },
     );
 
@@ -440,139 +471,151 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       });
     });
 
+    // The fourth column is paths, besides the match itself, whose addition or
+    // removal changes the result, the fifth those whose modification does too -
+    // the symlinks traversed.
     test.each([
-      ['/A/B/C/a', '/A/B/C/a/package.json', '', []],
-      ['/A/B/C/a/b', '/A/B/C/a/package.json', 'b', ['/A/B/C/a/b/package.json']],
+      ['/A/B/C/a', '/A/B/C/a/package.json', '', [], []],
+      [
+        '/A/B/C/a/b',
+        '/A/B/C/a/package.json',
+        'b',
+        ['/A/B/C/a/b/package.json'],
+        [],
+      ],
       [
         '/A/B/C/a/package.json',
         '/A/B/C/a/package.json',
         'package.json',
         ['/A/B/C/a/package.json'],
+        [],
       ],
       [
         '/A/B/C/a/b/notexists',
         '/A/B/C/a/package.json',
         'b/notexists',
         ['/A/B/C/a/b/notexists', '/A/B/C/a/b/package.json'],
+        [],
       ],
-      ['/A/B/C/a/b/c', '/A/B/C/a/b/c/package.json', '', []],
+      ['/A/B/C/a/b/c', '/A/B/C/a/b/c/package.json', '', [], []],
       [
         '/A/B/C/other',
         '/A/package.json',
         'B/C/other',
         ['/A/B/C/other', '/A/B/C/package.json', '/A/B/package.json'],
+        [],
       ],
       [
         '/A/B/C',
         '/A/package.json',
         'B/C',
         ['/A/B/C/package.json', '/A/B/package.json'],
+        [],
       ],
-      ['/A/B', '/A/package.json', 'B', ['/A/B/package.json']],
+      ['/A/B', '/A/package.json', 'B', ['/A/B/package.json'], []],
       [
         '/A/B/foo',
         '/A/package.json',
         'B/foo',
-
         ['/A/B/foo', '/A/B/package.json'],
+        [],
       ],
-      ['/A/foo', '/A/package.json', 'foo', ['/A/foo']],
-      ['/foo', null, null, ['/foo', '/package.json']],
+      ['/A/foo', '/A/package.json', 'foo', ['/A/foo'], []],
+      ['/foo', null, null, ['/foo', '/package.json'], []],
       [
         '/A/B/C/a/b/c/d/link-to-C/foo.js',
         '/A/B/C/a/b/c/package.json',
         'd/link-to-C/foo.js',
-        [
-          '/A/B/C/a/b/c/d/link-to-C',
-          '/A/B/C/a/b/c/d/package.json',
-          '/A/B/C/foo.js',
-          '/A/B/C/package.json',
-        ],
+        ['/A/B/C/a/b/c/d/package.json', '/A/B/C/foo.js', '/A/B/C/package.json'],
+        ['/A/B/C/a/b/c/d/link-to-C'],
       ],
       [
         '/A/B/C/a/b/c/d/link-to-B/C/foo.js',
         '/A/B/C/a/b/c/package.json',
         'd/link-to-B/C/foo.js',
         [
-          '/A/B/C/a/b/c/d/link-to-B',
           '/A/B/C/a/b/c/d/package.json',
           '/A/B/C/foo.js',
           '/A/B/C/package.json',
           '/A/B/package.json',
         ],
+        ['/A/B/C/a/b/c/d/link-to-B'],
       ],
       [
         '/A/B/C/a/b/c/d/link-to-A/B/C/foo.js',
         '/A/package.json',
         'B/C/foo.js',
-        [
-          '/A/B/C/a/b/c/d/link-to-A',
-          '/A/B/C/foo.js',
-          '/A/B/C/package.json',
-          '/A/B/package.json',
-        ],
+        ['/A/B/C/foo.js', '/A/B/C/package.json', '/A/B/package.json'],
+        ['/A/B/C/a/b/c/d/link-to-A'],
       ],
       [
         '/A/B/C/a/1/foo.js',
         '/A/B/C/a/1/real-package.json',
         'foo.js',
-        ['/A/B/C/a/1/foo.js', '/A/B/C/a/1/package.json'],
+        ['/A/B/C/a/1/foo.js'],
+        ['/A/B/C/a/1/package.json'],
       ],
       [
         '/A/B/C/a/2/foo.js',
         '/A/B/C/a/package.json',
         '2/foo.js',
-        [
-          '/A/B/C/a/2/foo.js',
-          '/A/B/C/a/2/notexist-package.json',
-          '/A/B/C/a/2/package.json',
-        ],
+        ['/A/B/C/a/2/foo.js', '/A/B/C/a/2/notexist-package.json'],
+        ['/A/B/C/a/2/package.json'],
       ],
       [
         '/A/B/C/a/n_m/pkg/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'notexist.js',
         ['/A/B/C/a/n_m/pkg/notexist.js'],
+        [],
       ],
       [
         '/A/B/C/a/n_m/pkg/subpath/notexist.js',
         '/A/B/C/a/n_m/pkg/subpath/package.json',
         'notexist.js',
         ['/A/B/C/a/n_m/pkg/subpath/notexist.js'],
+        [],
       ],
       [
         '/A/B/C/a/n_m/pkg/otherpath/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'otherpath/notexist.js',
         ['/A/B/C/a/n_m/pkg/otherpath'],
+        [],
       ],
       // pkg3 does not exist, doesn't look beyond the containing n_m
-      ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3']],
+      ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
       // Does not look beyond n_m, if n_m does not exist
-      ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m']],
+      ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
         '/A/B/workspace-pkg/package.json',
         'subpath',
-        ['/A/B/C/n_m/workspace/link-to-pkg', '/A/B/workspace-pkg/subpath'],
+        ['/A/B/workspace-pkg/subpath'],
+        ['/A/B/C/n_m/workspace/link-to-pkg'],
       ],
     ])(
-      '%s => %s (relative %s, invalidatedBy %s)',
+      '%s => %s (relative %s, existence %s, content %s)',
       (
         startPath,
         expectedPath,
         expectedRelativeSubpath,
-        expectedInvalidatedBy,
+        expectedExistence,
+        expectedContent,
       ) => {
         const pathMap = (normalPosixPath: string) =>
           mockPathModule.resolve(p('/A/B/C'), p(normalPosixPath));
-        const invalidatedBy = new Set<string>();
+        const observations = emptyObservations();
         expect(
-          tfs.hierarchicalLookup(p(startPath), 'package.json', {
-            breakOnSegment: 'n_m',
-            invalidatedBy,
-            subpathType: 'f',
-          }),
+          tfs.hierarchicalLookup(
+            p(startPath),
+            'package.json',
+            {
+              breakOnSegment: 'n_m',
+              subpathType: 'f',
+            },
+            observations,
+          ),
         ).toEqual(
           expectedPath == null
             ? null
@@ -581,7 +624,17 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
                 containerRelativePath: p(expectedRelativeSubpath),
               },
         );
-        expect(invalidatedBy).toEqual(new Set(expectedInvalidatedBy.map(p)));
+        const toCanonical = (posixPath: string) =>
+          canonicalTo(p('/A/B/C'))(pathMap(posixPath));
+        expect(observations).toEqual({
+          content: new Set(expectedContent.map(toCanonical)),
+          existence: new Set(
+            (expectedPath == null
+              ? expectedExistence
+              : [...expectedExistence, expectedPath]
+            ).map(toCanonical),
+          ),
+        });
       },
     );
   });

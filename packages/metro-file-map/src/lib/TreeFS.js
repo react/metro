@@ -16,6 +16,7 @@ import type {
   FileSystemListener,
   LookupResult,
   MutableFileSystem,
+  Observations,
   Path,
   ProcessFileFunction,
 } from '../flow-types';
@@ -282,25 +283,25 @@ export default class TreeFS implements MutableFileSystem {
     return result != null;
   }
 
-  lookup(mixedPath: Path): LookupResult {
+  lookup(mixedPath: Path, observations?: ?Observations): LookupResult {
     const normalPath = this.#normalizePath(mixedPath);
-    const links = new Set<string>();
     const result = this.#lookupByNormalPath(normalPath, {
-      collectLinkPaths: links,
+      observations,
       followLeaf: true,
     });
     if (!result.exists) {
-      const {canonicalMissingPath} = result;
-      return {
-        exists: false,
-        links,
-        missing: this.#pathUtils.normalToAbsolute(canonicalMissingPath),
-      };
+      if (observations) {
+        observations.existence.add(result.canonicalMissingPath);
+      }
+      return {exists: false};
     }
     const {canonicalPath, node} = result;
+    if (observations) {
+      observations.existence.add(canonicalPath);
+    }
     const realPath = this.#pathUtils.normalToAbsolute(canonicalPath);
     if (isDirectory(node)) {
-      return {exists: true, links, realPath, type: 'd'};
+      return {exists: true, realPath, type: 'd'};
     }
     invariant(
       isRegularFile(node),
@@ -308,7 +309,7 @@ export default class TreeFS implements MutableFileSystem {
       mixedPath,
       canonicalPath,
     );
-    return {exists: true, links, realPath, type: 'f', metadata: node};
+    return {exists: true, realPath, type: 'f', metadata: node};
   }
 
   getAllFiles(): Array<Path> {
@@ -562,9 +563,9 @@ export default class TreeFS implements MutableFileSystem {
         normalPath: string,
         segmentName: string,
       }>,
-      // Mutable Set into which absolute real paths of traversed symlinks will
-      // be added. Omit for performance if not needed.
-      collectLinkPaths?: ?Set<string>,
+      // Record into which the canonical paths of traversed symlinks will be
+      // added, as `content`. Omit for performance if not needed.
+      observations?: ?Observations,
 
       // Low-level callbacks called on mutations of TreeFS data.
       // Omit for performance if not needed.
@@ -728,10 +729,8 @@ export default class TreeFS implements MutableFileSystem {
           segmentNode,
           currentPath,
         );
-        if (opts.collectLinkPaths) {
-          opts.collectLinkPaths.add(
-            this.#pathUtils.normalToAbsolute(currentPath),
-          );
+        if (opts.observations) {
+          opts.observations.content.add(currentPath);
         }
 
         const remainingTargetPath = isLastSegment
@@ -846,8 +845,8 @@ export default class TreeFS implements MutableFileSystem {
    *   X = dirname(X)
    * while X !== dirname(X)
    *
-   * If opts.invalidatedBy is given, collects all absolute, real paths that if
-   * added or removed may invalidate this result.
+   * If `observations` is given, records the canonical paths this result
+   * depends upon.
    *
    * Useful for finding the closest package scope (subpath: package.json,
    * type f, breakOnSegment: node_modules) or closest potential package root
@@ -858,9 +857,9 @@ export default class TreeFS implements MutableFileSystem {
     subpath: string,
     opts: {
       breakOnSegment: ?string,
-      invalidatedBy: ?Set<string>,
       subpathType: 'f' | 'd',
     },
+    observations?: ?Observations,
   ): ?{
     absolutePath: string,
     containerRelativePath: string,
@@ -872,10 +871,9 @@ export default class TreeFS implements MutableFileSystem {
       segmentName: string,
     }> = [];
     const normalPath = this.#normalizePath(mixedStartPath);
-    const invalidatedBy = opts.invalidatedBy;
     const closestLookup = this.#lookupByNormalPath(normalPath, {
       collectAncestors: ancestorsOfInput,
-      collectLinkPaths: invalidatedBy,
+      observations,
     });
 
     if (closestLookup.exists && isDirectory(closestLookup.node)) {
@@ -883,7 +881,7 @@ export default class TreeFS implements MutableFileSystem {
         closestLookup.canonicalPath,
         subpath,
         opts.subpathType,
-        invalidatedBy,
+        observations,
         null,
       );
       if (maybeAbsolutePathMatch != null) {
@@ -894,15 +892,13 @@ export default class TreeFS implements MutableFileSystem {
       }
     } else {
       if (
-        invalidatedBy &&
+        observations &&
         (!closestLookup.exists || !isDirectory(closestLookup.node))
       ) {
-        invalidatedBy.add(
-          this.#pathUtils.normalToAbsolute(
-            closestLookup.exists
-              ? closestLookup.canonicalPath
-              : closestLookup.canonicalMissingPath,
-          ),
+        observations.existence.add(
+          closestLookup.exists
+            ? closestLookup.canonicalPath
+            : closestLookup.canonicalMissingPath,
         );
       }
       if (
@@ -958,7 +954,7 @@ export default class TreeFS implements MutableFileSystem {
         candidate.normalPath,
         subpath,
         opts.subpathType,
-        invalidatedBy,
+        observations,
         {
           ancestorOfRootIdx: candidate.ancestorOfRootIdx,
           node: candidate.node,
@@ -1005,7 +1001,7 @@ export default class TreeFS implements MutableFileSystem {
         candidateNormalPath,
         subpath,
         opts.subpathType,
-        invalidatedBy,
+        observations,
         null,
       );
       if (maybeAbsolutePathMatch != null) {
@@ -1039,7 +1035,7 @@ export default class TreeFS implements MutableFileSystem {
     normalCandidatePath: string,
     subpath: string,
     subpathType: 'f' | 'd',
-    invalidatedBy: ?Set<string>,
+    observations: ?Observations,
     start: ?{
       ancestorOfRootIdx: ?number,
       node: DirectoryNode,
@@ -1050,7 +1046,7 @@ export default class TreeFS implements MutableFileSystem {
       this.#pathUtils.joinNormalToRelative(normalCandidatePath, subpath)
         .normalPath,
       {
-        collectLinkPaths: invalidatedBy,
+        observations,
       },
     );
     if (
@@ -1058,14 +1054,15 @@ export default class TreeFS implements MutableFileSystem {
       // Should be a Map iff subpathType is directory
       isDirectory(lookupResult.node) === (subpathType === 'd')
     ) {
+      if (observations) {
+        observations.existence.add(lookupResult.canonicalPath);
+      }
       return this.#pathUtils.normalToAbsolute(lookupResult.canonicalPath);
-    } else if (invalidatedBy) {
-      invalidatedBy.add(
-        this.#pathUtils.normalToAbsolute(
-          lookupResult.exists
-            ? lookupResult.canonicalPath
-            : lookupResult.canonicalMissingPath,
-        ),
+    } else if (observations) {
+      observations.existence.add(
+        lookupResult.exists
+          ? lookupResult.canonicalPath
+          : lookupResult.canonicalMissingPath,
       );
     }
     return null;
