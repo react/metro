@@ -151,12 +151,19 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
-// What a resolution observed of the file system: canonical paths whose
-// addition or removal can change its result, and those whose modification
-// can too. Satisfies `metro-file-map`'s `Observations`, which populates it.
+// What a resolution observed. `existence` and `content` are canonical paths
+// whose addition or removal can change its result, and those whose
+// modification can too. They satisfy `metro-file-map`'s `Observations`, which
+// populates them.
+//
+// `haste` is every Haste module or package name the resolution looked up,
+// whether or not it was found, since one appearing later changes the result.
+// It is null if there were none, which is always the case when no file can be
+// given a Haste name - nothing is paid to observe what cannot change.
 export type ResolutionObservations = Readonly<{
   existence: Set<string>,
   content: Set<string>,
+  haste: ?Set<string>,
 }>;
 
 export type BundlerResolution = Readonly<{
