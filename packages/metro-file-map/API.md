@@ -152,7 +152,7 @@ interface FileSystem_2 {
     observations?: null | undefined | Observations,
   ): null | undefined | {absolutePath: string; containerRelativePath: string};
   linkStats(file: Path): null | undefined | FileStats;
-  lookup(mixedPath: Path, observations?: null | undefined | Observations): LookupResult;
+  lookup(mixedPath: Path, observations?: null | undefined | Observations, opts?: Readonly<{observeContent?: boolean | undefined}>): LookupResult;
   matchFiles(opts: {
     filter?: RegExp | null | undefined;
     filterCompareAbsolute?: boolean | undefined;

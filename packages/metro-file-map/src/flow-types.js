@@ -214,8 +214,14 @@ export type FileMapPluginInitOptions<
       canonicalPath: string,
       readonly pluginData: ?PerFileData,
     }>,
+    /**
+     * If `observations` is given, records the paths this result depends upon.
+     * Plugin data is derived from what a file holds, so a file found is
+     * recorded in `content`.
+     */
     lookup(
       mixedPath: string,
+      observations?: ?Observations,
     ):
       | {exists: false}
       | {exists: true, type: 'f', readonly pluginData: PerFileData}
@@ -378,8 +384,16 @@ export interface FileSystem {
    * If `observations` is given, records the paths this result depends upon:
    * any symlink traversed, and either the real path found or the first path
    * segment that did not exist.
+   *
+   * A path found is recorded in `existence`. If `opts.observeContent` is true
+   * a file found is recorded in `content` instead, which says the caller goes
+   * on to use what the file holds.
    */
-  lookup(mixedPath: Path, observations?: ?Observations): LookupResult;
+  lookup(
+    mixedPath: Path,
+    observations?: ?Observations,
+    opts?: Readonly<{observeContent?: boolean}>,
+  ): LookupResult;
 
   matchFiles(opts: {
     /* Filter relative paths against a pattern. */
