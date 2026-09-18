@@ -181,7 +181,6 @@ export default class DependencyGraph extends EventEmitter {
       'package.json',
       {
         breakOnSegment: 'node_modules',
-        invalidatedBy: null,
         subpathType: 'f',
       },
     );
