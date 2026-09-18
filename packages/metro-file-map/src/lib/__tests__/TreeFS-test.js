@@ -471,6 +471,67 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       });
     });
 
+    test('finds the closest directory with a single-segment subpath', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/B/C/a/n_m/pkg/subpath/deep'),
+          'n_m',
+          {breakOnSegment: null, subpathType: 'd'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/n_m/pkg/n_m'),
+        containerRelativePath: p('subpath/deep'),
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([
+          p('a/n_m/pkg/subpath/deep/n_m'),
+          p('a/n_m/pkg/subpath/n_m'),
+          p('a/n_m/pkg/n_m'),
+        ]),
+      });
+    });
+
+    test('finds the closest match for a deep subpath', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/B/C/a/b/c'),
+          p('n_m/pkg'),
+          {breakOnSegment: null, subpathType: 'd'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/n_m/pkg'),
+        containerRelativePath: p('b/c'),
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([p('a/b/c/n_m'), p('a/b/n_m'), p('a/n_m/pkg')]),
+      });
+    });
+
+    test('finds a subpath re-entering the root from an ancestor of the root', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/foo'),
+          p('B/C/a/package.json'),
+          {breakOnSegment: null, subpathType: 'f'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/package.json'),
+        containerRelativePath: 'foo',
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([p('../../foo'), p('a/package.json')]),
+      });
+    });
+
     // The fourth column is paths, besides the match itself, whose addition or
     // removal changes the result, the fifth those whose modification does too -
     // the symlinks traversed.
@@ -605,6 +666,8 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ) => {
         const pathMap = (normalPosixPath: string) =>
           mockPathModule.resolve(p('/A/B/C'), p(normalPosixPath));
+        const toCanonical = (posixPath: string) =>
+          canonicalTo(p('/A/B/C'))(pathMap(posixPath));
         const observations = emptyObservations();
         expect(
           tfs.hierarchicalLookup(
@@ -624,8 +687,6 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
                 containerRelativePath: p(expectedRelativeSubpath),
               },
         );
-        const toCanonical = (posixPath: string) =>
-          canonicalTo(p('/A/B/C'))(pathMap(posixPath));
         expect(observations).toEqual({
           content: new Set(expectedContent.map(toCanonical)),
           existence: new Set(
