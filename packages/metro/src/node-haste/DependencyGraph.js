@@ -11,6 +11,7 @@
 
 import type {
   BundlerResolution,
+  ResolutionObservations,
   TransformResultDependency,
 } from '../DeltaBundler/types';
 import type {ResolverInputOptions} from '../shared/types';
@@ -130,8 +131,8 @@ export default class DependencyGraph extends EventEmitter {
       );
       this._resolutionCache = new Map();
       this.#packageCache = new PackageCache({
-        getClosestPackage: absoluteModulePath =>
-          this._getClosestPackage(absoluteModulePath),
+        getClosestPackage: (absoluteModulePath, observations) =>
+          this._getClosestPackage(absoluteModulePath, observations),
       });
       this._createModuleResolver();
     });
@@ -175,6 +176,7 @@ export default class DependencyGraph extends EventEmitter {
 
   _getClosestPackage(
     absoluteModulePath: string,
+    observations?: ?ResolutionObservations,
   ): ?{packageJsonPath: string, packageRelativePath: string} {
     const result = this._fileSystem.hierarchicalLookup(
       absoluteModulePath,
@@ -183,6 +185,7 @@ export default class DependencyGraph extends EventEmitter {
         breakOnSegment: 'node_modules',
         subpathType: 'f',
       },
+      observations,
     );
     return result
       ? {
