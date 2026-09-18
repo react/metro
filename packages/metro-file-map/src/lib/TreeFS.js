@@ -30,7 +30,7 @@ type FileNode = FileMetadata;
 type MixedNode = FileNode | DirectoryNode;
 
 function isDirectory(node: ?MixedNode): node is DirectoryNode {
-  return node instanceof Map;
+  return node != null && !Array.isArray(node);
 }
 
 function isRegularFile(node: FileNode): boolean {
