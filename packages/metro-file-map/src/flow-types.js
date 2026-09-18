@@ -222,6 +222,18 @@ export type FileMapPluginInitOptions<
       | {exists: true, type: 'd'},
   }>,
   pluginState: ?SerializableState,
+  /**
+   * Synchronously run this plugin's worker, in-band, on the regular file at
+   * `mixedPath`, store the result as its plugin data and return it. Throws if
+   * the path is not a regular file, or the plugin has no worker.
+   *
+   * Plugin data is `undefined` for a file until a worker has run on it, which
+   * is when a lazy plugin should call this, and is reset to `undefined` when
+   * the file changes. `null` is a result like any other, so what a worker
+   * returns is stored with `undefined` replaced by `null`, and a file is
+   * processed at most once while it is unchanged.
+   */
+  processFile: (mixedPath: string) => PerFileData,
 }>;
 
 export type FileMapPluginWorker = Readonly<{
@@ -230,6 +242,13 @@ export type FileMapPluginWorker = Readonly<{
     setupArgs: JsonData,
   }>,
   filter: ({normalPath: string, isNodeModules: boolean}) => boolean,
+  /**
+   * If true, the worker is not run on files as they are crawled or changed,
+   * and `filter` is not consulted. It runs only on the files the plugin asks
+   * for, through the `processFile` it is given on initialization. Use this
+   * where a small, unpredictable subset of matching files is ever needed.
+   */
+  lazy?: boolean,
 }>;
 
 type V8SerializablePrimitive = string | number | boolean | null;
@@ -293,7 +312,7 @@ export type FileMetadata = [
   /* visited */ 0 | 1,
   /* sha1 */ ?string,
   /* symlink */ 0 | 1 | string, // string specifies target, if known
-  /* plugindata */
+  /* plugindata - one slot per plugin with a worker, `undefined` until run */
   ...
 ];
 

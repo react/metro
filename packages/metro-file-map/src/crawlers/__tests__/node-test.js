@@ -130,7 +130,7 @@ describe('node crawler', () => {
     // Tomato is not included because its mtime is unchanged
     expect(changedFiles).toEqual(
       createMap({
-        'fruits/directory/strawberry.js': [33, 42, 0, null, 0, null],
+        'fruits/directory/strawberry.js': [33, 42, 0, null, 0],
       }),
     );
 
@@ -144,8 +144,8 @@ describe('node crawler', () => {
     // be found when crawling this directory.
     const files = createMap({
       'fruits/previouslyExisted.js': [30, 40, 1, null, 0, null],
-      'fruits/directory/strawberry.js': [33, 42, 0, null, 0, null],
-      'fruits/tomato.js': [32, 42, 0, null, 0, null],
+      'fruits/directory/strawberry.js': [33, 42, 0, null, 0],
+      'fruits/tomato.js': [32, 42, 0, null, 0],
     });
 
     const {changedFiles, removedFiles} = await nodeCrawl({
@@ -216,8 +216,8 @@ describe('node crawler', () => {
 
     expect(changedFiles).toEqual(
       createMap({
-        'fruits/directory/strawberry.js': [33, 42, 0, null, 0, null],
-        'fruits/tomato.js': [32, 42, 0, null, 0, null],
+        'fruits/directory/strawberry.js': [33, 42, 0, null, 0],
+        'fruits/tomato.js': [32, 42, 0, null, 0],
       }),
     );
     expect(removedFiles).toEqual(new Set());

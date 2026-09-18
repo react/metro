@@ -223,6 +223,115 @@ describe('processBatch', () => {
     );
   });
 
+  test('lazy plugins are not run on a batch, and their filter is not consulted', async () => {
+    const eagerFilter = jest.fn().mockReturnValue(true);
+    const lazyFilter = jest.fn().mockReturnValue(true);
+
+    const processor = new FileProcessor({
+      ...defaultOptions,
+      pluginWorkers: [
+        {
+          worker: {modulePath: 'mock-lazy-plugin', setupArgs: {}},
+          filter: lazyFilter,
+          lazy: true,
+        },
+        {
+          worker: {modulePath: 'mock-eager-plugin', setupArgs: {}},
+          filter: eagerFilter,
+        },
+      ],
+    });
+
+    await processor.processBatch(
+      [[p('src/package.json'), [123, 234, 0, null, 0, null]]],
+      {computeSha1: false, maybeReturnContent: false},
+    );
+
+    expect(mockWorkerFn).toHaveBeenCalledTimes(1);
+    expect(mockWorkerFn).toHaveBeenCalledWith(
+      expect.objectContaining({pluginsToRun: [1]}),
+    );
+    expect(lazyFilter).not.toHaveBeenCalled();
+  });
+
+  test('a file matched only by a lazy plugin is not processed', async () => {
+    const processor = new FileProcessor({
+      ...defaultOptions,
+      pluginWorkers: [
+        {
+          worker: {modulePath: 'mock-lazy-plugin', setupArgs: {}},
+          filter: () => true,
+          lazy: true,
+        },
+      ],
+    });
+
+    await processor.processBatch(
+      [[p('src/package.json'), [123, 234, 0, null, 0, null]]],
+      {computeSha1: false, maybeReturnContent: false},
+    );
+
+    expect(mockWorkerFn).not.toHaveBeenCalled();
+  });
+
+  describe('processFileForPlugin', () => {
+    const pluginWorkers = [
+      {
+        worker: {modulePath: 'mock-eager-plugin', setupArgs: {}},
+        filter: () => true,
+      },
+      {
+        worker: {modulePath: 'mock-lazy-plugin', setupArgs: {}},
+        // On-demand processing does not consult the filter
+        filter: () => false,
+        lazy: true,
+      },
+    ];
+
+    test('runs only that plugin, in band, and stores its data', () => {
+      const processor = new FileProcessor({...defaultOptions, pluginWorkers});
+      const metadata: FileMetadata = [123, 234, 0, null, 0, 'eager data'];
+      mockWorkerFn.mockReturnValueOnce({pluginData: [{name: 'pkg'}]});
+
+      // A file in node_modules, which batch processing never runs plugins on
+      const absolutePath = p('/root/node_modules/pkg/package.json');
+      expect(processor.processFileForPlugin(absolutePath, metadata, 1)).toEqual(
+        {name: 'pkg'},
+      );
+
+      expect(mockWorkerFn).toHaveBeenCalledTimes(1);
+      expect(mockWorkerFn).toHaveBeenCalledWith({
+        computeSha1: false,
+        filePath: absolutePath,
+        maybeReturnContent: false,
+        pluginsToRun: [1],
+      });
+      expect(MockJestWorker).not.toHaveBeenCalled();
+      // Only this plugin's slot is written. In particular the file is not
+      // marked visited, since the other workers have not seen it.
+      expect(metadata).toEqual([
+        123,
+        234,
+        0,
+        null,
+        0,
+        'eager data',
+        {name: 'pkg'},
+      ]);
+    });
+
+    test('stores null when the worker returns nothing', () => {
+      const processor = new FileProcessor({...defaultOptions, pluginWorkers});
+      const metadata: FileMetadata = [123, 234, 0, null, 0, null];
+      mockWorkerFn.mockReturnValueOnce({pluginData: [undefined]});
+
+      expect(
+        processor.processFileForPlugin(p('/root/package.json'), metadata, 1),
+      ).toBe(null);
+      expect(metadata[H.PLUGINDATA + 1]).toBe(null);
+    });
+  });
+
   test('worker reply plugin data is mapped to correct fileMetadata indices', async () => {
     const mockFilter1 = jest.fn().mockReturnValue(true);
     const mockFilter2 = jest.fn().mockReturnValue(false);

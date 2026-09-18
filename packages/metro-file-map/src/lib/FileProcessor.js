@@ -13,6 +13,7 @@ import type {
   FileMapPluginWorker,
   FileMetadata,
   PerfLogger,
+  V8Serializable,
   WorkerMessage,
   WorkerMetadata,
   WorkerSetupArgs,
@@ -153,6 +154,30 @@ export class FileProcessor {
       : null;
   }
 
+  /**
+   * Synchronously run one plugin's worker on a regular file and store the
+   * result as that plugin's data. This is how a lazy plugin's files are
+   * processed, so neither its filter nor the exclusion of node_modules
+   * applies - the plugin asked for this file.
+   */
+  processFileForPlugin(
+    absolutePath: string,
+    fileMetadata: FileMetadata,
+    pluginIdx: number,
+  ): V8Serializable {
+    const reply = this.#inBandWorker.processFile({
+      computeSha1: false,
+      filePath: absolutePath,
+      maybeReturnContent: false,
+      pluginsToRun: [pluginIdx],
+    });
+    // `undefined` is reserved to mean that no worker has run.
+    const pluginData = reply.pluginData?.[0] ?? null;
+    // $FlowFixMe[invalid-tuple-index]
+    fileMetadata[H.PLUGINDATA + pluginIdx] = pluginData;
+    return pluginData;
+  }
+
   #getWorkerInput(
     normalPath: string,
     fileMetadata: FileMetadata,
@@ -175,7 +200,10 @@ export class FileProcessor {
     // Indices of plugins with a passing filter
     const pluginsToRun =
       this.#pluginWorkers?.reduce((prev, plugin, idx) => {
-        if (plugin.filter({isNodeModules, normalPath})) {
+        if (
+          plugin.lazy !== true &&
+          plugin.filter({isNodeModules, normalPath})
+        ) {
           prev.push(idx);
         }
         return prev;
@@ -262,8 +290,9 @@ function processWorkerReply(
   const pluginData = metadata.pluginData;
   if (pluginData) {
     for (const [i, pluginIdx] of pluginsRun.entries()) {
+      // `undefined` is reserved to mean that no worker has run.
       // $FlowFixMe[invalid-tuple-index]
-      fileMetadata[H.PLUGINDATA + pluginIdx] = pluginData[i];
+      fileMetadata[H.PLUGINDATA + pluginIdx] = pluginData[i] ?? null;
     }
   }
 

@@ -334,7 +334,6 @@ export default async function watchmanCrawl({
           0,
           sha1hex ?? null,
           symlinkInfo,
-          null,
         ];
 
         // If watchman is fresh, the removed files map starts with all files
