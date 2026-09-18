@@ -98,10 +98,11 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
 
     beforeEach(async () => {
       hasteMap = new HasteMap(opts);
-      removeFile = (canonicalPath, name) =>
+      removeFile = (canonicalPath, name) => {
         hasteMap.onChanged(
           makeChanges({added: [], removed: [[canonicalPath, name]]}),
         );
+      };
       await hasteMap.initialize({
         files: {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
@@ -167,6 +168,37 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
       expect(() => hasteMap.getModule('Bar')).toThrow(
         DuplicateHasteCandidatesError,
       );
+    });
+
+    test('reports the names that were bound and unbound', () => {
+      expect(
+        hasteMap.onChanged(
+          makeChanges({
+            added: [
+              [p('project/Baz.js'), 'Baz'],
+              [p('project/other/Bar.js'), 'Bar'],
+              [p('project/NotHaste.js'), null],
+            ],
+            removed: [
+              [p('project/Duplicate.js'), 'Duplicate'],
+              [p('project/Foo.js'), 'NameForFoo'],
+            ],
+          }),
+        ),
+      ).toEqual({
+        changedNames: new Set(['Baz', 'Bar', 'Duplicate', 'NameForFoo']),
+      });
+    });
+
+    test('reports nothing when no file with a name was added or removed', () => {
+      expect(
+        hasteMap.onChanged(
+          makeChanges({
+            added: [[p('project/NotHaste.js'), null]],
+            removed: [[p('project/AlsoNotHaste.js'), null]],
+          }),
+        ),
+      ).toBeUndefined();
     });
   });
 
