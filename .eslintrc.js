@@ -60,14 +60,5 @@ module.exports = {
         'import/no-commonjs': 'off',
       },
     },
-    {
-      files: [
-        // flow-api-translator doesn't support translating `empty`
-        'packages/metro-file-map/types/flow-types.d.ts',
-      ],
-      rules: {
-        '@typescript-eslint/no-explicit-any': 'off',
-      },
-    },
   ],
 };

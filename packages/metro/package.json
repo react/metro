@@ -32,7 +32,7 @@
     "error-stack-parser": "^2.0.6",
     "flow-enums-runtime": "^0.0.6",
     "graceful-fs": "^4.2.4",
-    "flow-parser": "0.331.0",
+    "flow-parser": "0.332.0",
     "invariant": "^2.2.4",
     "jest-worker": "^29.7.0",
     "jsc-safe-url": "^0.2.2",

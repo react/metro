@@ -32,6 +32,24 @@ type DependencyMapPaths = ?Readonly<{
   [moduleID: number | string]: ReadonlyJsonData,
 }>;
 
+type AsyncRequire = {
+  <T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): Promise<T>,
+  unstable_importMaybeSync<T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+  ): Promise<T> | T,
+  prefetch(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): void,
+  ...
+};
+
 declare var __METRO_GLOBAL_PREFIX__: string;
 
 function maybeLoadBundle(
@@ -97,4 +115,5 @@ asyncRequire.prefetch = function (
   );
 };
 
-module.exports = asyncRequire;
+// The explicit type carries the statics through to generated type definitions.
+module.exports = asyncRequire as AsyncRequire;
