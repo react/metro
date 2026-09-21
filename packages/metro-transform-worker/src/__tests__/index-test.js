@@ -30,6 +30,10 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
+import type {
+  BabelTransformer,
+  BabelTransformerArgs,
+} from 'metro-babel-transformer';
 import typeof FSType from 'node:fs';
 
 const {Buffer} = require('node:buffer');
@@ -277,6 +281,52 @@ test('does not add "use strict" on non-modules', async () => {
   expect(result.output[0].type).toBe('js/module');
   expect(result.output[0].data.code).toBe(
     [HEADER_DEV, '  module.exports = {};', '});'].join('\n'),
+  );
+});
+
+function mockBabelTransformer(): JestMockFn<
+  [BabelTransformerArgs],
+  ReturnType<BabelTransformer['transform']>,
+> {
+  const actual = jest.requireActual<BabelTransformer>(babelTransformerPath);
+  const transform = jest.fn(actual.transform);
+  jest.doMock(babelTransformerPath, () => ({...actual, transform}));
+  return transform;
+}
+
+test('passes the Metro Babel runtime module name when the runtime is enabled', async () => {
+  const babelTransform = mockBabelTransformer();
+
+  await Transformer.transform(
+    baseConfig,
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code)', 'utf8'),
+    baseTransformOptions,
+  );
+
+  expect(babelTransform).toHaveBeenCalledWith(
+    expect.objectContaining({
+      options: expect.objectContaining({
+        babelRuntimeModuleName: 'metro:babel-runtime',
+      }),
+    }),
+  );
+});
+
+test('omits the Babel runtime module name when the runtime is disabled', async () => {
+  const babelTransform = mockBabelTransformer();
+
+  await Transformer.transform(
+    {...baseConfig, enableBabelRuntime: false},
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code)', 'utf8'),
+    baseTransformOptions,
+  );
+
+  expect(babelTransform.mock.calls[0][0].options).not.toHaveProperty(
+    'babelRuntimeModuleName',
   );
 });
 

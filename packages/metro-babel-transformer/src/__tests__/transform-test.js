@@ -49,3 +49,31 @@ test('exposes the correct absolute path to a source file to plugins', () => {
   expect(pluginCwd).toEqual(PROJECT_ROOT);
   expect(visitorFilename).toEqual(path.resolve(PROJECT_ROOT, 'foo.js'));
 });
+
+test('exposes the Babel runtime module name to presets via the caller', () => {
+  let callerModuleName;
+  transform({
+    filename: 'foo.js',
+    src: 'console.log("foo");',
+    plugins: [
+      babel => {
+        callerModuleName = babel.caller(
+          caller => caller?.babelRuntimeModuleName,
+        );
+        return {visitor: {}};
+      },
+    ],
+    options: {
+      babelRuntimeModuleName: 'metro:babel-runtime',
+      dev: true,
+      enableBabelRuntime: true,
+      enableBabelRCLookup: false,
+      globalPrefix: '__metro__',
+      minify: false,
+      platform: null,
+      publicPath: 'test',
+      projectRoot: PROJECT_ROOT,
+    },
+  });
+  expect(callerModuleName).toBe('metro:babel-runtime');
+});

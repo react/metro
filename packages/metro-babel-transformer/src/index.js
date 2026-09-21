@@ -33,6 +33,7 @@ export type CustomTransformOptions = {
 export type TransformProfile = 'default' | 'hermes-stable' | 'hermes-canary';
 
 type BabelTransformerOptions = Readonly<{
+  babelRuntimeModuleName?: string,
   customTransformOptions?: CustomTransformOptions,
   dev: boolean,
   enableBabelRCLookup?: boolean,
@@ -111,6 +112,9 @@ function transform(
         name: 'metro',
         platform: options.platform,
         inlinePlatform: options.inlinePlatform,
+        ...(options.babelRuntimeModuleName != null
+          ? {babelRuntimeModuleName: options.babelRuntimeModuleName}
+          : null),
       },
       // NOTE(EvanBacon): We split the parse/transform steps up to accommodate
       // Hermes parsing, but this defaults to cloning the AST which increases
