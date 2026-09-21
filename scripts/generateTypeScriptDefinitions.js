@@ -445,6 +445,7 @@ if (process.mainModule === module) {
   // Omit globs to use hardcoded defaults.
   generateTsDefsForJsGlobs(
     process.argv.length >= 3 ? process.argv.slice(2) : AUTO_GENERATED_PATTERNS,
+    // $FlowFixMe[incompatible-type]
     {logger: console},
   ).catch(error => {
     process.exitCode = 1;

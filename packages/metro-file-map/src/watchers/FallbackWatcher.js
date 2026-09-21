@@ -406,6 +406,7 @@ export default class FallbackWatcher extends AbstractWatcher {
     const {event, relativePath} = change;
     const key = event + '-' + relativePath;
     const existingTimer = this.#changeTimers.get(key);
+    // $FlowFixMe[sketchy-null-number]
     if (existingTimer) {
       clearTimeout(existingTimer);
     }

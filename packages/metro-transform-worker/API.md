@@ -5,7 +5,7 @@
 ```ts
 
 export type CustomTransformOptions = {
-    [key: string]: unknown;
+  [key: string]: unknown;
 };
 
 export const getCacheKey: (config: JsTransformerConfig, opts?: Readonly<{projectRoot: string}>) => string;
@@ -13,63 +13,63 @@ export const getCacheKey: (config: JsTransformerConfig, opts?: Readonly<{project
 export type getCacheKey = typeof getCacheKey;
 
 export type JsOutput = Readonly<{
-    data: Readonly<{
-        code: string;
-        lineCount: number;
-        map: VlqMap;
-        functionMap: null | undefined | FBSourceFunctionMap;
-    }>;
-    type: JSFileType;
+  data: Readonly<{
+    code: string;
+    lineCount: number;
+    map: VlqMap;
+    functionMap: null | undefined | FBSourceFunctionMap;
+  }>;
+  type: JSFileType;
 }>;
 
 export type JsTransformerConfig = Readonly<{
-    assetPlugins: ReadonlyArray<string>;
-    assetRegistryPath: string;
-    asyncRequireModulePath: string;
-    babelTransformerPath: string;
-    dynamicDepsInPackages: DynamicRequiresBehavior;
-    enableBabelRCLookup: boolean;
-    enableBabelRuntime: boolean | string;
-    globalPrefix: string;
-    hermesParser: boolean;
-    minifierConfig: MinifierConfig;
-    minifierPath: string;
-    optimizationSizeLimit: number;
-    publicPath: string;
-    allowOptionalDependencies: AllowOptionalDependencies;
-    unstable_dependencyMapReservedName: null | undefined | string;
-    unstable_disableModuleWrapping: boolean;
-    unstable_disableNormalizePseudoGlobals: boolean;
-    unstable_compactOutput: boolean;
-    unstable_allowRequireContext: boolean;
-    unstable_memoizeInlineRequires?: boolean | undefined;
-    unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  assetPlugins: ReadonlyArray<string>;
+  assetRegistryPath: string;
+  asyncRequireModulePath: string;
+  babelTransformerPath: string;
+  dynamicDepsInPackages: DynamicRequiresBehavior;
+  enableBabelRCLookup: boolean;
+  enableBabelRuntime: boolean | string;
+  globalPrefix: string;
+  hermesParser: boolean;
+  minifierConfig: MinifierConfig;
+  minifierPath: string;
+  optimizationSizeLimit: number;
+  publicPath: string;
+  allowOptionalDependencies: AllowOptionalDependencies;
+  unstable_dependencyMapReservedName: null | undefined | string;
+  unstable_disableModuleWrapping: boolean;
+  unstable_disableNormalizePseudoGlobals: boolean;
+  unstable_compactOutput: boolean;
+  unstable_allowRequireContext: boolean;
+  unstable_memoizeInlineRequires?: boolean | undefined;
+  unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
 }>;
 
 export type JsTransformOptions = Readonly<{
-    customTransformOptions?: CustomTransformOptions | undefined;
-    dev: boolean;
-    experimentalImportSupport?: boolean | undefined;
-    inlinePlatform: boolean;
-    inlineRequires: boolean;
-    minify: boolean;
-    nonInlinedRequires?: ReadonlyArray<string> | undefined;
-    platform: null | undefined | string;
-    type: Type;
-    unstable_memoizeInlineRequires?: boolean | undefined;
-    unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
-    unstable_staticHermesOptimizedRequire?: boolean | undefined;
-    unstable_transformProfile: TransformProfile;
+  customTransformOptions?: CustomTransformOptions | undefined;
+  dev: boolean;
+  experimentalImportSupport?: boolean | undefined;
+  inlinePlatform: boolean;
+  inlineRequires: boolean;
+  minify: boolean;
+  nonInlinedRequires?: ReadonlyArray<string> | undefined;
+  platform: null | undefined | string;
+  type: Type;
+  unstable_memoizeInlineRequires?: boolean | undefined;
+  unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_staticHermesOptimizedRequire?: boolean | undefined;
+  unstable_transformProfile: TransformProfile;
 }>;
 
 export type Minifier = (opts: MinifierOptions) => MinifierResult | Promise<MinifierResult>;
 
 export type MinifierOptions = {
-    code: string;
-    map: null | undefined | BasicSourceMap;
-    filename: string;
-    reserved: ReadonlyArray<string>;
-    config: MinifierConfig;
+  code: string;
+  map: null | undefined | BasicSourceMap;
+  filename: string;
+  reserved: ReadonlyArray<string>;
+  config: MinifierConfig;
 };
 
 export type MinifierResult = {code: string; map?: BasicSourceMap | undefined};
