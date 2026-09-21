@@ -7,7 +7,7 @@
     "@babel/plugin-transform-flow-strip-types": "^7.25.2",
     "@babel/plugin-transform-modules-commonjs": "^7.24.8",
     "@babel/plugin-transform-react-jsx": "^7.25.2",
-    "@babel/types": "^7.29.0",
+    "@babel/types": "^7.29.8",
     "@microsoft/api-extractor": "^7.52.2",
     "@tsconfig/node20": "^20.1.4",
     "@types/node": "^22.0.0",

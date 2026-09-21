@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@babel/traverse": "^7.29.0",
-    "@babel/types": "^7.29.0",
+    "@babel/types": "^7.29.8",
     "flow-enums-runtime": "^0.0.6",
     "invariant": "^2.2.4",
     "metro-symbolicate": "0.87.1",
@@ -31,7 +31,7 @@
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@babel/parser": "^7.29.0",
+    "@babel/parser": "^7.29.9",
     "terser": "^5.15.0"
   },
   "engines": {
