@@ -53,6 +53,10 @@ import {
   vlqMapFromTuples,
 } from 'metro-source-map';
 import metroTransformPlugins from 'metro-transform-plugins';
+import {
+  getMetroBabelRuntimePackageJsonPath,
+  getMetroBabelRuntimeVersion,
+} from 'metro/private/lib/metroBabelRuntime';
 import collectDependencies from 'metro/private/ModuleGraph/worker/collectDependencies';
 import generateImportNames from 'metro/private/ModuleGraph/worker/generateImportNames';
 import {
@@ -64,6 +68,10 @@ import nullthrows from 'nullthrows';
 
 const InternalInvalidRequireCallError =
   collectDependencies.InvalidRequireCallError;
+
+// Resolved by Metro's `metro:` scheme resolver to the `@babel/runtime`
+// guaranteed to exist at a known version.
+const METRO_BABEL_RUNTIME_MODULE_NAME = 'metro:babel-runtime';
 
 type MinifierConfig = Readonly<{[key: string]: unknown, ...}>;
 
@@ -660,6 +668,12 @@ function getBabelTransformArgs(
     filename: file.filename, // System-separated, project-root-relative
     options: {
       ...babelTransformerOptions,
+      ...(config.enableBabelRuntime === true
+        ? {
+            babelRuntimeModuleName: METRO_BABEL_RUNTIME_MODULE_NAME,
+            babelRuntimeVersion: getMetroBabelRuntimeVersion(),
+          }
+        : null),
       enableBabelRCLookup: config.enableBabelRCLookup,
       enableBabelRuntime: config.enableBabelRuntime,
       globalPrefix: config.globalPrefix,
@@ -756,6 +770,11 @@ export const getCacheKey = (
     require.resolve('metro/private/ModuleGraph/worker/generateImportNames'),
     require.resolve('metro/private/ModuleGraph/worker/JsFileWrapping'),
     ...metroTransformPlugins.getTransformPluginCacheKeyFiles(),
+    // Transform output depends on the installed version of Metro's own
+    // `@babel/runtime`, which is read from its `package.json`.
+    ...(config.enableBabelRuntime === true
+      ? [getMetroBabelRuntimePackageJsonPath()]
+      : []),
   ]);
 
   // $FlowFixMe[unsupported-syntax]

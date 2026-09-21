@@ -30,6 +30,10 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
+import type {
+  BabelTransformer,
+  BabelTransformerArgs,
+} from 'metro-babel-transformer';
 import typeof FSType from 'node:fs';
 
 const {Buffer} = require('node:buffer');
@@ -279,6 +283,57 @@ test('does not add "use strict" on non-modules', async () => {
     [HEADER_DEV, '  module.exports = {};', '});'].join('\n'),
   );
 });
+
+function mockBabelTransformer(): JestMockFn<
+  [BabelTransformerArgs],
+  ReturnType<BabelTransformer['transform']>,
+> {
+  const actual = jest.requireActual<BabelTransformer>(babelTransformerPath);
+  const transform = jest.fn(actual.transform);
+  jest.doMock(babelTransformerPath, () => ({...actual, transform}));
+  return transform;
+}
+
+test("passes Metro's own Babel runtime when enableBabelRuntime is true", async () => {
+  const babelTransform = mockBabelTransformer();
+  const {version} = jest.requireActual<{version: string, ...}>(
+    require.resolve('@babel/runtime/package.json', {
+      paths: [path.dirname(require.resolve('metro-runtime/package.json'))],
+    }),
+  );
+
+  await Transformer.transform(
+    baseConfig,
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code)', 'utf8'),
+    baseTransformOptions,
+  );
+
+  expect(babelTransform.mock.calls[0][0].options).toMatchObject({
+    babelRuntimeModuleName: 'metro:babel-runtime',
+    babelRuntimeVersion: version,
+  });
+});
+
+test.each([false, '7.25.0'])(
+  "does not pass Metro's own Babel runtime when enableBabelRuntime is %p",
+  async enableBabelRuntime => {
+    const babelTransform = mockBabelTransformer();
+
+    await Transformer.transform(
+      {...baseConfig, enableBabelRuntime},
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code)', 'utf8'),
+      baseTransformOptions,
+    );
+
+    const {options} = babelTransform.mock.calls[0][0];
+    expect(options).not.toHaveProperty('babelRuntimeModuleName');
+    expect(options).not.toHaveProperty('babelRuntimeVersion');
+  },
+);
 
 test('preserves require() calls when module wrapping is disabled', async () => {
   const contents = ['require("./c");'].join('\n');
