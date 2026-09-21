@@ -65,6 +65,10 @@ import nullthrows from 'nullthrows';
 const InternalInvalidRequireCallError =
   collectDependencies.InvalidRequireCallError;
 
+// Resolved by Metro's `metro:` scheme resolver to the `@babel/runtime` that
+// metro-runtime depends on, independent of where the project hoists its own.
+const METRO_BABEL_RUNTIME_MODULE_NAME = 'metro:babel-runtime';
+
 type MinifierConfig = Readonly<{[key: string]: unknown, ...}>;
 
 export type MinifierOptions = {
@@ -660,6 +664,9 @@ function getBabelTransformArgs(
     filename: file.filename, // System-separated, project-root-relative
     options: {
       ...babelTransformerOptions,
+      ...(config.enableBabelRuntime
+        ? {babelRuntimeModuleName: METRO_BABEL_RUNTIME_MODULE_NAME}
+        : null),
       enableBabelRCLookup: config.enableBabelRCLookup,
       enableBabelRuntime: config.enableBabelRuntime,
       globalPrefix: config.globalPrefix,
