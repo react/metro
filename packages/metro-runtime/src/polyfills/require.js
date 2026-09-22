@@ -576,7 +576,7 @@ if (__DEV__) {
     return hot;
   };
 
-  let reactRefreshTimeout: null | TimeoutID = null;
+  let reactRefreshTimeout: null | ReturnType<typeof setTimeout> = null;
 
   // When a module is defined lazily via a segment definer, modules that
   // have not been required yet are absent from `modules`, and can't be walked
