@@ -252,7 +252,7 @@ export function createModuleGroups(
 }
 
 function* concat(
-  iterators: Iterator<Set<number>>,
+  iterators: IteratorObject<Set<number>>,
 ): Generator<number, void, void> {
   for (const it of iterators) {
     yield* it;

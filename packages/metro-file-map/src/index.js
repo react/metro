@@ -1136,7 +1136,10 @@ export default class FileMap extends EventEmitter {
 }
 
 // TODO: Replace with it.map() from Node 22+
-const mapIterable: <T, S>(Iterable<T>, (T) => S) => Iterator<S> = (it, fn) =>
+const mapIterable: <T, S>(Iterable<T>, (T) => S) => IteratorObject<S> = (
+  it,
+  fn,
+) =>
   (function* mapped() {
     for (const item of it) {
       yield fn(item);
