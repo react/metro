@@ -264,11 +264,11 @@ export default class FileMap extends EventEmitter {
   readonly #cacheManager: CacheManager;
   #canUseWatchmanPromise: Promise<boolean>;
   #changeID: number;
-  #changeInterval: ?IntervalID;
+  #changeInterval: ?ReturnType<typeof setInterval>;
   readonly #console: Console;
   readonly #crawlerAbortController: AbortController;
   readonly #fileProcessor: FileProcessor;
-  #healthCheckInterval: ?IntervalID;
+  #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;

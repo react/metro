@@ -1695,7 +1695,7 @@ class FSWatcher extends EventEmitter {
   _encoding: Encoding;
   _node: EntityNode;
   _nodeWatcher: NodeWatcher;
-  _persistIntervalId: IntervalID;
+  _persistIntervalId: ReturnType<typeof setInterval>;
 
   constructor(
     node: EntityNode,
