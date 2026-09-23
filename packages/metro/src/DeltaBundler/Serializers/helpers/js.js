@@ -108,11 +108,13 @@ function getDefaultAsyncDependencyPath(
   const bundlePath = path.relative(options.serverRoot, dependency.absolutePath);
   return (
     '/' +
-    path.join(
-      // TODO: This is not the proper Metro URL encoding of a file path
-      path.dirname(bundlePath),
-      // Strip the file extension
-      path.basename(bundlePath, path.extname(bundlePath)),
+    normalizePathSeparatorsToPosix(
+      path.join(
+        // TODO: This is not the proper Metro URL encoding of a file path
+        path.dirname(bundlePath),
+        // Strip the file extension
+        path.basename(bundlePath, path.extname(bundlePath)),
+      ),
     ) +
     '.bundle?' +
     searchParams.toString()
