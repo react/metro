@@ -63,7 +63,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
     if (osPlatform === 'win32') {
       jest.doMock('node:path', () => jest.requireActual('node:path/win32'));
     } else {
-      jest.doMock('node:path', () => jest.requireActual('node:path'));
+      jest.doMock('node:path', () => jest.requireActual('node:path/posix'));
     }
 
     const {EventEmitter} = require('node:events');
