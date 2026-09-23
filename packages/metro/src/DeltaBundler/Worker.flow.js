@@ -30,6 +30,7 @@ type TransformerInterface = {
     string,
     Buffer,
     JsTransformOptions,
+    ?string,
   ): Promise<TransformResult<>>,
 };
 
@@ -72,6 +73,7 @@ export const transform = (
   projectRoot: string,
   transformerConfig: TransformerConfig,
   fileBuffer?: Buffer,
+  assetUrlPath?: string,
 ): Promise<Data> => {
   let data;
 
@@ -87,6 +89,7 @@ export const transform = (
     transformOptions,
     projectRoot,
     transformerConfig,
+    assetUrlPath,
   );
 };
 
@@ -100,6 +103,7 @@ async function transformFile(
   transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
+  assetUrlPath?: string,
 ): Promise<Data> {
   // eslint-disable-next-line no-useless-call
   const Transformer: TransformerInterface = require.call(
@@ -123,6 +127,7 @@ async function transformFile(
     projectRelativePath,
     data,
     transformOptions,
+    assetUrlPath,
   );
 
   // The babel cache caches scopes and pathes for already traversed AST nodes.
