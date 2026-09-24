@@ -6,19 +6,19 @@
 
 import type $$IMPORT_TYPEOF_1$$ from 'yargs';
 import EventEmitter from 'node:events';
-import type { HandleFunction } from 'connect';
-import type { IncomingMessage } from 'connect';
-import type { Server } from 'connect';
-import type { Server as Server_2 } from 'node:http';
-import type { Server as Server_3 } from 'node:https';
-import type { Server as Server_4 } from 'ws';
-import type { ServerOptions as ServerOptions_2 } from 'node:https';
-import type { ServerResponse } from 'node:http';
-import type { Socket } from 'node:net';
-import type { Writable } from 'node:stream';
+import type {HandleFunction} from 'connect';
+import type {IncomingMessage} from 'connect';
+import type {Server} from 'connect';
+import type {Server as Server_2} from 'node:http';
+import type {Server as Server_3} from 'node:https';
+import type {Server as Server_4} from 'ws';
+import type {ServerOptions as ServerOptions_2} from 'node:https';
+import type {ServerResponse} from 'node:http';
+import type {Socket} from 'node:net';
+import type {Writable} from 'node:stream';
 
 export type AssetData = AssetDataWithoutFiles & {
-    readonly files: Array<string>;
+  readonly files: Array<string>;
 };
 
 export type AsyncDependencyType = 'async' | 'maybeSync' | 'prefetch' | 'weak';
@@ -32,13 +32,13 @@ export const buildGraph: (config: InputConfigT, opts: BuildGraphOptions) => Prom
 export type buildGraph = typeof buildGraph;
 
 export type BundleDetails = {
-    bundleType: string;
-    customResolverOptions: CustomResolverOptions;
-    customTransformOptions: CustomTransformOptions;
-    dev: boolean;
-    entryFile: string;
-    minify: boolean;
-    platform: null | undefined | string;
+  bundleType: string;
+  customResolverOptions: CustomResolverOptions;
+  customTransformOptions: CustomTransformOptions;
+  dev: boolean;
+  entryFile: string;
+  minify: boolean;
+  platform: null | undefined | string;
 };
 
 export type ContextMode = 'sync' | 'eager' | 'lazy' | 'lazy-once';
@@ -48,169 +48,169 @@ export const createConnectMiddleware: (config: ConfigT, options?: RunMetroOption
 export type createConnectMiddleware = typeof createConnectMiddleware;
 
 export type DeltaResult<T = MixedOutput> = {
-    readonly added: Map<string, Module<T>>;
-    readonly modified: Map<string, Module<T>>;
-    readonly deleted: Set<string>;
-    readonly reset: boolean;
+  readonly added: Map<string, Module<T>>;
+  readonly modified: Map<string, Module<T>>;
+  readonly deleted: Set<string>;
+  readonly reset: boolean;
 };
 
 export type Dependency = ResolvedDependency | Readonly<{data: TransformResultDependency}>;
 
 export class DependencyGraph extends EventEmitter {
-    constructor(
+  constructor(
     config: ConfigT,
     options?: {
-        readonly hasReducedPerformance?: boolean | undefined;
-        readonly watch?: boolean | undefined;
+      readonly hasReducedPerformance?: boolean | undefined;
+      readonly watch?: boolean | undefined;
     },
-    );
-    doesFileExist: (filePath: string) => boolean;
-    end(): void;
-    getAllFiles(): Array<string>;
-    getDependencies(filePath: string): Array<string>;
-    getHasteName(filePath: string): string;
-    getOrComputeSha1(mixedPath: string): Promise<{content?: Buffer | undefined; sha1: string}>;
-    getWatcher(): EventEmitter;
-    matchFilesWithContext(from: string, context: Readonly<{recursive: boolean; filter: RegExp}>): Iterable<string>;
-    ready(): Promise<void>;
-    resolveDependency(
+  );
+  doesFileExist: (filePath: string) => boolean;
+  end(): Promise<void>;
+  getAllFiles(): Array<string>;
+  getDependencies(filePath: string): Array<string>;
+  getHasteName(filePath: string): string;
+  getOrComputeSha1(mixedPath: string): Promise<{content?: Buffer | undefined; sha1: string}>;
+  getWatcher(): EventEmitter;
+  matchFilesWithContext(from: string, context: Readonly<{recursive: boolean; filter: RegExp}>): Iterable<string>;
+  ready(): Promise<void>;
+  resolveDependency(
     originModulePath: string,
     dependency: TransformResultDependency,
     platform: string | null,
     resolverOptions: ResolverInputOptions,
     extraOptions?: {assumeFlatNodeModules: boolean},
-    ): BundlerResolution;
+  ): BundlerResolution;
 }
 
 export function getSchemeResolvers(): Readonly<{
-    [scheme: string]: CustomResolver;
+  [scheme: string]: CustomResolver;
 }>;
 
 export class JsonReporter<TEvent extends {readonly [prop: string]: unknown}> {
-    constructor(stream: Writable);
-    update(event: TEvent): void;
+  constructor(stream: Writable);
+  update(event: TEvent): void;
 }
 
 export function loadConfig(argvInput?: YargArguments, defaultConfigOverrides?: InputConfigT): Promise<ConfigT>;
 
 export function mergeConfig<T extends InputConfigT, R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT) | ((baseConfig: T) => Promise<InputConfigT>)>>(
-base: T | (() => T),
-...configs: R
+  base: T | (() => T),
+  ...configs: R
 ): R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT)> ? T : Promise<T>;
 
 export type MetroConfig = InputConfigT;
 
 export class MetroServer {
-    constructor(config: ConfigT, options?: ServerOptions);
-    build(
+  constructor(config: ConfigT, options?: ServerOptions);
+  build(
     bundleOptions: BundleOptions,
     buildOptions?: BuildOptions,
-    ): Promise<{
-        code: string;
-        map: string;
-        assets?: ReadonlyArray<AssetData> | undefined;
-    }>;
-    static DEFAULT_BUNDLE_OPTIONS: Omit<
+  ): Promise<{
+    code: string;
+    map: string;
+    assets?: ReadonlyArray<AssetData> | undefined;
+  }>;
+  static DEFAULT_BUNDLE_OPTIONS: Omit<
     typeof MetroServer.DEFAULT_GRAPH_OPTIONS,
     'excludeSource' | 'inlineSourceMap' | 'lazy' | 'modulesOnly' | 'onProgress' | 'runModule' | 'shallow' | 'sourceMapUrl' | 'sourceUrl' | 'sourcePaths'
-    > & {
-        excludeSource: false;
-        inlineSourceMap: false;
-        lazy: false;
-        modulesOnly: false;
-        onProgress: null;
-        runModule: true;
-        shallow: false;
-        sourceMapUrl: null;
-        sourceUrl: null;
-        sourcePaths: SourcePathsMode;
-    };
-    static DEFAULT_GRAPH_OPTIONS: Readonly<{
-        customResolverOptions: CustomResolverOptions;
-        customTransformOptions: CustomTransformOptions;
-        dev: boolean;
-        minify: boolean;
-        unstable_transformProfile: 'default';
-    }>;
-    end(): void;
-    getAssets(options: BundleOptions): Promise<ReadonlyArray<AssetData>>;
-    getBundler(): IncrementalBundler;
-    getCreateModuleId(): (path: string) => number;
-    getNewBuildNumber(): number;
-    getOrderedDependencyPaths(options: {readonly dev: boolean; readonly entryFile: string; readonly minify: boolean; readonly platform: null | undefined | string}): Promise<Array<string>>;
-    getPlatforms(): ReadonlyArray<string>;
-    getRamBundleInfo(options: BundleOptions): Promise<RamBundleInfo>;
-    getWatchFolders(): ReadonlyArray<string>;
-    processRequest: (req: IncomingMessage, res: ServerResponse, next: (e: null | undefined | Error) => void) => void;
-    ready(): Promise<void>;
+  > & {
+    excludeSource: false;
+    inlineSourceMap: false;
+    lazy: false;
+    modulesOnly: false;
+    onProgress: null;
+    runModule: true;
+    shallow: false;
+    sourceMapUrl: null;
+    sourceUrl: null;
+    sourcePaths: SourcePathsMode;
+  };
+  static DEFAULT_GRAPH_OPTIONS: Readonly<{
+    customResolverOptions: CustomResolverOptions;
+    customTransformOptions: CustomTransformOptions;
+    dev: boolean;
+    minify: boolean;
+    unstable_transformProfile: 'default';
+  }>;
+  end(): Promise<void>;
+  getAssets(options: BundleOptions): Promise<ReadonlyArray<AssetData>>;
+  getBundler(): IncrementalBundler;
+  getCreateModuleId(): (path: string) => number;
+  getNewBuildNumber(): number;
+  getOrderedDependencyPaths(options: {readonly dev: boolean; readonly entryFile: string; readonly minify: boolean; readonly platform: null | undefined | string}): Promise<Array<string>>;
+  getPlatforms(): ReadonlyArray<string>;
+  getRamBundleInfo(options: BundleOptions): Promise<RamBundleInfo>;
+  getWatchFolders(): ReadonlyArray<string>;
+  processRequest: (req: IncomingMessage, res: ServerResponse, next: (e: null | undefined | Error) => void) => void;
+  ready(): Promise<void>;
 }
 
 export type MixedOutput = {readonly data: unknown; readonly type: string};
 
 export type Module<T = MixedOutput> = Readonly<{
-    dependencies: Map<string, Dependency>;
-    inverseDependencies: CountingSet<string>;
-    output: ReadonlyArray<T>;
-    path: string;
-    getSource: () => Buffer;
-    unstable_transformResultKey?: null | undefined | string;
+  dependencies: Map<string, Dependency>;
+  inverseDependencies: CountingSet<string>;
+  output: ReadonlyArray<T>;
+  path: string;
+  getSource: () => Buffer;
+  unstable_transformResultKey?: null | undefined | string;
 }>;
 
 export type ReadOnlyDependencies<T = MixedOutput> = ReadonlyMap<string, Module<T>>;
 
 export interface ReadOnlyGraph<T = MixedOutput> {
-    readonly dependencies: ReadOnlyDependencies<T>;
-    readonly entryPoints: ReadonlySet<string>;
-    readonly transformOptions: Readonly<TransformInputOptions>;
+  readonly dependencies: ReadOnlyDependencies<T>;
+  readonly entryPoints: ReadonlySet<string>;
+  readonly transformOptions: Readonly<TransformInputOptions>;
 }
 
 export type ReportableEvent =
-| {port: number; hasReducedPerformance: boolean; type: 'initialize_started'}
-| {type: 'initialize_failed'; port: number; error: Error}
-| {type: 'initialize_done'; port: number}
-| {buildID: string; type: 'bundle_build_done'}
-| {buildID: string; type: 'bundle_build_failed'}
-| {type: 'bundle_save_log'; message: string}
-| {
-    buildID: string;
-    bundleDetails: BundleDetails;
-    isPrefetch?: boolean | undefined;
-    type: 'bundle_build_started';
-}
-| {error: Error; type: 'bundling_error'}
-| {type: 'dep_graph_loading'; hasReducedPerformance: boolean}
-| {type: 'dep_graph_loaded'}
-| {
-    buildID: string;
-    type: 'bundle_transform_progressed';
-    transformedFileCount: number;
-    totalFileCount: number;
-}
-| {type: 'cache_read_error'; error: Error}
-| {type: 'cache_write_error'; error: Error}
-| {type: 'transform_cache_reset'}
-| {type: 'worker_stdout_chunk'; chunk: string}
-| {type: 'worker_stderr_chunk'; chunk: string}
-| {type: 'hmr_client_error'; error: Error}
-| {
-    type: 'client_log';
-    level: 'trace' | 'info' | 'warn' | 'log' | 'group' | 'groupCollapsed' | 'groupEnd' | 'debug';
-    data: Array<unknown>;
-}
-| {type: 'resolver_warning'; message: string}
-| {type: 'server_listening'; port: number; address: string; family: string}
-| {type: 'transformer_load_started'}
-| {type: 'transformer_load_done'}
-| {type: 'transformer_load_failed'; error: Error}
-| {type: 'watcher_health_check_result'; result: HealthCheckResult}
-| {type: 'watcher_status'; status: WatcherStatus};
+  | {port: number; hasReducedPerformance: boolean; type: 'initialize_started'}
+  | {type: 'initialize_failed'; port: number; error: Error}
+  | {type: 'initialize_done'; port: number}
+  | {buildID: string; type: 'bundle_build_done'}
+  | {buildID: string; type: 'bundle_build_failed'}
+  | {type: 'bundle_save_log'; message: string}
+  | {
+      buildID: string;
+      bundleDetails: BundleDetails;
+      isPrefetch?: boolean | undefined;
+      type: 'bundle_build_started';
+    }
+  | {error: Error; type: 'bundling_error'}
+  | {type: 'dep_graph_loading'; hasReducedPerformance: boolean}
+  | {type: 'dep_graph_loaded'}
+  | {
+      buildID: string;
+      type: 'bundle_transform_progressed';
+      transformedFileCount: number;
+      totalFileCount: number;
+    }
+  | {type: 'cache_read_error'; error: Error}
+  | {type: 'cache_write_error'; error: Error}
+  | {type: 'transform_cache_reset'}
+  | {type: 'worker_stdout_chunk'; chunk: string}
+  | {type: 'worker_stderr_chunk'; chunk: string}
+  | {type: 'hmr_client_error'; error: Error}
+  | {
+      type: 'client_log';
+      level: 'trace' | 'info' | 'warn' | 'log' | 'group' | 'groupCollapsed' | 'groupEnd' | 'debug';
+      data: Array<unknown>;
+    }
+  | {type: 'resolver_warning'; message: string}
+  | {type: 'server_listening'; port: number; address: string; family: string}
+  | {type: 'transformer_load_started'}
+  | {type: 'transformer_load_done'}
+  | {type: 'transformer_load_failed'; error: Error}
+  | {type: 'watcher_health_check_result'; result: HealthCheckResult}
+  | {type: 'watcher_status'; status: WatcherStatus};
 
 export type Reporter = {update(event: ReportableEvent): void};
 
 export type RequireContextParams = Readonly<{
-    recursive: boolean;
-    filter: Readonly<ContextFilter>;
-    mode: ContextMode;
+  recursive: boolean;
+  filter: Readonly<ContextFilter>;
+  mode: ContextMode;
 }>;
 
 export function resolveConfig(filePath?: string, cwd?: string): Promise<ResolveConfigResult>;
@@ -220,48 +220,48 @@ export const runBuild: (config: ConfigT, opts: RunBuildOptions) => Promise<RunBu
 export type runBuild = typeof runBuild;
 
 export type RunBuildOptions = {
-    entry: string;
-    assets?: boolean | undefined;
-    dev?: boolean | undefined;
-    out?: string | undefined;
-    bundleOut?: string | undefined;
-    sourceMapOut?: string | undefined;
-    onBegin?: (() => void) | undefined;
-    onComplete?: (() => void) | undefined;
-    onProgress?: ((transformedFileCount: number, totalFileCount: number) => void) | undefined;
-    minify?: boolean | undefined;
-    output?:
+  entry: string;
+  assets?: boolean | undefined;
+  dev?: boolean | undefined;
+  out?: string | undefined;
+  bundleOut?: string | undefined;
+  sourceMapOut?: string | undefined;
+  onBegin?: (() => void) | undefined;
+  onComplete?: (() => void) | undefined;
+  onProgress?: ((transformedFileCount: number, totalFileCount: number) => void) | undefined;
+  minify?: boolean | undefined;
+  output?:
     | Readonly<{
         build: (
-        server: MetroServer,
-        requestOptions: RequestOptions,
-        buildOptions?: BuildOptions,
+          server: MetroServer,
+          requestOptions: RequestOptions,
+          buildOptions?: BuildOptions,
         ) => Promise<{
-            code: string;
-            map: string;
-            assets?: ReadonlyArray<AssetData> | undefined;
+          code: string;
+          map: string;
+          assets?: ReadonlyArray<AssetData> | undefined;
         }>;
         save: (output: {code: string; map: string}, opts: OutputOptions, logger: (logMessage: string) => void) => Promise<unknown>;
-    }>
+      }>
     | undefined;
-    platform?: string | undefined;
-    sourceMap?: boolean | undefined;
-    sourceMapUrl?: string | undefined;
-    customResolverOptions?: CustomResolverOptions | undefined;
-    customTransformOptions?: CustomTransformOptions | undefined;
-    unstable_transformProfile?: TransformProfile | undefined;
+  platform?: string | undefined;
+  sourceMap?: boolean | undefined;
+  sourceMapUrl?: string | undefined;
+  customResolverOptions?: CustomResolverOptions | undefined;
+  customTransformOptions?: CustomTransformOptions | undefined;
+  unstable_transformProfile?: TransformProfile | undefined;
 };
 
 export type RunBuildResult = {
-    code: string;
-    map: string;
-    assets?: ReadonlyArray<AssetData> | undefined;
+  code: string;
+  map: string;
+  assets?: ReadonlyArray<AssetData> | undefined;
 };
 
 export function runMetro(config: InputConfigT, options?: RunMetroOptions): Promise<MetroServer>;
 
 export type RunMetroOptions = Omit<ServerOptions, 'waitForBundler'> & {
-    waitForBundler?: boolean | undefined;
+  waitForBundler?: boolean | undefined;
 };
 
 export const runServer: (config: ConfigT, opts?: RunServerOptions) => Promise<RunServerResult>;
@@ -269,101 +269,101 @@ export const runServer: (config: ConfigT, opts?: RunServerOptions) => Promise<Ru
 export type runServer = typeof runServer;
 
 export type RunServerOptions = Readonly<{
-    hasReducedPerformance?: boolean | undefined;
-    host?: string | undefined;
-    onError?: ((err: Error & {code?: string | undefined}) => void) | undefined;
-    onReady?: ((server: Server_2 | Server_3) => void) | undefined;
-    onClose?: (() => void) | undefined;
-    secureServerOptions?: ServerOptions_2 | undefined;
-    secure?: boolean | undefined;
-    secureCert?: string | undefined;
-    secureKey?: string | undefined;
-    unstable_extraMiddleware?: ReadonlyArray<HandleFunction> | undefined;
-    waitForBundler?: boolean | undefined;
-    watch?: boolean | undefined;
-    websocketEndpoints?: Readonly<{[path: string]: Server_4}> | undefined;
+  hasReducedPerformance?: boolean | undefined;
+  host?: string | undefined;
+  onError?: ((err: Error & {code?: string | undefined}) => void) | undefined;
+  onReady?: ((server: Server_2 | Server_3) => void) | undefined;
+  onClose?: (() => void) | undefined;
+  secureServerOptions?: ServerOptions_2 | undefined;
+  secure?: boolean | undefined;
+  secureCert?: string | undefined;
+  secureKey?: string | undefined;
+  unstable_extraMiddleware?: ReadonlyArray<HandleFunction> | undefined;
+  waitForBundler?: boolean | undefined;
+  watch?: boolean | undefined;
+  websocketEndpoints?: Readonly<{[path: string]: Server_4}> | undefined;
 }>;
 
 export type RunServerResult = {httpServer: Server_2 | Server_3};
 
 export type SerializerOptions = Readonly<{
-    asyncRequireModulePath: string;
-    createModuleId: (absolutePath: string) => number;
-    dependencyMapReservedName?: null | undefined | string;
-    dev: boolean;
-    getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
-    globalPrefix: string;
-    includeAsyncPaths: boolean;
-    inlineSourceMap?: null | undefined | boolean;
-    modulesOnly: boolean;
-    processModuleFilter: (module: Module) => boolean;
-    projectRoot: string;
-    runBeforeMainModule: ReadonlyArray<string>;
-    runModule: boolean;
-    serverRoot: string;
-    shouldAddToIgnoreList: (module: Module) => boolean;
-    sourceMapUrl?: null | undefined | string;
-    sourceUrl?: null | undefined | string;
-    getSourceUrl?: null | undefined | ((module: Module) => string);
-    unstable_inlineDependencyMap?: boolean | undefined;
-    unstable_getAsyncDependencyPath?: ((dependency: ResolvedDependency, options: unknown) => null | undefined | ReadonlyJsonData) | undefined;
+  asyncRequireModulePath: string;
+  createModuleId: (absolutePath: string) => number;
+  dependencyMapReservedName?: null | undefined | string;
+  dev: boolean;
+  getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
+  globalPrefix: string;
+  includeAsyncPaths: boolean;
+  inlineSourceMap?: null | undefined | boolean;
+  modulesOnly: boolean;
+  processModuleFilter: (module: Module) => boolean;
+  projectRoot: string;
+  runBeforeMainModule: ReadonlyArray<string>;
+  runModule: boolean;
+  serverRoot: string;
+  shouldAddToIgnoreList: (module: Module) => boolean;
+  sourceMapUrl?: null | undefined | string;
+  sourceUrl?: null | undefined | string;
+  getSourceUrl?: null | undefined | ((module: Module) => string);
+  unstable_inlineDependencyMap?: boolean | undefined;
+  unstable_getAsyncDependencyPath?: ((dependency: ResolvedDependency, options: unknown) => null | undefined | ReadonlyJsonData) | undefined;
 }>;
 
 export type ServerOptions = Readonly<{
-    hasReducedPerformance?: boolean | undefined;
-    onBundleBuilt?: ((bundlePath: string) => void) | undefined;
-    watch?: boolean | undefined;
+  hasReducedPerformance?: boolean | undefined;
+  onBundleBuilt?: ((bundlePath: string) => void) | undefined;
+  watch?: boolean | undefined;
 }>;
 
 export class Terminal {
-    constructor(stream: UnderlyingStream, opts?: {ttyPrint?: boolean | undefined});
-    flush(): Promise<void>;
-    log(format: string, ...args: Array<unknown>): void;
-    persistStatus(): void;
-    status(format: string, ...args: Array<unknown>): string;
-    waitForUpdates(): Promise<void>;
+  constructor(stream: UnderlyingStream, opts?: {ttyPrint?: boolean | undefined});
+  flush(): Promise<void>;
+  log(format: string, ...args: Array<unknown>): void;
+  persistStatus(): void;
+  status(format: string, ...args: Array<unknown>): string;
+  waitForUpdates(): Promise<void>;
 }
 
 export type TerminalReportableEvent =
-| ReportableEvent
-| {
-    buildID: string;
-    type: 'bundle_transform_progressed_throttled';
-    transformedFileCount: number;
-    totalFileCount: number;
-}
-| {
-    type: 'unstable_server_log';
-    level: 'info' | 'warn' | 'error';
-    data: string | Array<unknown>;
-}
-| {type: 'unstable_server_menu_updated'; message: string}
-| {type: 'unstable_server_menu_cleared'};
+  | ReportableEvent
+  | {
+      buildID: string;
+      type: 'bundle_transform_progressed_throttled';
+      transformedFileCount: number;
+      totalFileCount: number;
+    }
+  | {
+      type: 'unstable_server_log';
+      level: 'info' | 'warn' | 'error';
+      data: string | Array<unknown>;
+    }
+  | {type: 'unstable_server_menu_updated'; message: string}
+  | {type: 'unstable_server_menu_cleared'};
 
 export class TerminalReporter {
-    constructor(terminal: Terminal);
-    readonly terminal: Terminal;
-    update(event: TerminalReportableEvent): void;
+  constructor(terminal: Terminal);
+  readonly terminal: Terminal;
+  update(event: TerminalReportableEvent): void;
 }
 
 export type TransformInputOptions = Omit<JsTransformOptions, 'inlinePlatform' | 'inlineRequires'>;
 
 export type TransformResult<T = MixedOutput> = Readonly<{
-    dependencies: ReadonlyArray<TransformResultDependency>;
-    output: ReadonlyArray<T>;
-    unstable_transformResultKey?: null | undefined | string;
+  dependencies: ReadonlyArray<TransformResultDependency>;
+  output: ReadonlyArray<T>;
+  unstable_transformResultKey?: null | undefined | string;
 }>;
 
 export type TransformResultDependency = Readonly<{
-    name: string;
-    data: Readonly<{
-        key: string;
-        asyncType: AsyncDependencyType | null;
-        isESMImport: boolean;
-        isOptional?: boolean | undefined;
-        locs: ReadonlyArray<ReadonlySourceLocation>;
-        contextParams?: RequireContextParams | undefined;
-    }>;
+  name: string;
+  data: Readonly<{
+    key: string;
+    asyncType: AsyncDependencyType | null;
+    isESMImport: boolean;
+    isOptional?: boolean | undefined;
+    locs: ReadonlyArray<ReadonlySourceLocation>;
+    contextParams?: RequireContextParams | undefined;
+  }>;
 }>;
 
 ```

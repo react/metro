@@ -1,6 +1,6 @@
 {
   "name": "metro-file-map",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "[Experimental] - 🚇 File crawling, watching and mapping for Metro",
   "main": "src/index.js",
   "exports": {
@@ -26,8 +26,7 @@
     "invariant": "^2.2.4",
     "jest-worker": "^29.7.0",
     "micromatch": "^4.0.4",
-    "nullthrows": "^1.1.1",
-    "walker": "^1.0.7"
+    "nullthrows": "^1.1.1"
   },
   "devDependencies": {
     "slash": "^3.0.0"

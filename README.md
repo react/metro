@@ -1,9 +1,9 @@
 # Metro
 
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/facebook/metro/blob/HEAD/LICENSE)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/react/metro/blob/HEAD/LICENSE)
 [![npm package version](https://img.shields.io/npm/v/metro?color=brightgreen)](https://www.npmjs.com/package/metro)
-[![facebook/metro/nightly-tests](https://github.com/facebook/metro/actions/workflows/nightly-tests.yml/badge.svg)](https://github.com/facebook/metro/actions/workflows/nightly-tests.yml)
-[![Code coverage](https://codecov.io/gh/facebook/metro/branch/main/graph/badge.svg?token=oMHdoKhFZB)](https://codecov.io/gh/facebook/metro)
+[![react/metro/nightly-tests](https://github.com/react/metro/actions/workflows/nightly-tests.yml/badge.svg)](https://github.com/react/metro/actions/workflows/nightly-tests.yml)
+[![Code coverage](https://codecov.io/gh/react/metro/branch/main/graph/badge.svg?token=oMHdoKhFZB)](https://codecov.io/gh/react/metro)
 [![Follow @MetroBundler on Twitter](https://img.shields.io/twitter/follow/MetroBundler?style=social)](https://twitter.com/intent/follow?screen_name=MetroBundler)
 
 🚇 The JavaScript bundler for React Native.
@@ -32,9 +32,9 @@ Metro was previously part of the [react-native](https://github.com/facebook/reac
 
 Meta has adopted a Code of Conduct that we expect project participants to adhere to. Please read [the full text](https://code.fb.com/codeofconduct) so that you can understand what actions will and will not be tolerated.
 
-### [Contributing guide](https://github.com/facebook/metro/blob/main/CONTRIBUTING.md)
+### [Contributing guide](https://github.com/react/metro/blob/main/CONTRIBUTING.md)
 
-Read our [contributing guide](https://github.com/facebook/metro/blob/main/CONTRIBUTING.md) to learn about our development process, how to propose bug fixes and improvements, and how to build and test your changes to Metro.
+Read our [contributing guide](https://github.com/react/metro/blob/main/CONTRIBUTING.md) to learn about our development process, how to propose bug fixes and improvements, and how to build and test your changes to Metro.
 
 ### Discussions
 

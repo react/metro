@@ -167,7 +167,7 @@ export type ResolutionContext = Readonly<{
    * for a given absolute candidate path (which need not exist), or null if
    * there is no package.json closer than the nearest node_modules directory.
    *
-   * @deprecated See https://github.com/facebook/metro/commit/29c77bff31e2475a086bc3f04073f485da8f9ff0
+   * @deprecated See https://github.com/react/metro/commit/29c77bff31e2475a086bc3f04073f485da8f9ff0
    */
   getPackageForModule: (absoluteModulePath: string) => ?PackageForModule,
 

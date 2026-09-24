@@ -7,53 +7,53 @@
 import EventEmitter from 'node:events';
 
 export type BuildParameters = Readonly<{
-    computeSha1: boolean;
-    enableSymlinks: boolean;
-    extensions: ReadonlyArray<string>;
-    ignorePattern: RegExp;
-    plugins: ReadonlyArray<InputFileMapPlugin>;
-    retainAllFiles: boolean;
-    rootDir: string;
-    roots: ReadonlyArray<string>;
-    cacheBreaker: string;
+  computeSha1: boolean;
+  enableSymlinks: boolean;
+  extensions: ReadonlyArray<string>;
+  ignorePattern: RegExp;
+  plugins: ReadonlyArray<InputFileMapPlugin>;
+  retainAllFiles: boolean;
+  rootDir: string;
+  roots: ReadonlyArray<string>;
+  cacheBreaker: string;
 }>;
 
 export type BuildResult = {fileSystem: FileSystem_2};
 
 export type CacheData = Readonly<{
-    clocks: WatchmanClocks;
-    fileSystemData: unknown;
-    plugins: ReadonlyMap<string, void | V8Serializable>;
+  clocks: WatchmanClocks;
+  fileSystemData: unknown;
+  plugins: ReadonlyMap<string, void | V8Serializable>;
 }>;
 
 export interface CacheManager {
-    end(): Promise<void>;
-    read(): Promise<null | undefined | CacheData>;
-    write(getSnapshot: () => CacheData, opts: CacheManagerWriteOptions): Promise<void>;
+  end(): Promise<void>;
+  read(): Promise<null | undefined | CacheData>;
+  write(getSnapshot: () => CacheData, opts: CacheManagerWriteOptions): Promise<void>;
 }
 
 export type CacheManagerFactory = (options: CacheManagerFactoryOptions) => CacheManager;
 
 export type CacheManagerFactoryOptions = Readonly<{
-    buildParameters: BuildParameters;
+  buildParameters: BuildParameters;
 }>;
 
 export type CacheManagerWriteOptions = Readonly<{
-    changedSinceCacheRead: boolean;
-    eventSource: CacheManagerEventSource;
-    onWriteError: (error: Error) => void;
+  changedSinceCacheRead: boolean;
+  eventSource: CacheManagerEventSource;
+  onWriteError: (error: Error) => void;
 }>;
 
 export type ChangeEvent = Readonly<{
-    logger?: null | undefined | RootPerfLogger;
-    changes: ReadonlyFileSystemChanges<Readonly<ChangedFileMetadata>>;
-    rootDir: string;
+  logger?: null | undefined | RootPerfLogger;
+  changes: ReadonlyFileSystemChanges<Readonly<ChangedFileMetadata>>;
+  rootDir: string;
 }>;
 
 export type ChangeEventMetadata = {
-    modifiedTime: null | undefined | number;
-    size: null | undefined | number;
-    type: 'f' | 'd' | 'l';
+  modifiedTime: null | undefined | number;
+  size: null | undefined | number;
+  type: 'f' | 'd' | 'l';
 };
 
 export type Crawler = (options: CrawlerOptions) => Promise<CrawlResult>;
@@ -61,219 +61,219 @@ export type Crawler = (options: CrawlerOptions) => Promise<CrawlResult>;
 export type CrawlerFactory = (options: CrawlerFactoryOptions) => Crawler;
 
 export type CrawlerFactoryOptions = Readonly<{
-    buildParameters: BuildParameters;
-    pluginDataIndices: ReadonlyMap<string, number>;
+  buildParameters: BuildParameters;
+  pluginDataIndices: ReadonlyMap<string, number>;
 }>;
 
 export type CrawlerOptions = {
-    abortSignal?: null | undefined | AbortSignal;
-    computeSha1: boolean;
-    console: Console_2;
-    extensions: ReadonlyArray<string>;
-    ignore: IgnoreMatcher;
-    includeSymlinks: boolean;
-    perfLogger?: null | undefined | PerfLogger;
-    previousState: Readonly<{
-        clocks: ReadonlyMap<CanonicalPath, WatchmanClockSpec>;
-        fileSystem: FileSystem_2;
-    }>;
-    rootDir: string;
-    roots: ReadonlyArray<string>;
-    onStatus: (status: WatcherStatus) => void;
-    subpath?: string | undefined;
+  abortSignal?: null | undefined | AbortSignal;
+  computeSha1: boolean;
+  console: Console_2;
+  extensions: ReadonlyArray<string>;
+  ignore: IgnoreMatcher;
+  includeSymlinks: boolean;
+  perfLogger?: null | undefined | PerfLogger;
+  previousState: Readonly<{
+    clocks: ReadonlyMap<CanonicalPath, WatchmanClockSpec>;
+    fileSystem: FileSystem_2;
+  }>;
+  rootDir: string;
+  roots: ReadonlyArray<string>;
+  onStatus: (status: WatcherStatus) => void;
+  subpath?: string | undefined;
 };
 
 export type CrawlResult = {changedFiles: FileData; removedFiles: Set<Path>; clocks: WatchmanClocks} | {changedFiles: FileData; removedFiles: Set<Path>};
 
 export type DependencyExtractor = {
-    extract: (content: string, absoluteFilePath: string, defaultExtractor?: DependencyExtractor['extract']) => Set<string>;
-    getCacheKey: () => string;
+  extract: (content: string, absoluteFilePath: string, defaultExtractor?: DependencyExtractor['extract']) => Set<string>;
+  getCacheKey: () => string;
 };
 
 export class DependencyPlugin extends FileDataPlugin<ReadonlyArray<string> | null> {
-    constructor(options: DependencyPluginOptions);
-    getDependencies(mixedPath: Path): null | undefined | ReadonlyArray<string>;
+  constructor(options: DependencyPluginOptions);
+  getDependencies(mixedPath: Path): null | undefined | ReadonlyArray<string>;
 }
 
 export type DependencyPluginOptions = Readonly<{
-    dependencyExtractor: null | undefined | string;
-    computeDependencies: boolean;
+  dependencyExtractor: null | undefined | string;
+  computeDependencies: boolean;
 }>;
 
 export class DiskCacheManager implements CacheManager {
-    constructor(opts: CacheManagerFactoryOptions, config: DiskCacheConfig);
-    end(): Promise<void>;
-    static getCacheFilePath(buildParameters: BuildParameters, cacheFilePrefix?: null | undefined | string, cacheDirectory?: null | undefined | string): string;
-    getCacheFilePath(): string;
-    read(): Promise<null | undefined | CacheData>;
-    write(getSnapshot: () => CacheData, opts: CacheManagerWriteOptions): Promise<void>;
+  constructor(opts: CacheManagerFactoryOptions, config: DiskCacheConfig);
+  end(): Promise<void>;
+  static getCacheFilePath(buildParameters: BuildParameters, cacheFilePrefix?: null | undefined | string, cacheDirectory?: null | undefined | string): string;
+  getCacheFilePath(): string;
+  read(): Promise<null | undefined | CacheData>;
+  write(getSnapshot: () => CacheData, opts: CacheManagerWriteOptions): Promise<void>;
 }
 
 export class DuplicateHasteCandidatesError extends Error {
-    constructor(name: string, platform: string, supportsNativePlatform: boolean, duplicatesSet: DuplicatesSet);
-    duplicatesSet: DuplicatesSet;
-    hasteName: string;
-    platform: string | null;
-    supportsNativePlatform: boolean;
+  constructor(name: string, platform: string, supportsNativePlatform: boolean, duplicatesSet: DuplicatesSet);
+  duplicatesSet: DuplicatesSet;
+  hasteName: string;
+  platform: string | null;
+  supportsNativePlatform: boolean;
 }
 
 export type FileData = Map<CanonicalPath, FileMetadata>;
 
 class FileMap extends EventEmitter {
-    constructor(options: InputOptions);
-    build(): Promise<BuildResult>;
-    static create(options: InputOptions): FileMap;
-    end(): Promise<void>;
-    static H: HType;
-    read(): Promise<null | undefined | CacheData>;
+  constructor(options: InputOptions);
+  build(): Promise<BuildResult>;
+  static create(options: InputOptions): FileMap;
+  end(): Promise<void>;
+  static H: HType;
+  read(): Promise<null | undefined | CacheData>;
 }
-export { FileMap }
+export {FileMap};
 export default FileMap;
 
 interface FileSystem_2 {
-    exists(file: Path): boolean;
-    getAllFiles(): Array<Path>;
-    getDifference(
+  exists(file: Path): boolean;
+  getAllFiles(): Array<Path>;
+  getDifference(
     files: FileData,
     options?: Readonly<{
-        subpath?: string | undefined;
+      subpath?: string | undefined;
     }>,
-    ): {changedFiles: FileData; removedFiles: Set<string>};
-    getOrComputeSha1(file: Path): Promise<null | undefined | {sha1: string; content?: Buffer | undefined}>;
-    getSerializableSnapshot(): CacheData['fileSystemData'];
-    getSha1(file: Path): null | undefined | string;
-    hierarchicalLookup(
+  ): {changedFiles: FileData; removedFiles: Set<string>};
+  getOrComputeSha1(file: Path): Promise<null | undefined | {sha1: string; content?: Buffer | undefined}>;
+  getSerializableSnapshot(): CacheData['fileSystemData'];
+  getSha1(file: Path): null | undefined | string;
+  hierarchicalLookup(
     mixedStartPath: string,
     subpath: string,
     opts: {
-        breakOnSegment?: null | undefined | string;
-        invalidatedBy?: null | undefined | Set<string>;
-        subpathType: 'f' | 'd';
+      breakOnSegment?: null | undefined | string;
+      invalidatedBy?: null | undefined | Set<string>;
+      subpathType: 'f' | 'd';
     },
-    ): null | undefined | {absolutePath: string; containerRelativePath: string};
-    linkStats(file: Path): null | undefined | FileStats;
-    lookup(mixedPath: Path): LookupResult;
-    matchFiles(opts: {
-        filter?: RegExp | null | undefined;
-        filterCompareAbsolute?: boolean | undefined;
-        filterComparePosix?: boolean | undefined;
-        follow?: boolean | undefined;
-        recursive?: boolean | undefined;
-        rootDir?: Path | null | undefined;
-    }): Iterable<Path>;
+  ): null | undefined | {absolutePath: string; containerRelativePath: string};
+  linkStats(file: Path): null | undefined | FileStats;
+  lookup(mixedPath: Path): LookupResult;
+  matchFiles(opts: {
+    filter?: RegExp | null | undefined;
+    filterCompareAbsolute?: boolean | undefined;
+    filterComparePosix?: boolean | undefined;
+    follow?: boolean | undefined;
+    recursive?: boolean | undefined;
+    rootDir?: Path | null | undefined;
+  }): Iterable<Path>;
 }
-export { FileSystem_2 as FileSystem }
+export {FileSystem_2 as FileSystem};
 
 export class HasteConflictsError extends Error {
-    constructor(conflicts: ReadonlyArray<HasteConflict>);
-    getDetailedMessage(pathsRelativeToRoot: null | undefined | string): string;
+  constructor(conflicts: ReadonlyArray<HasteConflict>);
+  getDetailedMessage(pathsRelativeToRoot: null | undefined | string): string;
 }
 
 export interface HasteMap {
-    computeConflicts(): Array<HasteConflict>;
-    getModule(name: string, platform?: null | undefined | string, supportsNativePlatform?: null | undefined | boolean, type?: null | undefined | HTypeValue): null | undefined | Path;
-    getModuleNameByPath(file: Path): null | undefined | string;
-    getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform: null | undefined | boolean): null | undefined | Path;
+  computeConflicts(): Array<HasteConflict>;
+  getModule(name: string, platform?: null | undefined | string, supportsNativePlatform?: null | undefined | boolean, type?: null | undefined | HTypeValue): null | undefined | Path;
+  getModuleNameByPath(file: Path): null | undefined | string;
+  getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform: null | undefined | boolean): null | undefined | Path;
 }
 
 export type HasteMapData = Map<string, HasteMapItem>;
 
 export type HasteMapItem = {
-    [platform: string]: HasteMapItemMetadata;
+  [platform: string]: HasteMapItemMetadata;
 };
 
 export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null> {
-    constructor(options: HasteMapOptions);
-    assertValid(): void;
-    computeConflicts(): Array<HasteConflict>;
-    getCacheKey(): string;
-    getModule(name: string, platform?: null | undefined | string, supportsNativePlatform?: null | undefined | boolean, type?: null | undefined | HTypeValue): null | undefined | Path;
-    getModuleNameByPath(mixedPath: Path): null | undefined | string;
-    getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform?: null | undefined | boolean): null | undefined | Path;
-    getSerializableSnapshot(): null;
-    getWorker(): FileMapPluginWorker;
-    initialize(opts: FileMapPluginInitOptions<null, string | null>): Promise<void>;
-    readonly name: 'haste';
-    onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): void;
-    setModule(id: string, module: HasteMapItemMetadata): void;
+  constructor(options: HasteMapOptions);
+  assertValid(): void;
+  computeConflicts(): Array<HasteConflict>;
+  getCacheKey(): string;
+  getModule(name: string, platform?: null | undefined | string, supportsNativePlatform?: null | undefined | boolean, type?: null | undefined | HTypeValue): null | undefined | Path;
+  getModuleNameByPath(mixedPath: Path): null | undefined | string;
+  getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform?: null | undefined | boolean): null | undefined | Path;
+  getSerializableSnapshot(): null;
+  getWorker(): FileMapPluginWorker;
+  initialize(opts: FileMapPluginInitOptions<null, string | null>): Promise<void>;
+  readonly name: 'haste';
+  onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): void;
+  setModule(id: string, module: HasteMapItemMetadata): void;
 }
 
 export type HealthCheckResult =
-| {
-    type: 'error';
-    timeout: number;
-    error: Error;
-    watcher: null | undefined | string;
-}
-| {
-    type: 'success';
-    timeout: number;
-    timeElapsed: number;
-    watcher: null | undefined | string;
-}
-| {
-    type: 'timeout';
-    timeout: number;
-    watcher: null | undefined | string;
-    pauseReason: null | undefined | string;
-};
+  | {
+      type: 'error';
+      timeout: number;
+      error: Error;
+      watcher: null | undefined | string;
+    }
+  | {
+      type: 'success';
+      timeout: number;
+      timeElapsed: number;
+      watcher: null | undefined | string;
+    }
+  | {
+      type: 'timeout';
+      timeout: number;
+      watcher: null | undefined | string;
+      pauseReason: null | undefined | string;
+    };
 
 export type InputFileMapPlugin = FileMapPlugin<
-/**
-* >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
-*       |                                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
-**/
-any,
-/**
-* >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
-*       |                                                       ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
-**/
-any
+  /**
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   *       |                                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+   **/
+  any,
+  /**
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   *       |                                                       ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+   **/
+  any
 >;
 
 export type InputOptions = Readonly<{
-    computeSha1?: null | undefined | boolean;
-    enableSymlinks?: null | undefined | boolean;
-    extensions: ReadonlyArray<string>;
-    ignorePattern?: null | undefined | RegExp;
-    plugins?: ReadonlyArray<InputFileMapPlugin> | undefined;
-    retainAllFiles: boolean;
-    rootDir: string;
-    roots: ReadonlyArray<string>;
-    cacheManagerFactory?: null | undefined | CacheManagerFactory;
-    console?: Console_2 | undefined;
-    crawlerFactory?: null | undefined | CrawlerFactory;
-    healthCheck: HealthCheckOptions;
-    maxFilesPerWorker?: null | undefined | number;
-    maxWorkers: number;
-    perfLoggerFactory?: null | undefined | PerfLoggerFactory;
-    resetCache?: null | undefined | boolean;
-    useWatchman?: null | undefined | boolean;
-    watch?: null | undefined | boolean;
-    watchmanDeferStates?: ReadonlyArray<string> | undefined;
+  computeSha1?: null | undefined | boolean;
+  enableSymlinks?: null | undefined | boolean;
+  extensions: ReadonlyArray<string>;
+  ignorePattern?: null | undefined | RegExp;
+  plugins?: ReadonlyArray<InputFileMapPlugin> | undefined;
+  retainAllFiles: boolean;
+  rootDir: string;
+  roots: ReadonlyArray<string>;
+  cacheManagerFactory?: null | undefined | CacheManagerFactory;
+  console?: Console_2 | undefined;
+  crawlerFactory?: null | undefined | CrawlerFactory;
+  healthCheck: HealthCheckOptions;
+  maxFilesPerWorker?: null | undefined | number;
+  maxWorkers: number;
+  perfLoggerFactory?: null | undefined | PerfLoggerFactory;
+  resetCache?: null | undefined | boolean;
+  useWatchman?: null | undefined | boolean;
+  watch?: null | undefined | boolean;
+  watchmanDeferStates?: ReadonlyArray<string> | undefined;
 }>;
 
 export class NoopCacheManager implements CacheManager {
-    end(): Promise<void>;
-    read(): Promise<null | undefined | CacheData>;
-    write(): Promise<void>;
+  end(): Promise<void>;
+  read(): Promise<null | undefined | CacheData>;
+  write(): Promise<void>;
 }
 
 export type WatcherStatus =
-| {
-    type: 'watchman_slow_command';
-    timeElapsed: number;
-    command: 'watch-project' | 'query';
-}
-| {
-    type: 'watchman_slow_command_complete';
-    timeElapsed: number;
-    command: 'watch-project' | 'query';
-}
-| {
-    type: 'watchman_warning';
-    warning: unknown;
-    command: 'watch-project' | 'query';
-};
+  | {
+      type: 'watchman_slow_command';
+      timeElapsed: number;
+      command: 'watch-project' | 'query';
+    }
+  | {
+      type: 'watchman_slow_command_complete';
+      timeElapsed: number;
+      command: 'watch-project' | 'query';
+    }
+  | {
+      type: 'watchman_warning';
+      warning: unknown;
+      command: 'watch-project' | 'query';
+    };
 
 ```

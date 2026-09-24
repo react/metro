@@ -22,7 +22,7 @@ The argument to `require()` must be a compile-time constant. The [`dynamicDepsIn
 
 At build time, Metro [resolves](./Resolution.md) module names to absolute paths and [assigns an opaque module ID](./Configuration.md#createmoduleidfactory) to each one.
 
-At runtime, `require` refers to a function that takes an opaque module ID (*not* a name or path) and returns a module. This can be useful if you already have a module ID returned by another module API, such as [`require.resolveWeak`](#require-resolveweak).
+At runtime, `require` refers to a function that takes an opaque module ID (*not* a name or path) and returns a module. This can be useful if you already have a module ID returned by another module API, such as [`require.resolveWeak`](#requireresolveweak).
 
 ```js
 const localModule = require('./path/module');

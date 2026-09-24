@@ -88,13 +88,15 @@ export default async function watchmanCrawl({
         command,
       });
     };
-    let intervalOrTimeoutId: TimeoutID | IntervalID = setTimeout(() => {
-      logWatchmanWaitMessage();
-      intervalOrTimeoutId = setInterval(
-        logWatchmanWaitMessage,
-        WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
-      );
-    }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
+    let intervalOrTimeoutId:
+      ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> =
+      setTimeout(() => {
+        logWatchmanWaitMessage();
+        intervalOrTimeoutId = setInterval(
+          logWatchmanWaitMessage,
+          WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
+        );
+      }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
     try {
       const response = await new Promise<WatchmanQueryResponse>(
         (resolve, reject) =>

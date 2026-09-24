@@ -68,7 +68,7 @@ const supportLinks = [
         </li>
         <li>
           Browse our{' '}
-          <a href="https://github.com/facebook/metro/releases">
+          <a href="https://github.com/react/metro/releases">
             latest releases on GitHub
           </a>
           .

@@ -20,6 +20,7 @@ let collapsedGuardTimer;
 
 export default (terminal: Terminal, level: string, ...data: Array<unknown>) => {
   // $FlowFixMe[invalid-computed-prop]
+  // $FlowFixMe[prop-missing]
   const logFunction = console[level] && level !== 'trace' ? level : 'log';
   const color: ReadonlyArray<ForegroundColors | BackgroundColors | Modifiers> =
     level === 'error'

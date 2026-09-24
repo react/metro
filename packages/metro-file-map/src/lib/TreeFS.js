@@ -1071,7 +1071,7 @@ export default class TreeFS implements MutableFileSystem {
     return null;
   }
 
-  *metadataIterator(opts: MetadataIteratorOptions): Iterator<{
+  *metadataIterator(opts: MetadataIteratorOptions): IteratorObject<{
     baseName: string,
     canonicalPath: string,
     metadata: FileMetadata,
@@ -1115,7 +1115,7 @@ export default class TreeFS implements MutableFileSystem {
     node: DirectoryNode,
     parent: ?DirectoryNode,
     ancestorOfRootIdx: ?number,
-  ): Iterator<[string, MixedNode]> {
+  ): IteratorObject<[string, MixedNode]> {
     if (ancestorOfRootIdx != null && ancestorOfRootIdx > 0 && parent) {
       yield [
         this.#pathUtils.getBasenameOfNthAncestor(ancestorOfRootIdx - 1),

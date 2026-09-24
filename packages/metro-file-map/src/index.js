@@ -264,11 +264,11 @@ export default class FileMap extends EventEmitter {
   readonly #cacheManager: CacheManager;
   #canUseWatchmanPromise: Promise<boolean>;
   #changeID: number;
-  #changeInterval: ?IntervalID;
+  #changeInterval: ?ReturnType<typeof setInterval>;
   readonly #console: Console;
   readonly #crawlerAbortController: AbortController;
   readonly #fileProcessor: FileProcessor;
-  #healthCheckInterval: ?IntervalID;
+  #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;
@@ -1068,9 +1068,11 @@ export default class FileMap extends EventEmitter {
   }
 
   async end(): Promise<void> {
+    // $FlowFixMe[sketchy-null-number]
     if (this.#changeInterval) {
       clearInterval(this.#changeInterval);
     }
+    // $FlowFixMe[sketchy-null-number]
     if (this.#healthCheckInterval) {
       clearInterval(this.#healthCheckInterval);
     }
@@ -1134,7 +1136,10 @@ export default class FileMap extends EventEmitter {
 }
 
 // TODO: Replace with it.map() from Node 22+
-const mapIterable: <T, S>(Iterable<T>, (T) => S) => Iterator<S> = (it, fn) =>
+const mapIterable: <T, S>(Iterable<T>, (T) => S) => IteratorObject<S> = (
+  it,
+  fn,
+) =>
   (function* mapped() {
     for (const item of it) {
       yield fn(item);

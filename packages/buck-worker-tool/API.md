@@ -4,7 +4,7 @@
 
 ```ts
 
-import type { Duplex } from 'node:stream';
+import type {Duplex} from 'node:stream';
 
 export function buckWorker(commands: Commands): Duplex;
 

@@ -1,6 +1,6 @@
 {
   "name": "metro-babel-register",
-  "version": "0.87.0",
+  "version": "0.87.1",
   "description": "🚇 babel/register configuration for Metro.",
   "main": "src/babel-register.js",
   "exports": {
@@ -21,7 +21,7 @@
     "@babel/preset-typescript": "^7.24.7",
     "@babel/register": "^7.24.6",
     "babel-plugin-replace-ts-export-assignment": "^0.0.2",
-    "flow-parser": "0.327.0",
+    "flow-parser": "0.331.0",
     "babel-plugin-transform-flow-enums": "^0.0.2",
     "escape-string-regexp": "^1.0.5",
     "flow-enums-runtime": "^0.0.6"

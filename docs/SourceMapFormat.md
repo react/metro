@@ -32,7 +32,7 @@ Each metadata tuple is encoded as an array of zero or more entries. Each entry m
 The indices in each metadata tuple are assigned as follows:
 
 * Index 0: [Function map](#function-map) or `null`.
-  * In Metro, this is the result of calling [`generateFunctionMap`](https://github.com/facebook/metro/blob/main/packages/metro-source-map/src/generateFunctionMap.js) on the source AST.
+  * In Metro, this is the result of calling [`generateFunctionMap`](https://github.com/react/metro/blob/main/packages/metro-source-map/src/generateFunctionMap.js) on the source AST.
 * Index 1-∞: Reserved for future use.
 
 #### Function map
