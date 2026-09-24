@@ -91,7 +91,6 @@ function find(options: CrawlerOptions): Promise<FileData> {
                   0,
                   null,
                   isSymbolicLink ? 1 : 0,
-                  null,
                 ]);
               }
               resolveIfDone();

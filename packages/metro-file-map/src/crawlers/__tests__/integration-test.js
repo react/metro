@@ -76,29 +76,23 @@ const CASES = [
   [
     true,
     new Map([
-      ['foo.js', [expect.any(Number), 245, 0, null, 0, null]],
-      [
-        join('directory', 'bar.js'),
-        [expect.any(Number), 245, 0, null, 0, null],
-      ],
+      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
+      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
       [
         'link-to-directory',
-        [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory'), null],
+        [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory')],
       ],
       [
         'link-to-foo.js',
-        [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js'), null],
+        [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js')],
       ],
     ]),
   ],
   [
     false,
     new Map([
-      [
-        join('directory', 'bar.js'),
-        [expect.any(Number), 245, 0, null, 0, null],
-      ],
-      ['foo.js', [expect.any(Number), 245, 0, null, 0, null]],
+      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
+      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
     ]),
   ],
 ];
@@ -118,7 +112,7 @@ describe.each(Object.keys(CRAWLERS))(
           previousState: {
             fileSystem: new TreeFS({
               rootDir: FIXTURES_DIR,
-              files: new Map([['removed.js', [123, 234, 0, null, 0, null]]]),
+              files: new Map([['removed.js', [123, 234, 0, null, 0]]]),
               processFile: () => {
                 throw new Error('Not implemented');
               },
