@@ -10,7 +10,7 @@ packages/*/build/**
 
 [options]
 emoji=true
-
+builtin_lib=core-only
 format.bracket_spacing=false
 
 munge_underscores=true
@@ -38,4 +38,4 @@ untyped-import
 untyped-type-import
 
 [version]
-^0.332.0
+^0.333.0

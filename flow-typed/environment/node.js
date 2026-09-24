@@ -71,7 +71,7 @@ declare class Buffer extends Uint8Array {
     sourceStart?: number,
     sourceEnd?: number,
   ): number;
-  entries(): Iterator<[number, number]>;
+  entries(): IteratorObject<[number, number]>;
   equals(otherBuffer: Buffer): boolean;
   fill(
     value: string | Buffer | number,
@@ -91,7 +91,7 @@ declare class Buffer extends Uint8Array {
     encoding?: buffer$Encoding,
   ): number;
   inspect(): string;
-  keys(): Iterator<number>;
+  keys(): IteratorObject<number>;
   lastIndexOf(
     value: string | Buffer | number,
     offsetOrEncoding?: number | buffer$Encoding,
@@ -121,7 +121,7 @@ declare class Buffer extends Uint8Array {
   swap64(): Buffer;
   toJSON(): buffer$ToJSONRet;
   toString(encoding?: buffer$Encoding, start?: number, end?: number): string;
-  values(): Iterator<number>;
+  values(): IteratorObject<number>;
   write(
     string: string,
     offset?: number,
@@ -181,14 +181,13 @@ declare class Buffer extends Uint8Array {
   static compare(buf1: Buffer, buf2: Buffer): number;
   static concat(list: Array<Buffer>, totalLength?: number): Buffer;
 
-  static from(value: Buffer): Buffer;
+  static from(value: ArrayLike<number> | Iterable<number>): Buffer;
   static from(value: string, encoding?: buffer$Encoding): Buffer;
   static from(
     value: ArrayBuffer | SharedArrayBuffer,
     byteOffset?: number,
     length?: number,
   ): Buffer;
-  static from(value: Iterable<number>): this;
   static isBuffer(obj: any): boolean;
   static isEncoding(encoding: string): boolean;
 }
