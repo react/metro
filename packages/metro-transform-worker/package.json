@@ -21,8 +21,8 @@
   "dependencies": {
     "@babel/core": "^7.25.2",
     "@babel/generator": "^7.29.1",
-    "@babel/parser": "^7.29.0",
-    "@babel/types": "^7.29.0",
+    "@babel/parser": "^7.29.9",
+    "@babel/types": "^7.29.8",
     "flow-enums-runtime": "^0.0.6",
     "metro": "0.87.1",
     "metro-babel-transformer": "0.87.1",
