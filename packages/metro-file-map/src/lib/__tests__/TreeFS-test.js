@@ -209,6 +209,52 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
+    describe('observeContent', () => {
+      test('records a file found in content, not existence', () => {
+        const observations = emptyObservations();
+        expect(
+          tfs.lookup(p('/project/bar.js'), observations, {
+            observeContent: true,
+          }),
+        ).toMatchObject({exists: true, type: 'f'});
+        expect(observations).toEqual({
+          content: new Set([canonical(p('/project/bar.js'))]),
+          existence: new Set(),
+        });
+      });
+
+      test('records the real path of a file found through a symlink, with the link', () => {
+        const observations = emptyObservations();
+        expect(
+          tfs.lookup(p('/project/foo/link-to-bar.js'), observations, {
+            observeContent: true,
+          }),
+        ).toMatchObject({exists: true, realPath: p('/project/bar.js')});
+        expect(observations).toEqual({
+          content: new Set([
+            canonical(p('/project/foo/link-to-bar.js')),
+            canonical(p('/project/bar.js')),
+          ]),
+          existence: new Set(),
+        });
+      });
+
+      test('still records a directory found, or a missing path, in existence', () => {
+        const observations = emptyObservations();
+        tfs.lookup(p('/project/foo'), observations, {observeContent: true});
+        tfs.lookup(p('/project/foo/missing.js'), observations, {
+          observeContent: true,
+        });
+        expect(observations).toEqual({
+          content: new Set(),
+          existence: new Set([
+            canonical(p('/project/foo')),
+            canonical(p('/project/foo/missing.js')),
+          ]),
+        });
+      });
+    });
+
     test('traversing the same symlink multiple times does not imply a cycle', () => {
       expect(
         tfs.lookup(p('/project/foo/owndir/owndir/another.js')),

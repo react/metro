@@ -447,8 +447,10 @@ export default class FileMap extends EventEmitter {
             plugins.map(({plugin, dataIdx}) =>
               plugin.initialize({
                 files: {
-                  lookup: mixedPath => {
-                    const result = fileSystem.lookup(mixedPath);
+                  lookup: (mixedPath, observations) => {
+                    const result = fileSystem.lookup(mixedPath, observations, {
+                      observeContent: true,
+                    });
                     if (!result.exists) {
                       return {exists: false};
                     }
