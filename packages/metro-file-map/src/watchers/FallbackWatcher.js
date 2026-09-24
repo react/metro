@@ -31,6 +31,7 @@ const fsPromises = fs.promises;
 
 const TOUCH_EVENT = common.TOUCH_EVENT;
 const DELETE_EVENT = common.DELETE_EVENT;
+const RECRAWL_EVENT = common.RECRAWL_EVENT;
 
 /**
  * This setting delays all events. It suppresses 'change' events that
@@ -196,7 +197,15 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
     this.#watched[dir] = watcher;
 
-    watcher.on('error', this.#checkedEmitError);
+    watcher.on('error', error => {
+      // Node has already closed the watcher, and will not emit 'close'. Forget
+      // it, so that stopping doesn't wait on it and the path can be watched
+      // again.
+      if (this.#watched[dir] === watcher) {
+        delete this.#watched[dir];
+      }
+      this.#checkedEmitError(error);
+    });
 
     if (this.root !== dir) {
       this.#register(dir, 'd');
@@ -229,64 +238,45 @@ export default class FallbackWatcher extends AbstractWatcher {
   }
 
   /**
-   * On some platforms, as pointed out on the fs docs (most likely just win32)
-   * the file argument might be missing from the fs event. Try to detect what
-   * change by detecting if something was deleted or the most recent file change.
-   */
-  #detectChangedFile(
-    dir: string,
-    event: string,
-    callback: (file: string) => void,
-  ) {
-    if (!this.#dirRegistry[dir]) {
-      return;
-    }
-
-    let found = false;
-    let closest: ?Readonly<{file: string, mtime: Stats['mtime']}> = null;
-    let c = 0;
-    Object.keys(this.#dirRegistry[dir]).forEach((file, i, arr) => {
-      fs.lstat(path.join(dir, file), (error, stat) => {
-        if (found) {
-          return;
-        }
-
-        if (error) {
-          if (isIgnorableFileError(error)) {
-            found = true;
-            callback(file);
-          } else {
-            this.emitError(error);
-          }
-        } else {
-          if (closest == null || stat.mtime > closest.mtime) {
-            closest = {file, mtime: stat.mtime};
-          }
-          if (arr.length === ++c) {
-            callback(closest.file);
-          }
-        }
-      });
-    });
-  }
-
-  /**
    * Normalize fs events and pass it on to be processed.
    */
   #normalizeChange(dir: string, event: string, file: string) {
     if (!file) {
-      this.#detectChangedFile(dir, event, actualFile => {
-        if (actualFile) {
-          this.#processChange(dir, event, actualFile).catch(error =>
-            this.emitError(error),
-          );
-        }
-      });
+      this.#processUnnamedChange(dir).catch(error => this.emitError(error));
     } else {
       this.#processChange(dir, event, path.normalize(file)).catch(error =>
         this.emitError(error),
       );
     }
+  }
+
+  /**
+   * Process an event that doesn't name the changed entry. Windows sends these
+   * when changes to a directory overflow the buffer they're reported through,
+   * so any number of entries under `dir` may have been added, changed or
+   * removed.
+   */
+  async #processUnnamedChange(dir: string) {
+    // Watch and register anything new, so that later changes are reported.
+    await recReaddir(
+      dir,
+      subdir => {
+        this.#watchdir(subdir);
+      },
+      filename => {
+        this.#register(filename, 'f');
+      },
+      symlink => {
+        this.#register(symlink, 'l');
+      },
+      this.#checkedEmitError,
+      this.ignored,
+    );
+    // Then have the file map reconcile everything under `dir`.
+    this.#emitEvent({
+      event: RECRAWL_EVENT,
+      relativePath: path.relative(this.root, dir),
+    });
   }
 
   /**
