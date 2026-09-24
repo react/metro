@@ -196,7 +196,15 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
     this.#watched[dir] = watcher;
 
-    watcher.on('error', this.#checkedEmitError);
+    watcher.on('error', error => {
+      // Node has already closed the watcher, and will not emit 'close'. Forget
+      // it, so that stopping doesn't wait on it and the path can be watched
+      // again.
+      if (this.#watched[dir] === watcher) {
+        delete this.#watched[dir];
+      }
+      this.#checkedEmitError(error);
+    });
 
     if (this.root !== dir) {
       this.#register(dir, 'd');

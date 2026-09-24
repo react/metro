@@ -11,6 +11,7 @@
 
 import FallbackWatcher from '../FallbackWatcher';
 import {createTempWatchRoot} from './helpers';
+import EventEmitter from 'node:events';
 import fs from 'node:fs';
 import {join} from 'node:path';
 
@@ -19,11 +20,18 @@ jest.setTimeout(10 * 1000);
 
 const {mkdir, rm, writeFile} = fs.promises;
 
+// An `FSWatcher` after it has reported an error: Node closes the handle before
+// emitting 'error', so a subsequent `close()` returns early and emits nothing.
+class ErroredFSWatcher extends EventEmitter {
+  close() {}
+}
+
 describe('FallbackWatcher', () => {
   let watchRoot: string;
   let watcher: ?FallbackWatcher;
   let calls: Array<string>;
   let watchFailure: ?{code: string, path: string};
+  let watchOverride: ?{path: string, watcher: ErroredFSWatcher};
 
   const indexOfCall = (op: 'watch' | 'readdir', dir: string) =>
     calls.indexOf(`${op}:${dir}`);
@@ -37,10 +45,17 @@ describe('FallbackWatcher', () => {
     watchRoot = await createTempWatchRoot('Fallback', false);
     calls = [];
     watchFailure = null;
+    watchOverride = null;
 
     const {watch} = fs;
     jest.spyOn(fs, 'watch').mockImplementation((dir, ...args) => {
       calls.push(`watch:${String(dir)}`);
+      const override = watchOverride;
+      if (override != null && dir === override.path) {
+        watchOverride = null;
+        // $FlowFixMe[incompatible-type] - models an errored FSWatcher
+        return override.watcher;
+      }
       const failure = watchFailure;
       if (failure != null && dir === failure.path) {
         const error = new Error(`Cannot watch path '${String(dir)}'.`);
@@ -127,7 +142,47 @@ describe('FallbackWatcher', () => {
       }
     },
   );
+
+  describe('after a directory watcher errors', () => {
+    let erroredWatcher: ErroredFSWatcher;
+
+    beforeEach(async () => {
+      await mkdir(join(watchRoot, 'a'));
+      erroredWatcher = new ErroredFSWatcher();
+      watchOverride = {path: join(watchRoot, 'a'), watcher: erroredWatcher};
+      await watcher?.startWatching();
+      erroredWatcher.emit('error', fsError('ENOENT', join(watchRoot, 'a')));
+    });
+
+    test('stopWatching resolves', async () => {
+      await expect(
+        Promise.race([
+          watcher?.stopWatching().then(() => 'stopped'),
+          new Promise(resolve => setTimeout(resolve, 1000, 'timed out')),
+        ]),
+      ).resolves.toBe('stopped');
+    });
+
+    // The directory is replaced before we process the change, so we never see
+    // it missing and there is no deletion to clear the old watch.
+    test('watches a directory replaced at the same path', async () => {
+      calls = [];
+      fs.rmSync(join(watchRoot, 'a'), {recursive: true});
+      fs.mkdirSync(join(watchRoot, 'a'));
+      fs.writeFileSync(join(watchRoot, 'a', 'file.js'), '');
+
+      await waitFor(() => indexOfCall('readdir', join(watchRoot, 'a')) >= 0);
+      expectWatchedBeforeListed(join(watchRoot, 'a'));
+    });
+  });
 });
+
+function fsError(code: string, path: string): Error {
+  const error = new Error(`${code}: ${path}`);
+  // $FlowFixMe[prop-missing] code
+  error.code = code;
+  return error;
+}
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 5000;
