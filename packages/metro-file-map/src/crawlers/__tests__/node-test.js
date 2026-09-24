@@ -83,6 +83,49 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
+      } else if (slash(dir) === '/project/prototype') {
+        setTimeout(
+          () =>
+            callback(
+              null,
+              [
+                'a.js',
+                'b.constructor',
+                'c.toString',
+                'd.__proto__',
+                'e.hasOwnProperty',
+              ].map(name => ({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                name,
+              })),
+            ),
+          0,
+        );
+      } else if (slash(dir) === '/project') {
+        setTimeout(
+          () =>
+            callback(null, [
+              {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                name: 'fruits',
+              },
+            ]),
+          0,
+        );
+      } else if (slash(dir) === '/') {
+        setTimeout(
+          () =>
+            callback(null, [
+              {
+                isDirectory: () => true,
+                isSymbolicLink: () => false,
+                name: 'project',
+              },
+            ]),
+          0,
+        );
       } else if (slash(dir) == '/error') {
         setTimeout(() => callback({code: 'ENOTDIR'}, undefined), 0);
       }
@@ -274,4 +317,67 @@ describe('node crawler', () => {
       }),
     ).rejects.toThrow(err);
   });
+
+  test('only crawls files with a listed extension', async () => {
+    nodeCrawl = require('../node').default;
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: ['/project/prototype'],
+    });
+
+    // Extensions that name Object.prototype properties are not listed.
+    expect([...changedFiles.keys()]).toEqual([normalize('prototype/a.js')]);
+  });
+
+  test('crawls a root that is the parent of rootDir', async () => {
+    nodeCrawl = require('../node').default;
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: new TreeFS({rootDir: '/project/fruits'})},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir: '/project/fruits',
+      roots: ['/project'],
+    });
+
+    // Files under rootDir are normal paths relative to it, not '../fruits/…'.
+    expect([...changedFiles.keys()].sort()).toEqual(
+      ['directory/strawberry.js', 'tomato.js'].map(normalize),
+    );
+  });
+
+  // The readdir mock is written with POSIX paths.
+  (process.platform === 'win32' ? test.skip : test)(
+    'crawls from a filesystem root without doubling separators',
+    async () => {
+      const fs = require('graceful-fs');
+      nodeCrawl = require('../node').default;
+      const ignore = jest.fn(pearMatcher);
+
+      const {changedFiles} = await nodeCrawl({
+        console: global.console,
+        previousState: {fileSystem: emptyFS},
+        extensions: ['js'],
+        ignore,
+        rootDir,
+        roots: ['/'],
+      });
+
+      expect([...changedFiles.keys()].sort()).toEqual([
+        'fruits/directory/strawberry.js',
+        'fruits/tomato.js',
+      ]);
+      expect(ignore).toHaveBeenCalledWith('/project');
+      expect(fs.lstat).toHaveBeenCalledWith(
+        '/project/fruits/tomato.js',
+        expect.any(Function),
+      );
+    },
+  );
 });

@@ -164,18 +164,6 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     );
   });
 
-  test.each([
-    ['foo', null],
-    ['', 0],
-    ['..', 1],
-    [p('../..'), 2],
-    [p('../../..'), 3],
-    [p('../../../foo'), null],
-    [p('../../../..foo'), null],
-  ])('getAncestorOfRootIdx (%s => %s)', (input, expected) => {
-    expect(pathUtils.getAncestorOfRootIdx(input)).toEqual(expected);
-  });
-
   if (platform === 'win32') {
     describe('cross-drive absolute paths (Windows)', () => {
       test.each([['C:\\project\\root'], ['C:\\']])(
@@ -246,4 +234,99 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       );
     });
   }
+
+  describe('resolveSymlinkToNormal', () => {
+    beforeEach(() => {
+      pathUtils = new RootPathUtils(p('/project/root'));
+    });
+
+    test.each([
+      ['foo/link', './target.js', p('foo/target.js')],
+      ['foo/link', '../bar.js', 'bar.js'],
+      ['link', 'target.js', 'target.js'],
+      [p('a/b/link'), p('../../c.js'), 'c.js'],
+      [p('a/b/link'), p('../../../outside/f.js'), p('../outside/f.js')],
+    ])(
+      'resolves relative target (%s -> %s) to %s',
+      (symlinkPath, readlinkResult, expected) => {
+        expect(
+          pathUtils.resolveSymlinkToNormal(p(symlinkPath), readlinkResult),
+        ).toEqual(expected);
+      },
+    );
+
+    // readlink returns the target as the link was created, which need not be
+    // well-formed. On Windows, these also use '/' separators.
+    test.each([
+      ['a/link', '..', ''],
+      ['a/link', '.', 'a'],
+      ['a/link', './', 'a'],
+      ['a/link', 'b/..', 'a'],
+      ['a/link', 'b/../c', p('a/c')],
+      ['a/link', 'b/./c', p('a/b/c')],
+      ['a/link', 'b//c', p('a/b/c')],
+      ['a/b/link', '../..', ''],
+      ['a/b/link', '../../..', '..'],
+    ])(
+      'resolves non-well-formed target (%s -> %s) to %s',
+      (symlinkPath, readlinkResult, expected) => {
+        expect(
+          pathUtils.resolveSymlinkToNormal(p(symlinkPath), readlinkResult),
+        ).toEqual(expected);
+      },
+    );
+
+    test.each([
+      ['link', p('/project/root/target.js'), 'target.js'],
+      ['link', p('/project/root/a/b.js'), p('a/b.js')],
+      ['link', p('/outside/foo.js'), p('../../outside/foo.js')],
+      [p('a/link'), p('/project/root'), ''],
+    ])(
+      'resolves absolute target (%s -> %s) to %s',
+      (symlinkPath, readlinkResult, expected) => {
+        expect(
+          pathUtils.resolveSymlinkToNormal(p(symlinkPath), readlinkResult),
+        ).toEqual(expected);
+      },
+    );
+
+    test('strips trailing separator from target', () => {
+      expect(
+        pathUtils.resolveSymlinkToNormal('link', p('/project/root/dir/')),
+      ).toEqual('dir');
+    });
+
+    // A filesystem root is the one absolute target that consists only of a
+    // separator, so it must not be trimmed before we test for absoluteness.
+    // Relative targets may also reach the filesystem root, or pass it: '..' at
+    // the filesystem root is the filesystem root itself.
+    test.each([
+      ['link', p('/'), p('../..')],
+      [p('a/link'), p('/'), p('../..')],
+      ['link', '../..', p('../..')],
+      ['link', '../../../../..', p('../..')],
+      [p('a/link'), '../../../../../..', p('../..')],
+    ])(
+      'resolves filesystem root target (%s -> %s) to %s',
+      (symlinkPath, readlinkResult, expected) => {
+        expect(
+          pathUtils.resolveSymlinkToNormal(symlinkPath, readlinkResult),
+        ).toEqual(expected);
+      },
+    );
+
+    if (platform === 'win32') {
+      test.each([
+        ['D:\\', '..\\..\\..\\D:'],
+        ['D:\\ext\\', '..\\..\\..\\D:\\ext'],
+      ])(
+        'resolves cross-drive root target (%s) to %s',
+        (readlinkResult, expected) => {
+          expect(
+            pathUtils.resolveSymlinkToNormal('link', readlinkResult),
+          ).toEqual(expected);
+        },
+      );
+    }
+  });
 });

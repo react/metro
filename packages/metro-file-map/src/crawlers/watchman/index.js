@@ -88,13 +88,15 @@ export default async function watchmanCrawl({
         command,
       });
     };
-    let intervalOrTimeoutId: TimeoutID | IntervalID = setTimeout(() => {
-      logWatchmanWaitMessage();
-      intervalOrTimeoutId = setInterval(
-        logWatchmanWaitMessage,
-        WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
-      );
-    }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
+    let intervalOrTimeoutId:
+      ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> =
+      setTimeout(() => {
+        logWatchmanWaitMessage();
+        intervalOrTimeoutId = setInterval(
+          logWatchmanWaitMessage,
+          WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
+        );
+      }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
     try {
       const response = await new Promise<WatchmanQueryResponse>(
         (resolve, reject) =>
@@ -326,6 +328,11 @@ export default async function watchmanCrawl({
         let symlinkInfo: 0 | 1 | string = 0;
         if (fileData.type === 'l') {
           symlinkInfo = fileData['symlink_target'] ?? 1;
+        }
+        if (typeof symlinkInfo === 'string') {
+          symlinkInfo = normalizePathSeparatorsToPosix(
+            pathUtils.resolveSymlinkToNormal(relativeFilePath, symlinkInfo),
+          );
         }
 
         const nextData: FileMetadata = [

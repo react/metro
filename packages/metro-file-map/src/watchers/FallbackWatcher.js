@@ -47,7 +47,8 @@ const DEBOUNCE_MS = 100;
 const CRAWL_CONCURRENCY = 32;
 
 export default class FallbackWatcher extends AbstractWatcher {
-  readonly #changeTimers: Map<string, TimeoutID> = new Map();
+  readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
+    new Map();
   readonly #dirRegistry: {
     [directory: string]: {[file: string]: true, __proto__: null},
     __proto__: null,
