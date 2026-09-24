@@ -172,7 +172,6 @@ function dep(name: string): TransformResultDependency {
         jest.mock('node:fs', () => new (require('metro-memory-fs'))());
       }
 
-      // $FlowFixMe[cannot-write]
       jest.requireMock('node:os').tmpdir = () => p('/tmp');
 
       fs = jest.requireMock('node:fs');
@@ -186,7 +185,6 @@ function dep(name: string): TransformResultDependency {
         ) {
           return;
         }
-        // $FlowFixMe[incompatible-type]
         originalError(...args);
       });
     });

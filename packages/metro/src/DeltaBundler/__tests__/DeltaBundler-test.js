@@ -56,7 +56,6 @@ describe('DeltaBundler', () => {
     const fileEmitter = new EventEmitter();
     deltaBundler = new DeltaBundler(fileEmitter);
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     DeltaCalculator.prototype.getDelta.mockImplementation(async ({reset}) =>
       Promise.resolve({
         modified: reset ? mockGraph.dependencies : new Map(),
@@ -65,7 +64,6 @@ describe('DeltaBundler', () => {
       }),
     );
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     DeltaCalculator.prototype.getGraph.mockReturnValue(mockGraph);
   });
 
@@ -74,7 +72,6 @@ describe('DeltaBundler', () => {
       await deltaBundler.buildGraph(mockGraph.entryPoints, options),
     ).toEqual(mockGraph);
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     expect(DeltaCalculator.prototype.getDelta.mock.calls[0][0]).toEqual({
       reset: true,
       shallow: false,

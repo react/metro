@@ -9,7 +9,6 @@
  * @oncall react_native
  */
 
-// $FlowFixMe[unsupported-syntax]
 declare module 'graceful-fs' {
   declare module.exports: {
     ...$Exports<'fs'>,

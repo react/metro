@@ -1068,11 +1068,9 @@ export default class FileMap extends EventEmitter {
   }
 
   async end(): Promise<void> {
-    // $FlowFixMe[sketchy-null-number]
     if (this.#changeInterval) {
       clearInterval(this.#changeInterval);
     }
-    // $FlowFixMe[sketchy-null-number]
     if (this.#healthCheckInterval) {
       clearInterval(this.#healthCheckInterval);
     }

@@ -228,9 +228,11 @@ function deferred(
   return {promise, resolve: () => resolve(value)};
 }
 
-/* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
- * LTI update could not be added via codemod */
-function getPaths({added, modified, deleted}) {
+function getPaths<T>({added, modified, deleted}: Result<T>): {
+  added: Set<string>,
+  modified: Set<string>,
+  deleted: Set<string>,
+} {
   const addedPaths = [...added.values()].map(module => module.path);
   const modifiedPaths = [...modified.values()].map(module => module.path);
 
@@ -336,8 +338,10 @@ class TestGraph extends Graph<> {
   }
 }
 
-// $FlowFixMe[missing-local-annot]
-function getMatchingContextModules<T>(graph: Graph<T>, filePath: string) {
+function getMatchingContextModules<T>(
+  graph: Graph<T>,
+  filePath: string,
+): Set<string> {
   const contextPaths = new Set<string>();
   graph.markModifiedContextModules(filePath, contextPaths);
   return contextPaths;
@@ -375,7 +379,6 @@ beforeEach(async () => {
           data: {
             asyncType: null,
             isESMImport: false,
-            // $FlowFixMe[missing-empty-array-annot]
             locs: [],
             // $FlowFixMe[incompatible-type]
             key: dep.data.key,

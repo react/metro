@@ -230,8 +230,7 @@ describe('Cache', () => {
 
   describe('disabled cache', () => {
     test('returns null for reads', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+      const cache = new Cache<string>([]);
 
       const result = await cache.get(Buffer.from('foo'));
 
@@ -239,8 +238,7 @@ describe('Cache', () => {
     });
 
     test('ignores writes', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+      const cache = new Cache<string>([]);
 
       await cache.set(Buffer.from('foo'), 'value');
       const result = await cache.get(Buffer.from('foo'));
@@ -249,8 +247,7 @@ describe('Cache', () => {
     });
 
     test('logs nothing', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+      const cache = new Cache<string>([]);
 
       await cache.set(Buffer.from('foo'), 'value');
       await cache.get(Buffer.from('foo'));

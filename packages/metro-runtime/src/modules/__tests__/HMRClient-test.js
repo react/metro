@@ -29,7 +29,6 @@ beforeEach(() => {
   global.globalEvalWithSourceUrl = (code, sourceURL) => {
     evaledCode += '\n/* ' + sourceURL + ' */\n  ' + code;
   };
-  // $FlowFixMe[cannot-write]
   global.WebSocket = jest.fn(() => {
     mockSocket = {
       onerror: jest.fn(),
@@ -55,7 +54,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // $FlowFixMe[cannot-write]
   delete global.WebSocket;
   delete global.globalEvalWithSourceUrl;
 });

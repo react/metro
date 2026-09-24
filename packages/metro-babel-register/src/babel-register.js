@@ -90,7 +90,6 @@ function config(
       {
         test: /\.js$/,
         plugins: [
-          /* $FlowFixMe[cannot-resolve-module] */
           [require('flow-parser/babel-plugin')],
           [require('babel-plugin-transform-flow-enums')],
           [require('@babel/plugin-transform-flow-strip-types').default],

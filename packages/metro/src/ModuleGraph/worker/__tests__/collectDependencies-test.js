@@ -1472,9 +1472,7 @@ describe('optional dependencies', () => {
           ast: true,
           plugins: [
             importLocationsPlugin,
-            // $FlowFixMe[cannot-resolve-module] Untyped Babel plugin
             require('@babel/plugin-transform-runtime'),
-            // $FlowFixMe[cannot-resolve-module] Untyped Babel plugin in OSS
             require('@babel/plugin-transform-modules-commonjs'),
           ],
         },

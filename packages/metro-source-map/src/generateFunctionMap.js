@@ -133,8 +133,6 @@ function functionMapBabelPlugin(): PluginObj<> {
         path && t.isProgram(path.node),
         'path missing or not a program node',
       );
-      // $FlowFixMe[prop-missing] checked above
-      // $FlowFixMe[incompatible-type-arg] checked above
       const programPath: NodePath<BabelNodeProgram> = path as $FlowFixMe;
 
       visitor.enter(programPath);

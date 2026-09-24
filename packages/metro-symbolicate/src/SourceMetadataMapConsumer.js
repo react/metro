@@ -133,7 +133,6 @@ export default class SourceMetadataMapConsumer {
     }
     let parsedFunctionMap = null;
     const metadataBySource = this._getMetadataBySource();
-    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
     /* $FlowFixMe[invalid-this-arg] Error exposed after fixing this typing
      * unsoundness in flow */
     if (Object.prototype.hasOwnProperty.call(metadataBySource, source)) {

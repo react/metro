@@ -15,7 +15,6 @@
 'use strict';
 
 try {
-  // $FlowFixMe[untyped-import]
   require('metro-babel-register').unstable_registerForMetroMonorepo();
 } catch {}
 

@@ -549,7 +549,6 @@ export async function generateApiSnapshots(
 // When run as a script, generate (or, with --verify, verify) all snapshots.
 if (require.main === module) {
   const verifyOnly = process.argv.includes('--verify');
-  // $FlowFixMe[incompatible-type]
   generateApiSnapshots({verifyOnly, logger: console}).catch(error => {
     process.exitCode = 1;
     console.error(error);

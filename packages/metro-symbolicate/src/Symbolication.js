@@ -20,7 +20,6 @@ import invariant from 'invariant';
 import fs from 'node:fs';
 import path from 'node:path';
 import nullthrows from 'nullthrows';
-// flowlint-next-line untyped-type-import:off
 import {typeof SourceMapConsumer} from 'source-map';
 
 type SingleMapModuleIds = {

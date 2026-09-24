@@ -235,7 +235,6 @@ const assertFileSystemEqual = (fileSystem: FileSystem, fileData: FileData) => {
 // Jest toEqual does not match Map instances from different contexts
 // This normalizes them for the uses cases in this test
 const deepNormalize = <T extends unknown>(value: T): T => {
-  // $FlowFixMe[method-unbinding]
   /* $FlowFixMe[invalid-this-arg] Error exposed after fixing this typing
    * unsoundness in flow */
   const stringTag = Object.prototype.toString.call(value);
@@ -896,7 +895,6 @@ describe('FileMap', () => {
       buildNewFileMap(
         {},
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -904,7 +902,6 @@ describe('FileMap', () => {
           failValidationOnConflicts: true,
         },
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -951,7 +948,6 @@ describe('FileMap', () => {
 
   test('splits up modules by platform', async () => {
     mockFs = Object.create(null) as MockFS;
-    // $FlowFixMe[prop-missing]
     mockFs[path.join('/', 'project', 'fruits', 'Strawberry.js')] = `
       const Banana = require("Banana");
     `;

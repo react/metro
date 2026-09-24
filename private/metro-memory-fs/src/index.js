@@ -104,7 +104,6 @@ const FLAGS_SPECS: {
   wx: {exclusive: true, truncate: true, writable: true},
   'w+': {readable: true, truncate: true, writable: true},
   'wx+': {exclusive: true, readable: true, truncate: true, writable: true},
-  // $FlowFixMe[invalid-computed-prop]: Symbol support is incomplete
   [kWritableMustExist]: {mustExist: true, writable: true},
 };
 
@@ -1131,7 +1130,6 @@ class MemoryFs {
     const ffd = fd;
     const rst = new WriteFileStream({
       fd,
-      // $FlowFixMe[method-unbinding] added when improving typing for this parameters
       writeSync: this._write.bind(this),
       filePath,
       start,

@@ -581,7 +581,6 @@ export default class Server {
       );
       // Tell clients to cache this for 1 year.
       // This is safe as the asset url contains a hash of the asset.
-      // $FlowFixMe[incompatible-type]
       /* $FlowFixMe[invalid-compare] Error discovered during Constant Condition
        * roll out. See https://fburl.com/workplace/4oq3zi07. */
       if (process.env.REACT_NATIVE_ENABLE_ASSET_CACHING === true) {
@@ -898,7 +897,6 @@ export default class Server {
             // is not actually sent in the response until after bundling is complete. This
             // would defeat the purpose of sending progress, so we `uncork` the stream now
             // which will force the response to flush to the client immediately.
-            // $FlowFixMe[method-unbinding] added when improving typing for this parameters
             if (res.socket != null && res.socket.uncork != null) {
               res.socket.uncork();
             }

@@ -24,7 +24,6 @@ describe('subpath imports resolution support', () => {
       [p('/root/node_modules/test-pkg/package.json')]: '',
       [p('/root/node_modules/test-pkg/index.js')]: '',
       [p('/root/node_modules/test-pkg/index-main.js')]: '',
-      // $FlowFixMe[incompatible-type] Flow wants a string for some reason
       [p('/root/node_modules/test-pkg/symlink.js')]: {
         realPath: p('/root/node_modules/test-pkg/symlink-target.js'),
       },

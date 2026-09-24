@@ -51,7 +51,6 @@ describe('FallbackWatcher', () => {
       return watch(dir, ...args);
     });
     const {readdir} = fs.promises;
-    // $FlowFixMe[incompatible-call] - variadic passthrough
     jest.spyOn(fs.promises, 'readdir').mockImplementation((dir, ...args) => {
       calls.push(`readdir:${String(dir)}`);
       return readdir(dir, ...args);

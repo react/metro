@@ -163,8 +163,7 @@ describe('HmrServer', () => {
 
     id = config.serializer.createModuleIdFactory();
 
-    // $FlowFixMe[underconstrained-implicit-instantiation]
-    hmrServer = new HmrServer(incrementalBundlerMock, id, config);
+    hmrServer = new HmrServer<Client>(incrementalBundlerMock, id, config);
 
     connect = async (
       relativeUrl: string,

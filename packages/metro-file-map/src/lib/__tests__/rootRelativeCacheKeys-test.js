@@ -66,7 +66,6 @@ test('returns a distinct cache key for any change', () => {
     key: T,
     newVal: BuildParameters[T],
   ): BuildParameters => {
-    // $FlowFixMe[invalid-computed-prop] Can't use a union for a computed prop
     // $FlowFixMe[incompatible-indexer]
     return {...buildParameters, [key]: newVal};
   };

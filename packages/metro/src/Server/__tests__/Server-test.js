@@ -336,7 +336,6 @@ describe('processRequest', () => {
       }),
     );
 
-    // $FlowFixMe[cannot-write]
     fs.realpath = jest.fn((file, cb) => {
       cb?.(null, '/root/foo.js');
     });
@@ -406,7 +405,6 @@ describe('processRequest', () => {
   });
 
   test('returns 404 on request of *.bundle when resource does not exist', async () => {
-    // $FlowFixMe[cannot-write]
     fs.realpath = jest.fn((file, cb: $FlowFixMe) =>
       cb(new ResourceNotFoundError('unknown.bundle')),
     );
@@ -570,7 +568,6 @@ describe('processRequest', () => {
   });
 
   test('DELETE succeeds with a nonexistent path', async () => {
-    // $FlowFixMe[cannot-write]
     fs.realpath = jest.fn((file, cb: $FlowFixMe) =>
       cb(new ResourceNotFoundError('unknown.bundle')),
     );

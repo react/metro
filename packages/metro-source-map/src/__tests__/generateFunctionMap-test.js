@@ -29,7 +29,6 @@ const {
 const {transformFromAstSync} = require('@babel/core');
 const {parse} = require('@babel/parser');
 const STANDARDIZED_TYPES: Array<BabelNodeStandardized> =
-  // $FlowFixMe[prop-missing]
   // $FlowFixMe[incompatible-type]
   // $FlowFixMe[missing-export]
   require('@babel/types').STANDARDIZED_TYPES;

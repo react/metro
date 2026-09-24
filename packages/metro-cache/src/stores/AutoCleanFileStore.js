@@ -61,7 +61,6 @@ export default class AutoCleanFileStore<T> extends FileStore<T> {
       .filter(dirent => dirent.isFile())
       .forEach(dirent => {
         const absolutePath = path.join(
-          // $FlowFixMe[prop-missing] - dirent.parentPath added in Node 20.12
           dirent.parentPath,
           dirent.name.toString(),
         );

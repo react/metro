@@ -206,7 +206,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
 
     const DeltaCalculator = require('../DeltaCalculator').default;
 
-    // $FlowFixMe[underconstrained-implicit-instantiation]
     deltaCalculator = new DeltaCalculator(
       new Set([p('/bundle')]),
       fileWatcher,
