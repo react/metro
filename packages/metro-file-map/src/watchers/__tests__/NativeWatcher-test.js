@@ -14,11 +14,13 @@ import type {WatcherBackendChangeEvent} from '../../flow-types';
 import NativeWatcher from '../NativeWatcher';
 import fs from 'node:fs';
 import os from 'node:os';
-import {join} from 'node:path';
+import {join, resolve} from 'node:path';
 
 jest.useRealTimers();
 
-const ROOT = join('/', 'project');
+// Absolute on every platform, with a drive letter on Windows, as the watcher
+// resolves its root.
+const ROOT = resolve('/', 'project');
 
 type Deferred<T> = {
   promise: Promise<T>,
