@@ -9,8 +9,11 @@
  * @oncall react_native
  */
 
+import type {WatcherBackendChangeEvent} from '../../flow-types';
+
 import FallbackWatcher from '../FallbackWatcher';
 import {createTempWatchRoot} from './helpers';
+import EventEmitter from 'node:events';
 import fs from 'node:fs';
 import {join} from 'node:path';
 
@@ -19,11 +22,22 @@ jest.setTimeout(10 * 1000);
 
 const {mkdir, rm, writeFile} = fs.promises;
 
+// An `FSWatcher` after it has reported an error: Node closes the handle before
+// emitting 'error', so a subsequent `close()` returns early and emits nothing.
+class ErroredFSWatcher extends EventEmitter {
+  close() {}
+}
+
 describe('FallbackWatcher', () => {
   let watchRoot: string;
   let watcher: ?FallbackWatcher;
   let calls: Array<string>;
   let watchFailure: ?{code: string, path: string};
+  let watchOverride: ?{path: string, watcher: ErroredFSWatcher};
+  // The listener passed to `fs.watch` for each directory, and the directories
+  // whose events are withheld from it.
+  let listeners: Map<string, (event: string, filename: ?string) => void>;
+  let mutedDirs: Set<string>;
 
   const indexOfCall = (op: 'watch' | 'readdir', dir: string) =>
     calls.indexOf(`${op}:${dir}`);
@@ -37,10 +51,19 @@ describe('FallbackWatcher', () => {
     watchRoot = await createTempWatchRoot('Fallback', false);
     calls = [];
     watchFailure = null;
+    watchOverride = null;
+    listeners = new Map();
+    mutedDirs = new Set();
 
     const {watch} = fs;
-    jest.spyOn(fs, 'watch').mockImplementation((dir, ...args) => {
+    jest.spyOn(fs, 'watch').mockImplementation((dir, options, listener) => {
       calls.push(`watch:${String(dir)}`);
+      const override = watchOverride;
+      if (override != null && dir === override.path) {
+        watchOverride = null;
+        // $FlowFixMe[incompatible-type] - models an errored FSWatcher
+        return override.watcher;
+      }
       const failure = watchFailure;
       if (failure != null && dir === failure.path) {
         const error = new Error(`Cannot watch path '${String(dir)}'.`);
@@ -48,7 +71,12 @@ describe('FallbackWatcher', () => {
         error.code = failure.code;
         throw error;
       }
-      return watch(dir, ...args);
+      listeners.set(String(dir), listener);
+      return watch(dir, options, (event, filename) => {
+        if (!mutedDirs.has(String(dir))) {
+          listener(event, filename);
+        }
+      });
     });
     const {readdir} = fs.promises;
     // $FlowFixMe[incompatible-call] - variadic passthrough
@@ -127,7 +155,97 @@ describe('FallbackWatcher', () => {
       }
     },
   );
+
+  describe('after a directory watcher errors', () => {
+    let erroredWatcher: ErroredFSWatcher;
+
+    beforeEach(async () => {
+      await mkdir(join(watchRoot, 'a'));
+      erroredWatcher = new ErroredFSWatcher();
+      watchOverride = {path: join(watchRoot, 'a'), watcher: erroredWatcher};
+      await watcher?.startWatching();
+      erroredWatcher.emit('error', fsError('ENOENT', join(watchRoot, 'a')));
+    });
+
+    test('stopWatching resolves', async () => {
+      await expect(
+        Promise.race([
+          watcher?.stopWatching().then(() => 'stopped'),
+          new Promise(resolve => setTimeout(resolve, 1000, 'timed out')),
+        ]),
+      ).resolves.toBe('stopped');
+    });
+
+    // The directory is replaced before we process the change, so we never see
+    // it missing and there is no deletion to clear the old watch.
+    test('watches a directory replaced at the same path', async () => {
+      calls = [];
+      fs.rmSync(join(watchRoot, 'a'), {recursive: true});
+      fs.mkdirSync(join(watchRoot, 'a'));
+      fs.writeFileSync(join(watchRoot, 'a', 'file.js'), '');
+
+      await waitFor(() => indexOfCall('readdir', join(watchRoot, 'a')) >= 0);
+      expectWatchedBeforeListed(join(watchRoot, 'a'));
+    });
+  });
+
+  // Windows reports a change with no filename when changes to a directory
+  // overflow its buffer, so any number of entries under it may have changed.
+  describe('when an event does not name the changed entry', () => {
+    const emitUnnamedChange = (dir: string) => {
+      const listener = listeners.get(dir);
+      if (listener == null) {
+        throw new Error(`Not watching ${dir}`);
+      }
+      listener('change', null);
+    };
+
+    beforeEach(async () => {
+      await mkdir(join(watchRoot, 'a'));
+      await writeFile(join(watchRoot, 'a', 'existing.js'), '');
+      await watcher?.startWatching();
+      // Only the unnamed change reports anything, and on macOS the root's
+      // watcher also sees changes in subdirectories.
+      mutedDirs.add(watchRoot);
+      mutedDirs.add(join(watchRoot, 'a'));
+      calls = [];
+    });
+
+    test('requests a recrawl of the directory', async () => {
+      const events: Array<WatcherBackendChangeEvent> = [];
+      watcher?.onFileEvent(event => {
+        events.push(event);
+      });
+      await writeFile(join(watchRoot, 'a', 'new.js'), '');
+      await rm(join(watchRoot, 'a', 'existing.js'));
+
+      emitUnnamedChange(join(watchRoot, 'a'));
+
+      await waitFor(() => events.some(event => event.event === 'recrawl'));
+      expect(events).toEqual([
+        {event: 'recrawl', relativePath: 'a', root: watchRoot},
+      ]);
+    });
+
+    test('watches a new directory under it', async () => {
+      await mkdir(join(watchRoot, 'a', 'b'));
+
+      emitUnnamedChange(join(watchRoot, 'a'));
+
+      await waitFor(
+        () => indexOfCall('readdir', join(watchRoot, 'a', 'b')) >= 0,
+      );
+      expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
+    });
+  });
 });
+
+function fsError(code: string, path: string): Error {
+  const error = new Error(`${code}: ${path}`);
+  // $FlowFixMe[prop-missing] code
+  error.code = code;
+  return error;
+}
 
 async function waitFor(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 5000;
