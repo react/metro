@@ -174,23 +174,25 @@ export class RootPathUtils {
     );
   }
 
-  // If a path is a direct ancestor of the project root (or the root itself),
-  // return a number with the degrees of separation, e.g. root=0, parent=1,..
-  // or null otherwise.
-  getAncestorOfRootIdx(normalPath: string): ?number {
-    if (normalPath === '') {
-      return 0;
-    }
-    if (normalPath === '..') {
-      return 1;
-    }
-    // Otherwise a *normal* path is only a root ancestor if it is a sequence of
-    // '../' segments followed by '..', so the length tells us the number of
-    // up fragments.
-    if (normalPath.endsWith(SEP_UP_FRAGMENT)) {
-      return (normalPath.length + 1) / 3;
-    }
-    return null;
+  resolveSymlinkToNormal(
+    symlinkNormalPath: string,
+    readlinkResult: string,
+  ): string {
+    // Lexically resolves the target against the symlink's directory. This is
+    // string manipulation only: symlinks within the target are not followed,
+    // and the target need not exist, so the result is not a real path.
+    //
+    // readlink returns whatever the link was created with, which need not be
+    // well-formed (e.g. '..', 'a/./b', 'a//b', or '/' separators on Windows),
+    // so resolve with node:path. This runs once per symlink, when its node is
+    // populated, not on traversal.
+    const normal = this.absoluteToNormal(
+      path.resolve(this.#rootDir, symlinkNormalPath, '..', readlinkResult),
+    );
+    // Normalization keeps a trailing separator when the result is the root or
+    // an ancestor of it (e.g. a link to '/'), and readlink itself may return
+    // one. A stored symlink target never has one.
+    return normal.endsWith(path.sep) ? normal.slice(0, -1) : normal;
   }
 
   // Takes a normal and relative path, and joins them efficiently into a normal
