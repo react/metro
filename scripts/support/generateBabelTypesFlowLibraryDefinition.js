@@ -114,7 +114,7 @@ function main() {
       });
 
     // Flow seems to deoptimize the union type if another type is spread into the node declaration.
-    // Defining the base props over and over again significantely speeds up the type checking.
+    // Defining the base props over and over again significantly speeds up the type checking.
     typeDecls += `declare type ${NODE_PREFIX}${type} = {
   leadingComments?: Array<${NODE_PREFIX}Comment>;
   innerComments?: Array<${NODE_PREFIX}Comment>;

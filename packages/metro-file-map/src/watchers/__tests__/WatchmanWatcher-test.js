@@ -179,7 +179,7 @@ describe('WatchmanWatcher', () => {
       return startPromise;
     });
 
-    test('subscribe response is initally deferred', () => {
+    test('subscribe response is initially deferred', () => {
       cmdCallback<WatchmanSubscribeResponse>(null, {
         'asserted-states': ['busy'],
       });

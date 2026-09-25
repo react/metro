@@ -50,7 +50,7 @@ describe('getAsset', () => {
     fs.mkdirSync('/root/imgs', {recursive: true});
   });
 
-  test('should fail if the extension is not registerd', async () => {
+  test('should fail if the extension is not registered', async () => {
     writeImages({'b.png': 'b image', 'b@2x.png': 'b2 image'});
 
     await expect(

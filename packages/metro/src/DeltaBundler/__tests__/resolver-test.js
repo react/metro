@@ -547,7 +547,7 @@ function dep(name: string): TransformResultDependency {
         });
       });
 
-      test('finds the appropiate node_modules folder', async () => {
+      test('finds the appropriate node_modules folder', async () => {
         setMockFileSystem({
           node_modules: {
             foo: {
@@ -2565,7 +2565,7 @@ function dep(name: string): TransformResultDependency {
       beforeEach(() => {
         resolveRequest = jest.fn().mockReturnValue({
           type: 'sourceFile',
-          filePath: p('/root/overriden.js'),
+          filePath: p('/root/overridden.js'),
         });
       });
 
@@ -2573,18 +2573,18 @@ function dep(name: string): TransformResultDependency {
         setMockFileSystem({
           'index.js': '',
           myFolder: {'foo.js': ''},
-          'overriden.js': '',
+          'overridden.js': '',
         });
 
         resolver = await createResolver({resolver: {resolveRequest}});
 
         expect(
           resolver.resolve(p('/root/index.js'), dep('./myFolder/foo')),
-        ).toEqual({type: 'sourceFile', filePath: p('/root/overriden.js')});
+        ).toEqual({type: 'sourceFile', filePath: p('/root/overridden.js')});
         expect(resolver.resolve(p('/root/index.js'), dep('./invalid'))).toEqual(
           {
             type: 'sourceFile',
-            filePath: p('/root/overriden.js'),
+            filePath: p('/root/overridden.js'),
           },
         );
       });
@@ -2598,14 +2598,14 @@ function dep(name: string): TransformResultDependency {
               'index.js': '',
             },
           },
-          'overriden.js': '',
+          'overridden.js': '',
         });
 
         resolver = await createResolver({resolver: {resolveRequest}});
 
         expect(resolver.resolve(p('/root/index.js'), dep('aPackage'))).toEqual({
           type: 'sourceFile',
-          filePath: p('/root/overriden.js'),
+          filePath: p('/root/overridden.js'),
         });
       });
 
@@ -2616,14 +2616,14 @@ function dep(name: string): TransformResultDependency {
             'package.json': JSON.stringify({name: 'aPackage'}),
             'index.js': '',
           },
-          'overriden.js': '',
+          'overridden.js': '',
         });
 
         resolver = await createResolver({resolver: {resolveRequest}});
 
         expect(resolver.resolve(p('/root/index.js'), dep('aPackage'))).toEqual({
           type: 'sourceFile',
-          filePath: p('/root/overriden.js'),
+          filePath: p('/root/overridden.js'),
         });
       });
 
@@ -2631,7 +2631,7 @@ function dep(name: string): TransformResultDependency {
         setMockFileSystem({
           'index.js': '',
           'aPackage.js': '@providesModule aPackage',
-          'overriden.js': '',
+          'overridden.js': '',
         });
 
         resolver = await createResolver({
@@ -2646,7 +2646,7 @@ function dep(name: string): TransformResultDependency {
 
         expect(resolver.resolve(p('/root/index.js'), dep('aPackage'))).toEqual({
           type: 'sourceFile',
-          filePath: p('/root/overriden.js'),
+          filePath: p('/root/overridden.js'),
         });
       });
 
@@ -2654,7 +2654,7 @@ function dep(name: string): TransformResultDependency {
         setMockFileSystem({
           'index.js': '',
           'foo.js': '',
-          'overriden.js': '',
+          'overridden.js': '',
         });
 
         resolver = await createResolver({resolver: {resolveRequest}}, 'ios');

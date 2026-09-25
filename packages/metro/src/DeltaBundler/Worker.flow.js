@@ -125,9 +125,9 @@ async function transformFile(
     transformOptions,
   );
 
-  // The babel cache caches scopes and pathes for already traversed AST nodes.
+  // The babel cache caches scopes and paths for already traversed AST nodes.
   // Clearing the cache here since the nodes of the transformed file are no longer referenced.
-  // This isn't stritcly necessary since the cache uses a WeakMap. However, WeakMap only permit
+  // This isn't strictly necessary since the cache uses a WeakMap. However, WeakMaps only permit
   // that unreferenced keys are collected but the values still hold references to the Scope and NodePaths.
   // Manually clearing the cache allows the GC to collect the Scope and NodePaths without checking if there
   // exist any other references to the keys.

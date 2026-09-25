@@ -921,7 +921,7 @@ describe('import() prefetching', () => {
     );
   });
 
-  test('distinguishes between import and prefetch dependncies on the same module', () => {
+  test('distinguishes between import and prefetch dependencies on the same module', () => {
     const ast = astFromCode(`
       __prefetchImport("some/async/module");
       import("some/async/module").then(() => {});
@@ -1125,7 +1125,7 @@ test('exposes a string as `dependencyMapName` even without collecting dependenci
   expect(collectDependencies(ast, opts).dependencyMapName).toEqual(any(String));
 });
 
-test('ignores require functions defined defined by lower scopes', () => {
+test('ignores require functions defined by lower scopes', () => {
   const ast = astFromCode(`
     const a = require('b/lib/a');
     exports.do = () => require("do");
@@ -1134,13 +1134,13 @@ test('ignores require functions defined defined by lower scopes', () => {
     }
     require('do');
     function testA(require) {
-      const b = require('nonExistantModule');
+      const b = require('nonExistentModule');
     }
     {
       const require = function(foo) {
         return;
       }
-      require('nonExistantModule');
+      require('nonExistentModule');
     }
   `);
   const {dependencies, dependencyMapName} = collectDependencies(ast, opts);
@@ -1158,11 +1158,11 @@ test('ignores require functions defined defined by lower scopes', () => {
       }
       require(${dependencyMapName}[1], "do");
       function testA(require) {
-        const b = require('nonExistantModule');
+        const b = require('nonExistentModule');
       }
       {
         const require = function (foo) { return; };
-        require('nonExistantModule');
+        require('nonExistentModule');
       }
     `),
   );
@@ -1789,8 +1789,8 @@ function astFromCode(code: string): BabelNodeFile {
 
 // Mock transformer for dependencies. Uses a "readable" format
 // require() -> require(id, module name)
-// import() -> require(async moudle name).async(id, module name)
-// prefetch -> require(async moudle name).prefetch(id, module name)
+// import() -> require(async module name).async(id, module name)
+// prefetch -> require(async module name).prefetch(id, module name)
 const MockDependencyTransformer: DependencyTransformer = {
   transformSyncRequire(
     path: NodePath<>,

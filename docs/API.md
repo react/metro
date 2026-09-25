@@ -76,4 +76,4 @@ Starts a full Metro HTTP server. It will listen on the specified `host:port`, an
 
 **Basic options:** `port`, `onBundleBuilt`
 
-Instead of creating the full server, creates a Connect middleware that answers to bundle requests. This middleware can then be plugged into your own servers. The `port` parameter is optional and only used for logging purposes. The `onBundleBuilt` function is optional, is passed the bundle name, and is called when the server has finishing creating the bundle.
+Instead of creating the full server, creates a Connect middleware that answers to bundle requests. This middleware can then be plugged into your own servers. The `port` parameter is optional and only used for logging purposes. The `onBundleBuilt` function is optional, is passed the bundle name, and is called when the server has finished creating the bundle.

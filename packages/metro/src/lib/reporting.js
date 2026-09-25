@@ -168,7 +168,7 @@ export type ReportableEvent =
  *
  *   1. ad-hoc, embedded into another tool, in which case we do not want to
  *   pollute that tool's own output. The tool is free to present the
- *   warnings/progress we generate any way they want, by specifing a custom
+ *   warnings/progress we generate any way they want, by specifying a custom
  *   reporter.
  *   2. run as a background process from another tool, in which case we want
  *   to expose updates in a way that is easily machine-readable, for example

@@ -281,7 +281,7 @@ describe('node crawler', () => {
         extensions: ['js', 'json'],
         ignore: pearMatcher,
         rootDir,
-        roots: ['/project/fruits', '/project/vegtables'],
+        roots: ['/project/fruits', '/project/vegetables'],
       }),
     ).rejects.toThrow(err);
   });

@@ -69,10 +69,10 @@ let mockedDependencyTree: Map<
   >,
 > = new Map();
 
-/* `files` emulates the changed paths typically aggregated by DeltaCalcutor.
+/* `files` emulates the changed paths typically aggregated by DeltaCalculator.
  * Paths will be added to this set by any addition, deletion or modification,
  * respecting getModifiedModulesForDeletedPath. Each such operation will
- * increment the count - we'll intepret count as a file revision number, with
+ * increment the count - we'll interpret count as a file revision number, with
  * a changed count reflected in a change to the transform output key.
  */
 const files = new CountingSet<string>();

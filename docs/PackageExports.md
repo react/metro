@@ -172,7 +172,7 @@ The Node.js spec gives guidance on migrating to `"exports"` in a non-breaking ma
 
 Each subpath is an exact specifier ([see section in RFC](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0534-metro-package-exports-support.md#exact-path-specifiers)).
 
-We recommend continuing to use **extensionless specifiers** for subpaths in packages targeting React Native — or **defining both extensioned and extensionless specifiers**. This will match matching existing user expectations.
+We recommend continuing to use **extensionless specifiers** for subpaths in packages targeting React Native — or **defining both extensioned and extensionless specifiers**. This will match existing user expectations.
 
 ```json
   "exports": {
@@ -262,7 +262,7 @@ Using subpath patterns can be a convenient method to export many assets. We reco
 
 ## Troubleshooting
 
-### Package/ESM incompatibilites
+### Package/ESM incompatibilities
 Some issues that can come from Metro resolving to a file not designed for React Native include:
  - *"`import.meta` can not be used outside a module"*. `import.meta` support is coming.
  - Errors relating to `document` or other web globals in your mobile app.

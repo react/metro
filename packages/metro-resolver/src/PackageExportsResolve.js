@@ -144,7 +144,7 @@ function getExportsSubpath(packageSubpath: string): string {
  * many times. Note that ExportsField is immutable, and the upstream package
  * cache gives us a stable reference.
  *
- * The case where ExportsField is a string (not weakly referencable) has to be
+ * The case where ExportsField is a string (not weakly referenceable) has to be
  * excluded, but those are very cheap to process anyway.
  *
  * (Ultimately this should be coupled more closely to the package cache, so that

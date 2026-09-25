@@ -49,7 +49,7 @@ export type State = {
  * Will be transformed into:
  *     f(require('foo'));
  *
- * When the assigment expression has a property access, it will be inlined too,
+ * When the assignment expression has a property access, it will be inlined too,
  * keeping the property. For instance:
  *     var Bar = require('foo').bar;
  *     g(Bar);

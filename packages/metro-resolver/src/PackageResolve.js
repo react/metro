@@ -83,7 +83,7 @@ export function redirectModulePath(
    *
    * - A relative specifier (beginning with '.'), which may be redirected by a
    *   `package.json` file local to `context.originModulePath`.
-   *     - Note: A path begining with '/' is treated as an absolute specifier
+   *     - Note: A path beginning with '/' is treated as an absolute specifier
    *       (non-standard).
    * - A bare specifier (e.g. 'some-pkg', 'some-pkg/foo'), which may be
    *   redirected by `package.json` rules in the containing package.
@@ -178,7 +178,7 @@ export function matchSubpathFromMainFields(
   // replacement map. We iterate `mainFields` in reverse so that, on a key
   // conflict, earlier `mainFields` win, equivalent to
   // `Object.assign({}, ...fieldValues.reverse())`, but avoiding any allocation
-  // in the the most common case (no object-valued field, e.g. only a string
+  // in the most common case (no object-valued field, e.g. only a string
   // "main"/"browser").
   let replacements: {[string]: string | false} | null = null;
   for (let i = mainFields.length - 1; i >= 0; i--) {

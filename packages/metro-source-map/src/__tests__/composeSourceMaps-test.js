@@ -86,7 +86,7 @@ describe('composeSourceMaps', () => {
   });
 
   test('verifies merged source maps work the same as applying them separately', async () => {
-    // Apply two tranformations: compression, then mangling.
+    // Apply two transformations: compression, then mangling.
     const stage1 = await terser.minify(
       {'test1.js': TestScript1, 'test2.js': TestScript2},
       {

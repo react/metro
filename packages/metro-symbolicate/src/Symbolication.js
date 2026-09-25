@@ -398,7 +398,7 @@ class SymbolicationContext<ModuleIdsT> {
   }
 
   /**
-   * Symbolicates heap alloction stacks in a Chrome-formatted heap
+   * Symbolicates heap allocation stacks in a Chrome-formatted heap
    * snapshot/timeline.
    * Line and column offsets in options (both input and output) are _ignored_,
    * because this format has a well-defined convention (1-based lines and

@@ -169,7 +169,7 @@ export function getModuleParams(
 
   // As an optimisation: we only emit an argument for the dependency map if
   // it is non-empty. This is safe because either `dependencyMapReservedName`
-  // is set and we have enforced there are no string occurences of that name,
+  // is set and we have enforced there are no string occurrences of that name,
   // or we have used `generateUid` to generate an unbound name for it.
   if (hasPaths) {
     params.push({

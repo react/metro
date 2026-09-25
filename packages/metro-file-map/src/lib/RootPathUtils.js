@@ -292,7 +292,7 @@ export class RootPathUtils {
           totalUpIndirections >= this.#rootParts.length - 1
         ) {
           // If we have no right side (or an indirection that would take us
-          // below the root), just ensure we don't include a trailing separtor.
+          // below the root), just ensure we don't include a trailing separator.
           return {
             collapsedPath: UP_FRAGMENT_SEP.repeat(totalUpIndirections).slice(
               0,
