@@ -122,7 +122,7 @@ type InternalOptions = Readonly<{
 
 type IndexedPlugin = Readonly<{
   // $FlowFixMe[unclear-type] Plugin types cannot be known statically
-  plugin: FileMapPlugin<any, any>,
+  plugin: FileMapPlugin<any, any, unknown>,
   dataIdx: ?number,
 }>;
 type InternalEnqueuedEvent = Readonly<
@@ -145,7 +145,9 @@ export {default as DependencyPlugin} from './plugins/DependencyPlugin';
 export type {DependencyPluginOptions} from './plugins/DependencyPlugin';
 export {DuplicateHasteCandidatesError} from './plugins/haste/DuplicateHasteCandidatesError';
 export {HasteConflictsError} from './plugins/haste/HasteConflictsError';
+export {default as getPluginChanges} from './lib/getPluginChanges';
 export {default as HastePlugin} from './plugins/HastePlugin';
+export type {HasteChanges} from './plugins/HastePlugin';
 
 export type {HasteMap} from './flow-types';
 export type {HealthCheckResult} from './Watcher';
@@ -315,19 +317,21 @@ export default class FileMap extends EventEmitter {
     const pluginWorkers: Array<FileMapPluginWorker> = [];
     const pluginDataIndices = new Map<string, number>();
     const plugins = options.plugins ?? [];
+    const pluginNames = new Set<string>();
     for (const plugin of plugins) {
+      // Plugin data slots, persisted plugin state and change summaries are all
+      // addressed by name, so a second plugin of the same name would silently
+      // take over the first's.
+      invariant(
+        !pluginNames.has(plugin.name),
+        'metro-file-map: Duplicate plugin name: %s',
+        plugin.name,
+      );
+      pluginNames.add(plugin.name);
       const maybeWorker = plugin.getWorker();
       const dataIdx = maybeWorker != null ? dataSlot++ : null;
       indexedPlugins.push({plugin, dataIdx});
       if (dataIdx != null) {
-        // Crawlers address plugin data by name, so names must be unique among
-        // plugins holding a slot - otherwise a crawler would silently write to
-        // the shadowed plugin's slot.
-        invariant(
-          !pluginDataIndices.has(plugin.name),
-          'metro-file-map: Duplicate plugin name: %s',
-          plugin.name,
-        );
         pluginDataIndices.set(plugin.name, dataIdx);
       }
       if (maybeWorker != null) {
@@ -478,7 +482,9 @@ export default class FileMap extends EventEmitter {
         ]);
 
         // Update `fileSystem` and plugins based on the file delta.
-        const actualChanges = await this.#applyFileDelta(
+        // Nothing is emitted for the initial build, so what plugins say about
+        // it goes unused.
+        const {changeAggregator: actualChanges} = await this.#applyFileDelta(
           fileSystem,
           plugins,
           fileDelta,
@@ -598,6 +604,27 @@ export default class FileMap extends EventEmitter {
     return null;
   }
 
+  /**
+   * Bring every plugin up to date with a batch of changes, and collect what
+   * each has to say about it for `ChangeEvent.pluginChanges`.
+   */
+  #updatePlugins(
+    changeAggregator: FileSystemChangeAggregator,
+  ): Map<string, unknown> {
+    const pluginChanges = new Map<string, unknown>();
+    this.#plugins.forEach(({plugin, dataIdx}) => {
+      const summary = plugin.onChanged(
+        changeAggregator.getMappedView(
+          dataIdx != null ? metadata => metadata[dataIdx] : () => null,
+        ),
+      );
+      if (summary != null) {
+        pluginChanges.set(plugin.name, summary);
+      }
+    });
+    return pluginChanges;
+  }
+
   async #applyFileDelta(
     fileSystem: MutableFileSystem,
     plugins: ReadonlyArray<IndexedPlugin>,
@@ -606,7 +633,10 @@ export default class FileMap extends EventEmitter {
       removedFiles: ReadonlySet<CanonicalPath>,
       clocks?: WatchmanClocks,
     }>,
-  ): Promise<FileSystemChangeAggregator> {
+  ): Promise<{
+    changeAggregator: FileSystemChangeAggregator,
+    pluginChanges: ReadonlyMap<string, unknown>,
+  }> {
     this.#startupPerfLogger?.point('applyFileDelta_start');
     const {changedFiles, removedFiles} = delta;
     this.#startupPerfLogger?.point('applyFileDelta_preprocess_start');
@@ -695,17 +725,11 @@ export default class FileMap extends EventEmitter {
     this.#startupPerfLogger?.point('applyFileDelta_add_end');
 
     this.#startupPerfLogger?.point('applyFileDelta_updatePlugins_start');
-    this.#plugins.forEach(({plugin, dataIdx}) => {
-      plugin.onChanged(
-        changeAggregator.getMappedView(
-          dataIdx != null ? metadata => metadata[dataIdx] : () => null,
-        ),
-      );
-    });
+    const pluginChanges = this.#updatePlugins(changeAggregator);
     this.#startupPerfLogger?.point('applyFileDelta_updatePlugins_end');
     this.#startupPerfLogger?.point('applyFileDelta_end');
 
-    return changeAggregator;
+    return {changeAggregator, pluginChanges};
   }
 
   /**
@@ -813,13 +837,7 @@ export default class FileMap extends EventEmitter {
       }
 
       const _netChange = changeAggregator.getView();
-      this.#plugins.forEach(({plugin, dataIdx}) => {
-        plugin.onChanged(
-          changeAggregator.getMappedView(
-            dataIdx != null ? metadata => metadata[dataIdx] : () => null,
-          ),
-        );
-      });
+      const pluginChanges = this.#updatePlugins(changeAggregator);
 
       const toPublicMetadata = (
         metadata: Readonly<FileMetadata>,
@@ -846,6 +864,7 @@ export default class FileMap extends EventEmitter {
       const changeEvent: ChangeEvent = {
         changes: changesWithMetadata,
         logger: hmrPerfLogger,
+        pluginChanges,
         rootDir: this.#options.rootDir,
       };
       this.emit('change', changeEvent);
@@ -993,7 +1012,10 @@ export default class FileMap extends EventEmitter {
             }
 
             // Reuse the same batch processing logic as build()
-            const recrawlChangeAggregator = await this.#applyFileDelta(
+            const {
+              changeAggregator: recrawlChangeAggregator,
+              pluginChanges: recrawlPluginChanges,
+            } = await this.#applyFileDelta(
               fileSystem,
               this.#plugins,
               crawlResult,
@@ -1021,6 +1043,7 @@ export default class FileMap extends EventEmitter {
             const changeEvent: ChangeEvent = {
               changes: changesWithMetadata,
               logger: null,
+              pluginChanges: recrawlPluginChanges,
               rootDir: this.#options.rootDir,
             };
             this.emit('change', changeEvent);
