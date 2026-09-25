@@ -311,8 +311,11 @@ function parseSvg(content: Buffer): ?Dimensions {
   }
   const root = header.slice(rootStart, rootEnd + 1);
   const attributes: {[string]: string} = {};
+  // Match whole attribute names only. `\b` alone would also match after a
+  // hyphen or a namespace prefix, so `stroke-width="2"` (common on icon sets)
+  // or `xlink:width` would be read as the image's width.
   const attributePattern =
-    /\b(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    /(?<![\w:-])(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
   let match = attributePattern.exec(root);
   while (match != null) {
     const name = match[1];

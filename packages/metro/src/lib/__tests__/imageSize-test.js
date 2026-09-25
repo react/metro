@@ -53,6 +53,32 @@ describe('getImageDimensions', () => {
     ).toEqual({width: WIDTH, height: HEIGHT});
   });
 
+  test.each([
+    [
+      'stroke-width after width and height',
+      `<svg width="${WIDTH}" height="${HEIGHT}" stroke-width="2"/>`,
+    ],
+    [
+      'stroke-width with only a viewBox',
+      `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" stroke-width="1.5"/>`,
+    ],
+    [
+      'other hyphenated attributes',
+      `<svg width="${WIDTH}" height="${HEIGHT}" data-width="7" border-height="9"/>`,
+    ],
+    [
+      'a namespaced attribute after width and height',
+      `<svg width="${WIDTH}" height="${HEIGHT}" xlink:width="5"/>`,
+    ],
+  ])(
+    'ignores SVG attributes that only end in a dimension name: %s',
+    (_, svg) => {
+      expect(
+        getImageDimensions('svg', Buffer.from(svg), '/root/icon.svg'),
+      ).toEqual({width: WIDTH, height: HEIGHT});
+    },
+  );
+
   test('rejects unsupported SVG units', () => {
     expect(() =>
       getImageDimensions(
