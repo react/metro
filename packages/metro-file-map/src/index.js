@@ -142,6 +142,8 @@ type InternalEnqueuedEvent = Readonly<
 export {DiskCacheManager} from './cache/DiskCacheManager';
 export {NoopCacheManager} from './cache/NoopCacheManager';
 export {default as DependencyPlugin} from './plugins/DependencyPlugin';
+export {default as FileDataPlugin} from './plugins/FileDataPlugin';
+export type {FileDataPluginOptions} from './plugins/FileDataPlugin';
 export type {DependencyPluginOptions} from './plugins/DependencyPlugin';
 export {DuplicateHasteCandidatesError} from './plugins/haste/DuplicateHasteCandidatesError';
 export {HasteConflictsError} from './plugins/haste/HasteConflictsError';
@@ -167,7 +169,7 @@ export type {
 // This should be bumped whenever a code change to `metro-file-map` itself
 // would cause a change to the cache data structure and/or content (for a given
 // filesystem state and build parameters).
-const CACHE_BREAKER = '12';
+const CACHE_BREAKER = '13';
 
 const CHANGE_INTERVAL = 30;
 
@@ -473,6 +475,32 @@ export default class FileMap extends EventEmitter {
                     ),
                 },
                 pluginState: initialData?.plugins.get(plugin.name),
+                processFile: mixedPath => {
+                  invariant(
+                    dataIdx != null,
+                    'metro-file-map: Plugin "%s" has no worker to process files with',
+                    plugin.name,
+                  );
+                  const result = fileSystem.lookup(mixedPath);
+                  if (!result.exists || result.type !== 'f') {
+                    throw new Error(
+                      `metro-file-map: Cannot process ${mixedPath}, which is not a regular file`,
+                    );
+                  }
+                  const pluginData = this.#fileProcessor.processFileForPlugin(
+                    result.realPath,
+                    result.metadata,
+                    dataIdx - H.PLUGINDATA,
+                  );
+                  debug(
+                    'Lazily processed file for %s: %s',
+                    plugin.name,
+                    mixedPath,
+                  );
+                  // Inform caches that there is new data to save.
+                  this.emit('metadata');
+                  return pluginData;
+                },
               }),
             ),
           ),
@@ -931,7 +959,6 @@ export default class FileMap extends EventEmitter {
               0,
               null,
               change.metadata.type === 'l' ? 1 : 0,
-              null,
             ];
 
             try {
