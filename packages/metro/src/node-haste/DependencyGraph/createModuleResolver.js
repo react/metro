@@ -65,6 +65,11 @@ export default function createModuleResolver({
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
+    // As `HastePlugin` decides which files to give a name: packages only if
+    // global packages are enabled, and other files only with a `hasteImpl`.
+    isHasteEnabled:
+      config.resolver.enableGlobalPackages ||
+      config.resolver.hasteImplModulePath != null,
     getHasteModulePath: (name, platform) =>
       hasteMap.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
