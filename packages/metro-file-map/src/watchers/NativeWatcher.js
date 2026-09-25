@@ -88,19 +88,22 @@ export default class NativeWatcher extends AbstractWatcher {
           change => ({change, error: null}),
           (error: Error) => ({change: null, error}),
         );
-        this.#emitQueue = this.#emitQueue
-          .then(async () => {
-            const {change, error} = await settled;
+        const emitted = this.#emitQueue.then(() =>
+          settled.then(({change, error}) => {
             if (error != null) {
-              this.emitError(error);
-            } else if (change != null) {
+              throw error;
+            }
+            if (change != null) {
               this.emitFileEvent(change);
             }
-          })
-          .catch(error => {
-            // Only reached if emitting threw
-            this.emitError(error);
-          });
+          }),
+        );
+        // Report failures outside the queue, so that a throwing emitError
+        // (e.g. with no error listener) can't suppress later events.
+        this.#emitQueue = emitted.catch(() => {});
+        emitted.catch(error => {
+          this.emitError(error);
+        });
       },
     );
 
