@@ -259,15 +259,111 @@ describe('node crawler', () => {
 
     expect(changedFiles).toEqual(
       createMap({
-        'fruits/directory/strawberry.js': [33, 42, 0, null, 0, null],
-        'fruits/tomato.js': [32, 42, 0, null, 0, null],
+        'fruits/directory/strawberry.js': [null, 0, 0, null, 0, null],
+        'fruits/tomato.js': [null, 0, 0, null, 0, null],
       }),
     );
     expect(removedFiles).toEqual(new Set());
     // once for /project/fruits, once for /project/fruits/directory
     expect(fs.readdir).toHaveBeenCalledTimes(2);
-    // once for strawberry.js, once for tomato.js
+    // Neither file is in the previous file system, so neither is statted.
+    expect(fs.lstat).toHaveBeenCalledTimes(0);
+  });
+
+  test('skips lstat for files with no prior mtime', async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('graceful-fs');
+
+    const files = createMap({
+      'fruits/tomato.js': [null, 0, 0, null, 0, null],
+      'fruits/directory/strawberry.js': [null, 0, 0, null, 0, null],
+    });
+
+    const {changedFiles, removedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: ['/project/fruits'],
+    });
+
+    expect(changedFiles).toEqual(new Map());
+    expect(removedFiles).toEqual(new Set());
+    expect(fs.lstat).toHaveBeenCalledTimes(0);
+  });
+
+  test('calls lstat only for files with existing mtime', async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('graceful-fs');
+
+    const files = createMap({
+      'fruits/tomato.js': [31, 42, 1, null, 0, null],
+      'fruits/directory/strawberry.js': [null, 0, 0, null, 0, null],
+    });
+
+    const {changedFiles, removedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: ['/project/fruits'],
+    });
+
+    expect(changedFiles).toEqual(
+      createMap({
+        'fruits/tomato.js': [32, 42, 0, null, 0, null],
+      }),
+    );
+    expect(removedFiles).toEqual(new Set());
+    expect(fs.lstat).toHaveBeenCalledTimes(1);
+  });
+
+  test('excludes unchanged files when lstat mtime matches cache', async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('graceful-fs');
+
+    const files = createMap({
+      'fruits/tomato.js': [32, 42, 1, null, 0, null],
+      'fruits/directory/strawberry.js': [33, 42, 1, null, 0, null],
+    });
+
+    const {changedFiles, removedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: ['/project/fruits'],
+    });
+
+    expect(changedFiles).toEqual(new Map());
+    expect(removedFiles).toEqual(new Set());
     expect(fs.lstat).toHaveBeenCalledTimes(2);
+  });
+
+  test('marks symlinks correctly when stat is skipped', async () => {
+    nodeCrawl = require('../node').default;
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js'],
+      includeSymlinks: true,
+      ignore: pearMatcher,
+      rootDir,
+      roots: ['/project/fruits'],
+    });
+
+    expect(changedFiles.get(normalize('fruits/symlink'))).toEqual([
+      null,
+      0,
+      0,
+      null,
+      1,
+      null,
+    ]);
   });
 
   test('aborts the crawl on pre-aborted signal', async () => {
@@ -356,7 +452,6 @@ describe('node crawler', () => {
   (process.platform === 'win32' ? test.skip : test)(
     'crawls from a filesystem root without doubling separators',
     async () => {
-      const fs = require('graceful-fs');
       nodeCrawl = require('../node').default;
       const ignore = jest.fn(pearMatcher);
 
@@ -374,10 +469,7 @@ describe('node crawler', () => {
         'fruits/tomato.js',
       ]);
       expect(ignore).toHaveBeenCalledWith('/project');
-      expect(fs.lstat).toHaveBeenCalledWith(
-        '/project/fruits/tomato.js',
-        expect.any(Function),
-      );
+      expect(ignore).toHaveBeenCalledWith('/project/fruits/tomato.js');
     },
   );
 });

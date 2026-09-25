@@ -176,6 +176,19 @@ jest.mock('fs', () => ({
     error.code = 'ENOENT';
     throw error;
   }),
+  readlinkSync: jest.fn(path => {
+    const entry = mockFs[path];
+    if (!entry) {
+      const error = new Error(`Cannot read path '${path}'.`);
+      // $FlowFixMe[prop-missing] code
+      error.code = 'ENOENT';
+      throw error;
+    }
+    if (typeof entry.link !== 'string') {
+      throw new Error(`Not a symlink: '${path}'.`);
+    }
+    return entry.link;
+  }),
   writeFileSync: jest.fn((path, data, options) => {
     expect(options).toBe(require('node:v8').serialize ? undefined : 'utf8');
     mockFs[path] = data;
@@ -747,6 +760,50 @@ describe('FileMap', () => {
 
         expect(deepNormalize(await fileMap.read())).toEqual(cacheContent);
       },
+    );
+  });
+
+  test('defers symlink resolution for entries with null mtime', async () => {
+    const node = require('../crawlers/node').default;
+    const fsModule = require('node:fs');
+
+    // $FlowFixMe[prop-missing]
+    // $FlowFixMe[missing-local-annot]
+    node.mockImplementation(options => {
+      const changedFiles = createMap<FileMetadata>({
+        [path.join('fruits', 'Strawberry.js')]: [32, 42, 0, null, 0, null],
+        [path.join('fruits', 'LinkToStrawberry.js')]: [
+          null,
+          0,
+          0,
+          null,
+          1,
+          null,
+        ],
+      });
+      return Promise.resolve({changedFiles, removedFiles: new Set()});
+    });
+
+    const {fileSystem} = await buildNewFileMap({
+      enableSymlinks: true,
+      useWatchman: false,
+    });
+
+    expect(fsModule.promises.readlink).not.toHaveBeenCalledWith(
+      expect.stringContaining('LinkToStrawberry'),
+    );
+
+    expect(
+      fileSystem.lookup(
+        path.join('/', 'project', 'fruits', 'LinkToStrawberry.js'),
+      ),
+    ).toMatchObject({
+      exists: true,
+      realPath: path.join('/', 'project', 'fruits', 'Strawberry.js'),
+    });
+
+    expect(fsModule.readlinkSync).toHaveBeenCalledWith(
+      path.join('/', 'project', 'fruits', 'LinkToStrawberry.js'),
     );
   });
 
