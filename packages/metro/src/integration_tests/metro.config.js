@@ -19,6 +19,12 @@ module.exports = {
   maxWorkers: 1,
   projectRoot: ROOT_PATH,
   reporter: {update() {}},
+  // The file map cache defaults to `os.tmpdir()` and is keyed only by build
+  // parameters, so without this every test file, and every run, reads whatever
+  // the previous one wrote. A cache read inside Jest also holds `Map`s from
+  // another realm (`v8.deserialize` runs outside the sandbox) that fail
+  // TreeFS's `instanceof` checks.
+  resetCache: true,
   watchFolders: [path.resolve(__dirname, '../../../')],
   server: {port: 0},
   resolver: {

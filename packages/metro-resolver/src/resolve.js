@@ -12,6 +12,7 @@
 import type {
   FileAndDirCandidates,
   FileCandidates,
+  PackageForModule,
   Resolution,
   ResolutionContext,
   Result,
@@ -31,6 +32,7 @@ import {
   getPackageEntryPoint,
   matchSubpathFromMainFields,
   redirectModulePath,
+  redirectPackageSubpath,
 } from './PackageResolve';
 import resolveAsset from './resolveAsset';
 import isAssetFile from './utils/isAssetFile';
@@ -743,7 +745,13 @@ function resolveFile(
 
   const candidateExts: Array<string> = [];
   const filePathPrefix = path.join(dirPath, fileName);
-  const sfContext = {...context, candidateExts, filePathPrefix};
+  const sfContext = {
+    ...context,
+    candidateExts,
+    filePathPrefix,
+    fileName,
+    dirPackage: getPackageForFilesIn(context, dirPath),
+  };
   const sourceFileResolution = resolveSourceFile(sfContext, platform);
   if (sourceFileResolution != null) {
     if (typeof sourceFileResolution === 'string') {
@@ -758,6 +766,10 @@ type SourceFileContext = Readonly<{
   ...ResolutionContext,
   candidateExts: Array<string>,
   filePathPrefix: string,
+  fileName: string,
+  // The package containing the files in the directory, shared by every
+  // candidate extension
+  dirPackage: ?PackageForModule,
 }>;
 
 // Either a full path, or a restricted subset of Resolution.
@@ -829,9 +841,20 @@ function resolveSourceFileForExt(
   extension: string,
 ): SourceFileResolution {
   const filePath = `${context.filePathPrefix}${extension}`;
+  const {dirPackage} = context;
   const redirectedPath =
     // Any redirections for the bare path have already happened
-    extension !== '' ? redirectModulePath(context, filePath) : filePath;
+    extension !== '' && dirPackage != null
+      ? redirectPackageSubpath(
+          context,
+          filePath,
+          dirPackage,
+          path.join(
+            dirPackage.packageRelativePath,
+            context.fileName + extension,
+          ),
+        )
+      : filePath;
   if (redirectedPath === false) {
     return {type: 'empty'};
   }
@@ -841,6 +864,20 @@ function resolveSourceFileForExt(
   }
   context.candidateExts.push(extension);
   return null;
+}
+
+/**
+ * The package containing the files in a directory, which need not exist. This
+ * is the package of the directory itself, except that the files directly in a
+ * `node_modules` directory belong to none.
+ */
+function getPackageForFilesIn(
+  context: ResolutionContext,
+  dirPath: string,
+): ?PackageForModule {
+  return dirPath.endsWith(path.sep + 'node_modules')
+    ? null
+    : context.getPackageForModule(dirPath);
 }
 
 function isRelativeImport(filePath: string) {

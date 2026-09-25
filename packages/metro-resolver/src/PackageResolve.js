@@ -106,8 +106,6 @@ export function redirectModulePath(
     return modulePath;
   }
 
-  let redirectedPath;
-
   if (modulePath.startsWith('.') || isModulePathAbsolute) {
     const packageRelativeModulePath = isModulePathAbsolute
       ? // If the module path is absolute, containingPackage is relative to it
@@ -120,38 +118,66 @@ export function redirectModulePath(
           path.dirname(containingPackage.packageRelativePath),
           modulePath,
         );
-
-    redirectedPath = matchSubpathFromMainFields(
-      // Use prefixed POSIX path for lookup in package.json
-      './' + systemToPosixPath(packageRelativeModulePath),
-      containingPackage.packageJson,
-      mainFields,
-    );
-
-    if (typeof redirectedPath === 'string') {
-      // BRITTLE ASSUMPTION: This is always treated as a package-relative path
-      // and is converted back, even if the redirected path is a specifier
-      // referring to another package.
-      redirectedPath = path.isAbsolute(redirectedPath)
-        ? path.normalize(redirectedPath)
-        : path.join(containingPackage.rootPath, redirectedPath);
-    }
-  } else {
-    // Otherwise, `modulePath` may be an unprefixed relative path or a bare
-    // specifier (can also be an absolute specifier prefixed with a URL scheme).
-    // This is used only by the "browser" spec.
-    redirectedPath = matchSubpathFromMainFields(
+    return redirectPackageSubpath(
+      context,
       modulePath,
-      containingPackage.packageJson,
-      mainFields,
+      containingPackage,
+      packageRelativeModulePath,
     );
   }
+
+  // Otherwise, `modulePath` may be an unprefixed relative path or a bare
+  // specifier (can also be an absolute specifier prefixed with a URL scheme).
+  // This is used only by the "browser" spec.
+  const redirectedPath = matchSubpathFromMainFields(
+    modulePath,
+    containingPackage.packageJson,
+    mainFields,
+  );
 
   if (redirectedPath != null) {
     return redirectedPath;
   }
 
   return modulePath;
+}
+
+/**
+ * `redirectModulePath` for a module path whose containing package is already
+ * known. `packageRelativePath` is the path of the module relative to the
+ * package root, with system separators. Returns `false` if the module should
+ * be ignored, and `modulePath` if no `package.json` mapping is matched.
+ */
+export function redirectPackageSubpath(
+  context: Readonly<{
+    mainFields: ResolutionContext['mainFields'],
+    ...
+  }>,
+  modulePath: string,
+  containingPackage: Readonly<{
+    packageJson: PackageInfo['packageJson'],
+    rootPath: PackageInfo['rootPath'],
+    ...
+  }>,
+  packageRelativePath: string,
+): string | false {
+  const redirectedPath = matchSubpathFromMainFields(
+    // Use prefixed POSIX path for lookup in package.json
+    './' + systemToPosixPath(packageRelativePath),
+    containingPackage.packageJson,
+    context.mainFields,
+  );
+
+  if (typeof redirectedPath === 'string') {
+    // BRITTLE ASSUMPTION: This is always treated as a package-relative path
+    // and is converted back, even if the redirected path is a specifier
+    // referring to another package.
+    return path.isAbsolute(redirectedPath)
+      ? path.normalize(redirectedPath)
+      : path.join(containingPackage.rootPath, redirectedPath);
+  }
+
+  return redirectedPath === false ? false : modulePath;
 }
 
 /**
