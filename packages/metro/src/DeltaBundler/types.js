@@ -151,9 +151,21 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
+// What a resolution observed of the file system: canonical paths whose
+// addition or removal can change its result, and those whose modification
+// can too. Satisfies `metro-file-map`'s `Observations`, which populates it.
+export type ResolutionObservations = Readonly<{
+  existence: Set<string>,
+  content: Set<string>,
+}>;
+
 export type BundlerResolution = Readonly<{
   type: 'sourceFile',
   filePath: string,
+  // What this resolution observed of the file system, if
+  // `resolver.unstable_incrementalResolution` is enabled. It is shared by
+  // every caller given this resolution, so must not be mutated.
+  unstable_observations?: ResolutionObservations,
 }>;
 
 export type Options<T = MixedOutput> = Readonly<{

@@ -11,13 +11,13 @@
 
 import type {
   BundlerResolution,
+  ResolutionObservations,
   TransformResultDependency,
 } from '../../DeltaBundler/types';
 import type {Reporter} from '../../lib/reporting';
 import type {ResolverInputOptions} from '../../shared/types';
 import type {
   CustomResolver,
-  DoesFileExist,
   FileCandidates,
   FileSystemLookup,
   Resolution,
@@ -36,20 +36,34 @@ import util from 'node:util';
 type Options = Readonly<{
   assetExts: ReadonlySet<string>,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
+  doesFileExist: (
+    filePath: string,
+    observations?: ?ResolutionObservations,
+  ) => boolean,
   emptyModulePath: string,
   extraNodeModules: ?Object,
-  fileSystemLookup: FileSystemLookup,
+  fileSystemLookup: (
+    filePath: string,
+    observations?: ?ResolutionObservations,
+  ) => ReturnType<FileSystemLookup>,
   getHasteModulePath: (name: string, platform: ?string) => ?string,
   getHastePackagePath: (name: string, platform: ?string) => ?string,
   mainFields: ReadonlyArray<string>,
   getPackage: (packageJsonPath: string) => ?PackageJson,
-  getPackageForModule: (absolutePath: string) => ?PackageForModule,
+  getPackageForModule: (
+    absolutePath: string,
+    observations?: ?ResolutionObservations,
+  ) => ?PackageForModule,
   nodeModulesPaths: ReadonlyArray<string>,
   preferNativePlatform: boolean,
   projectRoot: string,
   reporter: Reporter,
-  resolveAsset: ResolveAsset,
+  resolveAsset: (
+    dirPath: string,
+    assetName: string,
+    extension: string,
+    observations?: ?ResolutionObservations,
+  ) => ReturnType<ResolveAsset>,
   resolveRequest: ?CustomResolver,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
@@ -60,6 +74,12 @@ type Options = Readonly<{
   unstable_enablePackageExports: boolean,
   unstable_incrementalResolution: boolean,
 }>;
+
+// Every record is created here, with the same properties in the same order,
+// so that reading them stays monomorphic on the lookup hot path.
+function createObservations(): ResolutionObservations {
+  return {existence: new Set(), content: new Set()};
+}
 
 export class ModuleResolver {
   _options: Options;
@@ -125,6 +145,14 @@ export class ModuleResolver {
       unstable_incrementalResolution,
     } = this._options;
 
+    // Everything this resolution observes of the file system is recorded here.
+    // The capabilities given to the resolver are bound to it, so that the
+    // resolution context keeps its shape and a custom resolver records what
+    // it looks up without having to know about it.
+    const observations: ?ResolutionObservations = unstable_incrementalResolution
+      ? createObservations()
+      : null;
+
     try {
       const result = Resolver.resolve(
         createDefaultContext(
@@ -134,17 +162,31 @@ export class ModuleResolver {
             customResolverOptions: resolverOptions.customResolverOptions ?? {},
             dev: resolverOptions.dev,
             disableHierarchicalLookup,
-            doesFileExist,
+            doesFileExist:
+              observations == null
+                ? doesFileExist
+                : filePath => doesFileExist(filePath, observations),
             extraNodeModules,
-            fileSystemLookup,
+            fileSystemLookup:
+              observations == null
+                ? fileSystemLookup
+                : filePath => fileSystemLookup(filePath, observations),
             getPackage,
-            getPackageForModule,
+            getPackageForModule:
+              observations == null
+                ? getPackageForModule
+                : absolutePath =>
+                    getPackageForModule(absolutePath, observations),
             isESMImport: dependency.data.isESMImport,
             mainFields,
             nodeModulesPaths,
             originModulePath,
             preferNativePlatform,
-            resolveAsset,
+            resolveAsset:
+              observations == null
+                ? resolveAsset
+                : (dirPath, assetName, extension) =>
+                    resolveAsset(dirPath, assetName, extension, observations),
             resolveHasteModule: (name: string) =>
               this._options.getHasteModulePath(name, platform),
             resolveHastePackage: (name: string) =>
@@ -163,7 +205,7 @@ export class ModuleResolver {
         dependency.name,
         platform,
       );
-      return this._getFileResolvedModule(result);
+      return this._getFileResolvedModule(result, observations);
     } catch (error) {
       if (error instanceof Resolver.FailedToResolvePathError) {
         const {candidates} = error;
@@ -229,18 +271,53 @@ export class ModuleResolver {
   /**
    * TODO: Return Resolution instead of coercing to BundlerResolution here
    */
-  _getFileResolvedModule(resolution: Resolution): BundlerResolution {
+  _getFileResolvedModule(
+    resolution: Resolution,
+    observations: ?ResolutionObservations,
+  ): BundlerResolution {
     switch (resolution.type) {
       case 'sourceFile':
-        return resolution;
+        return observations == null
+          ? resolution
+          : {
+              filePath: resolution.filePath,
+              type: 'sourceFile',
+              unstable_observations: observations,
+            };
       case 'assetFiles':
         // FIXME: we should forward ALL the paths/metadata,
         // not just an arbitrary item!
         const arbitrary = getArrayLowestItem(resolution.filePaths);
         invariant(arbitrary != null, 'invalid asset resolution');
-        return {filePath: arbitrary, type: 'sourceFile'};
+        return observations == null
+          ? {filePath: arbitrary, type: 'sourceFile'}
+          : {
+              filePath: arbitrary,
+              type: 'sourceFile',
+              unstable_observations: observations,
+            };
       case 'empty':
-        return this._getEmptyModule();
+        const emptyModule = this._getEmptyModule();
+        if (observations == null) {
+          return emptyModule;
+        }
+        // The empty module is resolved once and cached, so a resolution that
+        // lands on it depends on what that resolution observed as well as on
+        // what led here.
+        const emptyObservations = emptyModule.unstable_observations;
+        if (emptyObservations != null) {
+          for (const canonicalPath of emptyObservations.existence) {
+            observations.existence.add(canonicalPath);
+          }
+          for (const canonicalPath of emptyObservations.content) {
+            observations.content.add(canonicalPath);
+          }
+        }
+        return {
+          filePath: emptyModule.filePath,
+          type: 'sourceFile',
+          unstable_observations: observations,
+        };
       case 'virtualModule':
         // Reserved for future implementation.
         throw new Error('Virtual modules are not yet implemented.');
