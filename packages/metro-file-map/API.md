@@ -47,6 +47,7 @@ export type CacheManagerWriteOptions = Readonly<{
 export type ChangeEvent = Readonly<{
   logger?: null | undefined | RootPerfLogger;
   changes: ReadonlyFileSystemChanges<Readonly<ChangedFileMetadata>>;
+  pluginChanges: ReadonlyMap<string, unknown>;
   rootDir: string;
 }>;
 
@@ -164,6 +165,25 @@ interface FileSystem_2 {
 }
 export {FileSystem_2 as FileSystem};
 
+export function getPluginChanges<ChangeSummary>(
+  event: ChangeEvent,
+  plugin: FileMapPlugin<
+    /**
+     * >    |   plugin: FileMapPlugin<empty, empty, ChangeSummary>,
+     *      |                         ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+     **/
+    any,
+    /**
+     * >    |   plugin: FileMapPlugin<empty, empty, ChangeSummary>,
+     *      |                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+     **/
+    any,
+    ChangeSummary
+  >,
+): ChangeSummary | void;
+
+export type HasteChanges = Readonly<{changedNames: ReadonlySet<string>}>;
+
 export class HasteConflictsError extends Error {
   constructor(conflicts: ReadonlyArray<HasteConflict>);
   getDetailedMessage(pathsRelativeToRoot: null | undefined | string): string;
@@ -182,7 +202,7 @@ export type HasteMapItem = {
   [platform: string]: HasteMapItemMetadata;
 };
 
-export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null> {
+export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null, HasteChanges | void> {
   constructor(options: HasteMapOptions);
   assertValid(): void;
   computeConflicts(): Array<HasteConflict>;
@@ -194,7 +214,7 @@ export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null>
   getWorker(): FileMapPluginWorker;
   initialize(opts: FileMapPluginInitOptions<null, string | null>): Promise<void>;
   readonly name: 'haste';
-  onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): void;
+  onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): HasteChanges | void;
   setModule(id: string, module: HasteMapItemMetadata): void;
 }
 
@@ -220,15 +240,16 @@ export type HealthCheckResult =
 
 export type InputFileMapPlugin = FileMapPlugin<
   /**
-   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty, unknown>;
    *       |                                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
    **/
   any,
   /**
-   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty, unknown>;
    *       |                                                       ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
    **/
-  any
+  any,
+  unknown
 >;
 
 export type InputOptions = Readonly<{

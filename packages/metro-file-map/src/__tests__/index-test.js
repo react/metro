@@ -27,7 +27,7 @@ import type {
 } from '../flow-types';
 import type {DependencyPlugin} from '../index';
 import type {default as FileMapT} from '../index';
-import type {HasteMapOptions} from '../plugins/HastePlugin';
+import type HastePluginT, {HasteMapOptions} from '../plugins/HastePlugin';
 import type {MockMapOptions} from '../plugins/MockPlugin';
 import typeof WorkerModule from '../worker';
 
@@ -279,7 +279,7 @@ let buildNewFileMap: (
 ) => Promise<{
   ...BuildResult,
   fileMap: FileMapT,
-  hasteMap: HasteMap,
+  hasteMap: HastePluginT,
   mockMap: ?MockMap,
   dependencyPlugin: ?DependencyPlugin,
 }>;
@@ -433,6 +433,24 @@ describe('FileMap', () => {
 
   test('exports constants', () => {
     expect(FileMap.H).toBe(require('../constants').default);
+  });
+
+  test('throws on plugins that share a name, with or without a worker', () => {
+    const MockPlugin = require('../plugins/MockPlugin').default;
+    const mockConfig = {
+      console: globalThis.console,
+      rootDir: defaultConfig.rootDir,
+      mocksPattern: /__mocks__/,
+      throwOnModuleCollision: false,
+    };
+    expect(
+      () =>
+        new FileMap({
+          ...defaultConfig,
+          // MockPlugin has no worker, so holds no plugin data slot
+          plugins: [new MockPlugin(mockConfig), new MockPlugin(mockConfig)],
+        }),
+    ).toThrow('metro-file-map: Duplicate plugin name: mocks');
   });
 
   test('ignores files given a pattern', async () => {
@@ -1703,6 +1721,28 @@ describe('FileMap', () => {
       );
     }
 
+    fm_it(
+      'publishes what each plugin reports about a batch on the change event',
+      async ({fileMap, hasteMap}) => {
+        const getPluginChanges = require('../lib/getPluginChanges').default;
+        const fruitsRoot = path.join('/', 'project', 'fruits');
+        mockFs[path.join(fruitsRoot, 'Tomato.js')] = '// Tomato!';
+        mockEmitters[fruitsRoot].emitFileEvent({
+          event: 'touch',
+          relativePath: 'Tomato.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        mockDeleteFile(fruitsRoot, 'Banana.js');
+        const changeEvent = await waitForItToChange(fileMap);
+
+        expect(getPluginChanges(changeEvent, hasteMap)).toEqual({
+          changedNames: new Set(['Tomato', 'Banana']),
+        });
+        // Only plugins with something to say are present
+        expect([...changeEvent.pluginChanges.keys()]).toEqual([hasteMap.name]);
+      },
+    );
+
     function mockDeleteFile(root: string, relativePath: string) {
       const e = mockEmitters[root];
       e.emitFileEvent({event: 'delete', relativePath});
@@ -1717,7 +1757,7 @@ describe('FileMap', () => {
 
     function fm_it(
       title: string,
-      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HasteMap}>) => unknown,
+      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HastePluginT}>) => unknown,
       options?: FileMapTestOptions = {},
     ): void {
       options = options || {};
@@ -1740,7 +1780,7 @@ describe('FileMap', () => {
 
     fm_it.only = (
       title: string,
-      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HasteMap}>) => unknown,
+      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HastePluginT}>) => unknown,
       options?: FileMapTestOptions,
     ): void => fm_it(title, fn, {...options, only: true});
 
@@ -2572,7 +2612,13 @@ describe('FileMap', () => {
             relativePath: 'tropical',
           });
 
-          await waitForItToChange(fileMap);
+          const changeEvent = await waitForItToChange(fileMap);
+
+          // Plugins are updated inside the recrawl, and what they report
+          // still reaches the event
+          expect(
+            require('../lib/getPluginChanges').default(changeEvent, hasteMap),
+          ).toEqual({changedNames: new Set(['Mango', 'Papaya'])});
 
           // Verify crawl was called with the correct directory
           expect(mockNodeCrawler).toHaveBeenNthCalledWith(
