@@ -346,6 +346,12 @@ export default class FallbackWatcher extends AbstractWatcher {
           this.#checkedEmitError,
           this.ignored,
         );
+        // A directory we already knew about has been replaced, so entries we
+        // registered under it may since have changed or been removed. Have the
+        // file map reconcile it.
+        if (registered) {
+          this.#emitEvent({event: RECRAWL_EVENT, relativePath});
+        }
       } else {
         const type = common.typeFromStat(stat);
         if (type == null) {

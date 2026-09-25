@@ -187,6 +187,23 @@ describe('FallbackWatcher', () => {
       await waitFor(() => indexOfCall('readdir', join(watchRoot, 'a')) >= 0);
       expectWatchedBeforeListed(join(watchRoot, 'a'));
     });
+
+    // Entries registered under the old directory may be gone or changed.
+    test('requests a recrawl of a directory replaced at the same path', async () => {
+      const events: Array<WatcherBackendChangeEvent> = [];
+      watcher?.onFileEvent(event => {
+        events.push(event);
+      });
+      fs.rmSync(join(watchRoot, 'a'), {recursive: true});
+      fs.mkdirSync(join(watchRoot, 'a'));
+
+      await waitFor(() => events.some(event => event.event === 'recrawl'));
+      expect(events).toContainEqual({
+        event: 'recrawl',
+        relativePath: 'a',
+        root: watchRoot,
+      });
+    });
   });
 
   // Windows reports a change with no filename when changes to a directory
