@@ -96,6 +96,19 @@ describe('Bundler', () => {
     expect(depGraphEnd).toHaveBeenCalledTimes(1);
   });
 
+  test('ends the dependency graph when ending the Transformer fails', async () => {
+    const error = new Error('Farm is ended');
+    MockTransformer.mockImplementation(() => ({
+      end: jest.fn().mockRejectedValue(error),
+    }));
+
+    const bundler = new Bundler(config);
+    await bundler.ready();
+
+    await expect(bundler.end()).rejects.toBe(error);
+    expect(depGraphEnd).toHaveBeenCalledTimes(1);
+  });
+
   test('does not emit an unhandled rejection before ready is called', async () => {
     jest.useRealTimers();
 

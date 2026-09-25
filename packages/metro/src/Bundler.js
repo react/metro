@@ -64,8 +64,11 @@ export default class Bundler {
     // shouldn't prevent teardown of whatever was started.
     await this._initializedPromise.catch(() => {});
 
-    await this._transformer?.end();
-    await this._depGraph.end();
+    try {
+      await this._transformer?.end();
+    } finally {
+      await this._depGraph.end();
+    }
   }
 
   async getDependencyGraph(): Promise<DependencyGraph> {
