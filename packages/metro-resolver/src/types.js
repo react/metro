@@ -246,6 +246,11 @@ export type ResolutionContext = Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
+  /**
+   * The environment of the module being resolved from, e.g. `'react-server'`.
+   * Absent for the default environment.
+   */
+  unstable_environment?: ?string,
   unstable_incrementalResolution: boolean,
   unstable_logWarning: (message: string) => void,
 }>;

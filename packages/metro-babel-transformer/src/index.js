@@ -45,6 +45,7 @@ type BabelTransformerOptions = Readonly<{
   platform: ?string,
   projectRoot: string,
   publicPath: string,
+  unstable_environment?: ?string,
   unstable_transformProfile?: TransformProfile,
   globalPrefix: string,
   inlineRequires?: void,
@@ -111,6 +112,11 @@ function transform(
         name: 'metro',
         platform: options.platform,
         inlinePlatform: options.inlinePlatform,
+        // Only present when set, so that Babel's config cache, which varies on
+        // the caller, is unaffected for bundles without an environment.
+        ...(options.unstable_environment != null
+          ? {unstable_environment: options.unstable_environment}
+          : null),
       },
       // NOTE(EvanBacon): We split the parse/transform steps up to accommodate
       // Hermes parsing, but this defaults to cloning the AST which increases

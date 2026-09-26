@@ -47,6 +47,9 @@ export default function getGraphId(
         shallow,
         unstable_transformProfile:
           options.unstable_transformProfile || 'default',
+        ...(options.unstable_environment != null
+          ? {unstable_environment: options.unstable_environment}
+          : null),
       },
     },
     canonicalize,

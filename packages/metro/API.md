@@ -249,6 +249,7 @@ export type RunBuildOptions = {
   sourceMapUrl?: string | undefined;
   customResolverOptions?: CustomResolverOptions | undefined;
   customTransformOptions?: CustomTransformOptions | undefined;
+  unstable_environment?: string | undefined;
   unstable_transformProfile?: TransformProfile | undefined;
 };
 

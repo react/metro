@@ -215,4 +215,44 @@ describe('Transformer', function () {
 
     expect(require('../getTransformCacheKey')).not.toBeCalled();
   });
+
+  describe('unstable_environment', () => {
+    async function getPartialKey(transformOptions) {
+      const get = jest.fn();
+      const transformerInstance = new Transformer(
+        {
+          ...commonOptions,
+          cacheStores: [{get, set: jest.fn()}],
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+      require('../WorkerFarm').default.prototype.transform.mockReturnValue({
+        sha1: '0123456789012345678901234567890123456789',
+        result: {},
+      });
+      await transformerInstance.transformFile('./foo.js', transformOptions);
+      // The key is the partial key followed by the file's SHA-1.
+      return get.mock.calls[0][0].toString('hex').slice(0, 32);
+    }
+
+    test('does not change the cache key when unset', async () => {
+      // Pinned to the key produced before `unstable_environment` existed, so
+      // that transform caches for bundles without an environment stay valid.
+      expect(await getPartialKey({})).toBe('7590854a44fd52e6cbdd65fb26263acc');
+      expect(await getPartialKey({unstable_environment: null})).toBe(
+        await getPartialKey({}),
+      );
+    });
+
+    test('changes the cache key when set', async () => {
+      const serverKey = await getPartialKey({
+        unstable_environment: 'react-server',
+      });
+      expect(serverKey).not.toBe(await getPartialKey({}));
+      expect(serverKey).not.toBe(
+        await getPartialKey({unstable_environment: 'node'}),
+      );
+    });
+  });
 });

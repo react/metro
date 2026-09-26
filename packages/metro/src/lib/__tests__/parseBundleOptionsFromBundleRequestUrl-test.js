@@ -132,4 +132,24 @@ describe('parseBundleOptionsFromBundleRequestUrl', () => {
       ).toMatchObject({[optionName]: false});
     });
   });
+
+  describe('unstable_environment', () => {
+    test('is retrieved from the url', () => {
+      expect(
+        parseBundleOptionsFromBundleRequestUrl(
+          'http://localhost/my/bundle.bundle?unstable_environment=react-server',
+          new Set([]),
+        ),
+      ).toMatchObject({unstable_environment: 'react-server'});
+    });
+
+    test.each([
+      ['http://localhost/my/bundle.bundle'],
+      ['http://localhost/my/bundle.bundle?unstable_environment='],
+    ])('is omitted when absent or empty: %s', url => {
+      expect(
+        parseBundleOptionsFromBundleRequestUrl(url, new Set([])),
+      ).not.toHaveProperty('unstable_environment');
+    });
+  });
 });

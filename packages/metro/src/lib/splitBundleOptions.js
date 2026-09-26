@@ -17,11 +17,18 @@ import type {BundleOptions, SplitBundleOptions} from '../shared/types';
 export default function splitBundleOptions(
   options: BundleOptions,
 ): SplitBundleOptions {
+  // Omitted rather than null when unset, because resolver and transform
+  // options are serialised into cache keys and graph IDs.
+  const environment =
+    options.unstable_environment != null
+      ? {unstable_environment: options.unstable_environment}
+      : null;
   return {
     entryFile: options.entryFile,
     resolverOptions: {
       customResolverOptions: options.customResolverOptions,
       dev: options.dev,
+      ...environment,
     },
     transformOptions: {
       customTransformOptions: options.customTransformOptions,
@@ -30,6 +37,7 @@ export default function splitBundleOptions(
       platform: options.platform,
       type: 'module',
       unstable_transformProfile: options.unstable_transformProfile,
+      ...environment,
     },
     serializerOptions: {
       excludeSource: options.excludeSource,

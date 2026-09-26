@@ -56,6 +56,7 @@ export type JsTransformOptions = Readonly<{
   nonInlinedRequires?: ReadonlyArray<string> | undefined;
   platform: null | undefined | string;
   type: Type;
+  unstable_environment?: null | undefined | string;
   unstable_memoizeInlineRequires?: boolean | undefined;
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
   unstable_staticHermesOptimizedRequire?: boolean | undefined;

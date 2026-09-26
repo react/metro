@@ -62,6 +62,11 @@ export type BundleOptions = {
   sourceMapUrl: ?string,
   sourceUrl: ?string,
   createModuleIdFactory?: () => (path: string) => number,
+  /**
+   * The environment of the entry file, e.g. `'react-server'`. Absent for the
+   * default environment.
+   */
+  readonly unstable_environment?: ?string,
   readonly unstable_transformProfile: TransformProfile,
   readonly sourcePaths: SourcePathsMode,
 };
@@ -73,6 +78,7 @@ export type BuildOptions = Readonly<{
 export type ResolverInputOptions = Readonly<{
   customResolverOptions?: CustomResolverOptions,
   dev: boolean,
+  unstable_environment?: ?string,
 }>;
 
 export type SerializerOptions = {
@@ -155,6 +161,7 @@ export type RequestOptions = Readonly<
     onProgress?: (transformedFileCount: number, totalFileCount: number) => void,
     customResolverOptions?: CustomResolverOptions,
     customTransformOptions?: CustomTransformOptions,
+    unstable_environment?: string,
     unstable_transformProfile?: TransformProfile,
   }>,
 >;

@@ -155,6 +155,7 @@ export class ModuleResolver {
             unstable_conditionNames,
             unstable_conditionsByPlatform,
             unstable_enablePackageExports,
+            unstable_environment: resolverOptions.unstable_environment,
             unstable_incrementalResolution,
             unstable_logWarning: this._logWarning,
           },

@@ -49,3 +49,55 @@ test('exposes the correct absolute path to a source file to plugins', () => {
   expect(pluginCwd).toEqual(PROJECT_ROOT);
   expect(visitorFilename).toEqual(path.resolve(PROJECT_ROOT, 'foo.js'));
 });
+
+describe('unstable_environment', () => {
+  // Babel requires `api.caller` callbacks to return primitives.
+  function getCallerEnvironment(unstable_environment?: ?string): {
+    hasEnvironment: boolean,
+    environment: unknown,
+  } {
+    let hasEnvironment = false;
+    let environment;
+    transform({
+      filename: 'foo.js',
+      src: 'console.log("foo");',
+      plugins: [
+        babel => {
+          hasEnvironment = babel.caller(
+            c => c != null && Object.hasOwn(c, 'unstable_environment'),
+          );
+          environment = babel.caller(c => c?.unstable_environment);
+          return {visitor: {}};
+        },
+      ],
+      options: {
+        dev: true,
+        enableBabelRuntime: false,
+        enableBabelRCLookup: false,
+        globalPrefix: '__metro__',
+        minify: false,
+        platform: null,
+        publicPath: 'test',
+        projectRoot: PROJECT_ROOT,
+        unstable_environment,
+      },
+    });
+    return {hasEnvironment, environment};
+  }
+
+  test('is passed to plugins on the caller', () => {
+    expect(getCallerEnvironment('react-server')).toEqual({
+      hasEnvironment: true,
+      environment: 'react-server',
+    });
+  });
+
+  test.each([[undefined], [null]])(
+    'is absent from the caller when it is %s',
+    unstable_environment => {
+      expect(getCallerEnvironment(unstable_environment).hasEnvironment).toBe(
+        false,
+      );
+    },
+  );
+});

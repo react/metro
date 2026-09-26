@@ -127,6 +127,11 @@ export type JsTransformOptions = Readonly<{
   nonInlinedRequires?: ReadonlyArray<string>,
   platform: ?string,
   type: Type,
+  /**
+   * The environment this module is transformed for, e.g. `'react-server'`.
+   * Absent for the default environment.
+   */
+  unstable_environment?: ?string,
   unstable_memoizeInlineRequires?: boolean,
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string>,
   unstable_staticHermesOptimizedRequire?: boolean,

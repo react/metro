@@ -42,6 +42,15 @@ const getBoolQueryParam = (
 const getBundleType = (bundleType: string): 'map' | 'bundle' =>
   bundleType === 'map' ? bundleType : 'bundle';
 
+// An absent or empty environment is the default environment, and is omitted
+// rather than set to null so that it does not enter any cache key.
+const getEnvironmentOption = (
+  environment: ?string,
+): Readonly<{unstable_environment?: string}> =>
+  environment != null && environment !== ''
+    ? {unstable_environment: environment}
+    : {};
+
 const getTransformProfile = (transformProfile: ?string): TransformProfile =>
   transformProfile === 'hermes-stable' || transformProfile === 'hermes-canary'
     ? transformProfile
@@ -142,5 +151,6 @@ export default function parseBundleOptionsFromBundleRequestUrl(
     unstable_transformProfile: getTransformProfile(
       searchParams.get('unstable_transformProfile'),
     ),
+    ...getEnvironmentOption(searchParams.get('unstable_environment')),
   };
 }

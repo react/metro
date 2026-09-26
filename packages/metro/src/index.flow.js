@@ -140,6 +140,7 @@ export type RunBuildOptions = {
   sourceMapUrl?: string,
   customResolverOptions?: CustomResolverOptions,
   customTransformOptions?: CustomTransformOptions,
+  unstable_environment?: string,
   unstable_transformProfile?: TransformProfile,
 };
 
@@ -442,6 +443,7 @@ export const runBuild = async (
     platform = 'web',
     sourceMap = false,
     sourceMapUrl,
+    unstable_environment,
     unstable_transformProfile = DEFAULTS.unstable_transformProfile,
   } = opts;
   const metroServer = await runMetro(config, {
@@ -461,6 +463,7 @@ export const runBuild = async (
       customResolverOptions,
       customTransformOptions,
       unstable_transformProfile,
+      unstable_environment,
     };
 
     if (onBegin) {

@@ -93,6 +93,7 @@ export default class Transformer {
       nonInlinedRequires,
       platform,
       type,
+      unstable_environment,
       unstable_transformProfile,
       unstable_memoizeInlineRequires,
       unstable_nonMemoizedInlineRequires,
@@ -133,6 +134,9 @@ export default class Transformer {
       unstable_memoizeInlineRequires,
       unstable_nonMemoizedInlineRequires,
       unstable_transformProfile,
+      // Appended only when set, so that keys for transforms without an
+      // environment are unchanged.
+      ...(unstable_environment != null ? [unstable_environment] : []),
     ]);
 
     let sha1: string;

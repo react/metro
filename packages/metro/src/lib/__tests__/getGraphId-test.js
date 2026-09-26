@@ -9,6 +9,8 @@
  * @oncall react_native
  */
 
+import type {TransformInputOptions} from '../../DeltaBundler/types';
+
 import getGraphId from '../getGraphId';
 
 describe('getGraphId', () => {
@@ -305,5 +307,48 @@ describe('getGraphId', () => {
         },
       ),
     );
+  });
+
+  describe('unstable_environment', () => {
+    const transformOptions: TransformInputOptions = {
+      dev: true,
+      minify: true,
+      type: 'module',
+      platform: 'web',
+      unstable_transformProfile: 'default',
+    };
+    const otherOptions = {
+      shallow: false,
+      lazy: false,
+      unstable_allowRequireContext: false,
+      resolverOptions: {
+        dev: true,
+      },
+    };
+
+    test('does not change the id when unset', () => {
+      const id = getGraphId('/root/waddup', transformOptions, otherOptions);
+      expect(id).not.toContain('unstable_environment');
+      expect(
+        getGraphId(
+          '/root/waddup',
+          {...transformOptions, unstable_environment: null},
+          otherOptions,
+        ),
+      ).toBe(id);
+    });
+
+    test('generates a unique id per environment', () => {
+      const ids = new Set(
+        [undefined, 'react-server', 'node'].map(unstable_environment =>
+          getGraphId(
+            '/root/waddup',
+            {...transformOptions, unstable_environment},
+            otherOptions,
+          ),
+        ),
+      );
+      expect(ids.size).toBe(3);
+    });
   });
 });
