@@ -18,22 +18,52 @@ export default async function minifier(
   options: MinifierOptions,
 ): Promise<MinifierResult> {
   const result = await minify(options);
-
-  if (!options.map || result.map == null) {
+  if (!options.map) {
     return {code: result.code};
   }
 
-  const map: BasicSourceMap = JSON.parse(result.map);
+  const toMap = (encoded: string): BasicSourceMap => ({
+    ...JSON.parse(encoded),
+    sources: [options.filename],
+  });
+  const {decodedMap} = result;
+  if (decodedMap == null) {
+    const encoded = result.getMap();
+    return encoded == null
+      ? {code: result.code}
+      : {code: result.code, map: toMap(encoded)};
+  }
 
-  return {code: result.code, map: {...map, sources: [options.filename]}};
+  // Terser builds the decoded map anyway, and encodes only on request.
+  let map: ?BasicSourceMap;
+  return {
+    code: result.code,
+    decodedMap: {mappings: decodedMap.mappings, names: decodedMap.names},
+    // flowlint-next-line unsafe-getters-setters:off
+    get map(): BasicSourceMap {
+      if (map == null) {
+        map = toMap(result.getMap() ?? '{}');
+      }
+      return map;
+    },
+  };
 }
 
-async function minify({
-  code,
-  map,
-  reserved,
-  config,
-}: MinifierOptions): Promise<{code: string, map: ?string}> {
+async function minify({code, map, reserved, config}: MinifierOptions): Promise<{
+  code: string,
+  decodedMap: ?{
+    mappings: Array<
+      Array<
+        | [number]
+        | [number, number, number, number]
+        | [number, number, number, number, number],
+      >,
+    >,
+    names: Array<string>,
+    ...
+  },
+  getMap: () => ?string,
+}> {
   const options = {
     ...config,
     output: {
@@ -65,6 +95,8 @@ async function minify({
 
   return {
     code: result.code,
-    map: result.map,
+    decodedMap: result.decoded_map,
+    // Reading `result.map` makes Terser encode the map.
+    getMap: () => result.map,
   };
 }
