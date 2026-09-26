@@ -35,7 +35,7 @@ Our recommended workflow is to use [`yarn link`][1] to register local `metro` pa
     yarn link metro metro-config metro-runtime
     ```
 
-    Note: At mininum, the `metro` and `metro-runtime` packages need to be linked.
+    Note: At minimum, the `metro` and `metro-runtime` packages need to be linked.
 
 3. **Configure Metro `watchFolders` to work with our linked packages**
 
