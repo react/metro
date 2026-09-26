@@ -125,12 +125,6 @@ export interface SourceMapGenerator {
   toString(file?: string, options?: {excludeSource?: boolean | undefined}): string;
 }
 
-export function toBabelSegments(sourceMap: BasicSourceMap): Array<BabelSourceMapSegment>;
-
-export function toSegmentTuple(mapping: BabelSourceMapSegment): MetroSourceMapSegmentTuple;
-
-export function tuplesFromBabelDecodedMap(decodedMap: BabelDecodedMap): Array<MetroSourceMapSegmentTuple>;
-
 export type VlqMap = {
   readonly mappings: string;
   readonly names: ReadonlyArray<string>;

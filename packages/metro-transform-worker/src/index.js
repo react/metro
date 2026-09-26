@@ -18,6 +18,7 @@ import type {
   TransformProfile,
 } from 'metro-babel-transformer';
 import type {
+  BabelDecodedMap,
   BasicSourceMap,
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
@@ -41,14 +42,11 @@ import {transformFromAstSync} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
+import {decode as decodeMappings} from '@jridgewell/sourcemap-codec';
 import {stableHash} from 'metro-cache';
 import {getCacheKey as metroGetCacheKey} from 'metro-cache-key';
 import {
-  fromRawMappings,
   functionMapBabelPlugin,
-  toBabelSegments,
-  toSegmentTuple,
-  tuplesFromBabelDecodedMap,
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 } from 'metro-source-map';
@@ -79,6 +77,8 @@ export type MinifierOptions = {
 export type MinifierResult = {
   code: string,
   map?: BasicSourceMap,
+  // The same map decoded, if the minifier has it, in place of decoding `map`.
+  decodedMap?: ?BabelDecodedMap,
   ...
 };
 
@@ -203,30 +203,16 @@ function getDynamicDepsBehavior(
 
 const minifyCode = async (
   config: JsTransformerConfig,
-  projectRoot: string,
   filename: string,
   code: string,
-  source: string,
-  map: Array<MetroSourceMapSegmentTuple>,
+  map: ?BasicSourceMap,
   reserved?: ReadonlyArray<string> = [],
 ): Promise<{
   code: string,
-  map: Array<MetroSourceMapSegmentTuple>,
+  lineCount: number,
+  map: VlqMap,
   ...
 }> => {
-  const sourceMap = fromRawMappings([
-    {
-      code,
-      // functionMap is overridden by the serializer
-      functionMap: null,
-      // isIgnored is overridden by the serializer
-      isIgnored: false,
-      map,
-      path: filename,
-      source,
-    },
-  ]).toMap(undefined, {});
-
   const minify = getMinifier(config.minifierPath);
 
   try {
@@ -234,15 +220,18 @@ const minifyCode = async (
       code,
       config: config.minifierConfig,
       filename,
-      map: sourceMap,
+      map,
       reserved,
     });
 
+    const {lineCount, lastLineColumn} = countLines(minified.code);
     return {
       code: minified.code,
-      map: minified.map
-        ? toBabelSegments(minified.map).map(toSegmentTuple)
-        : [],
+      lineCount,
+      map: vlqMapFromBabelDecodedMap(
+        getDecodedMap(minified) ?? {mappings: [], names: []},
+        [lineCount, lastLineColumn],
+      ),
     };
   } catch (error) {
     if (error.constructor.name === 'JS_Parse_Error') {
@@ -254,6 +243,18 @@ const minifyCode = async (
     throw error;
   }
 };
+
+// A minifier may return its map already decoded, which saves decoding it here.
+function getDecodedMap(minified: MinifierResult): ?BabelDecodedMap {
+  if (minified.decodedMap != null) {
+    return minified.decodedMap;
+  }
+  const {map} = minified;
+  if (map != null) {
+    return {mappings: decodeMappings(map.mappings), names: map.names};
+  }
+  return null;
+}
 
 const disabledDependencyTransformer: DependencyTransformer = {
   transformIllegalDynamicRequire: () => void 0,
@@ -476,25 +477,13 @@ async function transformJS(
   let lineCount: number;
 
   if (minify) {
-    // The minifier returns its own map (not Babel's `decodedMap`), so we derive
-    // tuples from Babel's eagerly-computed decoded map, hand them to the
-    // minifier, then re-encode the resulting tuples to a compact VLQ map.
-    let tuples = result.decodedMap
-      ? tuplesFromBabelDecodedMap(result.decodedMap)
-      : [];
-
-    ({map: tuples, code} = await minifyCode(
+    ({code, lineCount, map} = await minifyCode(
       config,
-      projectRoot,
       file.filename,
       result.code,
-      file.code,
-      tuples,
+      result.map,
       reserved,
     ));
-
-    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, tuples));
-    map = vlqMapFromTuples(tuples);
   } else {
     // Dominant path (e.g. Hermes, which doesn't minify): encode the compact VLQ
     // map straight from Babel's eagerly-computed decoded map, never
@@ -603,7 +592,8 @@ async function transformJSON(
               ?.unstable_staticHermesOptimizedRequire,
           ),
         );
-  let map: Array<MetroSourceMapSegmentTuple> = [];
+  let map: VlqMap;
+  let lineCount: number;
 
   // TODO: When we can reuse transformJS for JSON, we should not derive `minify` separately.
   const minify =
@@ -612,14 +602,19 @@ async function transformJSON(
     options.unstable_transformProfile !== 'hermes-stable';
 
   if (minify) {
-    ({map, code} = await minifyCode(
-      config,
-      projectRoot,
-      file.filename,
-      code,
-      file.code,
-      map,
-    ));
+    // The wrapped JSON has no mappings of its own, so the minified code maps
+    // to nothing.
+    ({map, code, lineCount} = await minifyCode(config, file.filename, code, {
+      version: 3,
+      sources: [file.filename],
+      sourcesContent: [file.code],
+      names: [],
+      mappings: '',
+    }));
+  } else {
+    let tuples: Array<MetroSourceMapSegmentTuple>;
+    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, []));
+    map = vlqMapFromTuples(tuples);
   }
 
   let jsType: JSFileType;
@@ -632,14 +627,9 @@ async function transformJSON(
     jsType = 'js/module';
   }
 
-  let lineCount;
-  ({lineCount, map} = countLinesAndTerminateMap(code, map));
-  // The JSON path builds tuples directly (no Babel `decodedMap`), so re-encode
-  // the finished tuples to a compact VLQ map.
-  const outputMap = vlqMapFromTuples(map);
   const output: Array<JsOutput> = [
     {
-      data: {code, functionMap: null, lineCount, map: outputMap},
+      data: {code, functionMap: null, lineCount, map},
       type: jsType,
     },
   ];

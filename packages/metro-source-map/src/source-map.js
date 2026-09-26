@@ -21,9 +21,8 @@ import {
   generateFunctionMap,
 } from './generateFunctionMap';
 import Generator from './Generator';
+import {decode as decodeMappings} from '@jridgewell/sourcemap-codec';
 import nullthrows from 'nullthrows';
-// $FlowFixMe[untyped-import] - source-map
-import SourceMap from 'source-map';
 
 export type {IConsumer};
 
@@ -120,15 +119,6 @@ export type IndexMap = {
 };
 
 export type MixedSourceMap = IndexMap | BasicSourceMap;
-
-type SourceMapConsumerMapping = {
-  generatedLine: number,
-  generatedColumn: number,
-  originalLine: ?number,
-  originalColumn: ?number,
-  source: ?string,
-  name: ?string,
-};
 
 export type RawMappingsModule = {
   readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
@@ -344,71 +334,9 @@ function toIndexMapSection(module: RawMappingsModule): BasicSourceMap {
 }
 
 /**
- * Transforms a standard source map object into a Raw Mappings object, to be
- * used across the bundler.
- */
-function toBabelSegments(
-  sourceMap: BasicSourceMap,
-): Array<BabelSourceMapSegment> {
-  const rawMappings: Array<BabelSourceMapSegment> = [];
-
-  new SourceMap.SourceMapConsumer(sourceMap).eachMapping(
-    (map: SourceMapConsumerMapping) => {
-      rawMappings.push(
-        map.originalLine == null || map.originalColumn == null
-          ? {
-              generated: {
-                line: map.generatedLine,
-                column: map.generatedColumn,
-              },
-              source: map.source,
-              name: map.name,
-            }
-          : {
-              generated: {
-                line: map.generatedLine,
-                column: map.generatedColumn,
-              },
-              original: {
-                line: map.originalLine,
-                column: map.originalColumn,
-              },
-              source: map.source,
-              name: map.name,
-            },
-      );
-    },
-  );
-
-  return rawMappings;
-}
-
-function toSegmentTuple(
-  mapping: BabelSourceMapSegment,
-): MetroSourceMapSegmentTuple {
-  const {column, line} = mapping.generated;
-  const {name, original} = mapping;
-
-  if (original == null) {
-    return [line, column];
-  }
-
-  if (typeof name !== 'string') {
-    return [line, column, original.line, original.column];
-  }
-
-  return [line, column, original.line, original.column, name];
-}
-
-/**
- * Converts a Babel/gen-mapping "decoded" source map (`result.decodedMap` from
- * `@babel/generator`) into raw mapping tuples, byte-identical to
- * `result.rawMappings.map(toSegmentTuple)`.
- *
- * Preferred over `result.rawMappings` because `decodedMap` is computed eagerly
- * during generation, whereas accessing `rawMappings` triggers a second decode
- * (`allMappings`) that allocates ~4-5 objects per segment. No terminating
- * mapping is appended (callers that need one use `countLinesAndTerminateMap`).
+ * Converts a decoded source map (such as `result.decodedMap` from
+ * `@babel/generator`) into raw mapping tuples. No terminating mapping is
+ * appended.
  */
 function tuplesFromBabelDecodedMap(
   decodedMap: BabelDecodedMap,
@@ -497,22 +425,19 @@ const countLines = (string: string): number =>
 
 /**
  * Decodes a compact VLQ map back into raw mapping tuples — the inverse of
- * `vlqMapFromTuples`, reusing Metro's existing source-map consumer.
+ * `vlqMapFromTuples`.
  */
 function decodeVlqMap(vlqMap: VlqMap): Array<MetroSourceMapSegmentTuple> {
-  return toBabelSegments({
-    version: 3,
-    sources: [''],
-    names: [...vlqMap.names],
-    mappings: vlqMap.mappings,
-  }).map(toSegmentTuple);
+  return tuplesFromBabelDecodedMap({
+    mappings: decodeMappings(vlqMap.mappings),
+    names: vlqMap.names,
+  });
 }
 
 /**
  * Encodes raw mapping tuples into a compact VLQ `mappings` string + `names`
- * table. Decode the inverse via `decodeVlqMap` (or `toBabelSegments` +
- * `toSegmentTuple`). Storing maps in this form uses far less memory than the
- * equivalent decoded tuple arrays.
+ * table. Decode the inverse via `decodeVlqMap`. Storing maps in this form uses
+ * far less memory than the equivalent decoded tuple arrays.
  */
 function vlqMapFromTuples(
   mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
@@ -611,9 +536,6 @@ export {
   functionMapBabelPlugin,
   isVlqMap,
   normalizeSourcePath,
-  toBabelSegments,
-  toSegmentTuple,
-  tuplesFromBabelDecodedMap,
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 };
