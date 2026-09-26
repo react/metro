@@ -329,6 +329,40 @@ describe('composeSourceMaps', () => {
     `);
   });
 
+  test('composes a last map with multi-line sections at a column offset', () => {
+    const indexedMap: IndexMap = {
+      version: 3,
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {version: 3, names: [], sources: ['a.js'], mappings: 'AAAA'},
+        },
+        {
+          offset: {line: 0, column: 4},
+          map: {
+            version: 3,
+            names: [],
+            sources: ['b.js'],
+            mappings: 'CAAA;AACA',
+          },
+        },
+      ],
+    };
+    const composed = new Consumer(composeSourceMaps([indexedMap]));
+    const indexed = new Consumer(indexedMap);
+    for (const [line, column] of [
+      [1, 0],
+      [1, 4],
+      [1, 5],
+      [2, 0],
+    ]) {
+      const position = {line: add1(line - 1), column: add0(column)};
+      expect(composed.originalPositionFor(position)).toEqual(
+        indexed.originalPositionFor(position),
+      );
+    }
+  });
+
   test('Propagate x_hermes_function_offsets', () => {
     const map1 = {
       version: 3,
