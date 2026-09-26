@@ -549,6 +549,8 @@ Type: `string` (default: `'metro-minify-terser'`)
 
 Path, or package name resolvable from `metro-transform-worker`, to the minifier that minifies the code after transformation.
 
+The minifier is called with `{code, map, filename, reserved, config}`, where `map` is the source map of `code` and `config` is [`minifierConfig`](#minifierconfig). It returns, or resolves to, `{code, decodedMap}`, where `decodedMap` is the source map of the minified code, composed with `map`, in decoded form: `{mappings, names}`, with `mappings` as an array of segment arrays per line, as [`@jridgewell/sourcemap-codec`](https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec)'s `decode` returns them.
+
 #### `minifierConfig`
 
 Type: `{[key: string]: mixed}`
