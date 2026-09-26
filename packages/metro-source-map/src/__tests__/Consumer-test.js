@@ -133,6 +133,33 @@ describe('basic maps', () => {
         }
       `);
     });
+
+    test('a column before the first mapping on its line is unmapped', () => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings: 'AAAA;KAAC',
+        names: [],
+        sources: ['source0'],
+      });
+      expect(
+        consumer.originalPositionFor({line: add1(1), column: add0(4)}),
+      ).toEqual({source: null, name: null, line: null, column: null});
+      expect(
+        consumer.originalPositionFor({line: add1(1), column: add0(5)}),
+      ).toEqual({source: 'source0', name: null, line: 1, column: 1});
+    });
+
+    test('mappings at the same generated column resolve to the last', () => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings: 'AAAA,AACA',
+        names: [],
+        sources: ['source0'],
+      });
+      expect(
+        consumer.originalPositionFor({line: add1(0), column: add0(0)}),
+      ).toEqual({source: 'source0', name: null, line: 2, column: 0});
+    });
   });
 
   describe('generatedMappings()', () => {
