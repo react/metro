@@ -217,6 +217,64 @@ describe('basic maps', () => {
         ]
       `);
     });
+
+    test('multi-digit and negative deltas, empty segments and lines', () => {
+      expect([
+        ...new Consumer({
+          version: 3,
+          mappings: 'AAAU,gBCoBHC,,w+B;;KDjBg9D',
+          names: ['name0', 'name1'],
+          sources: ['source0', 'source1'],
+        }).generatedMappings(),
+      ]).toEqual([
+        {
+          generatedLine: 1,
+          generatedColumn: 0,
+          source: 'source0',
+          name: null,
+          originalLine: 1,
+          originalColumn: 10,
+        },
+        {
+          generatedLine: 1,
+          generatedColumn: 16,
+          source: 'source1',
+          name: 'name1',
+          originalLine: 21,
+          originalColumn: 7,
+        },
+        {
+          generatedLine: 1,
+          generatedColumn: 1016,
+          source: null,
+          name: null,
+          originalLine: null,
+          originalColumn: null,
+        },
+        {
+          generatedLine: 3,
+          generatedColumn: 5,
+          source: 'source0',
+          name: null,
+          originalLine: 4,
+          originalColumn: 2007,
+        },
+      ]);
+    });
+
+    test.each([
+      ['AA', 'Invalid original line delta'],
+      ['AAAA,AAA', 'Invalid original column delta'],
+      ['AAAA,A!AA', undefined],
+    ])('throws on malformed mappings %s', (mappings, message) => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings,
+        names: [],
+        sources: ['source0'],
+      });
+      expect(() => [...consumer.generatedMappings()]).toThrow(message);
+    });
   });
 
   describe('sourceContentFor', () => {
