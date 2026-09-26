@@ -45,12 +45,23 @@ export default function composeSourceMaps(
     file: consumers[0].file,
   });
 
+  const earlierConsumers = consumers.slice(1);
   consumers[0].eachMapping(mapping => {
-    const original = findOriginalPosition(
-      consumers,
-      mapping.generatedLine,
-      mapping.generatedColumn,
-    );
+    const original =
+      mapping.originalLine == null || mapping.originalColumn == null
+        ? {line: null, column: null, source: null, name: null}
+        : earlierConsumers.length === 0
+          ? {
+              line: mapping.originalLine,
+              column: mapping.originalColumn,
+              source: mapping.source,
+              name: mapping.name,
+            }
+          : findOriginalPosition(
+              earlierConsumers,
+              mapping.originalLine,
+              mapping.originalColumn,
+            );
     generator.addMapping({
       generated: {
         line: mapping.generatedLine,
