@@ -47,7 +47,7 @@ export default class B64Builder {
       return this;
     }
     this.hasSegment = false;
-    if (this.pos + n >= this.buffer.length) {
+    while (this.pos + n >= this.buffer.length) {
       this._realloc();
     }
     while (n--) {
