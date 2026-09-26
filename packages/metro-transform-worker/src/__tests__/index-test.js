@@ -12,14 +12,17 @@
 'use strict';
 
 jest
-  .mock('../utils/getMinifier', () => () => ({code, map, config}) => {
-    const trimmed = config.output.comments
-      ? code
-      : code.replace('/*#__PURE__*/', '');
-    return {
-      code: trimmed.replace('arbitrary(code)', 'minified(code)'),
-      map,
-    };
+  .mock('../utils/getMinifier', () => {
+    const minifier = jest.fn(({code, map, config}) => {
+      const trimmed = config.output.comments
+        ? code
+        : code.replace('/*#__PURE__*/', '');
+      return {
+        code: trimmed.replace('arbitrary(code)', 'minified(code)'),
+        map,
+      };
+    });
+    return () => minifier;
   })
   .mock('metro-transform-plugins', () => ({
     ...jest.requireActual('metro-transform-plugins'),
@@ -32,6 +35,7 @@ import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
 import typeof FSType from 'node:fs';
 
+const {vlqMapFromBabelDecodedMap} = require('metro-source-map');
 const {Buffer} = require('node:buffer');
 const path = require('node:path');
 
@@ -433,7 +437,7 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
     source,
     {...baseTransformOptions, experimentalImportSupport: true},
   );
-  // Minified path re-encodes the minifier's tuple output to VLQ.
+  // Minified path encodes VLQ from the minifier's decoded map.
   const minifiedResult = await Transformer.transform(
     baseConfig,
     '/root',
@@ -453,6 +457,32 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
     expect(map.mappings.length).toBeGreaterThan(0);
     expect(Array.isArray(map.names)).toBe(true);
   }
+});
+
+test("uses the minifier's decoded map, if it has one, without reading `map`", async () => {
+  const decodedMap = {mappings: [[[0, 0, 0, 0, 0]]], names: ['arbitrary']};
+  jest
+    .requireMock('../utils/getMinifier')()
+    .mockImplementationOnce(() => ({
+      code: 'minified(code);',
+      decodedMap,
+      // flowlint-next-line unsafe-getters-setters:off
+      get map() {
+        throw new Error('Expected the decoded map to be used');
+      },
+    }));
+
+  const result = await Transformer.transform(
+    baseConfig,
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code);', 'utf8'),
+    {...baseTransformOptions, dev: false, minify: true},
+  );
+
+  expect(result.output[0].data.map).toEqual(
+    vlqMapFromBabelDecodedMap(decodedMap, [1, 'minified(code);'.length]),
+  );
 });
 
 test('throws if the reserved dependency map name appears in the input', async () => {

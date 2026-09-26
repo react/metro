@@ -110,5 +110,21 @@ declare module 'terser' {
   declare function minify(
     code: _Input,
     options: {..._Options, sourceMap: _SourceMapOptions, ...},
-  ): _Error | {..._Result, map: string};
+  ):
+    | _Error
+    | {
+        ..._Result,
+        map: string,
+        decoded_map?: ?{
+          mappings: Array<
+            Array<
+              | [number]
+              | [number, number, number, number]
+              | [number, number, number, number, number],
+            >,
+          >,
+          names: Array<string>,
+          ...
+        },
+      };
 }
