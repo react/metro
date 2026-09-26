@@ -42,7 +42,6 @@ import {transformFromAstSync} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
-import {decode as decodeMappings} from '@jridgewell/sourcemap-codec';
 import {stableHash} from 'metro-cache';
 import {getCacheKey as metroGetCacheKey} from 'metro-cache-key';
 import {
@@ -76,11 +75,6 @@ export type MinifierOptions = {
 
 export type MinifierResult = {
   code: string,
-  /**
-   * @deprecated Return `decodedMap` instead. Only read if `decodedMap` is
-   * missing, and will be removed.
-   */
-  map?: BasicSourceMap,
   // The minified code's source map, decoded, composed with the input `map`.
   decodedMap?: ?BabelDecodedMap,
   ...
@@ -233,7 +227,7 @@ const minifyCode = async (
       code: minified.code,
       lineCount,
       map: vlqMapFromBabelDecodedMap(
-        getDecodedMap(minified) ?? {mappings: [], names: []},
+        minified.decodedMap ?? {mappings: [], names: []},
         [lineCount, lastLineColumn],
       ),
     };
@@ -247,18 +241,6 @@ const minifyCode = async (
     throw error;
   }
 };
-
-// A minifier may return its map already decoded, which saves decoding it here.
-function getDecodedMap(minified: MinifierResult): ?BabelDecodedMap {
-  if (minified.decodedMap != null) {
-    return minified.decodedMap;
-  }
-  const {map} = minified;
-  if (map != null) {
-    return {mappings: decodeMappings(map.mappings), names: map.names};
-  }
-  return null;
-}
 
 const disabledDependencyTransformer: DependencyTransformer = {
   transformIllegalDynamicRequire: () => void 0,
