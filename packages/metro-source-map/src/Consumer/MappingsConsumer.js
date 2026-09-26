@@ -140,7 +140,6 @@ export default class MappingsConsumer
         originalColumnDelta,
         nameIndexDelta,
       ] = decodedVlqValues;
-      decodeVlq(mappingRaw);
       invariant(generatedColumnDelta != null, 'Invalid generated column delta');
       generatedColumn = add(generatedColumn, generatedColumnDelta);
       const mapping: {...Mapping, ...} = {
