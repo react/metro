@@ -27,9 +27,8 @@ import {
   lookupBiasToString,
 } from './constants';
 import normalizeSourcePath from './normalizeSourcePath';
-import {greatestLowerBound} from './search';
 import invariant from 'invariant';
-import {add, add0, get0, inc, sub} from 'ob1';
+import {add, add0, get0, get1, inc} from 'ob1';
 
 /* eslint-disable no-bitwise */
 
@@ -58,12 +57,16 @@ export default class MappingsConsumer
 {
   _sourceMap: BasicSourceMap;
   _decodedMappings: ?ReadonlyArray<Mapping>;
+  // The index in `_decodedMappings` of the first mapping on each generated
+  // line (0-based), so a lookup only searches the mappings on its line.
+  _lineStarts: ?ReadonlyArray<number>;
   _normalizedSources: ?ReadonlyArray<string>;
 
   constructor(sourceMap: BasicSourceMap) {
     super(sourceMap);
     this._sourceMap = sourceMap;
     this._decodedMappings = null;
+    this._lineStarts = null;
     this._normalizedSources = null;
   }
 
@@ -84,21 +87,27 @@ export default class MappingsConsumer
       );
     }
     const mappings = this._decodeAndCacheMappings();
-    const index = greatestLowerBound(
-      mappings,
-      {line, column},
-      (position, mapping) => {
-        if (position.line === mapping.generatedLine) {
-          return get0(sub(position.column, mapping.generatedColumn));
-        }
-        return get0(sub(position.line, mapping.generatedLine));
-      },
-    );
-    if (
-      index != null &&
-      mappings[index].generatedLine === generatedPosition.line
-    ) {
-      const mapping = mappings[index];
+    const lineStarts = this._lineStarts;
+    invariant(lineStarts != null, 'Expected line starts to be decoded');
+    const line0 = get1(line) - 1;
+    if (line0 < 0 || line0 >= lineStarts.length) {
+      return {...EMPTY_POSITION};
+    }
+    // The last mapping on the line at or before `column`.
+    let low = lineStarts[line0];
+    let high =
+      line0 + 1 < lineStarts.length ? lineStarts[line0 + 1] : mappings.length;
+    const lineStart = low;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (get0(mappings[mid].generatedColumn) <= get0(column)) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low > lineStart) {
+      const mapping = mappings[low - 1];
       return {
         source: mapping.source,
         name: mapping.name,
@@ -113,6 +122,7 @@ export default class MappingsConsumer
     const normalizedSources = this._normalizeAndCacheSources();
     const {mappings: mappingsRaw, names} = this._sourceMap;
     const result: Array<Mapping> = [];
+    const lineStarts = [0];
 
     let generatedLine = FIRST_LINE;
     let generatedColumn = FIRST_COLUMN;
@@ -170,6 +180,7 @@ export default class MappingsConsumer
           fieldCount = 0;
         }
         if (charCode === SEMICOLON && i < length) {
+          lineStarts.push(result.length);
           generatedLine = inc(generatedLine);
           generatedColumn = FIRST_COLUMN;
         }
@@ -191,6 +202,7 @@ export default class MappingsConsumer
         shift = 0;
       }
     }
+    this._lineStarts = lineStarts;
     return result;
   }
 
