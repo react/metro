@@ -151,6 +151,7 @@ export default class Transformer {
 
     let fullKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
     let result;
+    let invalidCacheHit = false;
     try {
       result = await cache.get(fullKey);
     } catch (error) {
@@ -159,6 +160,14 @@ export default class Transformer {
         error,
       });
       throw error;
+    }
+
+    if (
+      result != null &&
+      (!Array.isArray(result.dependencies) || !Array.isArray(result.output))
+    ) {
+      result = null;
+      invalidCacheHit = true;
     }
 
     // A valid result from the cache is used directly; otherwise we call into
@@ -177,7 +186,7 @@ export default class Transformer {
     // Only re-compute the full key if the SHA-1 changed. This is because
     // references are used by the cache implementation in a weak map to keep
     // track of the cache that returned the result.
-    if (sha1 !== data.sha1) {
+    if (sha1 !== data.sha1 || invalidCacheHit) {
       fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
     }
 

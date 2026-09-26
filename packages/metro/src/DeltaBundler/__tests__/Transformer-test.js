@@ -61,6 +61,7 @@ describe('Transformer', function () {
     fs.writeFileSync('/path/to/transformer.js', '');
 
     require('../getTransformCacheKey').mockClear();
+    require('../WorkerFarm').default.prototype.transform.mockClear();
   });
 
   test('uses new cache layers when transforming if requested to do so', async () => {
@@ -103,6 +104,36 @@ describe('Transformer', function () {
     expect(get.mock.calls[0][0].toString('hex').substr(0, 32)).toBe(
       set.mock.calls[0][0].toString('hex').substr(0, 32),
     );
+  });
+
+  test('treats invalid cached transform results as misses', async () => {
+    const get = jest.fn().mockReturnValue(Buffer.alloc(16));
+    const set = jest.fn();
+    const result = {dependencies: [], output: []};
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set}],
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    require('../WorkerFarm').default.prototype.transform.mockReturnValue({
+      sha1: '0123456789012345678901234567890123456789',
+      result,
+    });
+
+    await expect(
+      transformerInstance.transformFile('./foo.js', {}),
+    ).resolves.toMatchObject(result);
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(
+      require('../WorkerFarm').default.prototype.transform,
+    ).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledTimes(1);
   });
 
   test('logs cache read errors to reporter', async () => {
