@@ -29,13 +29,16 @@ const MockDependencyGraph: ClassMock = DependencyGraph;
 describe('Bundler', () => {
   let config: ConfigT;
   let reporter;
+  let depGraphEnd;
 
   beforeEach(() => {
     reporter = {update: jest.fn()};
     config = {...getDefaultConfig.getDefaultValues('/'), reporter};
 
+    depGraphEnd = jest.fn().mockResolvedValue();
     MockDependencyGraph.mockImplementation(() => ({
       ready: jest.fn().mockResolvedValue(),
+      end: depGraphEnd,
     }));
 
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -69,6 +72,42 @@ describe('Bundler', () => {
       });
     },
   );
+
+  test('ends the dependency graph when Transformer initialization fails', async () => {
+    MockTransformer.mockImplementation(() => {
+      throw new Error('Transformer initialization failed');
+    });
+
+    const bundler = new Bundler(config);
+
+    await expect(bundler.end()).resolves.toBeUndefined();
+    expect(depGraphEnd).toHaveBeenCalledTimes(1);
+  });
+
+  test('ends the Transformer and dependency graph after initialization', async () => {
+    const transformerEnd = jest.fn().mockResolvedValue();
+    MockTransformer.mockImplementation(() => ({end: transformerEnd}));
+
+    const bundler = new Bundler(config);
+    await bundler.ready();
+    await bundler.end();
+
+    expect(transformerEnd).toHaveBeenCalledTimes(1);
+    expect(depGraphEnd).toHaveBeenCalledTimes(1);
+  });
+
+  test('ends the dependency graph when ending the Transformer fails', async () => {
+    const error = new Error('Farm is ended');
+    MockTransformer.mockImplementation(() => ({
+      end: jest.fn().mockRejectedValue(error),
+    }));
+
+    const bundler = new Bundler(config);
+    await bundler.ready();
+
+    await expect(bundler.end()).rejects.toBe(error);
+    expect(depGraphEnd).toHaveBeenCalledTimes(1);
+  });
 
   test('does not emit an unhandled rejection before ready is called', async () => {
     jest.useRealTimers();
