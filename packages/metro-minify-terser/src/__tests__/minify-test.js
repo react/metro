@@ -98,4 +98,32 @@ describe('Minification:', () => {
     const result = await minify({...baseOptions, filename});
     expect(result.map).toEqual({...map, sources: [filename]});
   });
+
+  test('returns the decoded map from terser, and encodes `map` only on request', async () => {
+    let encodeCount = 0;
+    /* $FlowFixMe[incompatible-type] The mocked `minify` result isn't typed as
+     * Terser's. */
+    terser.minify.mockResolvedValue({
+      code: '',
+      decoded_map: {...map, names: ['name0'], mappings: [[[0, 0, 0, 0, 0]]]},
+      // flowlint-next-line unsafe-getters-setters:off
+      get map() {
+        encodeCount++;
+        return JSON.stringify({...map, names: ['name0'], mappings: 'AAAAA'});
+      },
+    });
+    const result = await minify({...baseOptions, filename});
+    expect(result.decodedMap).toEqual({
+      names: ['name0'],
+      mappings: [[[0, 0, 0, 0, 0]]],
+    });
+    expect(encodeCount).toBe(0);
+    expect(result.map).toEqual({
+      ...map,
+      names: ['name0'],
+      mappings: 'AAAAA',
+      sources: [filename],
+    });
+    expect(encodeCount).toBe(1);
+  });
 });
