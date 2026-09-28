@@ -4,4 +4,25 @@
 
 ```ts
 
+import type $$IMPORT_TYPEOF_1$$ from '@babel/traverse';
+import type * as $$IMPORT_TYPEOF_1$$_2 from '@babel/core';
+import type * as $$IMPORT_TYPEOF_2$$ from '@babel/types';
+import type {Node as Node_2} from '@babel/types';
+import type {PluginObj} from '@babel/core';
+import type {SourceLocation} from '@babel/types';
+import type {Statement} from '@babel/types';
+
+export interface TransformPlugins {
+  addParamsToDefineCall(code: string, ...params: unknown[]): string;
+  constantFoldingPlugin: typeof constantFoldingPlugin;
+  getTransformPluginCacheKeyFiles(): ReadonlyArray<string>;
+  importExportPlugin: typeof importExportPlugin;
+  inlinePlugin: typeof inlinePlugin;
+  inlineRequiresPlugin: typeof $$EXPORT_DEFAULT_DECLARATION$$;
+  normalizePseudoGlobals: typeof normalizePseudoglobals;
+}
+
+const transformPlugins: TransformPlugins;
+export default transformPlugins;
+
 ```
