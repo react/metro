@@ -182,7 +182,7 @@ export default class MappingsConsumer
         shift = shift + VLQ_BASE_SHIFT;
       } else {
         const negate = value & 1;
-        value = value >> 1;
+        value = value >>> 1;
         if (fieldCount < 5) {
           fields[fieldCount] = negate ? -value : value;
         }
