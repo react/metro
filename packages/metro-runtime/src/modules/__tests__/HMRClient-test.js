@@ -29,7 +29,7 @@ beforeEach(() => {
   global.globalEvalWithSourceUrl = (code, sourceURL) => {
     evaledCode += '\n/* ' + sourceURL + ' */\n  ' + code;
   };
-  global.WebSocket = jest.fn(() => {
+  const MockWebSocket = jest.fn(() => {
     mockSocket = {
       onerror: jest.fn(),
       onmessage: jest.fn(),
@@ -51,10 +51,11 @@ beforeEach(() => {
     };
     return mockSocket;
   });
+  jest.spyOn(global, 'WebSocket', 'get').mockReturnValue(MockWebSocket);
 });
 
 afterEach(() => {
-  delete global.WebSocket;
+  jest.restoreAllMocks();
   delete global.globalEvalWithSourceUrl;
 });
 

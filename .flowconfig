@@ -10,7 +10,7 @@ packages/*/build/**
 
 [options]
 emoji=true
-builtin_lib=core-only
+builtin_lib=flowlib-with-lib-dom-d-ts
 format.bracket_spacing=false
 
 munge_underscores=true

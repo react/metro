@@ -213,7 +213,7 @@ declare module 'buffer' {
 
   declare function isAscii(input: Buffer | ArrayBuffer | $TypedArray): boolean;
 
-  declare function resolveObjectURL(id: string): Blob | void;
+  declare function resolveObjectURL(id: string): globalThis.Blob | void;
 
   declare var Buffer: Node$Buffer;
   declare var Blob: typeof globalThis.Blob;
@@ -3756,7 +3756,6 @@ declare class stream$Duplex extends stream$Readable mixins stream$Writable {
   // with Readable's, which Flow doesn't like.
   // See https://nodejs.org/api/stream.html#stream_class_stream_duplex_1
 
-  // $FlowFixMe[incompatible-exact] See above
   // $FlowFixMe[incompatible-type] See above
   static fromWeb(
     pair: Readonly<{

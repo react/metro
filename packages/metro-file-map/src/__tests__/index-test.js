@@ -894,6 +894,7 @@ describe('FileMap', () => {
       buildNewFileMap(
         {},
         {
+          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -901,6 +902,7 @@ describe('FileMap', () => {
           failValidationOnConflicts: true,
         },
         {
+          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -925,7 +927,6 @@ describe('FileMap', () => {
     );
 
     expect(
-      // $FlowFixMe[prop-missing]
       console.warn.mock.calls[0][0].replaceAll('\\', '/'),
     ).toMatchSnapshot();
   });
@@ -1589,7 +1590,6 @@ describe('FileMap', () => {
       }),
     );
 
-    // $FlowFixMe[prop-missing]
     expect(console.warn.mock.calls[0][0]).toMatchSnapshot();
   });
 
@@ -2439,7 +2439,6 @@ describe('FileMap', () => {
             metadata: MOCK_CHANGE_FILE,
           });
           await new Promise((resolve, reject) => {
-            // $FlowFixMe[prop-missing]
             console.error.mockImplementationOnce(() => {
               reject(new Error('should not print error'));
             });
