@@ -329,6 +329,7 @@ export interface FileSystem {
     removedFiles: Set<string>,
   };
   getSerializableSnapshot(): CacheData['fileSystemData'];
+  getMtimeByNormalPath(file: Path): ?number;
   getSha1(file: Path): ?string;
   getOrComputeSha1(file: Path): Promise<?{sha1: string, content?: Buffer}>;
 

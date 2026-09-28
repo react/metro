@@ -72,44 +72,55 @@ function oneOf(this: $FlowFixMe, actual: unknown, ...expectOneOf: unknown[]) {
  * https://fburl.com/gdoc/y8dn025u */
 expect.extend({oneOf});
 
-const CASES = [
-  [
-    true,
-    new Map([
-      ['foo.js', [expect.any(Number), 245, 0, null, 0, null]],
-      [
-        join('directory', 'bar.js'),
-        [expect.any(Number), 245, 0, null, 0, null],
-      ],
-      [
-        'link-to-directory',
-        [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory'), null],
-      ],
-      [
-        'link-to-foo.js',
-        [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js'), null],
-      ],
-    ]),
-  ],
-  [
-    false,
-    new Map([
-      [
-        join('directory', 'bar.js'),
-        [expect.any(Number), 245, 0, null, 0, null],
-      ],
-      ['foo.js', [expect.any(Number), 245, 0, null, 0, null]],
-    ]),
-  ],
-];
+function getCases(skipsStat: boolean) {
+  const fileEntry = skipsStat
+    ? [null, 0, 0, null, 0, null]
+    : [expect.any(Number), 245, 0, null, 0, null];
+  return [
+    [
+      true,
+      new Map([
+        ['foo.js', fileEntry],
+        [join('directory', 'bar.js'), fileEntry],
+        [
+          'link-to-directory',
+          skipsStat
+            ? [null, 0, 0, null, 1, null]
+            : [
+                expect.any(Number),
+                9,
+                0,
+                null,
+                expect.oneOf(1, 'directory'),
+                null,
+              ],
+        ],
+        [
+          'link-to-foo.js',
+          skipsStat
+            ? [null, 0, 0, null, 1, null]
+            : [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js'), null],
+        ],
+      ]),
+    ],
+    [
+      false,
+      new Map([
+        [join('directory', 'bar.js'), fileEntry],
+        ['foo.js', fileEntry],
+      ]),
+    ],
+  ];
+}
 
 describe.each(Object.keys(CRAWLERS))(
   'Crawler integration tests (%s)',
   crawlerName => {
     const crawl = CRAWLERS[crawlerName];
     const maybeTest = crawl ? test : test.skip;
+    const skipsStat = crawlerName === 'node-recursive';
 
-    maybeTest.each(CASES)(
+    maybeTest.each(getCases(skipsStat))(
       'Finds the expected files (includeSymlinks: %s)',
       async (includeSymlinks, expectedChangedFiles) => {
         invariant(crawl, 'crawl should not be null within maybeTest');

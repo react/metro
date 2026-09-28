@@ -139,6 +139,7 @@ interface FileSystem_2 {
       subpath?: string | undefined;
     }>,
   ): {changedFiles: FileData; removedFiles: Set<string>};
+  getMtimeByNormalPath(file: Path): null | undefined | number;
   getOrComputeSha1(file: Path): Promise<null | undefined | {sha1: string; content?: Buffer | undefined}>;
   getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): null | undefined | string;

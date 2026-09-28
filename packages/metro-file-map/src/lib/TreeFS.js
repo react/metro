@@ -21,9 +21,11 @@ import type {
 } from '../flow-types';
 
 import H from '../constants';
+import normalizePathSeparatorsToPosix from './normalizePathSeparatorsToPosix';
 import normalizePathSeparatorsToSystem from './normalizePathSeparatorsToSystem';
 import {RootPathUtils} from './RootPathUtils';
 import invariant from 'invariant';
+import fs from 'node:fs';
 import path from 'node:path';
 
 type DirectoryNode = Map<string, MixedNode>;
@@ -203,11 +205,16 @@ export default class TreeFS implements MutableFileSystem {
         }
         if (
           newMetadata[H.MTIME] != null &&
-          // TODO: Remove when mtime is null if not populated
-          newMetadata[H.MTIME] != 0 &&
+          newMetadata[H.MTIME] !== 0 &&
           newMetadata[H.MTIME] === metadata[H.MTIME]
         ) {
           // Types and modified time match - not changed.
+          changedFiles.delete(canonicalPath);
+        } else if (
+          (newMetadata[H.MTIME] == null || newMetadata[H.MTIME] === 0) &&
+          (metadata[H.MTIME] == null || metadata[H.MTIME] === 0)
+        ) {
+          // If file is still untouched then mark it as unchanged
           changedFiles.delete(canonicalPath);
         } else if (
           newMetadata[H.SHA1] != null &&
@@ -229,6 +236,15 @@ export default class TreeFS implements MutableFileSystem {
     };
   }
 
+  getMtimeByNormalPath(normalPath: Path): ?number {
+    const result = this.#lookupByNormalPath(normalPath, {
+      followLeaf: false,
+    });
+    return result.exists && !isDirectory(result.node)
+      ? result.node[H.MTIME]
+      : null;
+  }
+
   getSha1(mixedPath: Path): ?string {
     const fileMetadata = this.#getFileData(mixedPath);
     return (fileMetadata && fileMetadata[H.SHA1]) ?? null;
@@ -245,6 +261,18 @@ export default class TreeFS implements MutableFileSystem {
       return null;
     }
     const {canonicalPath, node: fileMetadata} = result;
+
+    // Populate mtime and size on demand
+    if (fileMetadata[H.MTIME] == null || fileMetadata[H.MTIME] === 0) {
+      fileMetadata[H.SHA1] = null;
+      const absolutePath = this.#pathUtils.normalToAbsolute(canonicalPath);
+      try {
+        const stat = await fs.promises.lstat(absolutePath);
+        const diskMtime = stat.mtime.getTime();
+        fileMetadata[H.MTIME] = diskMtime;
+        fileMetadata[H.SIZE] = stat.size;
+      } catch {}
+    }
 
     // Empty strings
     const existing = fileMetadata[H.SHA1];
@@ -722,8 +750,19 @@ export default class TreeFS implements MutableFileSystem {
 
         // Symlink in a directory path. Targets are stored already lexically
         // resolved to a normal path, with POSIX separators so that the
-        // snapshot is portable between operating systems.
-        const storedSymlinkTarget = segmentNode[H.SYMLINK];
+        // snapshot is portable between operating systems. A symlink crawled
+        // without an lstat has no target yet (1), and is read now.
+        const storedSymlinkTarget =
+          segmentNode[H.SYMLINK] === 1
+            ? this.#readSymlinkTarget(segmentNode, currentPath)
+            : segmentNode[H.SYMLINK];
+        if (storedSymlinkTarget == null) {
+          return {
+            canonicalMissingPath: currentPath,
+            exists: false,
+            missingSegmentName: segmentName,
+          };
+        }
         invariant(
           typeof storedSymlinkTarget === 'string',
           'Expected symlink target to be populated.',
@@ -1213,6 +1252,32 @@ export default class TreeFS implements MutableFileSystem {
         );
       }
     }
+  }
+
+  // Reads a symlink whose target was not read when its node was populated,
+  // and stores the target in the same form as FileMap does when it reads a
+  // link eagerly. Returns null if the link can't be read.
+  #readSymlinkTarget(
+    symlinkNode: FileMetadata,
+    canonicalPathOfSymlink: Path,
+  ): ?string {
+    let readlinkResult;
+    try {
+      readlinkResult = fs.readlinkSync(
+        this.#pathUtils.normalToAbsolute(canonicalPathOfSymlink),
+      );
+    } catch {
+      return null;
+    }
+    const storedTarget = normalizePathSeparatorsToPosix(
+      this.#pathUtils.resolveSymlinkToNormal(
+        canonicalPathOfSymlink,
+        readlinkResult,
+      ),
+    );
+    symlinkNode[H.SYMLINK] = storedTarget;
+    symlinkNode[H.VISITED] = 1;
+    return storedTarget;
   }
 
   #getFileData(
