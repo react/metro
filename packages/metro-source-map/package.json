@@ -20,6 +20,7 @@
   "dependencies": {
     "@babel/traverse": "^7.29.0",
     "@babel/types": "^7.29.8",
+    "@jridgewell/sourcemap-codec": "^1.5.0",
     "flow-enums-runtime": "^0.0.6",
     "invariant": "^2.2.4",
     "metro-symbolicate": "0.87.1",

@@ -74,7 +74,6 @@ export type MinifierOptions = {
 
 export type MinifierResult = {
   code: string;
-  map?: BasicSourceMap | undefined;
   decodedMap?: null | undefined | BabelDecodedMap;
 };
 

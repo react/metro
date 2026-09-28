@@ -87,8 +87,9 @@ const GLO: MinifierOptions = {
 test('parallel calls do not clobber each other', async () => {
   const [barResult, gloResult] = await Promise.all([minify(BAR), minify(GLO)]);
 
-  const barMap = barResult.map;
-  const gloMap = gloResult.map;
+  const barMap = barResult.decodedMap;
+  const gloMap = gloResult.decodedMap;
 
+  expect(barMap).not.toBeNull();
   expect(gloMap).not.toEqual(barMap);
 });
