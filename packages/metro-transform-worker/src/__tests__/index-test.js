@@ -13,13 +13,19 @@
 
 jest
   .mock('../utils/getMinifier', () => {
+    const {decode} = jest.requireActual<MockSourcemapCodec>(
+      '@jridgewell/sourcemap-codec',
+    );
     const minifier = jest.fn(({code, map, config}) => {
       const trimmed = config.output.comments
         ? code
         : code.replace('/*#__PURE__*/', '');
       return {
         code: trimmed.replace('arbitrary(code)', 'minified(code)'),
-        map,
+        decodedMap:
+          map == null
+            ? null
+            : {mappings: decode(map.mappings), names: map.names},
       };
     });
     return () => minifier;
@@ -33,6 +39,7 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
+import typeof * as MockSourcemapCodec from '@jridgewell/sourcemap-codec';
 import typeof FSType from 'node:fs';
 
 const {vlqMapFromBabelDecodedMap} = require('metro-source-map');
@@ -459,18 +466,11 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
   }
 });
 
-test("uses the minifier's decoded map, if it has one, without reading `map`", async () => {
+test("encodes the minifier's decoded map as the module's map", async () => {
   const decodedMap = {mappings: [[[0, 0, 0, 0, 0]]], names: ['arbitrary']};
   jest
     .requireMock('../utils/getMinifier')()
-    .mockImplementationOnce(() => ({
-      code: 'minified(code);',
-      decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
-      get map() {
-        throw new Error('Expected the decoded map to be used');
-      },
-    }));
+    .mockImplementationOnce(() => ({code: 'minified(code);', decodedMap}));
 
   const result = await Transformer.transform(
     baseConfig,

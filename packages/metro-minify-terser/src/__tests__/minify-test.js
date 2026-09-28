@@ -90,34 +90,17 @@ describe('Minification:', () => {
     expect(result.code).toBe(code);
   });
 
-  test('parses the source map object provided by terser and sets the sources property', async () => {
-    /* $FlowFixMe[incompatible-type](>=0.99.0 site=react_native_fb) This comment suppresses an
-     * error found when Flow v0.99 was deployed. To see the error, delete this
-     * comment and run Flow. */
-    terser.minify.mockResolvedValue({map: JSON.stringify(map), code: ''});
-    const result = await minify({...baseOptions, filename});
-    expect(result.map).toEqual({...map, sources: [filename]});
-  });
-
-  test('returns the decoded source map provided by terser, and encodes `map` only when read', async () => {
-    const decodedMap = {...map, mappings: [[[0, 0, 0, 0]]]};
-    let encodeCount = 0;
+  test('returns the decoded source map provided by terser', async () => {
     /* $FlowFixMe[incompatible-type] The mocked `minify` result isn't typed as
      * Terser's. */
     terser.minify.mockResolvedValue({
       code: '',
-      decoded_map: decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
-      get map() {
-        encodeCount++;
-        return JSON.stringify(map);
-      },
+      decoded_map: {...map, names: ['name0'], mappings: [[[0, 0, 0, 0, 0]]]},
     });
     const result = await minify({...baseOptions, filename});
-    expect(result.decodedMap).toEqual(decodedMap);
-    expect(encodeCount).toBe(0);
-    expect(result.map).toEqual({...map, sources: [filename]});
-    expect(result.map).toBe(result.map);
-    expect(encodeCount).toBe(1);
+    expect(result).toEqual({
+      code: '',
+      decodedMap: {names: ['name0'], mappings: [[[0, 0, 0, 0, 0]]]},
+    });
   });
 });
