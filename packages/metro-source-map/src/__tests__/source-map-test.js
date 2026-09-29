@@ -16,6 +16,7 @@ import type {
   MixedSourceMap,
 } from '../source-map';
 
+import Consumer from '../Consumer';
 import {greatestLowerBound} from '../Consumer/search';
 import Generator from '../Generator';
 import LineIndexedMappings from '../LineIndexedMappings';
@@ -23,38 +24,35 @@ import {
   fromRawMappings,
   fromRawMappingsIndexed,
   isVlqMap,
-  toBabelSegments,
-  toSegmentTuple,
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 } from '../source-map';
+import {get0, get1} from 'ob1';
 
-describe('flattening mappings / compacting', () => {
-  test('flattens simple mappings', () => {
-    expect(toSegmentTuple({generated: {line: 12, column: 34}})).toEqual([
-      12, 34,
-    ]);
+// Decodes a VLQ map to raw mapping tuples, the inverse of `vlqMapFromTuples`.
+function decodeTuples(vlqMap: {
+  readonly mappings: string,
+  readonly names: ReadonlyArray<string>,
+  ...
+}): Array<MetroSourceMapSegmentTuple> {
+  const consumer = new Consumer({
+    version: 3,
+    sources: [''],
+    names: [...vlqMap.names],
+    mappings: vlqMap.mappings,
   });
-
-  test('flattens mappings with a source location', () => {
-    expect(
-      toSegmentTuple({
-        generated: {column: 34, line: 12},
-        original: {column: 78, line: 56},
-      }),
-    ).toEqual([12, 34, 56, 78]);
+  return [...consumer.generatedMappings()].map(mapping => {
+    const line = get1(mapping.generatedLine);
+    const column = get0(mapping.generatedColumn);
+    const {originalLine, originalColumn, name} = mapping;
+    if (originalLine == null || originalColumn == null) {
+      return [line, column];
+    }
+    return name == null
+      ? [line, column, get1(originalLine), get0(originalColumn)]
+      : [line, column, get1(originalLine), get0(originalColumn), name];
   });
-
-  test('flattens mappings with a source location and a symbol name', () => {
-    expect(
-      toSegmentTuple({
-        generated: {column: 34, line: 12},
-        name: 'arbitrary',
-        original: {column: 78, line: 56},
-      }),
-    ).toEqual([12, 34, 56, 78, 'arbitrary']);
-  });
-});
+}
 
 describe('build map from raw mappings', () => {
   test('returns a `Generator` instance', () => {
@@ -116,19 +114,6 @@ describe('build map from raw mappings', () => {
       x_google_ignoreList: [1],
       version: 3,
     });
-  });
-
-  describe('convert a sourcemap into raw mappings', () => {
-    expect(
-      toBabelSegments({
-        mappings:
-          'E;;IAIMA;;;;QAII;;;;YAIIC;E;;ICEEC;;;;;;;;;;;Y;;cCAAA;;;;kBAI8F;;;;gHA8FID',
-        names: ['apples', 'pears', 'bananas'],
-        sources: ['path1', 'path2', 'path3'],
-        sourcesContent: ['code1', 'code2', 'code3'],
-        version: 3,
-      }),
-    ).toMatchSnapshot();
   });
 
   test('offsets the resulting source map by the provided offset argument', () => {
@@ -399,18 +384,7 @@ describe('fromRawMappingsIndexed', () => {
 });
 
 describe('vlqMapFromTuples', () => {
-  // Decode via Metro's existing string->tuples path, the inverse of
-  // vlqMapFromTuples.
-  const decode = (vlqMap: {
-    readonly mappings: string,
-    readonly names: ReadonlyArray<string>,
-  }) =>
-    toBabelSegments({
-      version: 3,
-      sources: [''],
-      names: [...vlqMap.names],
-      mappings: vlqMap.mappings,
-    }).map(toSegmentTuple);
+  const decode = decodeTuples;
 
   test('encodes tuples into a VlqMap', () => {
     const vlqMap = vlqMapFromTuples([
@@ -424,7 +398,7 @@ describe('vlqMapFromTuples', () => {
     expect(vlqMap.names).toEqual(['apples', 'pears']);
   });
 
-  test('round-trips via toBabelSegments + toSegmentTuple', () => {
+  test('round-trips via Consumer', () => {
     const tuples = [
       [1, 2],
       [3, 4, 5, 6, 'apples'],
@@ -498,7 +472,7 @@ describe('vlqMapFromBabelDecodedMap', () => {
 });
 
 describe('LineIndexedMappings', () => {
-  // Reference lookup: decode to tuples via toBabelSegments + toSegmentTuple,
+  // Reference lookup: decode to tuples via Consumer,
   // then greatestLowerBound over (generatedLine, generatedColumn), returning the
   // original position only when the matched segment is on the target line and
   // carries source info.
@@ -562,12 +536,7 @@ describe('LineIndexedMappings', () => {
       const tuples = cases[name];
       const vlqMap = vlqMapFromTuples(tuples);
       // The exact tuples the old path would have produced from this VLQ map.
-      const reference = toBabelSegments({
-        version: 3,
-        sources: [''],
-        names: [...vlqMap.names],
-        mappings: vlqMap.mappings,
-      }).map(toSegmentTuple);
+      const reference = decodeTuples(vlqMap);
 
       const decoded = new LineIndexedMappings(vlqMap.mappings);
 
