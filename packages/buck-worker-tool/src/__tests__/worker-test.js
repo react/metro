@@ -111,13 +111,14 @@ describe('Buck worker:', () => {
       writeFiles(files, '/');
     }
 
+    // The mocked fs is a posix memory fs on every platform.
     function writeFiles(files, dirPath) {
       for (const key in files) {
         const entry = files[key];
         if (entry == null || typeof entry === 'string') {
-          fs.writeFileSync(path.join(dirPath, key), entry || '');
+          fs.writeFileSync(path.posix.join(dirPath, key), entry || '');
         } else {
-          const subDirPath = path.join(dirPath, key);
+          const subDirPath = path.posix.join(dirPath, key);
           fs.mkdirSync(subDirPath, {recursive: true});
           writeFiles(entry, subDirPath);
         }

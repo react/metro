@@ -22,6 +22,7 @@ import type {InputConfigT} from 'metro-config';
 import ResourceNotFoundError from '../../IncrementalBundler/ResourceNotFoundError';
 import CountingSet from '../../lib/CountingSet';
 import {mergeConfig} from 'metro-config';
+import {posixToSystemPath as p} from 'metro-resolver/private/__tests__/utils';
 // $FlowFixMe[untyped-import]
 import MockRequest from 'mock-req';
 // $FlowFixMe[untyped-import]
@@ -99,7 +100,9 @@ describe('processRequest', () => {
       getResolveDependencyFn,
     }));
 
-    const mockFs = new (require('metro-memory-fs'))();
+    const mockFs = new (require('metro-memory-fs'))({
+      platform: process.platform === 'win32' ? 'win32' : 'posix',
+    });
     jest.doMock('fs', () => mockFs);
     jest.doMock('node:fs', () => mockFs);
 
@@ -131,9 +134,9 @@ describe('processRequest', () => {
 
   let server;
 
-  const config = mergeConfig(getDefaultValues('/'), {
-    projectRoot: '/root',
-    watchFolders: ['/root'],
+  const config = mergeConfig(getDefaultValues(p('/')), {
+    projectRoot: p('/root'),
+    watchFolders: [p('/root')],
     resolver: {blockList: []},
     cacheVersion: '',
     serializer: {
@@ -141,7 +144,7 @@ describe('processRequest', () => {
         `require(${JSON.stringify(moduleId)});`,
       polyfillModuleNames: [],
       getModulesRunBeforeMainModule: () => ['InitializeCore'],
-      isThirdPartyModule: module => module.path === '/root/foo.js',
+      isThirdPartyModule: module => module.path === p('/root/foo.js'),
     },
 
     reporter: require('../../lib/reporting').nullReporter,
@@ -156,7 +159,7 @@ describe('processRequest', () => {
     },
     symbolicator: {
       customizeFrame: ({file}) => {
-        if (file === '/root/foo.js') {
+        if (file === p('/root/foo.js')) {
           return {collapse: true};
         }
         return null;
@@ -213,14 +216,14 @@ describe('processRequest', () => {
       ) => {
         dependencies = new Map<string, Module<>>([
           [
-            '/root/mybundle.js',
+            p('/root/mybundle.js'),
             {
-              path: '/root/mybundle.js',
+              path: p('/root/mybundle.js'),
               dependencies: new Map<string, Dependency>([
                 [
                   'foo',
                   {
-                    absolutePath: '/root/foo.js',
+                    absolutePath: p('/root/foo.js'),
                     data: {
                       data: {
                         asyncType: null,
@@ -249,10 +252,10 @@ describe('processRequest', () => {
           ],
         ]);
         if (!options.shallow) {
-          dependencies.set('/root/foo.js', {
-            path: '/root/foo.js',
+          dependencies.set(p('/root/foo.js'), {
+            path: p('/root/foo.js'),
             dependencies: new Map(),
-            inverseDependencies: new CountingSet(['/root/mybundle.js']),
+            inverseDependencies: new CountingSet([p('/root/mybundle.js')]),
             getSource: () => Buffer.from('code-foo'),
             output: [
               {
@@ -272,7 +275,7 @@ describe('processRequest', () => {
         // mock out all of the code paths that depend on this so we can use this
         // simpler interface instead.
         const graph: ReadOnlyGraph<> = {
-          entryPoints: new Set(['/root/mybundle.js']),
+          entryPoints: new Set([p('/root/mybundle.js')]),
           dependencies,
           transformOptions: options.transformOptions,
         };
@@ -337,7 +340,7 @@ describe('processRequest', () => {
     );
 
     fs.realpath = jest.fn((file, cb) => {
-      cb?.(null, '/root/foo.js');
+      cb?.(null, p('/root/foo.js'));
     });
   });
 
@@ -619,7 +622,7 @@ describe('processRequest', () => {
           offset: {line: 1, column: 0},
           map: {
             version: 3,
-            sources: ['/root/mybundle.js'],
+            sources: [p('/root/mybundle.js')],
             sourcesContent: ['code-mybundle'],
             names: [],
             mappings: 'gBAAA',
@@ -629,7 +632,7 @@ describe('processRequest', () => {
           offset: {line: 2, column: 0},
           map: {
             version: 3,
-            sources: ['/root/foo.js'],
+            sources: [p('/root/foo.js')],
             sourcesContent: ['code-foo'],
             names: [],
             mappings: 'gBAAA',
@@ -651,7 +654,7 @@ describe('processRequest', () => {
           offset: {line: 0, column: 0},
           map: {
             version: 3,
-            sources: ['/root/mybundle.js'],
+            sources: [p('/root/mybundle.js')],
             sourcesContent: ['code-mybundle'],
             names: [],
             mappings: 'gBAAA',
@@ -661,7 +664,7 @@ describe('processRequest', () => {
           offset: {line: 1, column: 0},
           map: {
             version: 3,
-            sources: ['/root/foo.js'],
+            sources: [p('/root/foo.js')],
             sourcesContent: ['code-foo'],
             names: [],
             mappings: 'gBAAA',
@@ -721,7 +724,7 @@ describe('processRequest', () => {
     await makeRequest('index.bundle?platform=ios');
 
     expect(getTransformFn).toBeCalledWith(
-      ['/root/index.js'],
+      [p('/root/index.js')],
       expect.any(Bundler),
       expect.any(DeltaBundler),
       expect.any(Object),
@@ -732,7 +735,7 @@ describe('processRequest', () => {
     );
     expect(getResolveDependencyFn).toBeCalled();
 
-    expect(buildGraph).toBeCalledWith(['/root/index.js'], {
+    expect(buildGraph).toBeCalledWith([p('/root/index.js')], {
       lazy: false,
       onProgress: expect.any(Function),
       resolve: expect.any(Function),
@@ -798,7 +801,7 @@ describe('processRequest', () => {
     await makeRequest('index.bundle?unstable_transformProfile=hermes-stable');
 
     expect(getTransformFn).toBeCalledWith(
-      ['/root/index.js'],
+      [p('/root/index.js')],
       expect.any(Bundler),
       expect.any(DeltaBundler),
       expect.any(Object),
@@ -809,7 +812,7 @@ describe('processRequest', () => {
     );
     expect(getResolveDependencyFn).toBeCalled();
 
-    expect(buildGraph).toBeCalledWith(['/root/index.js'], {
+    expect(buildGraph).toBeCalledWith([p('/root/index.js')], {
       lazy: false,
       onProgress: expect.any(Function),
       resolve: expect.any(Function),
@@ -890,8 +893,8 @@ describe('processRequest', () => {
 
       expect(getAsset).toBeCalledWith(
         'imgs/a.png',
-        '/root',
-        ['/root'],
+        p('/root'),
+        [p('/root')],
         'ios',
         expect.any(Array),
         expect.any(Function),
@@ -908,8 +911,8 @@ describe('processRequest', () => {
 
       expect(getAsset).toBeCalledWith(
         'imgs/a.png',
-        '/root',
-        ['/root'],
+        p('/root'),
+        [p('/root')],
         'ios',
         expect.any(Array),
         expect.any(Function),
@@ -976,8 +979,8 @@ describe('processRequest', () => {
 
       expect(getAsset).toBeCalledWith(
         'imgs/%30/айсет/Øಚ😁/主页/logo.png',
-        '/root',
-        ['/root'],
+        p('/root'),
+        [p('/root')],
         null,
         expect.any(Array),
         expect.any(Function),
@@ -1001,8 +1004,8 @@ describe('processRequest', () => {
 
       expect(getAsset).toBeCalledWith(
         'imgs/a.png',
-        '/root',
-        ['/root'],
+        p('/root'),
+        [p('/root')],
         'ios',
         expect.any(Array),
         expect.any(Function),
@@ -1019,8 +1022,8 @@ describe('processRequest', () => {
 
       expect(getAsset).toBeCalledWith(
         '../otherFolder/otherImage.png',
-        '/root',
-        ['/root'],
+        p('/root'),
+        [p('/root')],
         null,
         expect.any(Array),
         expect.any(Function),
@@ -1031,9 +1034,12 @@ describe('processRequest', () => {
 
   describe('source requests', () => {
     beforeEach(() => {
-      fs.mkdirSync('/root');
-      fs.writeFileSync('/root/foo.js', '// \u3053\u3093\u306b\u3061\u306f\n');
-      fs.writeFileSync('/root/logo.png', 'not really a png');
+      fs.mkdirSync(p('/root'));
+      fs.writeFileSync(
+        p('/root/foo.js'),
+        '// \u3053\u3093\u306b\u3061\u306f\n',
+      );
+      fs.writeFileSync(p('/root/logo.png'), 'not really a png');
     });
 
     test('serves a source file with a utf-8 charset', async () => {
@@ -1061,7 +1067,7 @@ describe('processRequest', () => {
       });
 
       expect(getTransformFn).toBeCalledWith(
-        ['/root/foo file'],
+        [p('/root/foo file')],
         expect.any(Bundler),
         expect.any(DeltaBundler),
         expect.any(Object),
@@ -1077,7 +1083,7 @@ describe('processRequest', () => {
       );
       expect(getResolveDependencyFn).toBeCalled();
 
-      expect(buildGraph).toBeCalledWith(['/root/foo file'], {
+      expect(buildGraph).toBeCalledWith([p('/root/foo file')], {
         lazy: false,
         onProgress: null,
         resolve: expect.any(Function),
@@ -1102,12 +1108,12 @@ describe('processRequest', () => {
     '/symbolicate endpoint (query delimiter: %s)',
     queryDelimiter => {
       beforeEach(() => {
-        fs.mkdirSync('/root');
+        fs.mkdirSync(p('/root'));
         fs.writeFileSync(
-          '/root/mybundle.js',
+          p('/root/mybundle.js'),
           'this\nis\njust an example and it is all fake data, yay!',
         );
-        fs.writeFileSync('/root/foo.js', 'mock data');
+        fs.writeFileSync(p('/root/foo.js'), 'mock data');
       });
 
       test('should symbolicate given stack trace', async () => {
@@ -1126,33 +1132,36 @@ describe('processRequest', () => {
           }),
         });
 
+        const result = response._getJSON();
+        expect(result).toEqual({
+          codeFrame: {
+            content: expect.any(String),
+            fileName: p('/root/mybundle.js'),
+            location: {
+              column: 0,
+              row: 1,
+            },
+          },
+          stack: [
+            {
+              column: 0,
+              customPropShouldBeLeftUnchanged: 'foo',
+              file: p('/root/mybundle.js'),
+              lineNumber: 1,
+              methodName: 'clientSideMethodName',
+            },
+          ],
+        });
+
         // If snapshots in this file have to be updated but fail with
         // "Multiple inline snapshots for the same call are not supported."
         // Change `describe.each(['?', '//&'])` above to run only for one option:
         // like so: `describe.each(['?'])`
-        expect(response._getJSON()).toMatchInlineSnapshot(`
-          Object {
-            "codeFrame": Object {
-              "content": "[0m[31m[1m>[22m[39m[90m 1 |[39m [36mthis[39m
+        expect(result.codeFrame.content).toMatchInlineSnapshot(`
+          "[0m[31m[1m>[22m[39m[90m 1 |[39m [36mthis[39m
            [90m   |[39m [31m[1m^[22m[39m
            [90m 2 |[39m is
-           [90m 3 |[39m just an example and it is all fake data[33m,[39m yay[33m![39m[0m",
-              "fileName": "/root/mybundle.js",
-              "location": Object {
-                "column": 0,
-                "row": 1,
-              },
-            },
-            "stack": Array [
-              Object {
-                "column": 0,
-                "customPropShouldBeLeftUnchanged": "foo",
-                "file": "/root/mybundle.js",
-                "lineNumber": 1,
-                "methodName": "clientSideMethodName",
-              },
-            ],
-          }
+           [90m 3 |[39m just an example and it is all fake data[33m,[39m yay[33m![39m[0m"
         `);
       });
 
@@ -1278,7 +1287,7 @@ describe('processRequest', () => {
           stack: [
             expect.objectContaining({
               column: 0,
-              file: '/root/foo.js',
+              file: p('/root/foo.js'),
               lineNumber: 1,
             }),
           ],
@@ -1301,29 +1310,31 @@ describe('processRequest', () => {
           }),
         });
 
-        expect(response._getJSON()).toMatchInlineSnapshot(`
-          Object {
-            "codeFrame": Object {
-              "content": "[0m[31m[1m>[22m[39m[90m 1 |[39m [36mthis[39m
+        const result = response._getJSON();
+        expect(result).toEqual({
+          codeFrame: {
+            content: expect.any(String),
+            fileName: p('/root/mybundle.js'),
+            location: {
+              column: 0,
+              row: 1,
+            },
+          },
+          stack: [
+            {
+              column: 0,
+              customPropShouldBeLeftUnchanged: 'foo',
+              file: p('/root/mybundle.js'),
+              lineNumber: 1,
+              methodName: 'clientSideMethodName',
+            },
+          ],
+        });
+        expect(result.codeFrame.content).toMatchInlineSnapshot(`
+          "[0m[31m[1m>[22m[39m[90m 1 |[39m [36mthis[39m
            [90m   |[39m [31m[1m^[22m[39m
            [90m 2 |[39m is
-           [90m 3 |[39m just an example and it is all fake data[33m,[39m yay[33m![39m[0m",
-              "fileName": "/root/mybundle.js",
-              "location": Object {
-                "column": 0,
-                "row": 1,
-              },
-            },
-            "stack": Array [
-              Object {
-                "column": 0,
-                "customPropShouldBeLeftUnchanged": "foo",
-                "file": "/root/mybundle.js",
-                "lineNumber": 1,
-                "methodName": "clientSideMethodName",
-              },
-            ],
-          }
+           [90m 3 |[39m just an example and it is all fake data[33m,[39m yay[33m![39m[0m"
         `);
       });
 
@@ -1369,7 +1380,7 @@ describe('processRequest', () => {
         expect(response._getJSON()).toMatchObject({
           stack: [
             expect.objectContaining({
-              file: '/root/foo.js',
+              file: p('/root/foo.js'),
               collapse: true,
             }),
           ],
@@ -1398,7 +1409,7 @@ describe('processRequest', () => {
         expect(response._getJSON()).toMatchObject({
           stack: [
             expect.objectContaining({
-              file: '/root/foo.js',
+              file: p('/root/foo.js'),
               wasCollapsedBefore: true,
               customAnnotation: 'Baz',
             }),
@@ -1428,7 +1439,7 @@ describe('processRequest', () => {
         // Symbolication should still succeed
         expect(result.stack).toEqual([
           expect.objectContaining({
-            file: '/root/mybundle.js',
+            file: p('/root/mybundle.js'),
             lineNumber: 1,
             column: 0,
             methodName: 'clientSideMethodName',
@@ -1530,7 +1541,7 @@ describe('processRequest', () => {
       // $FlowFixMe[unclear-type] - reaching for a private method under test.
       const serverRootServer: any = new Server(
         mergeConfig(config, {
-          server: {unstable_serverRoot: '/'},
+          server: {unstable_serverRoot: p('/')},
         } as InputConfigT),
       );
 
@@ -1538,7 +1549,7 @@ describe('processRequest', () => {
 
       expect(getAssetsSerializer).toBeCalledWith(
         expect.anything(),
-        expect.objectContaining({projectRoot: '/root'}),
+        expect.objectContaining({projectRoot: p('/root')}),
       );
     });
   });
@@ -1548,9 +1559,9 @@ describe('processRequest', () => {
 
     beforeEach(() => {
       watchFolderServer = new Server(
-        mergeConfig(getDefaultValues('/'), {
-          projectRoot: '/project',
-          watchFolders: ['/project', '/external/packages'],
+        mergeConfig(getDefaultValues(p('/')), {
+          projectRoot: p('/project'),
+          watchFolders: [p('/project'), p('/external/packages')],
           resolver: {blockList: []},
           cacheVersion: '',
           serializer: {
@@ -1570,8 +1581,8 @@ describe('processRequest', () => {
           './[metro-watchFolders]/1/expo-router/entry',
         ),
       ).toEqual({
-        rootDir: '/external/packages',
-        filePath: './expo-router/entry',
+        rootDir: p('/external/packages'),
+        filePath: p('./expo-router/entry'),
       });
     });
 
@@ -1581,8 +1592,8 @@ describe('processRequest', () => {
           './[metro-watchFolders]/0/app/index',
         ),
       ).toEqual({
-        rootDir: '/project',
-        filePath: './app/index',
+        rootDir: p('/project'),
+        filePath: p('./app/index'),
       });
     });
 
@@ -1592,8 +1603,8 @@ describe('processRequest', () => {
           './[metro-project]/src/App',
         ),
       ).toEqual({
-        rootDir: '/project',
-        filePath: './src/App',
+        rootDir: p('/project'),
+        filePath: p('./src/App'),
       });
     });
 
@@ -1616,12 +1627,12 @@ describe('processRequest', () => {
         watchFolderServer._getEntryPointAbsolutePath(
           './[metro-watchFolders]/1/expo-router/entry',
         ),
-      ).toBe('/external/packages/expo-router/entry');
+      ).toBe(p('/external/packages/expo-router/entry'));
     });
 
     test('_getEntryPointAbsolutePath resolves non-prefixed entry against server root', () => {
       expect(watchFolderServer._getEntryPointAbsolutePath('./mybundle')).toBe(
-        '/project/mybundle',
+        p('/project/mybundle'),
       );
     });
   });
