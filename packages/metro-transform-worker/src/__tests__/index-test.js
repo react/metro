@@ -32,6 +32,9 @@ import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
 import typeof FSType from 'node:fs';
 
+const {
+  posixToSystemPath: p,
+} = require('metro-resolver/private/__tests__/utils');
 const {Buffer} = require('node:buffer');
 
 const babelTransformerPath =
@@ -79,14 +82,20 @@ const baseTransformOptions: JsTransformOptions = {
 beforeEach(() => {
   jest.resetModules();
 
-  jest.mock('node:fs', () => new (require('metro-memory-fs'))());
+  jest.mock(
+    'node:fs',
+    () =>
+      new (require('metro-memory-fs'))({
+        platform: process.platform === 'win32' ? 'win32' : 'posix',
+      }),
+  );
 
   fs = jest.requireMock('node:fs');
   Transformer = require('../');
   // $FlowFixMe[prop-missing] Cannot call `fs.reset` because property `reset` is missing in  module `fs`
   fs.reset();
 
-  fs.mkdirSync('/root/local', {recursive: true});
+  fs.mkdirSync(p('/root/local'), {recursive: true});
 });
 
 test('transforms a simple script', async () => {
@@ -130,12 +139,12 @@ test('transforms a simple module', async () => {
 });
 
 test('uses the indexed watch folder path for asset URLs', async () => {
-  fs.mkdirSync('/root/external', {recursive: true});
-  fs.writeFileSync('/root/external/test.mp4', 'asset data');
+  fs.mkdirSync(p('/root/external'), {recursive: true});
+  fs.writeFileSync(p('/root/external/test.mp4'), 'asset data');
 
   const result = await Transformer.transform(
     baseConfig,
-    '/root',
+    p('/root'),
     'external/test.mp4',
     Buffer.from('asset data'),
     {

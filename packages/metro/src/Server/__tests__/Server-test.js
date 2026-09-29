@@ -910,9 +910,9 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        './imgs/a.png',
-        '/root',
-        ['/root'],
+        p('./imgs/a.png'),
+        p('/root'),
+        [p('/root')],
         'ios',
         expect.any(Array),
         expect.any(Function),
@@ -928,9 +928,9 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        './imgs/a.png',
-        '/root',
-        ['/root'],
+        p('./imgs/a.png'),
+        p('/root'),
+        [p('/root')],
         'ios',
         expect.any(Array),
         expect.any(Function),
@@ -1676,17 +1676,17 @@ describe('processRequest', () => {
     });
 
     test.each([
-      '/project/imgs/a.png',
-      '/project/nested/deep/b.png',
-      '/external/packages/imgs/c.png',
-      '/external/packages/d.png',
+      [p('/project/imgs/a.png')],
+      [p('/project/nested/deep/b.png')],
+      [p('/external/packages/imgs/c.png')],
+      [p('/external/packages/d.png')],
     ])(
       'asset URL path for %s round-trips back to the same file',
       absolutePath => {
         const {getAssetUrlPath} = require('../../Assets');
-        const urlPath = getAssetUrlPath(absolutePath, '/project', [
-          '/project',
-          '/external/packages',
+        const urlPath = getAssetUrlPath(absolutePath, p('/project'), [
+          p('/project'),
+          p('/external/packages'),
         ]);
 
         // Mirrors how _processSingleAssetRequest resolves an incoming URL.
@@ -1695,7 +1695,7 @@ describe('processRequest', () => {
         );
         expect(
           path.resolve(
-            resolved?.rootDir ?? '/project',
+            resolved?.rootDir ?? p('/project'),
             resolved?.filePath ?? urlPath,
           ),
         ).toBe(absolutePath);
