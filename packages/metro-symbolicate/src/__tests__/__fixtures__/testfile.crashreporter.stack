@@ -1,0 +1,6 @@
+Non-fatal Exception: JavaScriptError
+0  ???  0x0 <unknown> (some message with no frame)
+1  ???  0x0 throws6 + 1 (thrower.min.js:1:161)
+2  ???  0x0 o + 1 (thrower.min.js:1:464)
+3  ???  0x0 <unknown> ([native code]:0:0)
+4  ???  0x0 <unknown> ([native code]:0:0)

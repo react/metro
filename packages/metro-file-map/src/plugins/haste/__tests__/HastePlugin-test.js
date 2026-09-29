@@ -82,6 +82,9 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
         ]),
         lookup: jest.fn(),
       },
+      processFile: () => {
+        throw new Error('Not implemented');
+      },
       pluginState: null,
     };
     await hasteMap.initialize(initialState);
@@ -106,6 +109,9 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
         files: {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
           lookup: jest.fn(),
+        },
+        processFile: () => {
+          throw new Error('Not implemented');
         },
         pluginState: null,
       });
@@ -138,6 +144,9 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
         files: {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
           lookup: jest.fn(),
+        },
+        processFile: () => {
+          throw new Error('Not implemented');
         },
         pluginState: null,
       });
@@ -182,6 +191,9 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
         files: {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
           lookup,
+        },
+        processFile: () => {
+          throw new Error('Not implemented');
         },
         pluginState: null,
       });

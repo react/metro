@@ -215,4 +215,26 @@ describe('Transformer', function () {
 
     expect(require('../getTransformCacheKey')).not.toBeCalled();
   });
+
+  test('does not start workers if the transformer cache key throws', () => {
+    const error = new Error("Cannot find module 'babel-preset-expo'");
+    require('../getTransformCacheKey').mockImplementationOnce(() => {
+      throw error;
+    });
+    const WorkerFarm = require('../WorkerFarm').default;
+    WorkerFarm.mockClear();
+
+    expect(
+      () =>
+        new Transformer(
+          {
+            ...commonOptions,
+            cacheStores: [{get: jest.fn(), set: jest.fn()}],
+            watchFolders,
+          },
+          {getOrComputeSha1},
+        ),
+    ).toThrow(error);
+    expect(WorkerFarm).not.toBeCalled();
+  });
 });

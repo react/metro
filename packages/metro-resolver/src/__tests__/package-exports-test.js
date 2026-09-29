@@ -655,6 +655,45 @@ describe('with package exports resolution enabled', () => {
       });
     });
 
+    test.each([
+      ['null', 'internal'],
+      ['no matching condition', 'server'],
+    ])(
+      'exact subpath with %s target does not fall back to a pattern',
+      (_, subpath) => {
+        const logWarning = jest.fn();
+        const context = {
+          ...createResolutionContext({
+            '/root/src/main.js': '',
+            '/root/node_modules/test-pkg/package.json': JSON.stringify({
+              name: 'test-pkg',
+              exports: {
+                './*': './lib/*.js',
+                './internal': null,
+                './server': {browser: './server-browser.js'},
+              },
+            }),
+            '/root/node_modules/test-pkg/lib/internal.js': '',
+            '/root/node_modules/test-pkg/lib/server.js': '',
+            '/root/node_modules/test-pkg/internal.js': '',
+            '/root/node_modules/test-pkg/server.js': '',
+          }),
+          originModulePath: '/root/src/main.js',
+          unstable_enablePackageExports: true,
+          unstable_logWarning: logWarning,
+        };
+
+        expect(Resolver.resolve(context, `test-pkg/${subpath}`, null)).toEqual({
+          type: 'sourceFile',
+          filePath: `/root/node_modules/test-pkg/${subpath}.js`,
+        });
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain(
+          `"/root/node_modules/test-pkg/${subpath}" which is listed in the "exports"`,
+        );
+      },
+    );
+
     describe('package encapsulation', () => {
       test('[nonstrict] should fall back to "browser" spec resolution and log inaccessible import warning', () => {
         const logWarning = jest.fn();

@@ -119,6 +119,26 @@ export class DuplicateHasteCandidatesError extends Error {
 
 export type FileData = Map<CanonicalPath, FileMetadata>;
 
+export class FileDataPlugin<PerFileData extends void | V8Serializable = void | V8Serializable> implements FileMapPlugin<null, PerFileData> {
+  constructor(opts: FileDataPluginOptions);
+  assertValid(): void;
+  getCacheKey(): string;
+  getFileSystem(): FileMapPluginInitOptions<null, PerFileData>['files'];
+  getSerializableSnapshot(): null;
+  getWorker(): FileMapPluginWorker;
+  initialize(initOptions: FileMapPluginInitOptions<null, PerFileData>): Promise<void>;
+  readonly name: string;
+  onChanged(_changes: ReadonlyFileSystemChanges<null | undefined | PerFileData>): void;
+  processFile(mixedPath: string): ReturnType<FileMapPluginInitOptions<null, PerFileData>['processFile']>;
+}
+
+export type FileDataPluginOptions = Readonly<
+  Omit<FileMapPluginWorker, 'name' | 'cacheKey'> & {
+    name: string;
+    cacheKey: string;
+  }
+>;
+
 class FileMap extends EventEmitter {
   constructor(options: InputOptions);
   build(): Promise<BuildResult>;
@@ -147,12 +167,12 @@ interface FileSystem_2 {
     subpath: string,
     opts: {
       breakOnSegment?: null | undefined | string;
-      invalidatedBy?: null | undefined | Set<string>;
       subpathType: 'f' | 'd';
     },
+    observations?: null | undefined | Observations,
   ): null | undefined | {absolutePath: string; containerRelativePath: string};
   linkStats(file: Path): null | undefined | FileStats;
-  lookup(mixedPath: Path): LookupResult;
+  lookup(mixedPath: Path, observations?: null | undefined | Observations): LookupResult;
   matchFiles(opts: {
     filter?: RegExp | null | undefined;
     filterCompareAbsolute?: boolean | undefined;

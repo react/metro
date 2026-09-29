@@ -49,11 +49,16 @@ export function matchSubpathFromExportsLike(
     createConfigError,
   );
 
-  let target = exportsLikeMapAfterConditions.get(subpath);
+  let target = null;
   let patternMatch = null;
 
-  // Attempt to match after expanding any subpath pattern keys
-  if (target == null) {
+  // Attempt to match subpath pattern keys only if there is no exact key. An
+  // exact key takes precedence even when its target is null. See step 2 of
+  // `PACKAGE_IMPORTS_EXPORTS_RESOLVE` in:
+  // https://nodejs.org/api/esm.html#resolution-algorithm-specification
+  if (exportsLikeMapAfterConditions.has(subpath)) {
+    target = exportsLikeMapAfterConditions.get(subpath);
+  } else {
     // Gather keys which are subpath patterns in descending order of specificity
     // For ordering, see `PATTERN_KEY_COMPARE` in:
     // https://nodejs.org/api/esm.html#resolution-algorithm-specification

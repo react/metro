@@ -136,6 +136,9 @@ Duplicate manual mock found for \`foo\`:
           throw new Error('should not be used');
         },
       },
+      processFile: () => {
+        throw new Error('Not implemented');
+      },
       pluginState: {
         mocks: new Map([
           ['bar', 'some/__mocks__/bar.js'],

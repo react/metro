@@ -6,9 +6,8 @@
  *
  * @flow strict-local
  * @format
- * @oncall code_indexing
  */
 
-declare module 'strip-ansi' {
-  declare module.exports: (string: string) => string;
-}
+// The unresolvable import in this module is added by a Babel plugin, not
+// written here - see injectImportPastEndOfFileTransformer.js.
+global.x = 1;

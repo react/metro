@@ -84,6 +84,31 @@ describe('import subpath patterns resolution support', () => {
       filePath: p('/root/node_modules/test-pkg/src/features/foo.js.js'),
     });
   });
+
+  test('exact subpath with a null or unmatched target does not fall back to a pattern', () => {
+    const logWarning = jest.fn();
+    const context = {
+      ...createResolutionContext({
+        [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
+          name: 'test-pkg',
+          imports: {
+            '#features/*': './src/features/*.js',
+            '#features/foo': null,
+            '#features/bar': {browser: './src/features/bar.web.js'},
+          },
+        }),
+        [p('/root/node_modules/test-pkg/src/index.js')]: '',
+        [p('/root/node_modules/test-pkg/src/features/foo.js')]: '',
+        [p('/root/node_modules/test-pkg/src/features/bar.js')]: '',
+      }),
+      originModulePath: p('/root/node_modules/test-pkg/src/index.js'),
+      unstable_logWarning: logWarning,
+    };
+
+    expect(() => Resolver.resolve(context, '#features/foo', null)).toThrow();
+    expect(() => Resolver.resolve(context, '#features/bar', null)).toThrow();
+    expect(logWarning).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('import subpath conditional imports resolution', () => {

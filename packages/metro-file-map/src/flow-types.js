@@ -222,6 +222,18 @@ export type FileMapPluginInitOptions<
       | {exists: true, type: 'd'},
   }>,
   pluginState: ?SerializableState,
+  /**
+   * Synchronously run this plugin's worker, in-band, on the regular file at
+   * `mixedPath`, store the result as its plugin data and return it. Throws if
+   * the path is not a regular file, or the plugin has no worker.
+   *
+   * Plugin data is `undefined` for a file until a worker has run on it, which
+   * is when a lazy plugin should call this, and is reset to `undefined` when
+   * the file changes. `null` is a result like any other, so what a worker
+   * returns is stored with `undefined` replaced by `null`, and a file is
+   * processed at most once while it is unchanged.
+   */
+  processFile: (mixedPath: string) => PerFileData,
 }>;
 
 export type FileMapPluginWorker = Readonly<{
@@ -230,6 +242,13 @@ export type FileMapPluginWorker = Readonly<{
     setupArgs: JsonData,
   }>,
   filter: ({normalPath: string, isNodeModules: boolean}) => boolean,
+  /**
+   * If true, the worker is not run on files as they are crawled or changed,
+   * and `filter` is not consulted. It runs only on the files the plugin asks
+   * for, through the `processFile` it is given on initialization. Use this
+   * where a small, unpredictable subset of matching files is ever needed.
+   */
+  lazy?: boolean,
 }>;
 
 type V8SerializablePrimitive = string | number | boolean | null;
@@ -295,7 +314,7 @@ export type FileMetadata = [
   // A string is the symlink's target, lexically resolved to a normal path with
   // POSIX separators, if known. The target need not exist.
   /* symlink */ 0 | 1 | string,
-  /* plugindata */
+  /* plugindata - one slot per plugin with a worker, `undefined` until run */
   ...
 ];
 
@@ -348,8 +367,7 @@ export interface FileSystem {
    *   X = dirname(X)
    * while X !== dirname(X)
    *
-   * If opts.invalidatedBy is given, collects all absolute, real paths that if
-   * added or removed may invalidate this result.
+   * If `observations` is given, records the paths this result depends upon.
    *
    * Useful for finding the closest package scope (subpath: package.json,
    * type f, breakOnSegment: node_modules) or closest potential package root
@@ -360,9 +378,9 @@ export interface FileSystem {
     subpath: string,
     opts: {
       breakOnSegment?: ?string,
-      invalidatedBy?: ?Set<string>,
       subpathType: 'f' | 'd',
     },
+    observations?: ?Observations,
   ): ?{
     absolutePath: string,
     containerRelativePath: string,
@@ -377,8 +395,12 @@ export interface FileSystem {
   /**
    * Return information about the given path, whether a directory or file.
    * Always follow symlinks, and return a real path if it exists.
+   *
+   * If `observations` is given, records the paths this result depends upon:
+   * any symlink traversed, and either the real path found or the first path
+   * segment that did not exist.
    */
-  lookup(mixedPath: Path): LookupResult;
+  lookup(mixedPath: Path, observations?: ?Observations): LookupResult;
 
   matchFiles(opts: {
     /* Filter relative paths against a pattern. */
@@ -412,16 +434,9 @@ export type LookupResult =
       // could indicate an unwatched path, or a directory containing no watched
       // files).
       exists: false,
-      // The real, normal, absolute paths of any symlinks traversed.
-      links: ReadonlySet<string>,
-      // The real, normal, absolute path of the first path segment
-      // encountered that does not exist, or cannot be navigated through.
-      missing: string,
     }
   | {
       exists: true,
-      // The real, normal, absolute paths of any symlinks traversed.
-      links: ReadonlySet<string>,
       // The real, normal, absolute path of the directory.
       realPath: string,
       // Currently lookup always follows symlinks, so can only return
@@ -430,8 +445,6 @@ export type LookupResult =
     }
   | {
       exists: true,
-      // The real, normal, absolute paths of any symlinks traversed.
-      links: ReadonlySet<string>,
       // The real, normal, absolute path of the file.
       realPath: string,
       // Currently lookup always follows symlinks, so can only return
@@ -440,6 +453,33 @@ export type LookupResult =
       // The file's metadata tuple. Must only be mutated via FileProcessor.
       metadata: FileMetadata,
     };
+
+/**
+ * A mutable record of what a query observed of the file system, sufficient to
+ * decide later whether its answer may have changed.
+ *
+ * The parameter is optional and may be omitted for performance.
+ */
+export interface Observations {
+  /**
+   * Paths that were observed to exist, or not to exist. Invalidated by added or
+   * removed files or directories.
+   *
+   * Non-existence is always recorded against the *topmost* missing path, not
+   * the path asked for, so an absent directory collapses every query beneath
+   * it to one entry: a missing `node_modules` is one path invalidating every
+   * package resolution under it, rather than one per package.
+   */
+  readonly existence: Set<CanonicalPath>;
+
+  /**
+   * Files whose content was observed (including traversed symlinks, whose
+   * content is their target) and directories whose immediate entries were
+   * enumerated. Invalidated by modification, as well as by addition or
+   * removal.
+   */
+  readonly content: Set<CanonicalPath>;
+}
 
 export interface MockMap {
   getMockModule(name: string): ?Path;

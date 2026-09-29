@@ -181,7 +181,6 @@ export default class DependencyGraph extends EventEmitter {
       'package.json',
       {
         breakOnSegment: 'node_modules',
-        invalidatedBy: null,
         subpathType: 'f',
       },
     );
@@ -220,7 +219,8 @@ export default class DependencyGraph extends EventEmitter {
   }
 
   async end() {
-    await this.ready();
+    // A failed build is surfaced by ready(), and shouldn't prevent teardown.
+    await this._initializedPromise.catch(() => {});
     await this._haste.end();
   }
 

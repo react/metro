@@ -213,7 +213,7 @@ declare module 'buffer' {
 
   declare function isAscii(input: Buffer | ArrayBuffer | $TypedArray): boolean;
 
-  declare function resolveObjectURL(id: string): Blob | void;
+  declare function resolveObjectURL(id: string): globalThis.Blob | void;
 
   declare var Buffer: Node$Buffer;
   declare var Blob: typeof globalThis.Blob;
