@@ -10,7 +10,7 @@
  */
 
 import type {ChangeEventMetadata} from '../../flow-types';
-import type {WatcherOptions} from '../common';
+import type {WatcherOptions, WatchProbe} from '../common';
 
 import FallbackWatcher from '../FallbackWatcher';
 import NativeWatcher from '../NativeWatcher';
@@ -105,7 +105,31 @@ export const startWatching = async (
 }>) => {
   const Watcher = WATCHERS[watcherName];
   invariant(Watcher != null, `Watcher ${watcherName} is not supported`);
-  const watcherInstance = new Watcher(watchRoot, opts);
+  // Probe with cookie files (matched by the `cookie-*` glob), as Metro does
+  // with health check files. Watchers emit in order, so once the latest is
+  // observed, none of the earlier ones remain in flight to leak into a test.
+  let probeCount = 0;
+  const probe: WatchProbe = async timeoutMs => {
+    const cookie = `cookie-probe-${++probeCount}`;
+    let unsubscribe: () => void = () => {};
+    const observed = new Promise<'observed'>(resolve => {
+      unsubscribe = watcherInstance.onFileEvent(change => {
+        if (change.relativePath === cookie) {
+          resolve('observed');
+        }
+      });
+    });
+    await writeFile(join(watchRoot, cookie), '');
+    const result = await Promise.race([
+      observed,
+      new Promise<'timeout'>(resolve =>
+        setTimeout(() => resolve('timeout'), timeoutMs),
+      ),
+    ]);
+    unsubscribe();
+    return result;
+  };
+  const watcherInstance = new Watcher(watchRoot, {...opts, probe});
 
   await watcherInstance.startWatching();
 

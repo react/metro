@@ -9,6 +9,7 @@
  */
 
 import type {WatcherBackendChangeEvent} from '../flow-types';
+import type {WatchProbe} from './common';
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
@@ -23,6 +24,10 @@ const debug = debugModule('Metro:NativeWatcher');
 const TOUCH_EVENT = 'touch';
 const DELETE_EVENT = 'delete';
 const RECRAWL_EVENT = 'recrawl';
+
+// How long to wait for each probe, and for the watch to become live overall.
+const PROBE_TIMEOUT_MS = 200;
+const LIVE_TIMEOUT_MS = 10000;
 
 /**
  * NativeWatcher uses Node's native fs.watch API with recursive: true.
@@ -46,6 +51,7 @@ const RECRAWL_EVENT = 'recrawl';
  */
 export default class NativeWatcher extends AbstractWatcher {
   #fsWatcher: ?FSWatcher;
+  readonly #probe: ?WatchProbe;
 
   /**
    * Promise chain to emit events in the order they were received.
@@ -62,6 +68,7 @@ export default class NativeWatcher extends AbstractWatcher {
       ignored: ?RegExp,
       globs: ReadonlyArray<string>,
       dot: boolean,
+      probe?: ?WatchProbe,
       ...
     }>,
   ) {
@@ -69,6 +76,7 @@ export default class NativeWatcher extends AbstractWatcher {
       throw new Error('This watcher can only be used on macOS');
     }
     super(dir, opts);
+    this.#probe = opts.probe;
   }
 
   async startWatching(): Promise<void> {
@@ -108,6 +116,20 @@ export default class NativeWatcher extends AbstractWatcher {
     );
 
     debug('Watching %s', this.root);
+
+    // fs.watch can return before any events are delivered: libuv starts the
+    // FSEvents stream on another thread, and the stream reports only changes
+    // made after it starts. Probe until a change is reported, so that changes
+    // made as soon as this resolves are not missed.
+    const probe = this.#probe;
+    if (probe != null) {
+      const deadline = Date.now() + LIVE_TIMEOUT_MS;
+      let result;
+      do {
+        result = await probe(PROBE_TIMEOUT_MS);
+      } while (result === 'timeout' && Date.now() < deadline);
+      debug('Probed watch of %s: %s', this.root, result);
+    }
   }
 
   /**
