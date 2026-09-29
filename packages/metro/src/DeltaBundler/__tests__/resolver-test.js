@@ -168,7 +168,8 @@ function dep(name: string): TransformResultDependency {
           () => new (require('metro-memory-fs'))({platform: 'win32'}),
         );
       } else {
-        jest.mock('node:path', () => jest.requireActual('node:path'));
+        const mockPath = jest.requireActual<{posix: unknown}>('path');
+        jest.mock('node:path', () => mockPath.posix);
         jest.mock('node:fs', () => new (require('metro-memory-fs'))());
       }
 
