@@ -36,6 +36,7 @@
     "istanbul-api": "3.0.0",
     "istanbul-lib-coverage": "3.0.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "jest-junit": "^16.0.0",
     "jest-watch-typeahead": "^2.2.0",
     "jsonc-eslint-parser": "^2.3.0",

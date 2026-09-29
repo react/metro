@@ -7,13 +7,16 @@
  * @flow strict-local
  * @format
  * @oncall react_native
+ * @jest-environment jsdom
  */
 
-import {Runtime} from './MetroFastRefreshMockRuntime';
+import {Runtime, cleanupRuntimes} from './MetroFastRefreshMockRuntime';
 
 describe('Fast Refresh integration with require()', () => {
-  test('preserves state in a single-module bundle', async () => {
-    const {renderer, define, metroRequire, React, events} = new Runtime();
+  afterEach(cleanupRuntimes);
+
+  test('preserves state in a single-module bundle', () => {
+    const {render, screen, define, metroRequire, React, events} = new Runtime();
 
     const ids = {
       'Component.js': 0,
@@ -36,11 +39,8 @@ describe('Fast Refresh integration with require()', () => {
 
     // Initial render
     const Component = metroRequire(ids['Component.js']);
-    let rendered;
-    await renderer.act(async () => {
-      rendered = renderer.create(<Component />);
-    });
-    expect(rendered?.toJSON()).toBe('version1: initialState1');
+    render(<Component />);
+    expect(screen.getByText('version1: initialState1')).toBeDefined();
 
     // Edit the component
     define(
@@ -63,13 +63,13 @@ describe('Fast Refresh integration with require()', () => {
     jest.runAllTimers();
 
     // Fast Refresh: Render the new version of the component with the old state.
-    expect(rendered?.toJSON()).toBe('version2: initialState1');
+    expect(screen.getByText('version2: initialState1')).toBeDefined();
     expect(events.onFastRefresh).toHaveBeenCalled();
     expect(events.onFullReload).not.toHaveBeenCalled();
   });
 
-  test('reloads a single-module bundle when invalidated by component signatures', async () => {
-    const {renderer, define, metroRequire, React, events} = new Runtime();
+  test('reloads a single-module bundle when invalidated by component signatures', () => {
+    const {render, screen, define, metroRequire, React, events} = new Runtime();
 
     const ids = {
       'Component.js': 0,
@@ -92,11 +92,8 @@ describe('Fast Refresh integration with require()', () => {
 
     // Initial render
     const Component = metroRequire(ids['Component.js']);
-    let rendered;
-    await renderer.act(async () => {
-      rendered = renderer.create(<Component />);
-    });
-    expect(rendered?.toJSON()).toBe('version1: initialState1');
+    render(<Component />);
+    expect(screen.getByText('version1: initialState1')).toBeDefined();
 
     // Edit the component
     define(
@@ -120,8 +117,8 @@ describe('Fast Refresh integration with require()', () => {
 
     // Full refresh: The component does not rerender. Instead, we signal a
     // reload.
-    // $FlowFixMe[incompatible-use]
-    expect(rendered.toJSON()).toBe('version1: initialState1');
+    expect(screen.getByText('version1: initialState1')).toBeDefined();
+    expect(screen.queryByText('version2: initialState2')).toBeNull();
     expect(events.onFastRefresh).not.toHaveBeenCalled();
     expect(events.onFullReload).toHaveBeenCalled();
     expect(events.onFullReload.mock.calls).toEqual([
@@ -129,7 +126,7 @@ describe('Fast Refresh integration with require()', () => {
     ]);
   });
 
-  test('handles a lazily-registered (unloaded) parent during Fast Refresh', async () => {
+  test('handles a lazily-registered (unloaded) parent during Fast Refresh', () => {
     const {define, metroRequire, registerSegment, events} = new Runtime();
 
     const ids = {
