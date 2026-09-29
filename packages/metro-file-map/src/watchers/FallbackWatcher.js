@@ -107,7 +107,7 @@ export default class FallbackWatcher extends AbstractWatcher {
     if (
       this.doIgnore(relativePath) ||
       (type === 'f' &&
-        !common.includedByGlob('f', this.globs, this.dot, relativePath))
+        !common.includedByFilter('f', this.fileFilter, relativePath))
     ) {
       return false;
     }
@@ -298,7 +298,7 @@ export default class FallbackWatcher extends AbstractWatcher {
 
         if (
           this.doIgnore(relativePath) ||
-          !common.includedByGlob('d', this.globs, this.dot, relativePath)
+          !common.includedByFilter('d', this.fileFilter, relativePath)
         ) {
           return;
         }
