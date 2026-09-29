@@ -346,6 +346,9 @@ function toIndexMapSection(module: RawMappingsModule): BasicSourceMap {
 /**
  * Transforms a standard source map object into a Raw Mappings object, to be
  * used across the bundler.
+ *
+ * @deprecated Unused by Metro, and will be removed. `Consumer`'s
+ * `generatedMappings()` decodes a source map.
  */
 function toBabelSegments(
   sourceMap: BasicSourceMap,
@@ -383,6 +386,9 @@ function toBabelSegments(
   return rawMappings;
 }
 
+/**
+ * @deprecated Unused by Metro, and will be removed.
+ */
 function toSegmentTuple(
   mapping: BabelSourceMapSegment,
 ): MetroSourceMapSegmentTuple {
@@ -409,6 +415,8 @@ function toSegmentTuple(
  * during generation, whereas accessing `rawMappings` triggers a second decode
  * (`allMappings`) that allocates ~4-5 objects per segment. No terminating
  * mapping is appended (callers that need one use `countLinesAndTerminateMap`).
+ *
+ * @deprecated Unused by Metro, and will be removed.
  */
 function tuplesFromBabelDecodedMap(
   decodedMap: BabelDecodedMap,
