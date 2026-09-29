@@ -15,6 +15,7 @@
 	"settings": {
 		"editor.formatOnSave": true,
 		"flow.pathToFlow": "${workspaceFolder}/node_modules/.bin/flow",
-		"javascript.validate.enable": false
+		"js/ts.validate.enabled": false,
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	}
 }
