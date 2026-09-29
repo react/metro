@@ -8,7 +8,13 @@
  * @oncall react_native
  */
 
-import TreeFS from '../../lib/TreeFS';
+import type TreeFSType from '../../lib/TreeFS';
+
+let mockPathModule;
+jest.mock('node:path', () => mockPathModule);
+
+// The platform-specific path helper `p` for the graceful-fs mock
+let mockP: string => string;
 
 jest.useRealTimers();
 
@@ -49,7 +55,7 @@ jest.mock('graceful-fs', () => {
         throw new Error('readdir: callback is not a function!');
       }
 
-      if (slash(dir) === '/project/fruits') {
+      if (dir === mockP('/project/fruits')) {
         setTimeout(
           () =>
             callback(null, [
@@ -71,7 +77,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) === '/project/fruits/directory') {
+      } else if (dir === mockP('/project/fruits/directory')) {
         setTimeout(
           () =>
             callback(null, [
@@ -83,7 +89,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) === '/project/prototype') {
+      } else if (dir === mockP('/project/prototype')) {
         setTimeout(
           () =>
             callback(
@@ -102,7 +108,7 @@ jest.mock('graceful-fs', () => {
             ),
           0,
         );
-      } else if (slash(dir) === '/project') {
+      } else if (dir === mockP('/project')) {
         setTimeout(
           () =>
             callback(null, [
@@ -114,7 +120,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) === '/') {
+      } else if (dir === mockP('/')) {
         setTimeout(
           () =>
             callback(null, [
@@ -126,7 +132,7 @@ jest.mock('graceful-fs', () => {
             ]),
           0,
         );
-      } else if (slash(dir) == '/error') {
+      } else if (dir === mockP('/error')) {
         setTimeout(() => callback({code: 'ENOTDIR'}, undefined), 0);
       }
     }),
@@ -135,19 +141,30 @@ jest.mock('graceful-fs', () => {
 });
 
 const pearMatcher = path => /pear/.test(path);
-const normalize = path =>
-  process.platform === 'win32' ? path.replace(/\//g, '\\') : path;
-const createMap = obj =>
-  new Map(Object.keys(obj).map(key => [normalize(key), obj[key]]));
 
-const rootDir = '/project';
-const emptyFS = new TreeFS({rootDir, files: new Map()});
-const getFS = (files: FileData) => new TreeFS({rootDir, files});
-let nodeCrawl;
+describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
+  // Convenience function to write paths with posix separators but convert them
+  // to system separators
+  const p: string => string = filePath =>
+    platform === 'win32'
+      ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
+      : filePath;
+  const createMap = obj =>
+    new Map(Object.keys(obj).map(key => [p(key), obj[key]]));
 
-describe('node crawler', () => {
+  const rootDir = p('/project');
+  let TreeFS: Class<TreeFSType>;
+  let emptyFS: TreeFSType;
+  let getFS: (files: FileData) => TreeFSType;
+  let nodeCrawl;
+
   beforeEach(() => {
     jest.resetModules();
+    mockPathModule = jest.requireActual<{}>('path')[platform];
+    mockP = p;
+    TreeFS = require('../../lib/TreeFS').default;
+    emptyFS = new TreeFS({rootDir, files: new Map()});
+    getFS = files => new TreeFS({rootDir, files});
   });
 
   test('updates only changed files', async () => {
@@ -167,7 +184,7 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     // Tomato is not included because its mtime is unchanged
@@ -197,11 +214,11 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     expect(changedFiles).toEqual(new Map());
-    expect(removedFiles).toEqual(new Set(['fruits/previouslyExisted.js']));
+    expect(removedFiles).toEqual(new Set([p('fruits/previouslyExisted.js')]));
   });
 
   test('completes with empty roots', async () => {
@@ -234,11 +251,13 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/error'],
+      roots: [p('/error')],
     });
 
     expect(mockConsole.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Error "ENOTDIR" reading contents of "/error"'),
+      expect.stringContaining(
+        `Error "ENOTDIR" reading contents of "${p('/error')}"`,
+      ),
     );
     expect(changedFiles).toEqual(new Map());
     expect(removedFiles).toEqual(new Set());
@@ -254,7 +273,7 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/fruits'],
+      roots: [p('/project/fruits')],
     });
 
     expect(changedFiles).toEqual(
@@ -281,7 +300,7 @@ describe('node crawler', () => {
         extensions: ['js', 'json'],
         ignore: pearMatcher,
         rootDir,
-        roots: ['/project/fruits', '/project/vegetables'],
+        roots: [p('/project/fruits'), p('/project/vegetables')],
       }),
     ).rejects.toThrow(err);
   });
@@ -313,7 +332,7 @@ describe('node crawler', () => {
         extensions: ['js', 'json'],
         ignore: pearMatcher,
         rootDir,
-        roots: ['/project/fruits'],
+        roots: [p('/project/fruits')],
       }),
     ).rejects.toThrow(err);
   });
@@ -327,11 +346,11 @@ describe('node crawler', () => {
       extensions: ['js'],
       ignore: pearMatcher,
       rootDir,
-      roots: ['/project/prototype'],
+      roots: [p('/project/prototype')],
     });
 
     // Extensions that name Object.prototype properties are not listed.
-    expect([...changedFiles.keys()]).toEqual([normalize('prototype/a.js')]);
+    expect([...changedFiles.keys()]).toEqual([p('prototype/a.js')]);
   });
 
   test('crawls a root that is the parent of rootDir', async () => {
@@ -339,45 +358,42 @@ describe('node crawler', () => {
 
     const {changedFiles} = await nodeCrawl({
       console: global.console,
-      previousState: {fileSystem: new TreeFS({rootDir: '/project/fruits'})},
+      previousState: {
+        fileSystem: new TreeFS({rootDir: p('/project/fruits')}),
+      },
       extensions: ['js'],
       ignore: pearMatcher,
-      rootDir: '/project/fruits',
-      roots: ['/project'],
+      rootDir: p('/project/fruits'),
+      roots: [p('/project')],
     });
 
     // Files under rootDir are normal paths relative to it, not '../fruits/…'.
     expect([...changedFiles.keys()].sort()).toEqual(
-      ['directory/strawberry.js', 'tomato.js'].map(normalize),
+      ['directory/strawberry.js', 'tomato.js'].map(p),
     );
   });
 
-  // The readdir mock is written with POSIX paths.
-  (process.platform === 'win32' ? test.skip : test)(
-    'crawls from a filesystem root without doubling separators',
-    async () => {
-      const fs = require('graceful-fs');
-      nodeCrawl = require('../node').default;
-      const ignore = jest.fn(pearMatcher);
+  test('crawls from a filesystem root without doubling separators', async () => {
+    const fs = require('graceful-fs');
+    nodeCrawl = require('../node').default;
+    const ignore = jest.fn(pearMatcher);
 
-      const {changedFiles} = await nodeCrawl({
-        console: global.console,
-        previousState: {fileSystem: emptyFS},
-        extensions: ['js'],
-        ignore,
-        rootDir,
-        roots: ['/'],
-      });
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js'],
+      ignore,
+      rootDir,
+      roots: [p('/')],
+    });
 
-      expect([...changedFiles.keys()].sort()).toEqual([
-        'fruits/directory/strawberry.js',
-        'fruits/tomato.js',
-      ]);
-      expect(ignore).toHaveBeenCalledWith('/project');
-      expect(fs.lstat).toHaveBeenCalledWith(
-        '/project/fruits/tomato.js',
-        expect.any(Function),
-      );
-    },
-  );
+    expect([...changedFiles.keys()].sort()).toEqual(
+      ['fruits/directory/strawberry.js', 'fruits/tomato.js'].map(p),
+    );
+    expect(ignore).toHaveBeenCalledWith(p('/project'));
+    expect(fs.lstat).toHaveBeenCalledWith(
+      p('/project/fruits/tomato.js'),
+      expect.any(Function),
+    );
+  });
 });
