@@ -17,8 +17,6 @@ const SKIPPED_ON_WINDOWS = [
   'scripts/__tests__/api-snapshots-sync-test.js',
 
   // TODO: Windows product bugs
-  // Async bundle paths are built with platform path separators
-  'packages/metro/src/DeltaBundler/Serializers/helpers/__tests__/js-test.js',
   // Stack trace parsing does not support drive letters
   'packages/metro-symbolicate/src/__tests__/symbolicate-test.js',
 ];
