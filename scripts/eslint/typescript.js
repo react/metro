@@ -27,4 +27,18 @@ module.exports = {
   ],
   plugins: ['@typescript-eslint'],
   parser: '@typescript-eslint/parser',
+  rules: {
+    // These files are generated from Flow sources, which Flow itself checks -
+    // an `any` here reflects one in the Flow source, or a construct the
+    // translator can't express.
+    '@typescript-eslint/no-explicit-any': 'off',
+    // Noise in generated definitions: a declaration a CommonJS module exports
+    // via `typeof` is reported as unused. The generator runs this rule itself,
+    // with `--fix`, to drop declarations that really are unused.
+    '@typescript-eslint/no-unused-vars': 'off',
+    // Flow's inexact `{...}` translates to `{}`, which this rule flags. The
+    // Flow sources that produce one are worth fixing rather than silencing, so
+    // this is off only until they are.
+    '@typescript-eslint/no-empty-object-type': 'off',
+  },
 };

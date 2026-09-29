@@ -15,6 +15,7 @@ import {
   translateFlowDefToTSDef,
   translateFlowToFlowDef,
 } from 'flow-api-translator';
+import {parse} from 'flow-parser';
 import fs from 'node:fs';
 import path from 'node:path';
 import nullthrows from 'nullthrows';
@@ -56,7 +57,6 @@ const IGNORED_PATTERNS = [
   'packages/metro/src/cli.js',
   'packages/**/third-party',
   'packages/metro/src/integration_tests',
-  'packages/metro-runtime/**/!(types*).js',
 ];
 
 function isSourceTSDeclaration(filePath: string): boolean {
@@ -82,6 +82,13 @@ export async function generateTsDefsForJsGlobs(
     fix: true,
     cwd: WORKSPACE_ROOT,
     overrideConfig: {
+      rules: {
+        // Off when linting the repo, because a declaration exported via
+        // `typeof` is reported as unused - but the generator relies on it to
+        // drop declarations left unused by translation, and acts only on
+        // "is defined but never used".
+        '@typescript-eslint/no-unused-vars': 'error',
+      },
       parserOptions: {
         // typescript-eslint writes its "version of TypeScript which is not
         // officially supported" warning straight to `console.log`, bypassing
@@ -138,6 +145,10 @@ export async function generateTsDefsForJsGlobs(
             // corresponding `.js` file, which is enforced to be a transparent
             // entry file that only registers Babel and re-exports the module.
             toProcess.set(filePath.replace(/\.flow\.js$/, '.js'), filePath);
+          } else if (filePath.endsWith('.js.flow')) {
+            // A .js.flow declaration file is the Flow source of truth for the
+            // adjacent .js file, which may be untyped (e.g. vendored code).
+            toProcess.set(filePath.replace(/\.flow$/, ''), filePath);
           } else if (filePath.endsWith('.js') && !toProcess.has(filePath)) {
             toProcess.set(filePath, filePath);
           } else if (isSourceTSDeclaration(filePath)) {
@@ -157,23 +168,28 @@ export async function generateTsDefsForJsGlobs(
     absoluteTsFile: string,
     sourceFile: string,
   ) {
-    // Lint and fix the generated output
+    // Lint and fix the generated output. `lintText` returns no result at all
+    // for a path .eslintignore covers - `**/vendor/**`, for one - in which case
+    // the output stands unlinted.
     let [lintResult] = await linter.lintText(sourceContent, {
       filePath: absoluteTsFile,
     });
-    let lintedOutput = lintResult.output ?? sourceContent;
+    let lintedOutput = lintResult?.output ?? sourceContent;
 
     const withoutUnusedGeneratedDeclarations =
-      removeUnusedGeneratedDeclarations(lintedOutput, lintResult.messages);
+      removeUnusedGeneratedDeclarations(
+        lintedOutput,
+        lintResult?.messages ?? [],
+      );
 
     if (withoutUnusedGeneratedDeclarations !== lintedOutput) {
       [lintResult] = await linter.lintText(withoutUnusedGeneratedDeclarations, {
         filePath: absoluteTsFile,
       });
-      lintedOutput = lintResult.output ?? withoutUnusedGeneratedDeclarations;
+      lintedOutput = lintResult?.output ?? withoutUnusedGeneratedDeclarations;
     }
 
-    if (logger && lintResult.messages.length > 0) {
+    if (logger && lintResult != null && lintResult.messages.length > 0) {
       logger.warn(sourceFile, lintResult.messages);
     }
 
@@ -249,28 +265,19 @@ export async function generateTsDefsForJsGlobs(
       }
       try {
         const flowDef = await translateFlowToFlowDef(
-          source,
+          expandFlowCommentTypes(source),
           {},
           {mungeUnderscores},
         );
-        if (flowDef.includes('declare module.exports')) {
-          errors.push({
-            sourceFile,
-            error: new Error(
-              'module.exports is not supported by TypeScript auto-generation',
-            ),
-          });
-        } else {
-          const tsDef = await translateFlowDefToTSDef(flowDef);
+        const tsDef = await translateFlowDefToTSDef(flowDef);
 
-          const beforeLint = tsDef
-            // Fix up gap left in license header by removal of atflow
-            .replace('\n *\n *\n', '\n *\n')
-            // TypeScript has no analogue for __proto__: null
-            .replace(/__proto__: null[,;]?/g, '');
+        const beforeLint = tsDef
+          // Fix up gap left in license header by removal of atflow
+          .replace('\n *\n *\n', '\n *\n')
+          // TypeScript has no analogue for __proto__: null
+          .replace(/__proto__: null[,;]?/g, '');
 
-          await writeOutputFile(beforeLint, absoluteTsFile, sourceFile);
-        }
+        await writeOutputFile(beforeLint, absoluteTsFile, sourceFile);
       } catch (error) {
         errors.push({sourceFile, error});
       }
@@ -300,6 +307,32 @@ export async function generateTsDefsForJsGlobs(
       'Errors encountered while generating TypeScript definitions',
     );
   }
+}
+
+// Files that run in Node without a Babel transform (e.g. worker entry points)
+// carry their types in Flow comment syntax, which the translator doesn't see.
+// Rewrite them as regular Flow syntax, per
+// https://flow.org/en/docs/types/comments/:
+//   `/*: T */` -> `: T`
+//   `/*:: code */` and `/*flow-include code */` -> `code`
+function expandFlowCommentTypes(source: string): string {
+  // Splice from the end so earlier comment ranges stay valid.
+  return parse(source, {flow: 'all'}).comments.reduceRight(
+    (code, {type, value, range: [start, end]}) => {
+      const marker =
+        type === 'Block' ? /^(::|flow-include|:)/.exec(value)?.[1] : null;
+      if (marker == null) {
+        return code;
+      }
+      const content = value.slice(marker.length);
+      return (
+        code.slice(0, start) +
+        (marker === ':' ? ':' + content : content) +
+        code.slice(end)
+      );
+    },
+    source,
+  );
 }
 
 function removeUnusedGeneratedDeclarations(
