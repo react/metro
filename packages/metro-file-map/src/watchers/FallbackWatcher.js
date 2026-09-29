@@ -106,8 +106,7 @@ export default class FallbackWatcher extends AbstractWatcher {
     const relativePath = path.relative(this.root, filepath);
     if (
       this.doIgnore(relativePath) ||
-      (type === 'f' &&
-        !common.includedByGlob('f', this.globs, this.dot, relativePath))
+      (type === 'f' && !common.isIncluded('f', this.included, relativePath))
     ) {
       return false;
     }
@@ -298,7 +297,7 @@ export default class FallbackWatcher extends AbstractWatcher {
 
         if (
           this.doIgnore(relativePath) ||
-          !common.includedByGlob('d', this.globs, this.dot, relativePath)
+          !common.isIncluded('d', this.included, relativePath)
         ) {
           return;
         }

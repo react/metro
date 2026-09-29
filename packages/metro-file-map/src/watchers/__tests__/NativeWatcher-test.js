@@ -78,7 +78,10 @@ describe('NativeWatcher', () => {
       return stat.promise;
     });
 
-    watcher = new NativeWatcher(ROOT, {dot: true, globs: [], ignored: null});
+    watcher = new NativeWatcher(ROOT, {
+      included: null,
+      ignored: null,
+    });
     events = [];
     watcher.onFileEvent(event => {
       events.push(event);
