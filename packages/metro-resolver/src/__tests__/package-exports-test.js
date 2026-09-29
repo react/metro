@@ -670,8 +670,8 @@ describe('with package exports resolution enabled', () => {
         const logWarning = jest.fn();
         const context = {
           ...createResolutionContext({
-            '/root/src/main.js': '',
-            '/root/node_modules/test-pkg/package.json': JSON.stringify({
+            [p('/root/src/main.js')]: '',
+            [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
               name: 'test-pkg',
               exports: {
                 './*': './lib/*.js',
@@ -679,10 +679,10 @@ describe('with package exports resolution enabled', () => {
                 './server': {browser: './server-browser.js'},
               },
             }),
-            '/root/node_modules/test-pkg/lib/internal.js': '',
-            '/root/node_modules/test-pkg/lib/server.js': '',
-            '/root/node_modules/test-pkg/internal.js': '',
-            '/root/node_modules/test-pkg/server.js': '',
+            [p('/root/node_modules/test-pkg/lib/internal.js')]: '',
+            [p('/root/node_modules/test-pkg/lib/server.js')]: '',
+            [p('/root/node_modules/test-pkg/internal.js')]: '',
+            [p('/root/node_modules/test-pkg/server.js')]: '',
           }),
           originModulePath: p('/root/src/main.js'),
           unstable_enablePackageExports: true,
