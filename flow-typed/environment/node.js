@@ -3756,6 +3756,7 @@ declare class stream$Duplex extends stream$Readable mixins stream$Writable {
   // with Readable's, which Flow doesn't like.
   // See https://nodejs.org/api/stream.html#stream_class_stream_duplex_1
 
+  // $FlowFixMe[incompatible-exact] See above
   // $FlowFixMe[incompatible-type] See above
   static fromWeb(
     pair: Readonly<{
