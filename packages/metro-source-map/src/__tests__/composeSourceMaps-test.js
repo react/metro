@@ -86,7 +86,7 @@ describe('composeSourceMaps', () => {
   });
 
   test('verifies merged source maps work the same as applying them separately', async () => {
-    // Apply two tranformations: compression, then mangling.
+    // Apply two transformations: compression, then mangling.
     const stage1 = await terser.minify(
       {'test1.js': TestScript1, 'test2.js': TestScript2},
       {
@@ -242,8 +242,6 @@ describe('composeSourceMaps', () => {
       mappings: 'AAAAA;AACAA;AACAA',
     };
 
-    /* $FlowFixMe[incompatible-call] Natural Inference rollout. See
-     * https://fburl.com/gdoc/y8dn025u */
     const mergedMap = composeSourceMaps([map1, map2]);
 
     expect(mergedMap).toEqual(
@@ -329,6 +327,40 @@ describe('composeSourceMaps', () => {
         ],
       }
     `);
+  });
+
+  test('composes a last map with multi-line sections at a column offset', () => {
+    const indexedMap: IndexMap = {
+      version: 3,
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {version: 3, names: [], sources: ['a.js'], mappings: 'AAAA'},
+        },
+        {
+          offset: {line: 0, column: 4},
+          map: {
+            version: 3,
+            names: [],
+            sources: ['b.js'],
+            mappings: 'CAAA;AACA',
+          },
+        },
+      ],
+    };
+    const composed = new Consumer(composeSourceMaps([indexedMap]));
+    const indexed = new Consumer(indexedMap);
+    for (const [line, column] of [
+      [1, 0],
+      [1, 4],
+      [1, 5],
+      [2, 0],
+    ]) {
+      const position = {line: add1(line - 1), column: add0(column)};
+      expect(composed.originalPositionFor(position)).toEqual(
+        indexed.originalPositionFor(position),
+      );
+    }
   });
 
   test('Propagate x_hermes_function_offsets', () => {

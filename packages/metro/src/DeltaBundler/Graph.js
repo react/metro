@@ -745,7 +745,7 @@ export class Graph<T = MixedOutput> {
   *_children(
     module: Module<T>,
     options: InternalOptions<T>,
-  ): Iterator<Module<T>> {
+  ): IteratorObject<Module<T>> {
     for (const dependency of module.dependencies.values()) {
       if (
         !isResolvedDependency(dependency) ||

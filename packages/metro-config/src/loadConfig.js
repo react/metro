@@ -139,7 +139,6 @@ function mergeConfigObjects<T extends InputConfigT>(
     },
     transformer: {
       ...base.transformer,
-      // $FlowFixMe[exponential-spread]
       ...overrides.transformer,
       // $FlowFixMe[exponential-spread]
       ...(overrides.transformer?.babelTransformerPath != null

@@ -69,8 +69,8 @@ export default class SectionsConsumer
           (get1(mapping.generatedLine) > 1 || get0(mapping.generatedColumn) > 0)
         ) {
           yield {
-            generatedLine: FIRST_LINE,
-            generatedColumn: FIRST_COLUMN,
+            generatedLine: add(FIRST_LINE, generatedOffset.lines),
+            generatedColumn: add(FIRST_COLUMN, generatedOffset.columns),
             source: null,
             name: null,
             originalLine: null,
@@ -81,10 +81,10 @@ export default class SectionsConsumer
         yield {
           ...mapping,
           generatedLine: add(mapping.generatedLine, generatedOffset.lines),
-          generatedColumn: add(
-            mapping.generatedColumn,
-            generatedOffset.columns,
-          ),
+          generatedColumn:
+            mapping.generatedLine === FIRST_LINE
+              ? add(mapping.generatedColumn, generatedOffset.columns)
+              : mapping.generatedColumn,
         };
       }
     }

@@ -154,7 +154,6 @@ describe('mergeConfig', () => {
 
       test('override tls: undefined (explicit) keeps base tls: object', () => {
         const base: InputConfigT = {server: {tls: {key: 'key', cert: 'cert'}}};
-        // $FlowExpectedError[incompatible-type] - testing explicit undefined
         const override: InputConfigT = {server: {tls: undefined}};
         const result = mergeConfig(base, override);
         expect(result.server?.tls).toStrictEqual({key: 'key', cert: 'cert'});
@@ -169,7 +168,6 @@ describe('mergeConfig', () => {
 
       test('override tls: undefined (explicit) keeps base tls: false', () => {
         const base: InputConfigT = {server: {tls: false}};
-        // $FlowExpectedError[incompatible-type] - testing untyped runtime behavior
         const override: InputConfigT = {server: {tls: undefined}};
         const result = mergeConfig(base, override);
         expect(result.server?.tls).toBe(false);
@@ -199,9 +197,7 @@ describe('mergeConfig', () => {
       });
 
       test('both tls undefined (explicit) results in no tls property', () => {
-        // $FlowExpectedError[incompatible-type] - testing untyped runtime behavior
         const base: InputConfigT = {server: {tls: undefined}};
-        // $FlowExpectedError[incompatible-type] - testing untyped runtime behavior
         const override: InputConfigT = {server: {tls: undefined}};
         const result = mergeConfig(base, override);
         expect(result.server?.tls).toBeUndefined();

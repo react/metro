@@ -88,13 +88,15 @@ export default async function watchmanCrawl({
         command,
       });
     };
-    let intervalOrTimeoutId: TimeoutID | IntervalID = setTimeout(() => {
-      logWatchmanWaitMessage();
-      intervalOrTimeoutId = setInterval(
-        logWatchmanWaitMessage,
-        WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
-      );
-    }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
+    let intervalOrTimeoutId:
+      ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> =
+      setTimeout(() => {
+        logWatchmanWaitMessage();
+        intervalOrTimeoutId = setInterval(
+          logWatchmanWaitMessage,
+          WATCHMAN_WARNING_INTERVAL_MILLISECONDS,
+        );
+      }, WATCHMAN_WARNING_INITIAL_DELAY_MILLISECONDS);
     try {
       const response = await new Promise<WatchmanQueryResponse>(
         (resolve, reject) =>
@@ -327,6 +329,11 @@ export default async function watchmanCrawl({
         if (fileData.type === 'l') {
           symlinkInfo = fileData['symlink_target'] ?? 1;
         }
+        if (typeof symlinkInfo === 'string') {
+          symlinkInfo = normalizePathSeparatorsToPosix(
+            pathUtils.resolveSymlinkToNormal(relativeFilePath, symlinkInfo),
+          );
+        }
 
         const nextData: FileMetadata = [
           mtime,
@@ -334,7 +341,6 @@ export default async function watchmanCrawl({
           0,
           sha1hex ?? null,
           symlinkInfo,
-          null,
         ];
 
         // If watchman is fresh, the removed files map starts with all files

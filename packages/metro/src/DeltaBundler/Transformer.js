@@ -62,8 +62,6 @@ export default class Transformer {
       transformerConfig,
     };
 
-    this._workerFarm = new WorkerFarm(config, transformerOptions);
-
     const globalCacheKey = this._cache.isDisabled
       ? ''
       : getTransformCacheKey({
@@ -75,6 +73,9 @@ export default class Transformer {
     const baseHashBuffer = stableHash([globalCacheKey]);
     this._baseHash = baseHashBuffer.toString('binary');
     debug('Base hash: %s', baseHashBuffer.toString('hex'));
+
+    // Start workers last - nothing can end them if the constructor throws.
+    this._workerFarm = new WorkerFarm(config, transformerOptions);
   }
 
   async transformFile(

@@ -41,7 +41,7 @@ class HMRClient extends EventEmitter {
   _queue: Array<string> = [];
   _state: SocketState = 'opening';
   _ws: WebSocket;
-  _heartbeatTimer: ?IntervalID = null;
+  _heartbeatTimer: ?ReturnType<typeof setInterval> = null;
 
   constructor(url: string) {
     super();

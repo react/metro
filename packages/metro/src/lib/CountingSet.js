@@ -65,15 +65,15 @@ export default class CountingSet<T> implements ReadOnlyCountingSet<T> {
     }
   }
 
-  keys(): Iterator<T> {
+  keys(): IteratorObject<T> {
     return this.#map.keys();
   }
 
-  values(): Iterator<T> {
+  values(): IteratorObject<T> {
     return this.#map.keys();
   }
 
-  *entries(): Iterator<[T, T]> {
+  *entries(): IteratorObject<[T, T]> {
     for (const item of this) {
       yield [item, item];
     }

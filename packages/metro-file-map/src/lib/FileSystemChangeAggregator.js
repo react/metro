@@ -134,7 +134,7 @@ function mapIterable<T>(
   metadataMapFn: (metadata: FileMetadata) => T,
 ): Iterable<Readonly<[CanonicalPath, T]>> {
   return {
-    *[Symbol.iterator](): Iterator<Readonly<[CanonicalPath, T]>> {
+    *[Symbol.iterator](): IteratorObject<Readonly<[CanonicalPath, T]>> {
       for (const [path, metadata] of map) {
         yield [path, metadataMapFn(metadata)];
       }

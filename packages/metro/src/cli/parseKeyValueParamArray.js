@@ -25,7 +25,6 @@ export default function coerceKeyValueArray(
     }
     const params = new URLSearchParams(item);
     params.forEach((value, key) => {
-      // $FlowExpectedError[prop-missing]
       result[key] = value;
     });
   }

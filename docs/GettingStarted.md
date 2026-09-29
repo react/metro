@@ -140,7 +140,7 @@ Given a configuration and a set of options that you would typically pass to a se
 * `platform ('web' | 'android' | 'ios')`: Which platform to bundle for if a list of platforms is provided.
 * `sourceMap (boolean)`: Whether Metro should generate source maps.
 * `sourceMapOut (string)`: Where to save the source map, if `sourceMap == true`. No extension will be added.
-* `sourceMapUrl (string)`: URL where the source map can be found. It defaults to the same same URL as the bundle, but changing the extension from `.bundle` to `.map`. When `inlineSourceMap` is `true`, this property has no effect.
+* `sourceMapUrl (string)`: URL where the source map can be found. It defaults to the same URL as the bundle, but changing the extension from `.bundle` to `.map`. When `inlineSourceMap` is `true`, this property has no effect.
 
 ```js
 const config = await Metro.loadConfig();
@@ -226,7 +226,7 @@ module.exports.transform = (file: {filename: string, src: string}) => {
 };
 ```
 
-If you would like to plug-in Babel, you can simply do that by passing the code to it:
+If you would like to plug in Babel, you can simply do that by passing the code to it:
 
 ```js
 const {transformSync} = require('@babel/core');

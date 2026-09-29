@@ -108,11 +108,13 @@ function getDefaultAsyncDependencyPath(
   const bundlePath = path.relative(options.serverRoot, dependency.absolutePath);
   return (
     '/' +
-    path.join(
-      // TODO: This is not the proper Metro URL encoding of a file path
-      path.dirname(bundlePath),
-      // Strip the file extension
-      path.basename(bundlePath, path.extname(bundlePath)),
+    normalizePathSeparatorsToPosix(
+      path.join(
+        // TODO: This is not the proper Metro URL encoding of a file path
+        path.dirname(bundlePath),
+        // Strip the file extension
+        path.basename(bundlePath, path.extname(bundlePath)),
+      ),
     ) +
     '.bundle?' +
     searchParams.toString()
@@ -169,7 +171,7 @@ export function getModuleParams(
 
   // As an optimisation: we only emit an argument for the dependency map if
   // it is non-empty. This is safe because either `dependencyMapReservedName`
-  // is set and we have enforced there are no string occurences of that name,
+  // is set and we have enforced there are no string occurrences of that name,
   // or we have used `generateUid` to generate an unbound name for it.
   if (hasPaths) {
     params.push({

@@ -527,6 +527,48 @@ describe('indexed (sectioned) maps', () => {
     });
   });
 
+  describe('generatedMappings()', () => {
+    test('applies the section offset to generated positions', () => {
+      const consumer = new Consumer({
+        version: 3,
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              names: [],
+              sources: ['section0_source0'],
+              mappings: 'AAAA',
+            },
+          },
+          {
+            offset: {line: 0, column: 4},
+            map: {
+              version: 3,
+              names: [],
+              sources: ['section1_source0'],
+              mappings: 'CAAA;AACA',
+            },
+          },
+        ],
+      });
+      expect(
+        [...consumer.generatedMappings()].map(mapping => [
+          mapping.generatedLine,
+          mapping.generatedColumn,
+          mapping.source,
+        ]),
+      ).toEqual([
+        [1, 0, 'section0_source0'],
+        // Unmapped from the start of section 1 until its first mapping
+        [1, 4, null],
+        [1, 5, 'section1_source0'],
+        // The column offset only applies to the first line of a section
+        [2, 0, 'section1_source0'],
+      ]);
+    });
+  });
+
   describe('sourceContentFor', () => {
     test('empty map', () => {
       const consumer = new Consumer({

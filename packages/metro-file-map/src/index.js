@@ -142,6 +142,8 @@ type InternalEnqueuedEvent = Readonly<
 export {DiskCacheManager} from './cache/DiskCacheManager';
 export {NoopCacheManager} from './cache/NoopCacheManager';
 export {default as DependencyPlugin} from './plugins/DependencyPlugin';
+export {default as FileDataPlugin} from './plugins/FileDataPlugin';
+export type {FileDataPluginOptions} from './plugins/FileDataPlugin';
 export type {DependencyPluginOptions} from './plugins/DependencyPlugin';
 export {DuplicateHasteCandidatesError} from './plugins/haste/DuplicateHasteCandidatesError';
 export {HasteConflictsError} from './plugins/haste/HasteConflictsError';
@@ -167,7 +169,7 @@ export type {
 // This should be bumped whenever a code change to `metro-file-map` itself
 // would cause a change to the cache data structure and/or content (for a given
 // filesystem state and build parameters).
-const CACHE_BREAKER = '11';
+const CACHE_BREAKER = '13';
 
 const CHANGE_INTERVAL = 30;
 
@@ -217,7 +219,8 @@ const WATCHMAN_REQUIRED_CAPABILITIES = [
  *   visited: boolean, // whether the file has been parsed or not.
  *   dependencies: Array<string>, // all relative dependencies of this file.
  *   sha1: ?string, // SHA-1 of the file, if requested via options.
- *   symlink: ?(1 | 0 | string), // Truthy if symlink, string is target
+ *   symlink: ?(1 | 0 | string), // Truthy if symlink, string is the target,
+ *                               // lexically resolved to a normal POSIX path
  * };
  *
  * // Modules can be targeted to a specific platform based on the file name.
@@ -264,11 +267,11 @@ export default class FileMap extends EventEmitter {
   readonly #cacheManager: CacheManager;
   #canUseWatchmanPromise: Promise<boolean>;
   #changeID: number;
-  #changeInterval: ?IntervalID;
+  #changeInterval: ?ReturnType<typeof setInterval>;
   readonly #console: Console;
   readonly #crawlerAbortController: AbortController;
   readonly #fileProcessor: FileProcessor;
-  #healthCheckInterval: ?IntervalID;
+  #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;
@@ -472,6 +475,32 @@ export default class FileMap extends EventEmitter {
                     ),
                 },
                 pluginState: initialData?.plugins.get(plugin.name),
+                processFile: mixedPath => {
+                  invariant(
+                    dataIdx != null,
+                    'metro-file-map: Plugin "%s" has no worker to process files with',
+                    plugin.name,
+                  );
+                  const result = fileSystem.lookup(mixedPath);
+                  if (!result.exists || result.type !== 'f') {
+                    throw new Error(
+                      `metro-file-map: Cannot process ${mixedPath}, which is not a regular file`,
+                    );
+                  }
+                  const pluginData = this.#fileProcessor.processFileForPlugin(
+                    result.realPath,
+                    result.metadata,
+                    dataIdx - H.PLUGINDATA,
+                  );
+                  debug(
+                    'Lazily processed file for %s: %s',
+                    plugin.name,
+                    mixedPath,
+                  );
+                  // Inform caches that there is new data to save.
+                  this.emit('metadata');
+                  return pluginData;
+                },
               }),
             ),
           ),
@@ -592,7 +621,9 @@ export default class FileMap extends EventEmitter {
         .readlink(this.#pathUtils.normalToAbsolute(normalPath))
         .then(symlinkTarget => {
           fileMetadata[H.VISITED] = 1;
-          fileMetadata[H.SYMLINK] = symlinkTarget;
+          fileMetadata[H.SYMLINK] = normalizePathSeparatorsToPosix(
+            this.#pathUtils.resolveSymlinkToNormal(normalPath, symlinkTarget),
+          );
         });
     }
     return null;
@@ -628,7 +659,7 @@ export default class FileMap extends EventEmitter {
 
     for (const [normalFilePath, fileData] of changedFiles) {
       // A crawler may preserve the H.VISITED flag to indicate that the file
-      // contents are unchaged and it doesn't need visiting again.
+      // contents are unchanged and it doesn't need visiting again.
       if (fileData[H.VISITED] === 1) {
         continue;
       }
@@ -928,7 +959,6 @@ export default class FileMap extends EventEmitter {
               0,
               null,
               change.metadata.type === 'l' ? 1 : 0,
-              null,
             ];
 
             try {
@@ -1134,7 +1164,10 @@ export default class FileMap extends EventEmitter {
 }
 
 // TODO: Replace with it.map() from Node 22+
-const mapIterable: <T, S>(Iterable<T>, (T) => S) => Iterator<S> = (it, fn) =>
+const mapIterable: <T, S>(Iterable<T>, (T) => S) => IteratorObject<S> = (
+  it,
+  fn,
+) =>
   (function* mapped() {
     for (const item of it) {
       yield fn(item);

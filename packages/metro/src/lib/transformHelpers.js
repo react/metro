@@ -216,7 +216,7 @@ export async function getResolveDependencyFn(
 ): Promise<
   (from: string, dependency: TransformResultDependency) => BundlerResolution,
 > {
-  const dependencyGraph = await await bundler.getDependencyGraph();
+  const dependencyGraph = await bundler.getDependencyGraph();
 
   return (from: string, dependency: TransformResultDependency) =>
     dependencyGraph.resolveDependency(

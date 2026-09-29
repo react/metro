@@ -223,13 +223,16 @@ export async function generateTsDefsForJsGlobs(
   await Promise.all(
     filesToProcess.map(async ([jsFile, sourceFile]) => {
       const absoluteTsFile = getTSDeclAbsolutePath(jsFile);
-      const sourceTSDeclationPath = absoluteTsFile.replace(TYPES_DIR, SRC_DIR);
+      const sourceTSDeclarationPath = absoluteTsFile.replace(
+        TYPES_DIR,
+        SRC_DIR,
+      );
       const absoluteSourceFile = path.resolve(WORKSPACE_ROOT, sourceFile);
 
       // If a source .d.ts file exists, copy it directly.
-      if (sourceDefs.has(sourceTSDeclationPath)) {
+      if (sourceDefs.has(sourceTSDeclarationPath)) {
         const source = await fs.promises.readFile(
-          sourceTSDeclationPath,
+          sourceTSDeclarationPath,
           'utf-8',
         );
         await writeOutputFile(source, absoluteTsFile, sourceFile);

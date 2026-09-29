@@ -483,7 +483,7 @@ function loadModuleImplementation(
     }
     moduleObject.id = moduleId;
 
-    // keep args in sync with with defineModuleCode in
+    // keep args in sync with defineModuleCode in
     // metro/src/Resolver/index.js
     // and metro/src/ModuleGraph/worker.js
     factory(
@@ -576,7 +576,7 @@ if (__DEV__) {
     return hot;
   };
 
-  let reactRefreshTimeout: null | TimeoutID = null;
+  let reactRefreshTimeout: null | ReturnType<typeof setTimeout> = null;
 
   // When a module is defined lazily via a segment definer, modules that
   // have not been required yet are absent from `modules`, and can't be walked
@@ -955,7 +955,6 @@ if (__DEV__) {
     if (
       typeof window !== 'undefined' &&
       window.location != null &&
-      // $FlowFixMe[method-unbinding]
       typeof window.location.reload === 'function'
     ) {
       window.location.reload();

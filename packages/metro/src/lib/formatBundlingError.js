@@ -77,21 +77,18 @@ export default function formatBundlingError(
   } else if (error instanceof ResourceNotFoundError) {
     return {
       type: 'ResourceNotFoundError',
-      // $FlowFixMe[incompatible-type]
       errors: [],
       message: error.message,
     };
   } else if (error instanceof GraphNotFoundError) {
     return {
       type: 'GraphNotFoundError',
-      // $FlowFixMe[incompatible-type]
       errors: [],
       message: error.message,
     };
   } else if (error instanceof RevisionNotFoundError) {
     return {
       type: 'RevisionNotFoundError',
-      // $FlowFixMe[incompatible-type]
       errors: [],
       message: error.message,
     };

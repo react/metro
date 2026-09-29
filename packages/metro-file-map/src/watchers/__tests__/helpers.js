@@ -147,7 +147,6 @@ export const startWatching = async (
         rejectUnexpected: false,
       }),
 
-    // $FlowFixMe[incompatible-use]
     allEvents: (afterFn, expectedEvents, {rejectUnexpected = true} = {}) =>
       Promise.all([
         new Promise((resolve, reject) => {

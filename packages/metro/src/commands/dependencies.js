@@ -80,8 +80,7 @@ async function dependencies(args: Args, config: ConfigT) {
   }
 
   return args.output != null
-    ? // $FlowFixMe[method-unbinding]
-      promisify(outStream.end).bind(outStream)()
+    ? promisify(outStream.end).bind(outStream)()
     : Promise.resolve();
 }
 

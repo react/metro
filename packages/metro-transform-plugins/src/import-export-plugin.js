@@ -297,7 +297,6 @@ export default function importExportPlugin({
               // $FlowFixMe[incompatible-use]
               const temp = path.scope.generateUidIdentifier(local.name);
 
-              // $FlowFixMe[incompatible-type]
               // $FlowFixMe[incompatible-use]
               if (local.name === 'default') {
                 state.imports.push({
@@ -452,7 +451,6 @@ export default function importExportPlugin({
                 break;
 
               case 'ImportSpecifier':
-                // $FlowFixMe[incompatible-type]
                 // $FlowFixMe[incompatible-use]
                 if (imported.name === 'default') {
                   state.imports.push({

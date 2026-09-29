@@ -64,7 +64,7 @@ Parameters: (*context*, *moduleName*, *platform*)
 1. If a [custom resolver](#resolverequest-customresolver) is defined, then
     1. Return the result of the custom resolver.
 2. If *moduleName* is an absolute path, or equal to `'.'` or `'..'`, or begins `'./'` or `'../'`
-    1. Let *absoluteModuleName* be *moduleName* if it is absolute path, otherwise the result of prepending the current directory (i.e. parent of [`context.originModulePath`](#originmodulepath-string)) with *moduleName*.
+    1. Let *absoluteModuleName* be *moduleName* if it is an absolute path, otherwise the result of prepending the current directory (i.e. parent of [`context.originModulePath`](#originmodulepath-string)) with *moduleName*.
     2. Return the result of [**RESOLVE_MODULE**](#resolve_module)(*context*, *absoluteModuleName*, *platform*), or continue.
 3. If *moduleName* begins `'#'`
     1. Throw an error. This will be replaced with subpath imports support in a non-breaking future release.
@@ -301,7 +301,7 @@ Any custom options passed to the resolver. By default, Metro populates this base
 
 #### `resolveRequest: CustomResolver`
 
-A alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolverequest).
+An alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolverequest).
 
 Metro expects `resolveRequest` to have the following signature:
 

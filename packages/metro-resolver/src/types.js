@@ -190,7 +190,7 @@ export type ResolutionContext = Readonly<{
   isESMImport?: boolean,
 
   /**
-   * Synchonously returns information about a given absolute path, including
+   * Synchronously returns information about a given absolute path, including
    * whether it exists, whether it is a file or directory, and its absolute
    * real path.
    */

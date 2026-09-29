@@ -29,7 +29,7 @@ const MODULES_DIR = 'js-modules';
 /**
  * Saves all JS modules of an app as single files
  * The startup code (prelude, polyfills etc.) are written to the file
- * designated by the `bundleOuput` option.
+ * designated by the `bundleOutput` option.
  * All other modules go into a 'js-modules' folder that in the same parent
  * directory as the startup file.
  */

@@ -33,13 +33,9 @@ import typeof * as TransformerType from '../index';
 import typeof FSType from 'node:fs';
 
 const {Buffer} = require('node:buffer');
-const path = require('node:path');
 
 const babelTransformerPath =
   require.resolve('@react-native/metro-babel-transformer');
-
-const transformerContents = (() =>
-  require('node:fs').readFileSync(babelTransformerPath))();
 
 const HEADER_DEV =
   '__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {';
@@ -91,8 +87,6 @@ beforeEach(() => {
   fs.reset();
 
   fs.mkdirSync('/root/local', {recursive: true});
-  fs.mkdirSync(path.dirname(babelTransformerPath), {recursive: true});
-  fs.writeFileSync(babelTransformerPath, transformerContents);
 });
 
 test('transforms a simple script', async () => {

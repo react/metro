@@ -165,7 +165,6 @@ describe('DeltaCalculator + require.context', () => {
       }),
     );
 
-    // $FlowFixMe[underconstrained-implicit-instantiation]
     deltaCalculator = new DeltaCalculator(
       new Set([p('/bundle')]),
       fileWatcher,

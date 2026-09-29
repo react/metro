@@ -4,4 +4,7 @@
 
 ```ts
 
+const minifierFn: typeof minifier;
+export default minifierFn;
+
 ```

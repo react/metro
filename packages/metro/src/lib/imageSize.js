@@ -312,7 +312,7 @@ function parseSvg(content: Buffer): ?Dimensions {
   const root = header.slice(rootStart, rootEnd + 1);
   const attributes: {[string]: string} = {};
   const attributePattern =
-    /\b(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    /(?<![\w:-])(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
   let match = attributePattern.exec(root);
   while (match != null) {
     const name = match[1];

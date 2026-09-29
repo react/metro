@@ -36,17 +36,38 @@ export default class FileDataPlugin<
   #worker: FileMapPluginWorker;
   #cacheKey: string;
   #files: ?FileMapPluginInitOptions<null, PerFileData>['files'];
+  #processFile: ?FileMapPluginInitOptions<null, PerFileData>['processFile'];
 
-  constructor({name, worker, filter, cacheKey}: FileDataPluginOptions) {
-    this.name = name;
-    this.#worker = {worker, filter};
-    this.#cacheKey = cacheKey;
+  constructor(opts: FileDataPluginOptions) {
+    this.name = opts.name;
+    this.#worker = {
+      worker: opts.worker,
+      filter: opts.filter,
+      lazy: opts.lazy,
+    };
+    this.#cacheKey = opts.cacheKey;
   }
 
   async initialize(
     initOptions: FileMapPluginInitOptions<null, PerFileData>,
   ): Promise<void> {
     this.#files = initOptions.files;
+    this.#processFile = initOptions.processFile;
+  }
+
+  /**
+   * Run this plugin's worker now on the file at `mixedPath`, store its data
+   * and return it. A lazy plugin calls this for a file whose data, as given by
+   * `getFileSystem().lookup()`, is `undefined`.
+   */
+  processFile(
+    mixedPath: string,
+  ): ReturnType<FileMapPluginInitOptions<null, PerFileData>['processFile']> {
+    const processFile = this.#processFile;
+    if (processFile == null) {
+      throw new Error(`${this.name} plugin has not been initialized`);
+    }
+    return processFile(mixedPath);
   }
 
   getFileSystem(): FileMapPluginInitOptions<null, PerFileData>['files'] {

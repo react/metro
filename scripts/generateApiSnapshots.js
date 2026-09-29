@@ -11,11 +11,18 @@
 
 'use strict';
 
+import type {
+  Node as BabelNode,
+  Statement as BabelNodeStatement,
+  TSExportAssignment as BabelNodeTSExportAssignment,
+} from '@babel/types';
+
 import {
   AUTO_GENERATED_PATTERNS,
   type Logger,
   generateTsDefsForJsGlobs,
 } from './generateTypeScriptDefinitions';
+import {parse} from '@babel/parser';
 import {
   CompilerState,
   Extractor,
@@ -92,6 +99,136 @@ function resolveExportTarget(value: ExportsTarget): ?string {
 function hasExports(dtsAbsolutePath: string): boolean {
   const source = fs.readFileSync(dtsAbsolutePath, 'utf-8');
   return /^\s*export[\s{*=]/m.test(source);
+}
+
+// API Extractor ignores `export =` (it skips `ts.InternalSymbolName.ExportEquals`
+// when collecting a module's exports), so a CommonJS entry point's report would
+// be empty. For extraction only, point the entry point at a sibling copy of its
+// `.d.ts` that uses `export default` instead - the published `.d.ts` keeps
+// `export =`. The copy sits beside the original so that relative imports still
+// resolve, and the caller deletes it once extraction is done.
+function withExtractableExports(
+  entryPoint: EntryPoint,
+  createdFiles: Array<string>,
+): EntryPoint {
+  const extractable = toExtractableSource(entryPoint.dtsPath);
+  if (extractable == null) {
+    return entryPoint;
+  }
+  const dtsPath = entryPoint.dtsPath.replace(
+    /\.d\.ts$/,
+    `.api-extractor-${process.pid}.d.ts`,
+  );
+  fs.writeFileSync(dtsPath, extractable);
+  createdFiles.push(dtsPath);
+  return {...entryPoint, dtsPath};
+}
+
+function parseDts(source: string): Array<BabelNodeStatement> {
+  return parse(source, {plugins: ['typescript'], sourceType: 'module'}).program
+    .body;
+}
+
+function findExportEquals(
+  body: Array<BabelNodeStatement>,
+): ?BabelNodeTSExportAssignment {
+  for (const node of body) {
+    if (node.type === 'TSExportAssignment') {
+      return node;
+    }
+  }
+  return null;
+}
+
+function sourceRange(node: BabelNode): [number, number] {
+  const {start, end} = node;
+  if (start == null || end == null) {
+    throw new Error(`Missing source range for ${node.type}`);
+  }
+  return [start, end];
+}
+
+// The name a top-level declaration introduces, if any.
+function declaredName(node: BabelNodeStatement): ?string {
+  switch (node.type) {
+    case 'VariableDeclaration': {
+      const {id} = node.declarations[0];
+      return id.type === 'Identifier' ? id.name : null;
+    }
+    case 'TSModuleDeclaration':
+      return node.id.type === 'Identifier' ? node.id.name : null;
+    case 'TSTypeAliasDeclaration':
+    case 'TSInterfaceDeclaration':
+    case 'TSEnumDeclaration':
+      return node.id.name;
+    case 'TSDeclareFunction':
+    case 'FunctionDeclaration':
+    case 'ClassDeclaration':
+      return node.id?.name;
+    default:
+      return null;
+  }
+}
+
+// Rewrite an `export =` module's source as an extractable copy, or return null
+// if the module has no `export =`.
+//
+// A report only includes exported declarations, and in an `export =` module
+// every type is local - so the copy also exports its top-level declarations,
+// which (as flow-api-translator emits only what the exports reference) are the
+// types that make up the exported value's API.
+//
+// Once the entry point's declarations are analysed, API Extractor also throws
+// ("Unable to analyze the export \"default\"") on any default import of
+// another `export =` module, so the copy imports those with `import x =
+// require()`, which it reports as an import rather than following.
+function toExtractableSource(dtsPath: string): ?string {
+  const source = fs.readFileSync(dtsPath, 'utf-8');
+  const body = parseDts(source);
+  const exportEquals = findExportEquals(body);
+  if (exportEquals == null) {
+    return null;
+  }
+  const {expression} = exportEquals;
+  const exportedName =
+    expression.type === 'Identifier' ? expression.name : null;
+  const edits: Array<[number, number, string]> = [];
+  for (const node of body) {
+    const [start, end] = sourceRange(node);
+    if (node === exportEquals) {
+      const exported = source.slice(...sourceRange(expression));
+      edits.push([start, end, `export default ${exported};`]);
+    } else if (node.type === 'ImportDeclaration') {
+      const [specifier, ...others] = node.specifiers;
+      const from = node.source.value;
+      const importedDts = path.resolve(path.dirname(dtsPath), from) + '.d.ts';
+      if (
+        specifier?.type === 'ImportDefaultSpecifier' &&
+        others.length === 0 &&
+        from.startsWith('.') &&
+        fs.existsSync(importedDts) &&
+        findExportEquals(parseDts(fs.readFileSync(importedDts, 'utf-8'))) !=
+          null
+      ) {
+        const typeOnly = node.importKind === 'type' ? 'type ' : '';
+        edits.push([
+          start,
+          end,
+          `import ${typeOnly}${specifier.local.name} = require('${from}');`,
+        ]);
+      }
+    } else {
+      const name = declaredName(node);
+      if (name != null && name !== exportedName) {
+        edits.push([start, start, 'export ']);
+      }
+    }
+  }
+  return edits.reduceRight(
+    (result, [editStart, editEnd, text]) =>
+      result.slice(0, editStart) + text + result.slice(editEnd),
+    source,
+  );
 }
 
 // Map a `./src/<rel>.js` exports target to its generated `types/<rel>.d.ts`.
@@ -269,7 +406,9 @@ function cleanReport(report: string): string {
 // the source `.d.ts` (parameter lists, type arguments) otherwise loses its
 // indentation. The options match the `.d.ts` generator's, so declarations wrap
 // as they do in the published definitions.
-async function formatReport(report: string): Promise<string> {
+//
+// Returns null for a report with no declarations.
+async function formatReport(report: string): Promise<?string> {
   const match = report.match(/^([\s\S]*?```ts\n)([\s\S]*)(```\n?)$/);
   if (match == null) {
     throw new Error('Could not find the TypeScript code block in the report');
@@ -282,8 +421,11 @@ async function formatReport(report: string): Promise<string> {
     printWidth: 200,
     requirePragma: false,
   });
+  if (formatted.trim() === '') {
+    return null;
+  }
   // Keep the blank lines API Extractor leaves inside the fences.
-  return header + '\n' + (formatted === '' ? '' : formatted + '\n') + footer;
+  return header + '\n' + formatted + '\n' + footer;
 }
 
 // Build the API Extractor config for one entry point. The report is written to
@@ -395,6 +537,7 @@ export async function generateApiSnapshots(
   const tempFolder = fs.mkdtempSync(
     path.join(os.tmpdir(), 'metro-api-snapshots-'),
   );
+  const extractorInputFiles: Array<string> = [];
 
   try {
     const packageDirs = fs
@@ -420,7 +563,12 @@ export async function generateApiSnapshots(
       );
       allSkipped.push(...skipped);
       if (entryPoints.length > 0) {
-        packages.push({packageDir, entryPoints});
+        packages.push({
+          packageDir,
+          entryPoints: entryPoints.map(entryPoint =>
+            withExtractableExports(entryPoint, extractorInputFiles),
+          ),
+        });
       }
     }
 
@@ -478,6 +626,30 @@ export async function generateApiSnapshots(
               entryPoint.outputFileName,
             );
 
+            if (snapshot == null) {
+              // Nothing to snapshot. Make sure no stale snapshot is left behind.
+              allSkipped.push(
+                `${entryPoint.packageName} "${entryPoint.exportKey}" (no exported API surface)`,
+              );
+              if (!fs.existsSync(outputPath)) {
+                continue;
+              }
+              if (verifyOnly) {
+                errors.push({
+                  context,
+                  error: new Error(
+                    `Public API snapshot ${entryPoint.outputFileName} has no ` +
+                      'exported API surface and should be deleted. Run ' +
+                      '`js1 build metro-ts-defs` (internal) or ' +
+                      '`yarn run build-api-snapshots` (OSS) to update it.',
+                  ),
+                });
+              } else {
+                fs.rmSync(outputPath);
+              }
+              continue;
+            }
+
             if (verifyOnly) {
               let existing = null;
               try {
@@ -519,6 +691,9 @@ export async function generateApiSnapshots(
     }
   } finally {
     fs.rmSync(tempFolder, {recursive: true, force: true});
+    for (const filePath of extractorInputFiles) {
+      fs.rmSync(filePath, {force: true});
+    }
   }
 
   if (logger && allSkipped.length > 0) {
