@@ -15,10 +15,6 @@ const SKIPPED_ON_WINDOWS = [
   // flow-api-translator emits os.EOL line endings in generated comments.
   // Snapshots are generated and verified on posix only.
   'scripts/__tests__/api-snapshots-sync-test.js',
-
-  // TODO: Windows product bugs
-  // Stack trace parsing does not support drive letters
-  'packages/metro-symbolicate/src/__tests__/symbolicate-test.js',
 ];
 
 const SKIPPED_PATHS = process.platform === 'win32' ? SKIPPED_ON_WINDOWS : [];
