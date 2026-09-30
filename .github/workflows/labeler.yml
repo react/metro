@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   labeler:
-    if: github.repository == 'react/metro'
+    if: github.repository == 'react/metro' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
