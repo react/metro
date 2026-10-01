@@ -15,12 +15,14 @@ import FallbackWatcher from '../FallbackWatcher';
 import {createTempWatchRoot} from './helpers';
 import EventEmitter from 'node:events';
 import fs from 'node:fs';
-import {join} from 'node:path';
+import {join, toNamespacedPath} from 'node:path';
 
 jest.useRealTimers();
 jest.setTimeout(10 * 1000);
 
 const {mkdir, rm, writeFile} = fs.promises;
+// Captured before any test replaces `fs.watch`.
+const {watch: unmockedWatch} = fs;
 
 // An `FSWatcher` after it has reported an error: Node closes the handle before
 // emitting 'error', so a subsequent `close()` returns early and emits nothing.
@@ -252,6 +254,158 @@ describe('FallbackWatcher', () => {
         () => indexOfCall('readdir', join(watchRoot, 'a', 'b')) >= 0,
       );
       expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
+    });
+  });
+
+  // A deleted directory takes the handles of everything under it with it.
+  // Windows reports the deletion to the directory's own handle as a 'rename'
+  // whose filename is the directory's absolute path, and repeats that report
+  // until the handle is closed.
+  describe('when a watched directory is deleted', () => {
+    // `dist-cache` shares a prefix with `dist` without being inside it.
+    const tree = [
+      'src',
+      join('dist', 'static', 'chunk-a'),
+      join('dist', 'static', 'chunk-b'),
+      'dist-cache',
+    ];
+    const everyDir = [
+      '',
+      'dist',
+      'dist-cache',
+      join('dist', 'static'),
+      join('dist', 'static', 'chunk-a'),
+      join('dist', 'static', 'chunk-b'),
+      'src',
+    ];
+
+    let quietDir: string;
+    // Every handle the watcher opened, and whether it has been closed.
+    let handles: Array<{dir: string, isClosed: () => boolean}>;
+    let events: Array<WatcherBackendChangeEvent>;
+
+    const resolveDir = (relativeDir: string) =>
+      relativeDir === '' ? watchRoot : join(watchRoot, relativeDir);
+    const dirsOf = (relativeDirs: ReadonlyArray<string>) =>
+      relativeDirs.map(resolveDir).sort();
+    const openDirs = () =>
+      handles
+        .filter(handle => !handle.isClosed())
+        .map(handle => handle.dir)
+        .sort();
+    const listenerOf = (relativeDir: string) => {
+      const listener = listeners.get(resolveDir(relativeDir));
+      if (listener == null) {
+        throw new Error(`Not watching ${relativeDir}`);
+      }
+      return listener;
+    };
+    const reportOwnDeletion = (relativeDir: string) => {
+      listenerOf(relativeDir)(
+        'rename',
+        toNamespacedPath(resolveDir(relativeDir)),
+      );
+    };
+    const hasEvent = (event: string, relativePath: string) =>
+      events.some(
+        change =>
+          change.event === event && change.relativePath === relativePath,
+      );
+
+    beforeEach(async () => {
+      for (const dir of tree) {
+        await mkdir(join(watchRoot, dir), {recursive: true});
+        await writeFile(join(watchRoot, dir, 'entry.js'), '');
+      }
+      // Every handle watches a quiet directory instead, so that each test
+      // decides which report reaches which listener.
+      quietDir = await createTempWatchRoot('Fallback', false);
+      handles = [];
+      events = [];
+      jest.spyOn(fs, 'watch').mockImplementation((dir, options, listener) => {
+        listeners.set(String(dir), listener);
+        const handle = unmockedWatch(quietDir);
+        const close = jest.spyOn(handle, 'close');
+        handles.push({
+          dir: String(dir),
+          isClosed: () => close.mock.calls.length > 0,
+        });
+        return handle;
+      });
+      watcher?.onFileEvent(event => {
+        events.push(event);
+      });
+      await watcher?.startWatching();
+    });
+
+    afterEach(async () => {
+      await watcher?.stopWatching();
+      await rm(quietDir, {recursive: true});
+    });
+
+    test('closes the handle of a directory that reports its own deletion, and every handle beneath it', async () => {
+      await rm(join(watchRoot, 'dist'), {recursive: true});
+
+      reportOwnDeletion('dist');
+
+      expect(openDirs()).toEqual(dirsOf(['', 'dist-cache', 'src']));
+    });
+
+    test('watches a directory recreated before its old handle reports, and ignores a repeated stale report', async () => {
+      const staleListener = listenerOf('dist');
+      await rm(join(watchRoot, 'dist'), {recursive: true});
+      await mkdir(join(watchRoot, 'dist', 'static', 'chunk-c'), {
+        recursive: true,
+      });
+      await writeFile(
+        join(watchRoot, 'dist', 'static', 'chunk-c', 'fresh.js'),
+        '',
+      );
+
+      staleListener('rename', toNamespacedPath(resolveDir('dist')));
+
+      await waitFor(() =>
+        hasEvent('touch', join('dist', 'static', 'chunk-c', 'fresh.js')),
+      );
+      const rewatched = dirsOf([
+        '',
+        'dist',
+        'dist-cache',
+        join('dist', 'static'),
+        join('dist', 'static', 'chunk-c'),
+        'src',
+      ]);
+      expect(openDirs()).toEqual(rewatched);
+
+      staleListener('rename', toNamespacedPath(resolveDir('dist')));
+
+      expect(openDirs()).toEqual(rewatched);
+    });
+
+    test('closes only its own handle when the root reports its own deletion', () => {
+      reportOwnDeletion('');
+
+      expect(openDirs()).toEqual(
+        dirsOf(everyDir.filter(relativeDir => relativeDir !== '')),
+      );
+    });
+
+    test('closes every handle beneath a directory whose deletion its parent reports', async () => {
+      await rm(join(watchRoot, 'dist'), {recursive: true});
+
+      listenerOf('')('rename', 'dist');
+
+      await waitFor(() => hasEvent('delete', 'dist'));
+      expect(openDirs()).toEqual(dirsOf(['', 'dist-cache', 'src']));
+    });
+
+    test('closes no handle for a deleted file', async () => {
+      await rm(join(watchRoot, 'src', 'entry.js'));
+
+      listenerOf('src')('rename', 'entry.js');
+
+      await waitFor(() => hasEvent('delete', join('src', 'entry.js')));
+      expect(openDirs()).toEqual(dirsOf(everyDir));
     });
   });
 });
