@@ -36,9 +36,5 @@ module.exports = {
     // via `typeof` is reported as unused. The generator runs this rule itself,
     // with `--fix`, to drop declarations that really are unused.
     '@typescript-eslint/no-unused-vars': 'off',
-    // Flow's inexact `{...}` translates to `{}`, which this rule flags. The
-    // Flow sources that produce one are worth fixing rather than silencing, so
-    // this is off only until they are.
-    '@typescript-eslint/no-empty-object-type': 'off',
   },
 };
