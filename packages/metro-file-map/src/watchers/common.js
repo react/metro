@@ -29,10 +29,24 @@ export const TOUCH_EVENT = 'touch';
 export const RECRAWL_EVENT = 'recrawl';
 export const ALL_EVENT = 'all';
 
+/**
+ * Writes a file under the watched root and resolves with whether the backend
+ * reported it within `timeoutMs`, or 'error' if it could not be written.
+ */
+export type WatchProbe = (timeoutMs: number) => Promise<WatchProbeResult>;
+export type WatchProbeResult = 'observed' | 'timeout' | 'error';
+
 export type WatcherOptions = Readonly<{
   globs: ReadonlyArray<string>,
   dot: boolean,
   ignored: ?RegExp,
+  /**
+   * Used by backends whose watch may not be live as soon as it is set up, to
+   * wait until it is before startWatching resolves. NativeWatcher backends in
+   * one process share an FSEvents stream, which restarts as each is added, so
+   * a watch is only guaranteed live once every backend has started.
+   */
+  probe?: ?WatchProbe,
   watchmanDeferStates: ReadonlyArray<string>,
   watchman?: unknown,
   watchmanPath?: string,

@@ -10,6 +10,7 @@
  */
 
 import type {WatcherBackendChangeEvent} from '../../flow-types';
+import type {WatchProbeResult} from '../common';
 
 import NativeWatcher from '../NativeWatcher';
 import fs from 'node:fs';
@@ -160,5 +161,46 @@ describe('NativeWatcher', () => {
     settleStat('first.js', fileStat(1000));
     await flush();
     expect(order).toEqual(['touch:first.js', 'error:EACCES', 'touch:third.js']);
+  });
+
+  test.each([
+    [['observed'], 1],
+    [['timeout', 'timeout', 'observed'], 3],
+    [['timeout', 'error', 'observed'], 2],
+  ])(
+    'startWatching probes until the watch is live: %j',
+    async (results, expectedCalls) => {
+      const probe = jest.fn<[number], Promise<WatchProbeResult>>();
+      for (const result of results) {
+        probe.mockResolvedValueOnce(result);
+      }
+      const probed = new NativeWatcher(ROOT, {
+        dot: true,
+        globs: [],
+        ignored: null,
+        probe,
+      });
+      await probed.startWatching();
+      expect(probe).toHaveBeenCalledTimes(expectedCalls);
+      await probed.stopWatching();
+    },
+  );
+
+  test('startWatching stops probing after an overall timeout', async () => {
+    let now = 0;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const probe = jest.fn<[number], Promise<WatchProbeResult>>(async () => {
+      now += 4000;
+      return 'timeout';
+    });
+    const probed = new NativeWatcher(ROOT, {
+      dot: true,
+      globs: [],
+      ignored: null,
+      probe,
+    });
+    await probed.startWatching();
+    expect(probe).toHaveBeenCalledTimes(3);
+    await probed.stopWatching();
   });
 });
