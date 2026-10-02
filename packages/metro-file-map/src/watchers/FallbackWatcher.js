@@ -188,8 +188,11 @@ export default class FallbackWatcher extends AbstractWatcher {
     try {
       watcher = fs.watch(dir, {persistent: true}, (event, filename) => {
         // libuv on Windows reports a deleted watched directory to its own
-        // handle as a rename naming the directory's absolute path, and repeats
-        // that report until the handle is closed.
+        // handle as a rename naming the directory's absolute path, and before
+        // libuv 1.53 repeats that report until the handle is closed. If the
+        // directory is recreated first, the open handle also stops it from
+        // being watched again. Linux and macOS name the directory by its
+        // basename instead, so this branch is Windows-only.
         if (filename != null && path.isAbsolute(filename)) {
           this.#reconcileWatchedDirectory(dir, watcher).catch(error =>
             this.emitError(error),
@@ -429,9 +432,11 @@ export default class FallbackWatcher extends AbstractWatcher {
       if (registered) {
         this.#emitEvent({event: DELETE_EVENT, relativePath});
       }
-      // A deleted directory takes its subtree with it, and a nested handle left
-      // open would also stop the path from being watched again once it is
-      // recreated.
+      // Close every handle under a deleted directory. Left open, a handle stops
+      // its path from being watched again once it is recreated. On Linux it
+      // also follows the directory if it was moved (as npm moves a package
+      // aside to update it), so it goes on watching the old copy. macOS
+      // watches by path, so there an open handle is merely redundant.
       if (removedFiles.length > 0 || this.#watched[fullPath]) {
         await this.#stopWatchingTree(fullPath);
       }
