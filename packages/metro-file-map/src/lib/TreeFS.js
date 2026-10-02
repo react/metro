@@ -280,7 +280,11 @@ export default class TreeFS implements MutableFileSystem {
     return result != null;
   }
 
-  lookup(mixedPath: Path, observations?: ?Observations): LookupResult {
+  lookup(
+    mixedPath: Path,
+    observations?: ?Observations,
+    opts?: Readonly<{observeContent?: boolean}>,
+  ): LookupResult {
     const normalPath = this.#normalizePath(mixedPath);
     const result = this.#lookupByNormalPath(normalPath, {
       observations,
@@ -294,7 +298,12 @@ export default class TreeFS implements MutableFileSystem {
     }
     const {canonicalPath, node} = result;
     if (observations) {
-      observations.existence.add(canonicalPath);
+      // `content` is invalidated by everything `existence` is, so a path
+      // belongs in only one of them.
+      (opts?.observeContent === true && !isDirectory(node)
+        ? observations.content
+        : observations.existence
+      ).add(canonicalPath);
     }
     const realPath = this.#pathUtils.normalToAbsolute(canonicalPath);
     if (isDirectory(node)) {
