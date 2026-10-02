@@ -560,6 +560,69 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
     expect(traverseDependencies.mock.calls[0][0]).toEqual([p('/foo')]);
   });
 
+  test('should traverse a file re-added while a failed delta was being built', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    emitChange({removedFiles: ['foo']});
+
+    let rejectTraversal: (error: Error) => void = () => {};
+    traverseDependencies.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        rejectTraversal = reject;
+      }),
+    );
+    const failedDelta = deltaCalculator.getDelta({
+      reset: false,
+      shallow: false,
+    });
+
+    // The file is recreated while the delta that saw it deleted is still being built.
+    emitChange({addedFiles: ['foo']});
+    rejectTraversal(new Error('Unable to resolve module'));
+    await expect(failedDelta).rejects.toBeInstanceOf(Error);
+
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/foo'), fooModule]]),
+      deleted: new Set(),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toContain(p('/foo'));
+  });
+
+  test('should not traverse a file deleted while a failed delta was being built', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    emitChange({modifiedFiles: ['foo']});
+
+    let rejectTraversal: (error: Error) => void = () => {};
+    traverseDependencies.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        rejectTraversal = reject;
+      }),
+    );
+    const failedDelta = deltaCalculator.getDelta({
+      reset: false,
+      shallow: false,
+    });
+
+    emitChange({removedFiles: ['foo']});
+    rejectTraversal(new Error('Unable to resolve module'));
+    await expect(failedDelta).rejects.toBeInstanceOf(Error);
+
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/bundle'), entryModule]]),
+      deleted: new Set([p('/foo')]),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toEqual([p('/bundle')]);
+  });
+
   test.each(['add', 'delete'])(
     "should re-traverse everything after a symlink '%s'",
     async eventType => {
