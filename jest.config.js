@@ -8,6 +8,15 @@
  * @oncall react_native
  */
 
+const path = require('node:path');
+
+// react-dom may be hoisted away from metro-runtime's react; share one instance.
+const reactDir = path.dirname(
+  require.resolve('react/package.json', {
+    paths: [path.join(__dirname, 'packages/metro-runtime')],
+  }),
+);
+
 /** @type {import('jest').Config} **/
 module.exports = {
   filter: '<rootDir>/scripts/jestFilter.js',
@@ -22,6 +31,8 @@ module.exports = {
   },
   moduleNameMapper: {
     '^prettier$': '<rootDir>/scripts/nativePrettier.js',
+    '^react$': reactDir,
+    '^react/(.*)$': `${reactDir}/$1`,
   },
   testEnvironment: 'node',
   testRegex: '/__tests__/.*-test\\.js$',

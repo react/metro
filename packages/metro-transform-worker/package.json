@@ -35,7 +35,8 @@
   },
   "devDependencies": {
     "@react-native/metro-babel-transformer": "0.78.0",
-    "metro-memory-fs": "*"
+    "metro-memory-fs": "*",
+    "metro-resolver": "*"
   },
   "engines": {
     "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"

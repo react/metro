@@ -76,6 +76,7 @@ export default class WorkerFarm {
     filename: string,
     options: TransformOptions,
     fileBuffer?: Buffer,
+    assetUrlPath?: string,
   ): Promise<TransformerResult> {
     try {
       const data = await this._worker.transform(
@@ -84,6 +85,7 @@ export default class WorkerFarm {
         this._config.projectRoot,
         this._transformerConfig,
         fileBuffer,
+        assetUrlPath,
       );
 
       Logger.log(data.transformFileStartLogEntry);

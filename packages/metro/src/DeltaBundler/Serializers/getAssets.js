@@ -12,7 +12,7 @@
 import type {AssetData} from '../../Assets';
 import type {Module, ReadOnlyDependencies} from '../types';
 
-import {getAssetData} from '../../Assets';
+import {getAssetData, getAssetUrlPath} from '../../Assets';
 import {getJsOutput, isJsModule} from './helpers/js';
 import path from 'node:path';
 
@@ -22,6 +22,7 @@ type Options = {
   platform: ?string,
   projectRoot: string,
   publicPath: string,
+  watchFolders: ReadonlyArray<string>,
 };
 
 export default async function getAssets(
@@ -41,7 +42,11 @@ export default async function getAssets(
       promises.push(
         getAssetData(
           module.path,
-          path.relative(options.projectRoot, module.path),
+          getAssetUrlPath(
+            module.path,
+            options.projectRoot,
+            options.watchFolders,
+          ),
           options.assetPlugins,
           options.platform,
           options.publicPath,

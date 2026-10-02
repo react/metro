@@ -36,8 +36,8 @@ type FactoryFn = (
   require: RequireFn,
   metroImportDefault: RequireFn,
   metroImportAll: RequireFn,
-  moduleObject: {exports: {...}, ...},
-  exports: {...},
+  moduleObject: Module,
+  exports: {[key: string]: unknown},
   dependencyMap: ?DependencyMap,
 ) => void;
 type HotModuleReloadingCallback = () => void;
@@ -239,7 +239,7 @@ function shouldPrintRequireCycle(modules: ReadonlyArray<?string>): boolean {
 
 function metroImportDefault(
   moduleId: ModuleID | VerboseModuleNameForDev,
-): any | Exports {
+): Exports {
   if (__DEV__ && typeof moduleId === 'string') {
     const verboseName = moduleId;
     moduleId = getModuleIdForVerboseName(verboseName);
@@ -271,7 +271,7 @@ metroRequire.importDefault = metroImportDefault;
 
 function metroImportAll(
   moduleId: ModuleID | VerboseModuleNameForDev | number,
-): any | Exports | {[string]: any} {
+): Exports {
   if (__DEV__ && typeof moduleId === 'string') {
     const verboseName = moduleId;
     moduleId = getModuleIdForVerboseName(verboseName);

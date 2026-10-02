@@ -1,0 +1,7 @@
+needs-meta-import:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/package.json'
+          - '**/yarn.lock'
+          - '.flowconfig'
+          - 'flow-typed/**'
