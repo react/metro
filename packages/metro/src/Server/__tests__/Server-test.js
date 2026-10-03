@@ -910,7 +910,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -928,7 +928,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -1614,67 +1614,6 @@ describe('processRequest', () => {
       );
     });
 
-    test('resolves [metro-watchFolders]/N/ prefix against the Nth watch folder', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/1/expo-router/entry',
-        ),
-      ).toEqual({
-        rootDir: p('/external/packages'),
-        filePath: p('./expo-router/entry'),
-      });
-    });
-
-    test('resolves [metro-watchFolders]/0/ prefix against the first watch folder', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/0/app/index',
-        ),
-      ).toEqual({
-        rootDir: p('/project'),
-        filePath: p('./app/index'),
-      });
-    });
-
-    test('resolves [metro-project]/ prefix against projectRoot', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-project]/src/App',
-        ),
-      ).toEqual({
-        rootDir: p('/project'),
-        filePath: p('./src/App'),
-      });
-    });
-
-    test('returns null for paths without a recognized prefix', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix('./mybundle'),
-      ).toBeNull();
-    });
-
-    test('returns null for out-of-bounds watchFolder index', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/99/mybundle',
-        ),
-      ).toBeNull();
-    });
-
-    test('_getEntryPointAbsolutePath resolves prefixed entry against the corresponding watch folder', () => {
-      expect(
-        watchFolderServer._getEntryPointAbsolutePath(
-          './[metro-watchFolders]/1/expo-router/entry',
-        ),
-      ).toBe(p('/external/packages/expo-router/entry'));
-    });
-
-    test('_getEntryPointAbsolutePath resolves non-prefixed entry against server root', () => {
-      expect(watchFolderServer._getEntryPointAbsolutePath('./mybundle')).toBe(
-        p('/project/mybundle'),
-      );
-    });
-
     test.each([
       [p('/project/imgs/a.png')],
       [p('/project/nested/deep/b.png')],
@@ -1690,13 +1629,11 @@ describe('processRequest', () => {
         ]);
 
         // Mirrors how _processSingleAssetRequest resolves an incoming URL.
-        const resolved = watchFolderServer._resolveWatchFolderPrefix(
-          './' + urlPath,
-        );
         expect(
           path.resolve(
-            resolved?.rootDir ?? p('/project'),
-            resolved?.filePath ?? urlPath,
+            p('/project'),
+            watchFolderServer._routeMap.filePathOfUrlDecodedPathname(urlPath) ??
+              urlPath,
           ),
         ).toBe(absolutePath);
       },
