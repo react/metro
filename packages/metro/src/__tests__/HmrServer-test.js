@@ -131,6 +131,7 @@ describe('HmrServer', () => {
         unstable_allowRequireContext: false,
       },
       resolver: {platforms: []},
+      watchFolders: ['/external/node_modules'],
       server: {
         rewriteRequestUrl(requrl) {
           const rewritten = requrl.replace(
@@ -648,6 +649,60 @@ describe('HmrServer', () => {
         type: 'update-done',
       },
     ]);
+  });
+
+  test('should resolve [metro-watchFolders] prefix in entry point', async () => {
+    await connect(
+      '/hot?bundleEntry=./[metro-watchFolders]/0/expo-router/entry.js&platform=ios',
+    );
+
+    expect(getRevisionByGraphIdMock).toBeCalledWith(
+      getGraphId(
+        '/external/node_modules/expo-router/entry.js',
+        {
+          customTransformOptions: {},
+          dev: true,
+          minify: false,
+          platform: 'ios',
+          type: 'module',
+          unstable_transformProfile: 'default',
+        },
+        {
+          shallow: false,
+          lazy: false,
+          unstable_allowRequireContext: false,
+          resolverOptions: {
+            dev: true,
+          },
+        },
+      ),
+    );
+  });
+
+  test('should resolve [metro-project] prefix in entry point', async () => {
+    await connect('/hot?bundleEntry=./[metro-project]/src/App.js&platform=ios');
+
+    expect(getRevisionByGraphIdMock).toBeCalledWith(
+      getGraphId(
+        '/root/src/App.js',
+        {
+          customTransformOptions: {},
+          dev: true,
+          minify: false,
+          platform: 'ios',
+          type: 'module',
+          unstable_transformProfile: 'default',
+        },
+        {
+          shallow: false,
+          lazy: false,
+          unstable_allowRequireContext: false,
+          resolverOptions: {
+            dev: true,
+          },
+        },
+      ),
+    );
   });
 
   test('should return error messages when there is a transform error', async () => {
