@@ -1379,7 +1379,16 @@ export default class Server {
           continue;
         }
 
-        const fileAbsolute = path.resolve(this._config.projectRoot, file ?? '');
+        const fileAbsolute =
+          file != null
+            ? (this._routeMap.filePathOfUrlDecodedPathname(file) ??
+              (path.isAbsolute(file)
+                ? file
+                : path.resolve(this._config.projectRoot, file)))
+            : null;
+        if (fileAbsolute == null) {
+          continue;
+        }
         if (!depGraph.doesFileExist(fileAbsolute)) {
           debug(
             'Skipping code frame for file not in dependency graph.',
