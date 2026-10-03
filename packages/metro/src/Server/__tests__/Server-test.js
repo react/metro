@@ -910,7 +910,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -928,7 +928,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -1629,13 +1629,11 @@ describe('processRequest', () => {
         ]);
 
         // Mirrors how _processSingleAssetRequest resolves an incoming URL.
-        const resolved = watchFolderServer._resolveWatchFolderPrefix(
-          './' + urlPath,
-        );
         expect(
           path.resolve(
-            resolved?.rootDir ?? p('/project'),
-            resolved?.filePath ?? urlPath,
+            p('/project'),
+            watchFolderServer._routeMap.filePathOfUrlDecodedPathname(urlPath) ??
+              urlPath,
           ),
         ).toBe(absolutePath);
       },

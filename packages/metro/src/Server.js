@@ -58,6 +58,7 @@ import formatBundlingError from './lib/formatBundlingError';
 import getGraphId from './lib/getGraphId';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import parseJsonBody from './lib/parseJsonBody';
+import ProjectRouteMap from './lib/ProjectRouteMap';
 import splitBundleOptions from './lib/splitBundleOptions';
 import * as transformHelpers from './lib/transformHelpers';
 import {UnableToResolveError} from './node-haste/DependencyGraph/ModuleResolution';
@@ -149,9 +150,7 @@ export default class Server {
   _reporter: Reporter;
   _serverOptions: ServerOptions | void;
   _allowedSuffixesForSourceRequests: ReadonlyArray<string>;
-  _sourceRequestRoutingMap: ReadonlyArray<
-    [pathnamePrefix: string, normalizedRootDir: string],
-  >;
+  _routeMap: ProjectRouteMap;
   _fetchTimings: Array<FetchTiming>;
   _activeFetchCount: number;
 
@@ -178,13 +177,7 @@ export default class Server {
         ].map(ext => '.' + ext),
       ),
     ];
-    this._sourceRequestRoutingMap = [
-      ['/[metro-project]/', path.resolve(this._config.projectRoot)],
-      ...this._config.watchFolders.map((watchFolder, index) => [
-        `/[metro-watchFolders]/${index}/`,
-        path.resolve(watchFolder),
-      ]),
-    ];
+    this._routeMap = new ProjectRouteMap(config);
     this._isEnded = false;
     this._fetchTimings = [];
     this._activeFetchCount = 0;
@@ -260,8 +253,7 @@ export default class Server {
       sourceMapUrl: serializerOptions.sourceMapUrl,
       sourceUrl: serializerOptions.sourceUrl,
       inlineSourceMap: serializerOptions.inlineSourceMap,
-      serverRoot:
-        this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+      serverRoot: this._routeMap.serverRootDir,
       shouldAddToIgnoreList: (module: Module<>) =>
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
@@ -370,6 +362,8 @@ export default class Server {
       transformOptions,
     } = splitBundleOptions(options);
 
+    const entryPoint = this._getEntryPointAbsolutePath(entryFile);
+
     const {prepend, graph} = await this._bundler.buildGraph(
       entryFile,
       transformOptions,
@@ -380,8 +374,6 @@ export default class Server {
         lazy: graphOptions.lazy,
       },
     );
-
-    const entryPoint = this._getEntryPointAbsolutePath(entryFile);
 
     return await getRamBundleInfo(entryPoint, prepend, graph, {
       asyncRequireModulePath: await this._resolveRelativePath(
@@ -411,8 +403,7 @@ export default class Server {
       sourceMapUrl: serializerOptions.sourceMapUrl,
       sourceUrl: serializerOptions.sourceUrl,
       inlineSourceMap: serializerOptions.inlineSourceMap,
-      serverRoot:
-        this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+      serverRoot: this._routeMap.serverRootDir,
       shouldAddToIgnoreList: (module: Module<>) =>
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
@@ -572,12 +563,9 @@ export default class Server {
 
     try {
       const depGraph = await this._bundler.getBundler().getDependencyGraph();
-      const resolvedAssetPath = this._resolveWatchFolderPrefix(
-        './' + assetPath,
-      );
       const data = await getAsset(
-        resolvedAssetPath?.filePath ?? assetPath,
-        resolvedAssetPath?.rootDir ?? this._config.projectRoot,
+        this._routeMap.filePathOfUrlDecodedPathname(assetPath) ?? assetPath,
+        this._config.projectRoot,
         this._config.watchFolders,
         urlObj.searchParams.get('platform'),
         this._config.resolver.assetExts,
@@ -712,36 +700,23 @@ export default class Server {
     } else if (pathname === '/symbolicate') {
       await this._symbolicate(req, res);
     } else {
-      let handled = false;
-      for (const [pathnamePrefix, normalizedRootDir] of this
-        ._sourceRequestRoutingMap) {
-        if (filePathname.startsWith(pathnamePrefix)) {
-          const relativeFilePathname = filePathname.substr(
-            pathnamePrefix.length,
-          );
-          await this._processSourceRequest(
-            relativeFilePathname,
-            normalizedRootDir,
-            res,
-          );
-          handled = true;
-          break;
-        }
-      }
-      if (!handled) {
+      const sourceFilePath =
+        this._routeMap.filePathOfUrlDecodedPathname(filePathname);
+      if (sourceFilePath != null) {
+        await this._processSourceRequest(sourceFilePath, res);
+      } else {
         next();
       }
     }
   }
 
   async _processSourceRequest(
-    relativeFilePathname: string,
-    rootDir: string,
+    filePath: string,
     res: ServerResponse,
   ): Promise<void> {
     if (
       !this._allowedSuffixesForSourceRequests.some(suffix =>
-        relativeFilePathname.endsWith(suffix),
+        filePath.endsWith(suffix),
       )
     ) {
       res.writeHead(404);
@@ -749,7 +724,6 @@ export default class Server {
       return;
     }
     const depGraph = await this._bundler.getBundler().getDependencyGraph();
-    const filePath = path.join(rootDir, relativeFilePathname);
     try {
       await depGraph.getOrComputeSha1(filePath);
     } catch {
@@ -757,7 +731,7 @@ export default class Server {
       res.end();
       return;
     }
-    const mimeType = mime.contentType(path.basename(relativeFilePathname));
+    const mimeType = mime.contentType(path.basename(filePath));
     res.setHeader('Content-Type', mimeType);
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -1165,8 +1139,7 @@ export default class Server {
           sourceMapUrl: serializerOptions.sourceMapUrl,
           sourceUrl: serializerOptions.sourceUrl,
           inlineSourceMap: serializerOptions.inlineSourceMap,
-          serverRoot:
-            this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+          serverRoot: this._routeMap.serverRootDir,
           shouldAddToIgnoreList: (module: Module<>) =>
             this._shouldAddModuleToIgnoreList(module),
           getSourceUrl: (module: Module<>) =>
@@ -1638,33 +1611,6 @@ export default class Server {
     );
   }
 
-  _resolveWatchFolderPrefix(
-    filePath: string,
-  ): {rootDir: string, filePath: string} | null {
-    const watchFolderMatch = filePath.match(
-      /^\.\/\[metro-watchFolders\]\/(\d+)\/(.*)/,
-    );
-    if (watchFolderMatch != null) {
-      const index = parseInt(watchFolderMatch[1], 10);
-      const watchFolder = this._config.watchFolders[index];
-      if (watchFolder != null) {
-        return {
-          rootDir: path.resolve(watchFolder),
-          filePath:
-            '.' + path.sep + watchFolderMatch[2].split('/').join(path.sep),
-        };
-      }
-    }
-    const projectMatch = filePath.match(/^\.\/\[metro-project\]\/(.*)/);
-    if (projectMatch != null) {
-      return {
-        rootDir: path.resolve(this._config.projectRoot),
-        filePath: '.' + path.sep + projectMatch[1].split('/').join(path.sep),
-      };
-    }
-    return null;
-  }
-
   async _resolveRelativePath(
     filePath: string,
     {
@@ -1682,14 +1628,17 @@ export default class Server {
       transformOptions.platform,
       resolverOptions,
     );
-    const resolved = this._resolveWatchFolderPrefix(filePath);
-    const rootDir =
-      resolved != null
-        ? resolved.rootDir
-        : relativeTo === 'server'
-          ? this._getServerRootDir()
-          : this._config.projectRoot;
-    const resolvedFilePath = resolved != null ? resolved.filePath : filePath;
+    let rootDir;
+    let resolvedFilePath;
+    if (relativeTo === 'project') {
+      rootDir = this._config.projectRoot;
+      resolvedFilePath = filePath;
+    } else {
+      const absolutePath =
+        this._routeMap.filePathOfUrlDecodedPathname(filePath);
+      rootDir = absolutePath != null ? '/' : this._routeMap.serverRootDir;
+      resolvedFilePath = absolutePath ?? filePath;
+    }
     return resolutionFn(`${rootDir}/.`, {
       name: resolvedFilePath,
       data: {
@@ -1753,16 +1702,11 @@ export default class Server {
     sourcePaths: SourcePathsMode.Absolute,
   };
 
-  _getServerRootDir(): string {
-    return this._config.server.unstable_serverRoot ?? this._config.projectRoot;
-  }
-
   _getEntryPointAbsolutePath(entryFile: string): string {
-    const resolved = this._resolveWatchFolderPrefix(entryFile);
-    if (resolved != null) {
-      return path.resolve(resolved.rootDir, resolved.filePath);
-    }
-    return path.resolve(this._getServerRootDir(), entryFile);
+    return (
+      this._routeMap.filePathOfUrlDecodedPathname(entryFile) ??
+      path.resolve(this._routeMap.serverRootDir, entryFile)
+    );
   }
 
   // Wait for the server to finish initializing.
@@ -1787,29 +1731,7 @@ export default class Server {
   _getModuleSourceUrl(module: Module<>, mode: SourcePathsMode): string {
     switch (mode) {
       case SourcePathsMode.ServerUrl:
-        for (const [pathnamePrefix, normalizedRootDir] of this
-          ._sourceRequestRoutingMap) {
-          if (module.path.startsWith(normalizedRootDir + path.sep)) {
-            const relativePath = module.path.slice(
-              normalizedRootDir.length + 1,
-            );
-            const relativePathPosix = relativePath
-              .split(path.sep)
-              .map(segment => encodeURIComponent(segment))
-              .join('/');
-            return pathnamePrefix + relativePathPosix;
-          }
-        }
-        // Ordinarily all files should match one of the roots above. If they
-        // don't, try to preserve useful information, even if fetching the path
-        // from Metro might fail.
-        const modulePathPosix = module.path
-          .split(path.sep)
-          .map(segment => encodeURIComponent(segment))
-          .join('/');
-        return modulePathPosix.startsWith('/')
-          ? modulePathPosix
-          : '/' + modulePathPosix;
+        return this._routeMap.urlPathnameOfFilePath(module.path);
       case SourcePathsMode.Absolute:
         return module.path;
     }
