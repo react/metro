@@ -2123,6 +2123,91 @@ describe('FileMap', () => {
       {config: {enableSymlinks: true}},
     );
 
+    // Watchers that report only the replaced path (FSEvents does, for a
+    // directory replaced in one batch) leave nothing to report the old
+    // entries beneath it.
+    fm_it(
+      'removes the files beneath a directory replaced by a symlink',
+      async ({fileMap}) => {
+        const {fileSystem} = await fileMap.build();
+        const e = mockEmitters[p('/project/fruits')];
+        delete mockFs[p('/project/fruits/pkg/index.js')];
+        delete mockFs[p('/project/fruits/pkg/lib/util.js')];
+        mockFs[p('/project/fruits/pkg')] = {link: '../vegetables'};
+        e.emitFileEvent({
+          event: 'touch',
+          relativePath: 'pkg',
+          metadata: MOCK_CHANGE_LINK,
+        });
+        const {changes} = await waitForItToChange(fileMap);
+        expectChanges(changes, {
+          addedFiles: [
+            [path.join('fruits', 'pkg'), {isSymlink: true, modifiedTime: 46}],
+          ],
+          removedFiles: [
+            [
+              path.join('fruits', 'pkg', 'index.js'),
+              {isSymlink: false, modifiedTime: 32},
+            ],
+            [
+              path.join('fruits', 'pkg', 'lib', 'util.js'),
+              {isSymlink: false, modifiedTime: 32},
+            ],
+          ],
+          removedDirectories: [
+            path.join('fruits', 'pkg'),
+            path.join('fruits', 'pkg', 'lib'),
+          ],
+        });
+        expect(fileSystem.linkStats(p('/project/fruits/pkg'))).toEqual(
+          expect.objectContaining({fileType: 'l'}),
+        );
+        expect(fileSystem.exists(p('/project/fruits/pkg/index.js'))).toBe(
+          false,
+        );
+      },
+      {
+        config: {enableSymlinks: true},
+        mockFs: {
+          [p('/project/fruits/Strawberry.js')]: '// Strawberry!',
+          [p('/project/fruits/pkg/index.js')]: '// pkg',
+          [p('/project/fruits/pkg/lib/util.js')]: '// util',
+          [p('/project/vegetables/Melon.js')]: '// Melon!',
+        },
+      },
+    );
+
+    fm_it('removes a file replaced by a directory', async ({fileMap}) => {
+      const {fileSystem} = await fileMap.build();
+      const e = mockEmitters[p('/project/fruits')];
+      delete mockFs[p('/project/fruits/Banana.js')];
+      mockFs[p('/project/fruits/Banana.js/index.js')] = '// Banana!';
+      e.emitFileEvent({
+        event: 'touch',
+        relativePath: path.join('Banana.js', 'index.js'),
+        metadata: MOCK_CHANGE_FILE,
+      });
+      const {changes} = await waitForItToChange(fileMap);
+      expectChanges(changes, {
+        addedFiles: [
+          [
+            path.join('fruits', 'Banana.js', 'index.js'),
+            {isSymlink: false, modifiedTime: 45},
+          ],
+        ],
+        removedFiles: [
+          [
+            path.join('fruits', 'Banana.js'),
+            {isSymlink: false, modifiedTime: 32},
+          ],
+        ],
+        addedDirectories: [path.join('fruits', 'Banana.js')],
+      });
+      expect(fileSystem.exists(p('/project/fruits/Banana.js/index.js'))).toBe(
+        true,
+      );
+    });
+
     fm_it(
       'symlink deletion is handled without affecting the symlink target',
       async ({fileMap, hasteMap}) => {
