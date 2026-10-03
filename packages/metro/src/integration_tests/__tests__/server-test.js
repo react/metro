@@ -99,10 +99,10 @@ describe('Metro development server serves bundles via HTTP', () => {
     expect(bundlesDownloaded).toEqual(
       new Set([
         '/import-export/index.bundle?platform=ios&dev=true&minify=false&lazy=true',
-        '/import-export/export-5.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-6.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-7.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-8.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-5.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-6.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-7.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-8.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
       ]),
     );
   });
