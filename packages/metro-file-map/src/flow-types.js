@@ -418,8 +418,6 @@ export interface FileSystem {
   }): Iterable<Path>;
 }
 
-export type Glob = string;
-
 export type JsonData =
   | string
   | number
@@ -617,9 +615,18 @@ export type WatcherBackendChangeEvent =
 
 export type WatcherBackendOptions = Readonly<{
   ignored: ?RegExp,
-  globs: ReadonlyArray<string>,
-  dot: boolean,
+  fileFilter: ?WatcherFileFilter,
   ...
+}>;
+
+/**
+ * Regular files a watcher reports changes to: those matching any of the
+ * extensions (without a leading dot), basenames, or basename prefixes.
+ */
+export type WatcherFileFilter = Readonly<{
+  extensions: ReadonlySet<string>,
+  fileNames: ReadonlySet<string>,
+  fileNamePrefixes: ReadonlyArray<string>,
 }>;
 
 export type WatchmanClockSpec =

@@ -143,18 +143,6 @@ export default class WatchmanWatcher extends AbstractWatcher {
         relative_root: watchProjectInfo.relativePath,
       };
 
-      // Make sure we honor the dot option if even we're not using globs.
-      if (self.globs.length === 0 && !self.dot) {
-        options.expression = [
-          'match',
-          '**',
-          'wholename',
-          {
-            includedotfiles: false,
-          },
-        ];
-      }
-
       self.#client.command(
         ['subscribe', getWatchRoot(), self.subscriptionName, options],
         onSubscribe,
@@ -269,7 +257,7 @@ export default class WatchmanWatcher extends AbstractWatcher {
 
     if (
       this.doIgnore(relativePath) ||
-      !common.includedByGlob(type, this.globs, this.dot, relativePath)
+      !common.includedByFilter(type, this.fileFilter, relativePath)
     ) {
       return;
     }

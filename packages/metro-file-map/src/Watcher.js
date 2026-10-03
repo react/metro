@@ -221,15 +221,14 @@ export class Watcher extends EventEmitter {
 
     const createWatcherBackend = (root: Path): Promise<WatcherBackend> => {
       const watcherOptions: WatcherBackendOptions = {
-        dot: true,
-        globs: [
+        fileFilter: {
+          extensions: new Set(extensions),
           // Ensure we always include package.json files, which are crucial for
-          /// module resolution.
-          '**/package.json',
+          // module resolution.
+          fileNames: new Set(['package.json']),
           // Ensure we always watch any health check files
-          '**/' + this.#options.healthCheckFilePrefix + '*',
-          ...extensions.map(extension => '**/*.' + extension),
-        ],
+          fileNamePrefixes: [this.#options.healthCheckFilePrefix],
+        },
         ignored: ignorePatternForWatch,
         watchmanDeferStates: this.#options.watchmanDeferStates,
       };

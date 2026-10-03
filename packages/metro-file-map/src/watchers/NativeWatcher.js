@@ -8,11 +8,11 @@
  * @format
  */
 
-import type {WatcherBackendChangeEvent} from '../flow-types';
+import type {WatcherBackendChangeEvent, WatcherFileFilter} from '../flow-types';
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {includedByGlob, typeFromStat} from './common';
+import {includedByFilter, typeFromStat} from './common';
 import debugModule from 'debug';
 import {promises as fsPromises, watch} from 'node:fs';
 import {platform} from 'node:os';
@@ -60,8 +60,7 @@ export default class NativeWatcher extends AbstractWatcher {
     dir: string,
     opts: Readonly<{
       ignored: ?RegExp,
-      globs: ReadonlyArray<string>,
-      dot: boolean,
+      fileFilter: ?WatcherFileFilter,
       ...
     }>,
   ) {
@@ -154,7 +153,7 @@ export default class NativeWatcher extends AbstractWatcher {
         return null;
       }
 
-      if (!includedByGlob(type, this.globs, this.dot, relativePath)) {
+      if (!includedByFilter(type, this.fileFilter, relativePath)) {
         return null;
       }
 

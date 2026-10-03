@@ -87,8 +87,7 @@ describe('FallbackWatcher', () => {
     });
 
     watcher = new FallbackWatcher(watchRoot, {
-      dot: true,
-      globs: [],
+      fileFilter: null,
       ignored: null,
       watchmanDeferStates: [],
     });

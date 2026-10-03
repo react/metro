@@ -49,9 +49,12 @@ jest.mock('fb-watchman', () => ({
 describe('WatchmanWatcher', () => {
   test('initializes with watch-project, clock, subscribe', () => {
     const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
-      dot: true,
       ignored: null,
-      globs: ['**/*.js'],
+      fileFilter: {
+        extensions: new Set(['js']),
+        fileNames: new Set(),
+        fileNamePrefixes: [],
+      },
       watchmanDeferStates: ['busy'],
     });
     let isSettled = false;
@@ -104,9 +107,12 @@ describe('WatchmanWatcher', () => {
     let watchmanWatcher: WatchmanWatcher;
     beforeEach(async () => {
       watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
-        dot: true,
         ignored: null,
-        globs: ['**/*.js'],
+        fileFilter: {
+          extensions: new Set(['js']),
+          fileNames: new Set(),
+          fileNamePrefixes: [],
+        },
         watchmanDeferStates: ['busy'],
       });
       const startPromise = watchmanWatcher.startWatching();
@@ -160,9 +166,12 @@ describe('WatchmanWatcher', () => {
 
     beforeEach(async () => {
       watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
-        dot: true,
         ignored: null,
-        globs: ['**/*.js'],
+        fileFilter: {
+          extensions: new Set(['js']),
+          fileNames: new Set(),
+          fileNamePrefixes: [],
+        },
         watchmanDeferStates: ['busy'],
       });
       startPromise = watchmanWatcher.startWatching();
