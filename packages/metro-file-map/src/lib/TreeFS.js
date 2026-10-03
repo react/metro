@@ -420,15 +420,13 @@ export default class TreeFS implements MutableFileSystem {
       changeListener,
       makeDirectories: true,
     });
-    if (!parentDirNode.exists) {
-      throw new Error(
-        `TreeFS: Failed to make parent directory entry for ${mixedPath}`,
-      );
-    }
     // Normalize the resulting path to account for the parent node being root.
-    const canonicalPath = this.#normalizePath(
-      parentDirNode.canonicalPath + path.sep + path.basename(normalPath),
-    );
+    // If the parent couldn't be made, bulkAddOrModify will handle or report it.
+    const canonicalPath = parentDirNode.exists
+      ? this.#normalizePath(
+          parentDirNode.canonicalPath + path.sep + path.basename(normalPath),
+        )
+      : normalPath;
     this.bulkAddOrModify(new Map([[canonicalPath, metadata]]), changeListener);
   }
 
@@ -450,11 +448,37 @@ export default class TreeFS implements MutableFileSystem {
         lastSepIdx === -1 ? normalPath : normalPath.slice(lastSepIdx + 1);
 
       if (directoryNode == null || dirname !== lastDir) {
-        const lookup = this.#lookupByNormalPath(dirname, {
+        let lookup = this.#lookupByNormalPath(dirname, {
           changeListener,
           followLeaf: false,
           makeDirectories: true,
         });
+        if (changeListener != null) {
+          // Watchers report entries they observed, so a file beneath one we
+          // know as a regular file means it has been replaced by a directory.
+          const blocking = !lookup.exists
+            ? this.#lookupByNormalPath(lookup.canonicalMissingPath, {
+                followLeaf: false,
+              })
+            : lookup;
+          if (
+            blocking.exists &&
+            blocking.parentNode != null &&
+            !isDirectory(blocking.node) &&
+            isRegularFile(blocking.node)
+          ) {
+            this.#removeChild(
+              blocking.parentNode,
+              blocking.canonicalPath,
+              changeListener,
+            );
+            lookup = this.#lookupByNormalPath(dirname, {
+              changeListener,
+              followLeaf: false,
+              makeDirectories: true,
+            });
+          }
+        }
         if (!lookup.exists) {
           // This should only be possible if the input is non-real and
           // lookup hits a broken symlink.
@@ -474,12 +498,12 @@ export default class TreeFS implements MutableFileSystem {
       }
       if (changeListener != null) {
         const existingNode = directoryNode.get(basename);
-        if (existingNode != null) {
-          invariant(
-            !isDirectory(existingNode),
-            'Detected addition or modification of file %s, but it is tracked as a non-empty directory',
-            normalPath,
-          );
+        if (existingNode != null && isDirectory(existingNode)) {
+          // A file where we know a directory means the directory has been
+          // replaced, along with everything beneath it.
+          this.#removeChild(directoryNode, normalPath, changeListener);
+          changeListener.fileAdded(normalPath, metadata);
+        } else if (existingNode != null) {
           // File already exists - this is a modification
           changeListener.fileModified(normalPath, existingNode, metadata);
         } else {
@@ -488,6 +512,34 @@ export default class TreeFS implements MutableFileSystem {
         }
       }
       directoryNode.set(basename, metadata);
+    }
+  }
+
+  /**
+   * Remove the entry at `canonicalPath` from `parentNode`, and everything
+   * beneath it, reporting each removal. Unlike `remove`, this leaves an emptied
+   * parent in place.
+   */
+  #removeChild(
+    parentNode: DirectoryNode,
+    canonicalPath: string,
+    changeListener: FileSystemListener,
+  ): void {
+    const reportRemoved = (nodePath: string, node: MixedNode) => {
+      if (isDirectory(node)) {
+        for (const [childName, child] of node) {
+          reportRemoved(nodePath + path.sep + childName, child);
+        }
+        changeListener.directoryRemoved(nodePath);
+      } else {
+        changeListener.fileRemoved(nodePath, node);
+      }
+    };
+    const basename = path.basename(canonicalPath);
+    const node = parentNode.get(basename);
+    if (node != null) {
+      reportRemoved(canonicalPath, node);
+      parentNode.delete(basename);
     }
   }
 
