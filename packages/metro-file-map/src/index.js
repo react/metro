@@ -806,6 +806,23 @@ export default class FileMap extends EventEmitter {
       firstEnqueuedTimestamp: number,
     } = null;
 
+    // Watchers report the paths of entries they observed, so a path that the
+    // file map resolves through a symlink is stale: it was reported before a
+    // directory above it was replaced by that symlink. Applying it would add or
+    // remove files in the symlink's target instead.
+    const isThroughSymlink = (relativeFilePath: string): boolean => {
+      for (
+        let dir = path.dirname(relativeFilePath);
+        dir !== '.';
+        dir = path.dirname(dir)
+      ) {
+        if (fileSystem.linkStats(dir)?.fileType === 'l') {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const emitChange = () => {
       if (nextEmit == null) {
         // Nothing to emit
@@ -822,6 +839,10 @@ export default class FileMap extends EventEmitter {
       // this sequence.
       for (const event of events) {
         const {relativeFilePath, clock} = event;
+        this.#updateClock(clocks, clock);
+        if (isThroughSymlink(relativeFilePath)) {
+          continue;
+        }
         if (event.type === 'delete') {
           fileSystem.remove(relativeFilePath, changeAggregator);
         } else {
@@ -831,7 +852,6 @@ export default class FileMap extends EventEmitter {
             changeAggregator,
           );
         }
-        this.#updateClock(clocks, clock);
       }
 
       const changeSize = changeAggregator.getSize();
