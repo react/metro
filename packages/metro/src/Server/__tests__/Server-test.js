@@ -1485,6 +1485,78 @@ describe('processRequest', () => {
         expect(result.codeFrame).toBeNull();
       });
 
+      test('should return codeFrame when symbolicated file has [metro-project] prefix', async () => {
+        // Simulate the scenario where source maps use virtual-prefixed
+        // paths (sourcePaths=serverUrl) by overriding the exploded source
+        // map to reference /[metro-project]/mybundle.js instead of the
+        // absolute /root/mybundle.js. Symbolication maps bundle line 2,
+        // col 18 → source line 1, col 0, and produces file =
+        // /[metro-project]/mybundle.js. getCodeFrame must resolve this
+        // virtual prefix back to /root/mybundle.js to read the source.
+        jest
+          .spyOn(server, '_explodedSourceMapForBundleOptions')
+          .mockResolvedValue([
+            {
+              firstLine1Based: 1,
+              functionMap: null,
+              path: 'require-js',
+              map: [],
+            },
+            {
+              firstLine1Based: 2,
+              functionMap: null,
+              path: '/[metro-project]/mybundle.js',
+              map: [[1, 16, 1, 0]],
+            },
+          ]);
+
+        const response = await makeRequest('/symbolicate', {
+          headers: {'content-type': 'application/json'},
+          data: JSON.stringify({
+            stack: [
+              {
+                file: `http://localhost:8081/mybundle.bundle${queryDelimiter}runModule=true`,
+                lineNumber: 2,
+                column: 18,
+                methodName: 'clientSideMethodName',
+              },
+            ],
+          }),
+        });
+
+        const result = response._getJSON();
+        // Symbolication mapped the HTTP URL to the virtual-prefixed source path
+        expect(result.stack[0].file).toBe('/[metro-project]/mybundle.js');
+        expect(result.stack[0].lineNumber).toBe(1);
+        expect(result.stack[0].column).toBe(0);
+        // getCodeFrame resolved /[metro-project]/mybundle.js → /root/mybundle.js
+        expect(result.codeFrame).not.toBeNull();
+        expect(result.codeFrame.fileName).toBe('/[metro-project]/mybundle.js');
+        expect(result.codeFrame.content).toEqual(expect.any(String));
+      });
+
+      test('should return codeFrame when file is a relative path (resolved against projectRoot)', async () => {
+        const response = await makeRequest('/symbolicate', {
+          headers: {'content-type': 'application/json'},
+          data: JSON.stringify({
+            stack: [
+              {
+                file: 'mybundle.js',
+                lineNumber: 2,
+                column: 0,
+                methodName: 'test',
+              },
+            ],
+          }),
+        });
+
+        const result = response._getJSON();
+        expect(result.stack[0].file).toBe('mybundle.js');
+        expect(result.codeFrame).not.toBeNull();
+        expect(result.codeFrame.fileName).toBe('mybundle.js');
+        expect(result.codeFrame.content).toEqual(expect.any(String));
+      });
+
       // TODO: This probably should restore the *original* file before rewrite
       // or normalisation.
       test('should leave original file and position when cannot symbolicate (after normalisation and rewriting?)', async () => {
