@@ -39,6 +39,27 @@ function isRegularFile(node: FileNode): boolean {
   return node[H.SYMLINK] === 0;
 }
 
+type NormalPathLookupResult =
+  | {
+      ancestorOfRootIdx: ?number,
+      canonicalPath: string,
+      exists: true,
+      node: MixedNode,
+      parentNode: DirectoryNode,
+    }
+  | {
+      ancestorOfRootIdx: ?number,
+      canonicalPath: string,
+      exists: true,
+      node: DirectoryNode,
+      parentNode: null,
+    }
+  | {
+      canonicalMissingPath: string,
+      missingSegmentName: string,
+      exists: false,
+    };
+
 type DeserializedSnapshotInput = {
   rootDir: string,
   fileSystemData: DirectoryNode,
@@ -416,10 +437,11 @@ export default class TreeFS implements MutableFileSystem {
     const normalPath = this.#normalizePath(mixedPath);
     // Walk the tree to find the *real* path of the parent node, creating
     // directories as we need.
-    const parentDirNode = this.#lookupByNormalPath(path.dirname(normalPath), {
+    const parentDirNode = this.#lookupDirectoryForAdd(
+      path.dirname(normalPath),
+      true,
       changeListener,
-      makeDirectories: true,
-    });
+    );
     if (!parentDirNode.exists) {
       throw new Error(
         `TreeFS: Failed to make parent directory entry for ${mixedPath}`,
@@ -450,11 +472,11 @@ export default class TreeFS implements MutableFileSystem {
         lastSepIdx === -1 ? normalPath : normalPath.slice(lastSepIdx + 1);
 
       if (directoryNode == null || dirname !== lastDir) {
-        const lookup = this.#lookupByNormalPath(dirname, {
+        const lookup = this.#lookupDirectoryForAdd(
+          dirname,
+          false,
           changeListener,
-          followLeaf: false,
-          makeDirectories: true,
-        });
+        );
         if (!lookup.exists) {
           // This should only be possible if the input is non-real and
           // lookup hits a broken symlink.
@@ -474,21 +496,78 @@ export default class TreeFS implements MutableFileSystem {
       }
       if (changeListener != null) {
         const existingNode = directoryNode.get(basename);
-        if (existingNode != null) {
-          invariant(
-            !isDirectory(existingNode),
-            'Detected addition or modification of file %s, but it is tracked as a non-empty directory',
-            normalPath,
-          );
-          // File already exists - this is a modification
-          changeListener.fileModified(normalPath, existingNode, metadata);
-        } else {
+        if (existingNode == null) {
           // New file
           changeListener.fileAdded(normalPath, metadata);
+        } else if (isDirectory(existingNode)) {
+          // A file (or symlink) where we know a directory means the directory
+          // has been replaced, so everything beneath it is gone. Removing it
+          // may also remove its emptied ancestors, so look up the parent again.
+          this.#removeNormalPath(normalPath, changeListener);
+          const lookup = this.#lookupByNormalPath(dirname, {
+            changeListener,
+            followLeaf: false,
+            makeDirectories: true,
+          });
+          if (!lookup.exists || !isDirectory(lookup.node)) {
+            throw new Error(
+              `TreeFS: Could not recreate directory ${dirname} after removing ${normalPath}.`,
+            );
+          }
+          directoryNode = lookup.node;
+          changeListener.fileAdded(normalPath, metadata);
+        } else {
+          // File already exists - this is a modification
+          changeListener.fileModified(normalPath, existingNode, metadata);
         }
       }
       directoryNode.set(basename, metadata);
     }
+  }
+
+  /**
+   * Look up the directory to add a file to, creating any missing directories.
+   * A watcher reports the path of an entry it observed, so in watch mode (with
+   * a change listener) a regular file in the way of that directory has been
+   * replaced by a directory, and is removed.
+   */
+  #lookupDirectoryForAdd(
+    normalPath: string,
+    followLeaf: boolean,
+    changeListener?: FileSystemListener,
+  ): NormalPathLookupResult {
+    const lookup = this.#lookupByNormalPath(normalPath, {
+      changeListener,
+      followLeaf,
+      makeDirectories: true,
+    });
+    if (changeListener == null) {
+      return lookup;
+    }
+    const blockingPath = !lookup.exists
+      ? lookup.canonicalMissingPath
+      : isDirectory(lookup.node)
+        ? null
+        : lookup.canonicalPath;
+    if (blockingPath == null) {
+      return lookup;
+    }
+    const blocking = this.#lookupByNormalPath(blockingPath, {
+      followLeaf: false,
+    });
+    if (
+      !blocking.exists ||
+      isDirectory(blocking.node) ||
+      !isRegularFile(blocking.node)
+    ) {
+      return lookup;
+    }
+    this.#removeNormalPath(blocking.canonicalPath, changeListener);
+    return this.#lookupByNormalPath(normalPath, {
+      changeListener,
+      followLeaf,
+      makeDirectories: true,
+    });
   }
 
   remove(mixedPath: Path, changeListener?: FileSystemListener): void {
@@ -583,26 +662,7 @@ export default class TreeFS implements MutableFileSystem {
         pathIdx: number,
       },
     } = {followLeaf: true, makeDirectories: false},
-  ):
-    | {
-        ancestorOfRootIdx: ?number,
-        canonicalPath: string,
-        exists: true,
-        node: MixedNode,
-        parentNode: DirectoryNode,
-      }
-    | {
-        ancestorOfRootIdx: ?number,
-        canonicalPath: string,
-        exists: true,
-        node: DirectoryNode,
-        parentNode: null,
-      }
-    | {
-        canonicalMissingPath: string,
-        missingSegmentName: string,
-        exists: false,
-      } {
+  ): NormalPathLookupResult {
     // We'll update the target if we hit a symlink.
     let targetNormalPath = requestedNormalPath;
     // Lazy-initialised set of seen target paths, to detect symlink cycles.

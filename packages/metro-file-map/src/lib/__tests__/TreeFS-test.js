@@ -1245,6 +1245,72 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           ['fileAdded', p('dir/another.js'), [789, 0, 0, '', '', 0, null]],
         ]);
       });
+
+      // A watcher reports the path it observed, so a file where we know a
+      // directory, or beneath a path we know as a file, means the old entry
+      // has been replaced.
+      test('removes everything beneath a directory replaced by a file', () => {
+        simpleTfs.addOrModify(p('dir'), [789, 0, 0, '', 0], listener);
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('dir/nested.js'), [456, 0, 0, '', 0]],
+          ['directoryRemoved', p('dir')],
+          ['fileAdded', p('dir'), [789, 0, 0, '', 0]],
+        ]);
+        expect(simpleTfs.linkStats(p('/project/dir'))).toEqual({
+          fileType: 'f',
+          modifiedTime: 789,
+          size: 0,
+        });
+        expect(simpleTfs.exists(p('/project/dir/nested.js'))).toBe(false);
+      });
+
+      test('removes everything beneath a directory replaced by a symlink', () => {
+        simpleTfs.addOrModify(p('dir'), [0, 0, 0, '', 'existing.js'], listener);
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('dir/nested.js'), [456, 0, 0, '', 0]],
+          ['directoryRemoved', p('dir')],
+          ['fileAdded', p('dir'), [0, 0, 0, '', 'existing.js']],
+        ]);
+        expect(simpleTfs.lookup(p('/project/dir'))).toMatchObject({
+          exists: true,
+          realPath: p('/project/existing.js'),
+        });
+      });
+
+      test('keeps the parent of a replaced directory that it was the only entry of', () => {
+        simpleTfs.addOrModify(p('only/dir/nested.js'), [1, 0, 0, '', 0]);
+
+        simpleTfs.addOrModify(p('only/dir'), [2, 0, 0, '', 0], listener);
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('only/dir/nested.js'), [1, 0, 0, '', 0]],
+          ['directoryRemoved', p('only/dir')],
+          ['directoryRemoved', p('only')],
+          ['directoryAdded', p('only')],
+          ['fileAdded', p('only/dir'), [2, 0, 0, '', 0]],
+        ]);
+        expect(simpleTfs.exists(p('/project/only/dir'))).toBe(true);
+      });
+
+      test('removes a file replaced by a directory', () => {
+        simpleTfs.addOrModify(
+          p('existing.js/inner/file.js'),
+          [789, 0, 0, '', 0],
+          listener,
+        );
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('existing.js'), [123, 0, 0, '', 0]],
+          ['directoryAdded', p('existing.js')],
+          ['directoryAdded', p('existing.js/inner')],
+          ['fileAdded', p('existing.js/inner/file.js'), [789, 0, 0, '', 0]],
+        ]);
+        expect(simpleTfs.exists(p('/project/existing.js/inner/file.js'))).toBe(
+          true,
+        );
+      });
     });
 
     describe('bulkAddOrModify with listener', () => {
@@ -1262,6 +1328,35 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           ['fileAdded', p('file1.js'), [1, 0, 0, '', '', 0, null]],
           ['fileAdded', p('file2.js'), [2, 0, 0, '', '', 0, null]],
           ['fileAdded', p('file3.js'), [3, 0, 0, '', '', 0, null]],
+        ]);
+      });
+
+      // As a recrawl of a directory that replaced a file reports it.
+      test('removes a file replaced by a directory', () => {
+        simpleTfs.bulkAddOrModify(
+          new Map<CanonicalPath, FileMetadata>([
+            [p('existing.js/inner.js'), [1, 0, 0, '', 0]],
+          ]),
+          listener,
+        );
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('existing.js'), [123, 0, 0, '', 0]],
+          ['directoryAdded', p('existing.js')],
+          ['fileAdded', p('existing.js/inner.js'), [1, 0, 0, '', 0]],
+        ]);
+      });
+
+      test('removes everything beneath a directory replaced by a file', () => {
+        simpleTfs.bulkAddOrModify(
+          new Map<CanonicalPath, FileMetadata>([[p('dir'), [1, 0, 0, '', 0]]]),
+          listener,
+        );
+
+        expect(logChange.mock.calls).toEqual([
+          ['fileRemoved', p('dir/nested.js'), [456, 0, 0, '', 0]],
+          ['directoryRemoved', p('dir')],
+          ['fileAdded', p('dir'), [1, 0, 0, '', 0]],
         ]);
       });
     });
