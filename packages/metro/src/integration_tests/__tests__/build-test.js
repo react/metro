@@ -118,6 +118,41 @@ test('allows specifying paths to save bundle and maps', async () => {
   );
 });
 
+// $FlowFixMe[prop-missing] - test.failing is not in Flow's Jest types
+test.failing(
+  'builds a bundle from a file in a directory literally named [metro-project]',
+  async () => {
+    const config = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+
+    const result = await Metro.runBuild(config, {
+      entry: './[metro-project]/LiteralDir.js',
+    });
+
+    expect(execBundle(result.code)).toBe('from-literal-dir');
+  },
+);
+
+// $FlowFixMe[prop-missing] - test.failing is not in Flow's Jest types
+test.failing(
+  'runBuild resolves entry against projectRoot, not unstable_serverRoot',
+  async () => {
+    const baseConfig = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+    const config = MetroConfig.mergeConfig(baseConfig, {
+      server: {unstable_serverRoot: path.resolve(INPUT_PATH, '..')},
+    });
+
+    const result = await Metro.runBuild(config, {
+      entry: 'TestBundle.js',
+    });
+
+    expect(execBundle(result.code)).toBeDefined();
+  },
+);
+
 test('(unstable) allows specifying a transform profile', async () => {
   const config = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
