@@ -178,10 +178,16 @@ export default class TreeFS implements MutableFileSystem {
     let prefix: string = '';
     if (subpath != null && subpath !== '') {
       const lookupResult = this.#lookupByNormalPath(subpath, {
-        followLeaf: true,
+        followLeaf: false,
       });
-      if (!lookupResult.exists || !isDirectory(lookupResult.node)) {
+      if (!lookupResult.exists) {
         // Directory doesn't exist, nothing to compare - all files are new
+        return {changedFiles, removedFiles};
+      }
+      if (!isDirectory(lookupResult.node)) {
+        // A file or symlink has been replaced by this directory, so it is
+        // removed and everything under the directory is new.
+        removedFiles.add(lookupResult.canonicalPath);
         return {changedFiles, removedFiles};
       }
       rootNode = lookupResult.node;
