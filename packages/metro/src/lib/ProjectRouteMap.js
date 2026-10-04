@@ -8,19 +8,27 @@
  * @format
  */
 
+import type {DynamicRoot} from './dynamicRoots';
 import type {ConfigT} from 'metro-config';
 
+import {DYNAMIC_ROOT_ID_LENGTH} from './dynamicRoots';
 import path from 'node:path';
 
-// Matches /[metro-watchFolders]/<index>/... and /[metro-project]/...
+// Matches /[metro-watchFolders]/<id>/... and /[metro-project]/...
 // Applied after normalizing ./ and bare paths to start with /.
 const EXPLICIT_ROUTE_RE =
-  /^\/(?:\[metro-watchFolders\]\/(\d+)|\[metro-project\])\/(.*)/s;
+  /^\/(?:\[metro-watchFolders\]\/([^/]+)|\[metro-project\])\/(.*)/s;
+
+const WATCH_FOLDER_INDEX_RE = /^\d+$/;
 
 /**
- * Immutable bidirectional map between URL pathnames and filesystem paths,
- * encoding the `[metro-project]` and `[metro-watchFolders]` virtual prefix
- * conventions.
+ * Bidirectional map between URL pathnames and filesystem paths, encoding the
+ * `[metro-project]` and `[metro-watchFolders]` virtual prefix conventions.
+ *
+ * The id after `[metro-watchFolders]` is either an index into the configured
+ * `watchFolders`, or, if it has `DYNAMIC_ROOT_ID_LENGTH` characters, the id of
+ * a dynamic root. The routes for `projectRoot`
+ * and `watchFolders` are fixed, and dynamic roots are read on each use.
  */
 export default class ProjectRouteMap {
   readonly serverRootDir: string;
@@ -31,7 +39,21 @@ export default class ProjectRouteMap {
     pathnamePrefix: string,
   }>;
 
-  constructor(config: ConfigT) {
+  readonly _getDynamicRoots: () => ReadonlyArray<DynamicRoot>;
+
+  constructor(
+    config: ConfigT,
+    getDynamicRoots: () => ReadonlyArray<DynamicRoot> = () => [],
+  ) {
+    // Keeps every index shorter than a dynamic root id.
+    const maxWatchFolders = 10 ** (DYNAMIC_ROOT_ID_LENGTH - 1);
+    if (config.watchFolders.length > maxWatchFolders) {
+      throw new Error(
+        `Metro supports at most ${maxWatchFolders} watchFolders, but ` +
+          `${config.watchFolders.length} are configured.`,
+      );
+    }
+    this._getDynamicRoots = getDynamicRoots;
     this.serverRootDir =
       config.server.unstable_serverRoot ?? config.projectRoot;
     this._projectRootDirPrefix = path.normalize(config.projectRoot + path.sep);
@@ -81,17 +103,27 @@ export default class ProjectRouteMap {
 
     const match = EXPLICIT_ROUTE_RE.exec(normalized);
     if (match != null) {
-      const watchFolderIndexStr = match[1];
+      const watchFolderId = match[1];
       const rest = match[2];
       let rootDirPrefix;
-      if (watchFolderIndexStr != null) {
-        const index = parseInt(watchFolderIndexStr, 10);
+      if (watchFolderId == null) {
+        rootDirPrefix = this._projectRootDirPrefix;
+      } else if (watchFolderId.length === DYNAMIC_ROOT_ID_LENGTH) {
+        const dynamicRoot = this._getDynamicRoots().find(
+          ({id}) => id === watchFolderId,
+        );
+        if (dynamicRoot == null) {
+          return null;
+        }
+        rootDirPrefix = dynamicRoot.rootDir + path.sep;
+      } else if (WATCH_FOLDER_INDEX_RE.test(watchFolderId)) {
+        const index = parseInt(watchFolderId, 10);
         if (index >= this._watchFolderDirPrefixes.length) {
           return null;
         }
         rootDirPrefix = this._watchFolderDirPrefixes[index];
       } else {
-        rootDirPrefix = this._projectRootDirPrefix;
+        return null;
       }
       return path.join(rootDirPrefix, rest.split('/').join(path.sep));
     }
@@ -111,6 +143,19 @@ export default class ProjectRouteMap {
       if (filePath.startsWith(rootDirPrefix)) {
         return (
           pathnamePrefix +
+          filePath
+            .slice(rootDirPrefix.length)
+            .split(path.sep)
+            .map(segment => encodeURIComponent(segment))
+            .join('/')
+        );
+      }
+    }
+    for (const {id, rootDir} of this._getDynamicRoots()) {
+      const rootDirPrefix = rootDir + path.sep;
+      if (filePath.startsWith(rootDirPrefix)) {
+        return (
+          `/[metro-watchFolders]/${id}/` +
           filePath
             .slice(rootDirPrefix.length)
             .split(path.sep)
