@@ -163,4 +163,125 @@ describe('ProjectRouteMap', () => {
       }
     });
   });
+
+  describe('dynamic roots', () => {
+    const dynamicRoots = [
+      {id: '01234567', rootDir: path.normalize('/elsewhere/lib')},
+      {
+        id: 'fedcba98',
+        rootDir: path.normalize('/mnt/scratch/node_modules/pkg'),
+      },
+    ];
+    let currentDynamicRoots = dynamicRoots;
+    const dynamicRouteMap = new ProjectRouteMap(
+      config,
+      () => currentDynamicRoots,
+    );
+
+    beforeEach(() => {
+      currentDynamicRoots = dynamicRoots;
+    });
+
+    test('resolves a dynamic root id to a file in that root', () => {
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBe(path.normalize('/elsewhere/lib/helpers/a.js'));
+    });
+
+    test('returns null for an unknown dynamic root id', () => {
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/00000000/helpers/a.js',
+        ),
+      ).toBeNull();
+      expect(
+        routeMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBeNull();
+    });
+
+    test('maps a file in a dynamic root to its id', () => {
+      expect(
+        dynamicRouteMap.urlPathnameOfFilePath(
+          path.normalize('/elsewhere/lib/helpers/a b.js'),
+        ),
+      ).toBe('/[metro-watchFolders]/01234567/helpers/a%20b.js');
+    });
+
+    test('prefers a watch folder to a dynamic root within it, and still resolves the id', () => {
+      const filePath = path.normalize('/mnt/scratch/node_modules/pkg/index.js');
+      expect(dynamicRouteMap.urlPathnameOfFilePath(filePath)).toBe(
+        '/[metro-watchFolders]/0/pkg/index.js',
+      );
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/fedcba98/index.js',
+        ),
+      ).toBe(filePath);
+    });
+
+    test('reads a segment of id length as an id, even if numeric, and a shorter number as an index', () => {
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/00000001/a.js',
+        ),
+      ).toBeNull();
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/0000001/a.js',
+        ),
+      ).toBe(path.join(path.normalize('/other/watch'), 'a.js'));
+    });
+
+    test('throws if an index could be as long as an id', () => {
+      expect(
+        () =>
+          new ProjectRouteMap({
+            ...config,
+            watchFolders: new Array<string>(10_000_000),
+          }),
+      ).not.toThrow();
+      expect(
+        () =>
+          new ProjectRouteMap({
+            ...config,
+            watchFolders: new Array<string>(10_000_001),
+          }),
+      ).toThrow('Metro supports at most 10000000 watchFolders');
+    });
+
+    test.each([
+      [path.normalize('/elsewhere/lib/'), 'helpers/a.js'],
+      [path.normalize('/'), 'elsewhere/lib/helpers/a.js'],
+    ])(
+      'maps files in a dynamic root %s, which ends in a separator, in both directions',
+      (rootDir, rootRelativePath) => {
+        const filePath = path.normalize('/elsewhere/lib/helpers/a.js');
+        const pathname = `/[metro-watchFolders]/89abcdef/${rootRelativePath}`;
+        const map = new ProjectRouteMap(config, () => [
+          {id: '89abcdef', rootDir},
+        ]);
+        expect(map.urlPathnameOfFilePath(filePath)).toBe(pathname);
+        expect(map.filePathOfUrlDecodedPathname(pathname)).toBe(filePath);
+      },
+    );
+
+    test('reads dynamic roots on each use', () => {
+      currentDynamicRoots = [];
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBeNull();
+      currentDynamicRoots = dynamicRoots;
+      expect(
+        dynamicRouteMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).not.toBeNull();
+    });
+  });
 });

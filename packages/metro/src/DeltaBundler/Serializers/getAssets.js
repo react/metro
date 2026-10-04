@@ -10,6 +10,7 @@
  */
 
 import type {AssetData} from '../../Assets';
+import type {DynamicRoot} from '../../lib/dynamicRoots';
 import type {Module, ReadOnlyDependencies} from '../types';
 
 import {getAssetData, getAssetUrlPath} from '../../Assets';
@@ -23,6 +24,7 @@ type Options = {
   projectRoot: string,
   publicPath: string,
   watchFolders: ReadonlyArray<string>,
+  dynamicRoots?: ReadonlyArray<DynamicRoot>,
 };
 
 export default async function getAssets(
@@ -46,6 +48,7 @@ export default async function getAssets(
             module.path,
             options.projectRoot,
             options.watchFolders,
+            options.dynamicRoots,
           ),
           options.assetPlugins,
           options.platform,
