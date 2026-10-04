@@ -57,6 +57,28 @@ describe('getAssetUrlPath', () => {
     ).toBe('[metro-watchFolders]/1/imgs/a.png');
   });
 
+  test('uses the id of a dynamic root for assets within it', () => {
+    expect(
+      getAssetUrlPath(
+        '/other/imgs/a.png',
+        '/root',
+        ['/root', '/external'],
+        [{id: '01234567', rootDir: '/other'}],
+      ),
+    ).toBe('[metro-watchFolders]/01234567/imgs/a.png');
+  });
+
+  test('prefers a watch folder to a dynamic root containing the asset', () => {
+    expect(
+      getAssetUrlPath(
+        '/external/imgs/a.png',
+        '/root',
+        ['/root', '/external'],
+        [{id: '01234567', rootDir: '/external/imgs'}],
+      ),
+    ).toBe('[metro-watchFolders]/1/imgs/a.png');
+  });
+
   test('throws for an asset outside every configured root', () => {
     expect(() =>
       getAssetUrlPath('/other/imgs/a.png', '/root', ['/root', '/external']),

@@ -114,3 +114,34 @@ test('should return the bundle assets', async () => {
     },
   ]);
 });
+
+test('uses the id of a dynamic root for an asset within it', async () => {
+  const dependencies = new Map([
+    [
+      '/other/imgs/7.png',
+      {
+        path: '/other/imgs/7.png',
+        output: [
+          {
+            type: 'js/module/asset',
+            data: {code: '//', lineCount: 1, map: [], functionMap: null},
+          },
+        ],
+      },
+    ],
+  ]);
+
+  expect(
+    await getAssets(dependencies, {
+      projectRoot: '/tmp',
+      watchFolders: ['/tmp', '/external'],
+      dynamicRoots: [{id: '01234567', rootDir: '/other'}],
+      processModuleFilter: () => true,
+    }),
+  ).toEqual([
+    {
+      path: '/other/imgs/7.png',
+      localPath: '[metro-watchFolders]/01234567/imgs/7.png',
+    },
+  ]);
+});
