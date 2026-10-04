@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import {getDynamicRootId} from '../dynamicRoots';
+import {getDynamicRootId, getDynamicRoots} from '../dynamicRoots';
 
 describe('getDynamicRootId', () => {
   afterEach(() => {
@@ -47,5 +47,40 @@ describe('getDynamicRootId', () => {
       getDynamicRootId: getDynamicRootIdOnPlatform,
     } = require('../dynamicRoots');
     expect(getDynamicRootIdOnPlatform(rootRelativePath)).toBe(id);
+  });
+});
+
+describe('getDynamicRoots', () => {
+  const root = (
+    absolutePath: string,
+    rootRelativePath: string,
+    dynamic: boolean,
+  ) => ({absolutePath, rootRelativePath, dynamic});
+
+  test('returns only dynamic roots, with ids of their relative paths', () => {
+    expect(
+      getDynamicRoots([
+        root('/repo/app', '', false),
+        root('/repo/packages', '../packages', false),
+        root('/store/lib', '../../store/lib', true),
+      ]),
+    ).toEqual([
+      {id: getDynamicRootId('../../store/lib'), rootDir: '/store/lib'},
+    ]);
+  });
+
+  test('orders a root before any nested within it, whatever the input order', () => {
+    const dynamic = [
+      root('/store/lib/inner', '../../store/lib/inner', true),
+      root('/zzz', '../../zzz', true),
+      root('/store/lib', '../../store/lib', true),
+    ];
+    const expected = ['/zzz', '/store/lib', '/store/lib/inner'];
+    expect(getDynamicRoots(dynamic).map(({rootDir}) => rootDir)).toEqual(
+      expected,
+    );
+    expect(
+      getDynamicRoots([...dynamic].reverse()).map(({rootDir}) => rootDir),
+    ).toEqual(expected);
   });
 });
