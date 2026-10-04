@@ -144,6 +144,7 @@ class FileMap extends EventEmitter {
   build(): Promise<BuildResult>;
   static create(options: InputOptions): FileMap;
   end(): Promise<void>;
+  getRoots(): ReadonlyArray<string>;
   static H: HType;
   read(): Promise<null | undefined | CacheData>;
 }

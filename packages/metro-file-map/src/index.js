@@ -538,6 +538,14 @@ export default class FileMap extends EventEmitter {
   }
 
   /**
+   * The directories whose files this file map holds. The same array is
+   * returned until the roots change.
+   */
+  getRoots(): ReadonlyArray<string> {
+    return this.#options.roots;
+  }
+
+  /**
    * 1. read data from the cache or create an empty structure.
    */
   async read(): Promise<?CacheData> {
