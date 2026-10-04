@@ -10,6 +10,7 @@
  */
 
 import type {TransformResult, TransformResultWithSource} from '../DeltaBundler';
+import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {TransformerConfig, TransformOptions} from './Worker';
 import type {ConfigT} from 'metro-config';
 
@@ -34,17 +35,22 @@ export default class Transformer {
   _config: ConfigT;
   _cache: Cache<TransformResult<>>;
   _baseHash: string;
+  _getDynamicRoots: () => ReadonlyArray<DynamicRoot>;
   _getSha1: GetOrComputeSha1Fn;
   _workerFarm: WorkerFarm;
 
   constructor(
     config: ConfigT,
-    opts: Readonly<{getOrComputeSha1: GetOrComputeSha1Fn}>,
+    opts: Readonly<{
+      getDynamicRoots?: () => ReadonlyArray<DynamicRoot>,
+      getOrComputeSha1: GetOrComputeSha1Fn,
+    }>,
   ) {
     this._config = config;
 
     this._config.watchFolders.forEach(verifyRootExists);
     this._cache = new Cache(config.cacheStores);
+    this._getDynamicRoots = opts.getDynamicRoots ?? (() => []);
     this._getSha1 = opts.getOrComputeSha1;
 
     // Remove the transformer config params that we don't want to pass to the
@@ -114,15 +120,16 @@ export default class Transformer {
       this._config.projectRoot,
       filePath,
     );
-    // Assets are the only modules whose output depends on watchFolders, via
-    // the URL path baked into them, so that dependency enters the cache key
-    // per asset here and not in the base hash.
+    // Assets are the only modules whose output depends on watchFolders and
+    // dynamic roots, via the URL path baked into them, so that dependency
+    // enters the cache key per asset here and not in the base hash.
     const assetUrlPath =
       type === 'asset'
         ? getAssetUrlPath(
             filePath,
             this._config.projectRoot,
             this._config.watchFolders,
+            this._getDynamicRoots(),
           )
         : null;
 
