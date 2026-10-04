@@ -9,7 +9,11 @@
  * @oncall react_native
  */
 
-import {DYNAMIC_ROOT_ID_LENGTH, getDynamicRootId} from '../dynamicRoots';
+import {
+  DYNAMIC_ROOT_ID_LENGTH,
+  getDynamicRootId,
+  getDynamicRoots,
+} from '../dynamicRoots';
 
 describe('getDynamicRootId', () => {
   afterEach(() => {
@@ -49,5 +53,55 @@ describe('getDynamicRootId', () => {
       getDynamicRootId: getDynamicRootIdOnPlatform,
     } = require('../dynamicRoots');
     expect(getDynamicRootIdOnPlatform(rootRelativePath)).toBe(id);
+  });
+});
+
+describe('getDynamicRoots', () => {
+  const root = (
+    absolutePath: string,
+    rootRelativePath: string,
+    dynamic: boolean,
+  ) => ({absolutePath, rootRelativePath, dynamic});
+
+  test('returns only dynamic roots, with ids of their relative paths', () => {
+    expect(
+      getDynamicRoots([
+        root('/repo/app', '', false),
+        root('/repo/packages', '../packages', false),
+        root('/store/lib', '../../store/lib', true),
+      ]),
+    ).toEqual([
+      {id: getDynamicRootId('../../store/lib'), rootDir: '/store/lib'},
+    ]);
+  });
+
+  test('orders a root before any nested within it, whatever the input order', () => {
+    const dynamic = [
+      root('/store/lib/inner', '../../store/lib/inner', true),
+      root('/zzz', '../../zzz', true),
+      root('/store/lib', '../../store/lib', true),
+    ];
+    const expected = ['/zzz', '/store/lib', '/store/lib/inner'];
+    expect(getDynamicRoots(dynamic).map(({rootDir}) => rootDir)).toEqual(
+      expected,
+    );
+    expect(
+      getDynamicRoots([...dynamic].reverse()).map(({rootDir}) => rootDir),
+    ).toEqual(expected);
+  });
+
+  test('throws if two roots have the same id', () => {
+    // Paths whose ids collide, found by search.
+    expect(getDynamicRootId('../store/87657')).toBe(
+      getDynamicRootId('../store/102961'),
+    );
+    expect(() =>
+      getDynamicRoots([
+        root('/store/87657', '../store/87657', true),
+        root('/store/102961', '../store/102961', true),
+      ]),
+    ).toThrow(
+      "Roots '/store/87657' and '/store/102961' have the same id '50663933'",
+    );
   });
 });
