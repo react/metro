@@ -61,6 +61,7 @@ describe('processRequest', () => {
   let buildGraph;
   let getDelta;
   let getDependencyGraph;
+  let getDynamicRoots;
   let getTransformFn;
   let getResolveDependencyFn;
   let getAsset;
@@ -110,6 +111,10 @@ describe('processRequest', () => {
     jest
       .spyOn(Bundler.prototype, 'getDependencyGraph')
       .mockImplementation(getDependencyGraph);
+    getDynamicRoots = jest.fn().mockReturnValue([]);
+    jest
+      .spyOn(Bundler.prototype, 'getDynamicRoots')
+      .mockImplementation(getDynamicRoots);
 
     fs = mockFs;
 
