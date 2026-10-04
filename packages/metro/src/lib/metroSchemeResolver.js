@@ -11,28 +11,10 @@
 
 import type {CustomResolver} from 'metro-resolver';
 
-import * as path from 'node:path';
+import {getMetroBabelRuntimePackageJsonPath} from './metroBabelRuntime';
 
 const BABEL_RUNTIME_SPECIFIER = 'babel-runtime';
 const BABEL_RUNTIME_PACKAGE = '@babel/runtime';
-
-// Resolved on first use rather than at module load, so that importing this
-// module (e.g. transitively from a resolution context) cannot fail in projects
-// that never emit a `metro:` specifier.
-let babelRuntimePackageJsonPath: ?string = null;
-
-function getBabelRuntimePackageJsonPath(): string {
-  if (babelRuntimePackageJsonPath == null) {
-    const metroRuntimeDir = path.dirname(
-      require.resolve('metro-runtime/package.json'),
-    );
-    babelRuntimePackageJsonPath = require.resolve(
-      '@babel/runtime/package.json',
-      {paths: [metroRuntimeDir]},
-    );
-  }
-  return babelRuntimePackageJsonPath;
-}
 
 /**
  * Resolver used for Metro's own `metro:` URI scheme, currently handling only
@@ -45,16 +27,16 @@ export default ((context, specifier, platform) => {
   // `metro:babel-runtime/helpers/interopRequireDefault`) to metro-runtime's
   // `@babel/runtime` dependency, so injected Babel helpers resolve
   // deterministically regardless of where `@babel/runtime` is hoisted. The
-  // `@babel/runtime` root is resolved via Node (above), the subpath is then
-  // resolved by Metro as a package self-reference, with the origin inside
-  // `@babel/runtime` so its `exports` map is applied.
+  // `@babel/runtime` root is resolved via Node (see `metroBabelRuntime`), the
+  // subpath is then resolved by Metro as a package self-reference, with the
+  // origin inside `@babel/runtime` so its `exports` map is applied.
   if (
     pathname === BABEL_RUNTIME_SPECIFIER ||
     pathname.startsWith(BABEL_RUNTIME_SPECIFIER + '/')
   ) {
     const subpath = pathname.slice(BABEL_RUNTIME_SPECIFIER.length);
     return context.resolveRequest(
-      {...context, originModulePath: getBabelRuntimePackageJsonPath()},
+      {...context, originModulePath: getMetroBabelRuntimePackageJsonPath()},
       BABEL_RUNTIME_PACKAGE + subpath,
       platform,
     );
