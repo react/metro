@@ -9,6 +9,8 @@
  * @oncall react_native
  */
 
+import type {FileMapRoot} from 'metro-file-map';
+
 import {normalizePathSeparatorsToPosix} from './pathUtils';
 import crypto from 'node:crypto';
 
@@ -43,4 +45,25 @@ export function getDynamicRootId(rootRelativePath: string): string {
       .digest('hex')
       .slice(0, 16)
   );
+}
+
+/**
+ * The dynamic roots among all of the file map's roots. They are ordered so
+ * that a root always precedes any root nested within it, and the order depends
+ * only on the set of roots.
+ */
+export function getDynamicRoots(
+  fileMapRoots: ReadonlyArray<FileMapRoot>,
+): ReadonlyArray<DynamicRoot> {
+  return fileMapRoots
+    .filter(root => root.dynamic)
+    .sort(
+      (a, b) =>
+        a.absolutePath.length - b.absolutePath.length ||
+        (a.absolutePath < b.absolutePath ? -1 : 1),
+    )
+    .map(({absolutePath, rootRelativePath}) => ({
+      id: getDynamicRootId(rootRelativePath),
+      rootDir: absolutePath,
+    }));
 }
