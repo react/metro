@@ -68,6 +68,7 @@ export class DependencyGraph extends EventEmitter {
   end(): Promise<void>;
   getAllFiles(): Array<string>;
   getDependencies(filePath: string): Array<string>;
+  getDynamicRoots(): ReadonlyArray<DynamicRoot>;
   getHasteName(filePath: string): string;
   getOrComputeSha1(mixedPath: string): Promise<{content?: Buffer | undefined; sha1: string}>;
   getWatcher(): EventEmitter;

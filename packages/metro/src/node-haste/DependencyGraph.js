@@ -13,6 +13,7 @@ import type {
   BundlerResolution,
   TransformResultDependency,
 } from '../DeltaBundler/types';
+import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {ResolverInputOptions} from '../shared/types';
 import type {ModuleResolver} from './DependencyGraph/ModuleResolution';
 import type {ConfigT} from 'metro-config';
@@ -26,6 +27,8 @@ import type {
   default as MetroFileMap,
 } from 'metro-file-map';
 
+import {getDynamicRoots} from '../lib/dynamicRoots';
+import {getMetroBabelRuntimePackageJsonPath} from '../lib/metroBabelRuntime';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
 import {PackageCache} from './PackageCache';
@@ -83,6 +86,8 @@ export default class DependencyGraph extends EventEmitter {
     >,
   >;
   _initializedPromise: Promise<void>;
+  #dynamicRoots: ReadonlyArray<DynamicRoot> = [];
+  #dynamicRootsSource: ?ReadonlyArray<string> = null;
 
   constructor(
     config: ConfigT,
@@ -116,7 +121,8 @@ export default class DependencyGraph extends EventEmitter {
     this._haste = fileMap;
     this._haste.on('status', status => this._onWatcherStatus(status));
 
-    this._initializedPromise = fileMap.build().then(({fileSystem}) => {
+    this._initializedPromise = fileMap.build().then(async ({fileSystem}) => {
+      await this._addMetroBabelRuntimeRoot();
       log(createActionEndEntry(initializingMetroLogEntry));
       config.reporter.update({type: 'dep_graph_loaded'});
 
@@ -135,6 +141,39 @@ export default class DependencyGraph extends EventEmitter {
       });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * `metro:babel-runtime` resolves into the `@babel/runtime` that
+   * metro-runtime depends on, wherever it is installed, so its files must be
+   * in the file map even when no configured root contains them.
+   */
+  async _addMetroBabelRuntimeRoot(): Promise<void> {
+    let packageJsonPath;
+    try {
+      packageJsonPath = getMetroBabelRuntimePackageJsonPath();
+    } catch {
+      // Left for the `metro:` scheme resolver to report, if it is ever used.
+      return;
+    }
+    await this._haste.addRoot(path.dirname(packageJsonPath));
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. The same array is returned until the roots change.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    const fileMapRoots = this._haste.getRoots();
+    if (fileMapRoots !== this.#dynamicRootsSource) {
+      this.#dynamicRootsSource = fileMapRoots;
+      this.#dynamicRoots = getDynamicRoots(
+        this._config.projectRoot,
+        this._config.watchFolders,
+        fileMapRoots,
+      );
+    }
+    return this.#dynamicRoots;
   }
 
   _onWatcherHealthCheck(result: HealthCheckResult) {

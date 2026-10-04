@@ -141,9 +141,11 @@ export type FileDataPluginOptions = Readonly<
 
 class FileMap extends EventEmitter {
   constructor(options: InputOptions);
+  addRoot(root: string): Promise<void>;
   build(): Promise<BuildResult>;
   static create(options: InputOptions): FileMap;
   end(): Promise<void>;
+  getRoots(): ReadonlyArray<string>;
   static H: HType;
   read(): Promise<null | undefined | CacheData>;
 }
