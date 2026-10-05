@@ -1358,6 +1358,17 @@ export default class Server {
   async _symbolicate(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const depGraph = await this._bundler.getBundler().getDependencyGraph();
 
+    // A frame's file may be a virtual-prefixed path from a source map with
+    // server URL source paths, whose segments are percent-encoded. One that
+    // does not decode is taken as it is.
+    const filePathOfVirtualPathname = (file: string): ?string => {
+      try {
+        return this._rootUrlMap.filePathOfUrlPathname(file);
+      } catch {
+        return this._rootUrlMap.filePathOfUrlDecodedPathname(file);
+      }
+    };
+
     const getCodeFrame = (
       urls: Set<string>,
       symbolicatedStack: ReadonlyArray<StackFrameOutput>,
@@ -1379,7 +1390,16 @@ export default class Server {
           continue;
         }
 
-        const fileAbsolute = path.resolve(this._config.projectRoot, file ?? '');
+        const fileAbsolute =
+          file != null
+            ? (filePathOfVirtualPathname(file) ??
+              (path.isAbsolute(file)
+                ? file
+                : path.resolve(this._config.projectRoot, file)))
+            : null;
+        if (fileAbsolute == null) {
+          continue;
+        }
         if (!depGraph.doesFileExist(fileAbsolute)) {
           debug(
             'Skipping code frame for file not in dependency graph.',
