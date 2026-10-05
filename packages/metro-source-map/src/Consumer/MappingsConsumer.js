@@ -27,10 +27,25 @@ import {
   lookupBiasToString,
 } from './constants';
 import normalizeSourcePath from './normalizeSourcePath';
-import {greatestLowerBound} from './search';
 import invariant from 'invariant';
-import {add, add0, get0, inc, sub} from 'ob1';
-import {decode as decodeVlq} from 'vlq';
+import {add, add0, get0, get1, inc} from 'ob1';
+
+/* eslint-disable no-bitwise */
+
+const COMMA = 44; // ','
+const SEMICOLON = 59; // ';'
+const VLQ_BASE_SHIFT = 5;
+const VLQ_BASE_MASK = (1 << VLQ_BASE_SHIFT) - 1;
+const VLQ_CONTINUATION_BIT = 1 << VLQ_BASE_SHIFT;
+const BASE64_DECODE: Int8Array = (() => {
+  const table = new Int8Array(128).fill(-1);
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < chars.length; i++) {
+    table[chars.charCodeAt(i)] = i;
+  }
+  return table;
+})();
 
 /**
  * A source map consumer that supports "basic" source maps (that have a
@@ -42,12 +57,16 @@ export default class MappingsConsumer
 {
   _sourceMap: BasicSourceMap;
   _decodedMappings: ?ReadonlyArray<Mapping>;
+  // The index in `_decodedMappings` of the first mapping on each generated
+  // line (0-based), so a lookup only searches the mappings on its line.
+  _lineStarts: ?ReadonlyArray<number>;
   _normalizedSources: ?ReadonlyArray<string>;
 
   constructor(sourceMap: BasicSourceMap) {
     super(sourceMap);
     this._sourceMap = sourceMap;
     this._decodedMappings = null;
+    this._lineStarts = null;
     this._normalizedSources = null;
   }
 
@@ -68,21 +87,27 @@ export default class MappingsConsumer
       );
     }
     const mappings = this._decodeAndCacheMappings();
-    const index = greatestLowerBound(
-      mappings,
-      {line, column},
-      (position, mapping) => {
-        if (position.line === mapping.generatedLine) {
-          return get0(sub(position.column, mapping.generatedColumn));
-        }
-        return get0(sub(position.line, mapping.generatedLine));
-      },
-    );
-    if (
-      index != null &&
-      mappings[index].generatedLine === generatedPosition.line
-    ) {
-      const mapping = mappings[index];
+    const lineStarts = this._lineStarts;
+    invariant(lineStarts != null, 'Expected line starts to be decoded');
+    const line0 = get1(line) - 1;
+    if (line0 < 0 || line0 >= lineStarts.length) {
+      return {...EMPTY_POSITION};
+    }
+    // The last mapping on the line at or before `column`.
+    let low = lineStarts[line0];
+    let high =
+      line0 + 1 < lineStarts.length ? lineStarts[line0 + 1] : mappings.length;
+    const lineStart = low;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (get0(mappings[mid].generatedColumn) <= get0(column)) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low > lineStart) {
+      const mapping = mappings[low - 1];
       return {
         source: mapping.source,
         name: mapping.name,
@@ -93,7 +118,12 @@ export default class MappingsConsumer
     return {...EMPTY_POSITION};
   }
 
-  *_decodeMappings(): Generator<Mapping, void, void> {
+  _decodeMappings(): Array<Mapping> {
+    const normalizedSources = this._normalizeAndCacheSources();
+    const {mappings: mappingsRaw, names} = this._sourceMap;
+    const result: Array<Mapping> = [];
+    const lineStarts = [0];
+
     let generatedLine = FIRST_LINE;
     let generatedColumn = FIRST_COLUMN;
     let originalLine = FIRST_LINE;
@@ -101,77 +131,79 @@ export default class MappingsConsumer
     let nameIndex = add0(0);
     let sourceIndex = add0(0);
 
-    const normalizedSources = this._normalizeAndCacheSources();
+    // The VLQ fields of the segment being decoded, decoded in place from
+    // character codes rather than by slicing out each segment.
+    const fields = [0, 0, 0, 0, 0];
+    let fieldCount = 0;
+    let value = 0;
+    let shift = 0;
 
-    const {mappings: mappingsRaw, names} = this._sourceMap;
-    let next;
-    const vlqCache = new Map<string, any>();
-    for (let i = 0; i < mappingsRaw.length; i = next) {
-      switch (mappingsRaw[i]) {
-        case ';':
+    const length = mappingsRaw.length;
+    for (let i = 0; i <= length; i++) {
+      const charCode = i < length ? mappingsRaw.charCodeAt(i) : SEMICOLON;
+      if (charCode === COMMA || charCode === SEMICOLON) {
+        // A trailing field cut off mid-VLQ is dropped, as `vlq` does.
+        invariant(
+          fieldCount > 0 || shift === 0,
+          'Invalid generated column delta',
+        );
+        value = 0;
+        shift = 0;
+        if (fieldCount > 0) {
+          invariant(fieldCount !== 2, 'Invalid original line delta');
+          invariant(fieldCount !== 3, 'Invalid original column delta');
+          generatedColumn = add(generatedColumn, fields[0]);
+          let source = null;
+          let name = null;
+          let mappingOriginalLine = null;
+          let mappingOriginalColumn = null;
+          if (fieldCount >= 4) {
+            sourceIndex = add(sourceIndex, fields[1]);
+            source = normalizedSources[get0(sourceIndex)];
+            originalLine = add(originalLine, fields[2]);
+            originalColumn = add(originalColumn, fields[3]);
+            mappingOriginalLine = originalLine;
+            mappingOriginalColumn = originalColumn;
+            if (fieldCount >= 5) {
+              nameIndex = add(nameIndex, fields[4]);
+              name = names[get0(nameIndex)];
+            }
+          }
+          result.push({
+            generatedLine,
+            generatedColumn,
+            source,
+            name,
+            originalLine: mappingOriginalLine,
+            originalColumn: mappingOriginalColumn,
+          });
+          fieldCount = 0;
+        }
+        if (charCode === SEMICOLON && i < length) {
+          lineStarts.push(result.length);
           generatedLine = inc(generatedLine);
           generatedColumn = FIRST_COLUMN;
-        /* falls through */
-        case ',':
-          next = i + 1;
-          continue;
-      }
-      findNext: for (next = i + 1; next < mappingsRaw.length; ++next) {
-        switch (mappingsRaw[next]) {
-          case ';':
-          /* falls through */
-          case ',':
-            break findNext;
         }
+        continue;
       }
-      const mappingRaw = mappingsRaw.slice(i, next);
-      let decodedVlqValues;
-      if (vlqCache.has(mappingRaw)) {
-        decodedVlqValues = vlqCache.get(mappingRaw);
+      const digit = charCode < 128 ? BASE64_DECODE[charCode] : -1;
+      invariant(digit !== -1, 'Invalid character in source map mappings');
+      value = value + ((digit & VLQ_BASE_MASK) << shift);
+      if (digit & VLQ_CONTINUATION_BIT) {
+        shift = shift + VLQ_BASE_SHIFT;
       } else {
-        decodedVlqValues = decodeVlq(mappingRaw);
-        vlqCache.set(mappingRaw, decodedVlqValues);
-      }
-      invariant(Array.isArray(decodedVlqValues), 'Decoding VLQ tuple failed');
-      const [
-        generatedColumnDelta,
-        sourceIndexDelta,
-        originalLineDelta,
-        originalColumnDelta,
-        nameIndexDelta,
-      ] = decodedVlqValues;
-      invariant(generatedColumnDelta != null, 'Invalid generated column delta');
-      generatedColumn = add(generatedColumn, generatedColumnDelta);
-      const mapping: {...Mapping, ...} = {
-        generatedLine,
-        generatedColumn,
-        source: null,
-        name: null,
-        originalLine: null,
-        originalColumn: null,
-      };
-
-      if (sourceIndexDelta != null) {
-        sourceIndex = add(sourceIndex, sourceIndexDelta);
-        mapping.source = normalizedSources[get0(sourceIndex)];
-
-        invariant(originalLineDelta != null, 'Invalid original line delta');
-        invariant(originalColumnDelta != null, 'Invalid original column delta');
-
-        originalLine = add(originalLine, originalLineDelta);
-        originalColumn = add(originalColumn, originalColumnDelta);
-
-        mapping.originalLine = originalLine;
-        mapping.originalColumn = originalColumn;
-
-        if (nameIndexDelta != null) {
-          nameIndex = add(nameIndex, nameIndexDelta);
-          mapping.name = names[get0(nameIndex)];
+        const negate = value & 1;
+        value = value >>> 1;
+        if (fieldCount < 5) {
+          fields[fieldCount] = negate ? -value : value;
         }
+        fieldCount++;
+        value = 0;
+        shift = 0;
       }
-
-      yield mapping;
     }
+    this._lineStarts = lineStarts;
+    return result;
   }
 
   _normalizeAndCacheSources(): ReadonlyArray<string> {
@@ -185,7 +217,7 @@ export default class MappingsConsumer
 
   _decodeAndCacheMappings(): ReadonlyArray<Mapping> {
     if (!this._decodedMappings) {
-      this._decodedMappings = [...this._decodeMappings()];
+      this._decodedMappings = this._decodeMappings();
     }
     return this._decodedMappings;
   }
