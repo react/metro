@@ -152,6 +152,101 @@ export default class TreeFS implements MutableFileSystem {
     return tfs;
   }
 
+  /**
+   * Canonical paths of all files and symlinks that are not within any of the
+   * given directories. Visits only directories that are ancestors of a root,
+   * or are themselves outside every root.
+   */
+  *pathsOutsideRoots(mixedRoots: ReadonlyArray<Path>): Iterable<string> {
+    const normalRoots = mixedRoots.map(root => this.#normalizePath(root));
+    // Roots at or above the root directory are '' or a sequence of '..'. Each
+    // contains everything reachable through at most that many '..' segments.
+    let maxAncestorRootDepth = -1;
+    const descendantRoots: Array<string> = [];
+    for (const normalRoot of normalRoots) {
+      const depth = this.#ancestorDepth(normalRoot);
+      if (depth == null) {
+        descendantRoots.push(normalRoot);
+      } else if (depth > maxAncestorRootDepth) {
+        maxAncestorRootDepth = depth;
+      }
+    }
+    yield* this.#pathsOutsideRoots(
+      this.#rootNode,
+      '',
+      0,
+      maxAncestorRootDepth,
+      descendantRoots,
+    );
+  }
+
+  // The number of '..' segments in a normal path that has no other segments,
+  // or null if it has other segments.
+  #ancestorDepth(normalPath: string): ?number {
+    if (normalPath === '') {
+      return 0;
+    }
+    let depth = 0;
+    for (const segment of normalPath.split(path.sep)) {
+      if (segment !== '..') {
+        return null;
+      }
+      depth++;
+    }
+    return depth;
+  }
+
+  *#pathsOutsideRoots(
+    node: DirectoryNode,
+    prefix: string,
+    ancestorDepth: number,
+    maxAncestorRootDepth: number,
+    descendantRoots: ReadonlyArray<string>,
+  ): Iterable<string> {
+    for (const [name, child] of node) {
+      const childPath = prefix === '' ? name : prefix + path.sep + name;
+      if (name === '..' && isDirectory(child)) {
+        yield* this.#pathsOutsideRoots(
+          child,
+          childPath,
+          ancestorDepth + 1,
+          maxAncestorRootDepth,
+          descendantRoots,
+        );
+        continue;
+      }
+      if (
+        ancestorDepth <= maxAncestorRootDepth ||
+        descendantRoots.some(
+          root => childPath === root || childPath.startsWith(root + path.sep),
+        )
+      ) {
+        continue;
+      }
+      if (!isDirectory(child)) {
+        yield childPath;
+      } else if (
+        descendantRoots.some(root => root.startsWith(childPath + path.sep))
+      ) {
+        yield* this.#pathsOutsideRoots(
+          child,
+          childPath,
+          ancestorDepth,
+          maxAncestorRootDepth,
+          descendantRoots,
+        );
+      } else {
+        for (const {canonicalPath} of this.#metadataIterator(
+          child,
+          {includeNodeModules: true, includeSymlinks: true},
+          childPath,
+        )) {
+          yield canonicalPath;
+        }
+      }
+    }
+  }
+
   getSize(mixedPath: Path): ?number {
     const fileMetadata = this.#getFileData(mixedPath);
     return (fileMetadata && fileMetadata[H.SIZE]) ?? null;
