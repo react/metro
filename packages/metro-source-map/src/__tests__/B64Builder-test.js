@@ -42,6 +42,12 @@ test('can mark zero new lines in the generated code', () => {
   expect(builder.toString()).toEqual('');
 });
 
+test('can mark more new lines than twice the initial buffer size', () => {
+  const lines = 3 * 1024 * 1024;
+  builder.startSegment(0).markLines(lines).startSegment(0);
+  expect(builder.toString()).toEqual('A' + ';'.repeat(lines) + 'A');
+});
+
 test('does not add commas when just starting a segment', () => {
   builder.startSegment(0);
   expect(builder.toString()).toEqual('A');
