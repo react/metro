@@ -9,6 +9,8 @@
  * @oncall react_native
  */
 
+import type {FileMapRoot} from 'metro-file-map';
+
 import {normalizePathSeparatorsToPosix} from './pathUtils';
 import crypto from 'node:crypto';
 
@@ -45,4 +47,40 @@ export function getDynamicRootId(rootRelativePath: string): string {
   return crypto
     .hash('sha1', normalizePathSeparatorsToPosix(rootRelativePath), 'hex')
     .slice(0, DYNAMIC_ROOT_ID_LENGTH);
+}
+
+/**
+ * The dynamic roots among all of the file map's roots. They are ordered so
+ * that a root always precedes any root nested within it, and the order depends
+ * only on the set of roots.
+ *
+ * Throws if two roots have the same id, which would otherwise make URLs in one
+ * of them resolve to files in the other.
+ */
+export function getDynamicRoots(
+  fileMapRoots: ReadonlyArray<FileMapRoot>,
+): ReadonlyArray<DynamicRoot> {
+  const dynamicRoots = fileMapRoots
+    .filter(root => root.dynamic)
+    .sort(
+      (a, b) =>
+        a.absolutePath.length - b.absolutePath.length ||
+        (a.absolutePath < b.absolutePath ? -1 : 1),
+    )
+    .map(({absolutePath, rootRelativePath}) => ({
+      id: getDynamicRootId(rootRelativePath),
+      rootDir: absolutePath,
+    }));
+  const rootDirsById = new Map<string, string>();
+  for (const {id, rootDir} of dynamicRoots) {
+    const existingRootDir = rootDirsById.get(id);
+    if (existingRootDir != null) {
+      throw new Error(
+        `Roots '${existingRootDir}' and '${rootDir}' have the same id ` +
+          `'${id}', so URLs cannot tell them apart.`,
+      );
+    }
+    rootDirsById.set(id, rootDir);
+  }
+  return dynamicRoots;
 }
