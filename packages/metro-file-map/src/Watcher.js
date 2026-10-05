@@ -18,7 +18,10 @@ import type {
   WatcherBackend,
   WatcherBackendChangeEvent,
 } from './flow-types';
-import type {WatcherOptions as WatcherBackendOptions} from './watchers/common';
+import type {
+  WatcherOptions as WatcherBackendOptions,
+  WatchProbeResult,
+} from './watchers/common';
 
 import nodeCrawl from './crawlers/node';
 import watchmanCrawl from './crawlers/watchman';
@@ -220,6 +223,7 @@ export class Watcher extends EventEmitter {
     this.#activeWatcher = watcher;
 
     const createWatcherBackend = (root: Path): Promise<WatcherBackend> => {
+      let probeResult: ?WatchProbeResult = null;
       const watcherOptions: WatcherBackendOptions = {
         dot: true,
         globs: [
@@ -231,6 +235,11 @@ export class Watcher extends EventEmitter {
           ...extensions.map(extension => '**/*.' + extension),
         ],
         ignored: ignorePatternForWatch,
+        probe: async timeoutMs => {
+          const {type} = await this.#checkHealth(root, timeoutMs);
+          probeResult = type === 'success' ? 'observed' : type;
+          return probeResult;
+        },
         watchmanDeferStates: this.#options.watchmanDeferStates,
       };
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
@@ -267,6 +276,13 @@ export class Watcher extends EventEmitter {
         });
         await watcher.startWatching();
         clearTimeout(rejectTimeout);
+        if (probeResult != null && probeResult !== 'observed') {
+          this.#options.console.warn(
+            `metro-file-map: Could not confirm that ${root} is being watched ` +
+              `(probe result: ${probeResult}). Changes made during startup ` +
+              'may be missed.',
+          );
+        }
         resolve(watcher);
       });
     };
@@ -290,6 +306,10 @@ export class Watcher extends EventEmitter {
   }
 
   async checkHealth(timeout: number): Promise<HealthCheckResult> {
+    return this.#checkHealth(this.#options.rootDir, timeout);
+  }
+
+  async #checkHealth(dir: string, timeout: number): Promise<HealthCheckResult> {
     const healthCheckId = this.#nextHealthCheckId++;
     if (healthCheckId === Number.MAX_SAFE_INTEGER) {
       this.#nextHealthCheckId = 0;
@@ -303,7 +323,7 @@ export class Watcher extends EventEmitter {
       this.#instanceId +
       '-' +
       healthCheckId;
-    const healthCheckPath = path.join(this.#options.rootDir, basename);
+    const healthCheckPath = path.join(dir, basename);
     let result: ?HealthCheckResult;
     const timeoutPromise = new Promise(resolve =>
       setTimeout(resolve, timeout),
