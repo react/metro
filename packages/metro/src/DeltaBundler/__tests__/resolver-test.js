@@ -175,6 +175,13 @@ function dep(name: string): TransformResultDependency {
 
       jest.requireMock('node:os').tmpdir = () => p('/tmp');
 
+      // Node resolves Metro's own `@babel/runtime` to a path on the host,
+      // which is not valid for the platform under test.
+      jest.doMock('../../lib/metroBabelRuntime', () => ({
+        getMetroBabelRuntimePackageJsonPath: () =>
+          p('/root/node_modules/@babel/runtime/package.json'),
+      }));
+
       fs = jest.requireMock('node:fs');
       originalError = console.error;
       // $FlowFixMe[cannot-write]
