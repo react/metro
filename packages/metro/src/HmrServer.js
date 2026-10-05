@@ -83,7 +83,9 @@ export default class HmrServer<TClient extends Client> {
     this._bundler = bundler;
     this._createModuleId = createModuleId;
     this._clientGroups = new Map();
-    this._rootUrlMap = new RootUrlMap(config);
+    this._rootUrlMap = new RootUrlMap(config, () =>
+      bundler.getBundler().getDynamicRoots(),
+    );
   }
 
   onClientConnect: (
