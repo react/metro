@@ -933,9 +933,6 @@ export default class FileMap extends EventEmitter {
       return;
     }
 
-    const hasWatchedExtension = (filePath: string) =>
-      this.#options.extensions.some(ext => filePath.endsWith(ext));
-
     let nextEmit: ?{
       events: Array<InternalEnqueuedEvent>,
       firstEventTimestamp: number,
@@ -1019,9 +1016,6 @@ export default class FileMap extends EventEmitter {
         change.metadata &&
         // Ignore all directory events
         (change.metadata.type === 'd' ||
-          // Ignore regular files with unwatched extensions
-          (change.metadata.type === 'f' &&
-            !hasWatchedExtension(change.relativePath)) ||
           // Don't emit events relating to symlinks if enableSymlinks: false
           (!this.#options.enableSymlinks && change.metadata?.type === 'l'))
       ) {
