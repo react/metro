@@ -144,11 +144,18 @@ class FileMap extends EventEmitter {
   build(): Promise<BuildResult>;
   static create(options: InputOptions): FileMap;
   end(): Promise<void>;
+  getRoots(): ReadonlyArray<FileMapRoot>;
   static H: HType;
   read(): Promise<null | undefined | CacheData>;
 }
 export {FileMap};
 export default FileMap;
+
+export type FileMapRoot = Readonly<{
+  absolutePath: string;
+  rootRelativePath: string;
+  dynamic: boolean;
+}>;
 
 interface FileSystem_2 {
   exists(file: Path): boolean;
