@@ -11,7 +11,8 @@
 
 import type {InputConfigT} from 'metro-config';
 
-import RootUrlMap from '../RootUrlMap';
+import {DYNAMIC_ROOT_ID_LENGTH} from '../dynamicRoots';
+import RootUrlMap, {MAX_WATCH_FOLDERS} from '../RootUrlMap';
 import {mergeConfig} from 'metro-config';
 import path from 'node:path';
 
@@ -161,6 +162,126 @@ describe('RootUrlMap', () => {
       if (filePath != null) {
         expect(rootUrlMap.urlPathnameOfFilePath(filePath)).toBe(pathname);
       }
+    });
+  });
+
+  describe('dynamic roots', () => {
+    const dynamicRoots = [
+      {id: '01234567', rootDir: path.normalize('/elsewhere/lib')},
+      {
+        id: 'fedcba98',
+        rootDir: path.normalize('/mnt/scratch/node_modules/pkg'),
+      },
+    ];
+    let currentDynamicRoots = dynamicRoots;
+    const dynamicRootUrlMap = new RootUrlMap(config, () => currentDynamicRoots);
+
+    beforeEach(() => {
+      currentDynamicRoots = dynamicRoots;
+    });
+
+    test('resolves a dynamic root id to a file in that root', () => {
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBe(path.normalize('/elsewhere/lib/helpers/a.js'));
+    });
+
+    test('returns null for an unknown dynamic root id', () => {
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/00000000/helpers/a.js',
+        ),
+      ).toBeNull();
+      expect(
+        rootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBeNull();
+    });
+
+    test('maps a file in a dynamic root to its id', () => {
+      expect(
+        dynamicRootUrlMap.urlPathnameOfFilePath(
+          path.normalize('/elsewhere/lib/helpers/a b.js'),
+        ),
+      ).toBe('/[metro-watchFolders]/01234567/helpers/a%20b.js');
+    });
+
+    test('prefers a watch folder to a dynamic root within it, and still resolves the id', () => {
+      const filePath = path.normalize('/mnt/scratch/node_modules/pkg/index.js');
+      expect(dynamicRootUrlMap.urlPathnameOfFilePath(filePath)).toBe(
+        '/[metro-watchFolders]/0/pkg/index.js',
+      );
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/fedcba98/index.js',
+        ),
+      ).toBe(filePath);
+    });
+
+    test('reads a segment of id length as an id, even if numeric, and a shorter number as an index', () => {
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/00000001/a.js',
+        ),
+      ).toBeNull();
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/0000001/a.js',
+        ),
+      ).toBe(path.join(path.normalize('/other/watch'), 'a.js'));
+    });
+
+    test('allows the most watch folders whose indices are all shorter than an id', () => {
+      expect(String(MAX_WATCH_FOLDERS - 1).length).toBeLessThan(
+        DYNAMIC_ROOT_ID_LENGTH,
+      );
+      expect(String(MAX_WATCH_FOLDERS).length).toBe(DYNAMIC_ROOT_ID_LENGTH);
+    });
+
+    test('throws for more watch folders than that', () => {
+      // Sparse, and rejected before any route is built from it.
+      expect(
+        () =>
+          new RootUrlMap({
+            ...config,
+            watchFolders: new Array<string>(MAX_WATCH_FOLDERS + 1),
+          }),
+      ).toThrow(
+        `Metro supports at most ${MAX_WATCH_FOLDERS} watchFolders, but ` +
+          `${MAX_WATCH_FOLDERS + 1} are configured.`,
+      );
+    });
+
+    test.each([
+      [path.normalize('/elsewhere/lib/'), 'helpers/a.js'],
+      [path.normalize('/'), 'elsewhere/lib/helpers/a.js'],
+    ])(
+      'maps files in a dynamic root %s, which ends in a separator, in both directions',
+      (rootDir, rootRelativePath) => {
+        const filePath = path.normalize('/elsewhere/lib/helpers/a.js');
+        const pathname = `/[metro-watchFolders]/89abcdef/${rootRelativePath}`;
+        const map = new RootUrlMap(config, () => [{id: '89abcdef', rootDir}]);
+        expect(map.urlPathnameOfFilePath(filePath)).toBe(pathname);
+        expect(map.filePathOfUrlDecodedPathname(pathname)).toBe(filePath);
+      },
+    );
+
+    test('reads dynamic roots on each use', () => {
+      currentDynamicRoots = [];
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).toBeNull();
+      currentDynamicRoots = dynamicRoots;
+      expect(
+        dynamicRootUrlMap.filePathOfUrlDecodedPathname(
+          '/[metro-watchFolders]/01234567/helpers/a.js',
+        ),
+      ).not.toBeNull();
     });
   });
 });

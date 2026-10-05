@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {DynamicRoot} from './lib/dynamicRoots';
 import type {AssetPath} from './node-haste/lib/AssetPaths';
 
 import {getImageDimensions} from './lib/imageSize';
@@ -259,11 +260,15 @@ export async function getAssetData(
  * index here and the index it reads back refer to the same directory. The
  * first root to contain the asset wins, in index order, so that appending a
  * watch folder never changes the URL of an asset under an existing one.
+ *
+ * An asset under no configured root uses the id of the first dynamic root to
+ * contain it, in place of an index.
  */
 export function getAssetUrlPath(
   assetPath: string,
   projectRoot: string,
   watchFolders: ReadonlyArray<string>,
+  dynamicRoots: ReadonlyArray<DynamicRoot> = [],
 ): string {
   const projectRelativePath = path.relative(
     path.resolve(projectRoot),
@@ -281,6 +286,15 @@ export function getAssetUrlPath(
     if (isPathInsideRoot(watchFolderRelativePath)) {
       return normalizePathSeparatorsToPosix(
         path.join('[metro-watchFolders]', String(i), watchFolderRelativePath),
+      );
+    }
+  }
+
+  for (const {id, rootDir} of dynamicRoots) {
+    const rootRelativePath = path.relative(rootDir, assetPath);
+    if (isPathInsideRoot(rootRelativePath)) {
+      return normalizePathSeparatorsToPosix(
+        path.join('[metro-watchFolders]', id, rootRelativePath),
       );
     }
   }
