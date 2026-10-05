@@ -28,6 +28,7 @@ import debounceAsyncQueue from './lib/debounceAsyncQueue';
 import formatBundlingError from './lib/formatBundlingError';
 import getGraphId from './lib/getGraphId';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
+import RootUrlMap from './lib/RootUrlMap';
 import splitBundleOptions from './lib/splitBundleOptions';
 import * as transformHelpers from './lib/transformHelpers';
 import debugModule from 'debug';
@@ -71,6 +72,7 @@ export default class HmrServer<TClient extends Client> {
   _bundler: IncrementalBundler;
   _createModuleId: (path: string) => number;
   _clientGroups: Map<RevisionId, ClientGroup>;
+  _rootUrlMap: RootUrlMap;
 
   constructor(
     bundler: IncrementalBundler,
@@ -81,6 +83,7 @@ export default class HmrServer<TClient extends Client> {
     this._bundler = bundler;
     this._createModuleId = createModuleId;
     this._clientGroups = new Map();
+    this._rootUrlMap = new RootUrlMap(config);
   }
 
   onClientConnect: (
@@ -121,19 +124,19 @@ export default class HmrServer<TClient extends Client> {
       transformOptions.platform,
       resolverOptions,
     );
-    const resolvedEntryFilePath = resolutionFn(
-      (this._config.server.unstable_serverRoot ?? this._config.projectRoot) +
-        '/.',
-      {
-        name: entryFile,
-        data: {
-          key: entryFile,
-          asyncType: null,
-          isESMImport: false,
-          locs: [],
-        },
+    const absolutePath =
+      this._rootUrlMap.filePathOfUrlDecodedPathname(entryFile);
+    const rootDir = absolutePath != null ? '/' : this._rootUrlMap.serverRootDir;
+    const resolvedEntryFile = absolutePath ?? entryFile;
+    const resolvedEntryFilePath = resolutionFn(rootDir + '/.', {
+      name: resolvedEntryFile,
+      data: {
+        key: resolvedEntryFile,
+        asyncType: null,
+        isESMImport: false,
+        locs: [],
       },
-    ).filePath;
+    }).filePath;
     const graphId = getGraphId(resolvedEntryFilePath, transformOptions, {
       resolverOptions,
       shallow: graphOptions.shallow,
@@ -379,8 +382,7 @@ export default class HmrServer<TClient extends Client> {
         createModuleId: this._createModuleId,
         includeAsyncPaths: group.graphOptions.lazy,
         projectRoot: this._config.projectRoot,
-        serverRoot:
-          this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+        serverRoot: this._rootUrlMap.serverRootDir,
       });
 
       logger?.point('serialize_end');
