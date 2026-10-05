@@ -37,6 +37,7 @@ const watchmanPath: string => string = filePath =>
 
 const DEFAULT_OPTIONS: CrawlerOptions = {
   abortSignal: null,
+  basenames: [],
   computeSha1: true,
   console: global.console,
   extensions: ['js'],
