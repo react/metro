@@ -110,6 +110,10 @@ export type Console = typeof global.console;
 
 export type CrawlerOptions = {
   abortSignal?: ?AbortSignal,
+  /**
+   * Basenames of regular files to include whatever their extension.
+   */
+  basenames: ReadonlyArray<string>,
   computeSha1: boolean,
   console: Console,
   extensions: ReadonlyArray<string>,
