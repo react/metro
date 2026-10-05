@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<ebebfbca9d43e034fde8489e1d9f2dbb>>
+ * @generated SignedSource<<67a04b1dc8137da401da7c42a82c6d28>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/watchers/common.js
@@ -20,7 +20,7 @@
  * https://github.com/amasad/sane/blob/64ff3a870c42e84f744086884bf55a4f9c22d376/src/common.js
  */
 
-import type {ChangeEventMetadata} from '../flow-types';
+import type {ChangeEventMetadata, WatcherIncludedFiles} from '../flow-types';
 import type {Stats} from 'fs';
 /**
  * Constants
@@ -34,20 +34,23 @@ export declare type RECRAWL_EVENT = typeof RECRAWL_EVENT;
 export declare const ALL_EVENT: 'all';
 export declare type ALL_EVENT = typeof ALL_EVENT;
 export type WatcherOptions = Readonly<{
-  globs: ReadonlyArray<string>;
-  dot: boolean;
+  included: null | undefined | WatcherIncludedFiles;
   ignored: null | undefined | RegExp;
   watchmanDeferStates: ReadonlyArray<string>;
   watchman?: unknown;
   watchmanPath?: string;
 }>;
 /**
- * Checks a file relative path against the globs array.
+ * Whether a watcher should report a change at the given relative path. Only
+ * regular files are checked against `included`, and every file is included
+ * when it is null.
+ *
+ * A file matches an extension when its basename ends with `.` followed by
+ * that extension, so `.env` matches `env` and `foo.d.ts` matches `d.ts`.
  */
-export declare function includedByGlob(
+export declare function isIncluded(
   type: null | undefined | ('f' | 'l' | 'd'),
-  globs: ReadonlyArray<string>,
-  dot: boolean,
+  included: null | undefined | WatcherIncludedFiles,
   relativePath: string,
 ): boolean;
 /**

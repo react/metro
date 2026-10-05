@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @noformat
- * @generated SignedSource<<ba8a5de14ca08c751a87bea6b356a670>>
+ * @generated SignedSource<<73dcfda27ad8d16345f50153d8a0035b>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/watchers/AbstractWatcher.js
@@ -18,6 +18,7 @@ import type {
   WatcherBackend,
   WatcherBackendChangeEvent,
   WatcherBackendOptions,
+  WatcherIncludedFiles,
 } from '../flow-types';
 
 export type Listeners = Readonly<{
@@ -27,8 +28,7 @@ export type Listeners = Readonly<{
 export declare class AbstractWatcher implements WatcherBackend {
   readonly root: string;
   readonly ignored: null | undefined | RegExp;
-  readonly globs: ReadonlyArray<string>;
-  readonly dot: boolean;
+  readonly included: null | undefined | WatcherIncludedFiles;
   readonly doIgnore: (path: string) => boolean;
   constructor(dir: string, opts: WatcherBackendOptions);
   onFileEvent(listener: (event: WatcherBackendChangeEvent) => void): () => void;

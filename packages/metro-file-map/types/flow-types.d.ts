@@ -6,7 +6,7 @@
  *
  * @noformat
  * @oncall react_native
- * @generated SignedSource<<b3646c81d37188726a1fc27777dcbede>>
+ * @generated SignedSource<<d6cc7fde1b672e3345edcfc4b8e05f52>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/flow-types.js
@@ -313,7 +313,6 @@ export interface FileSystem {
     rootDir?: Path | null;
   }): Iterable<Path>;
 }
-export type Glob = string;
 export type JsonData =
   | string
   | number
@@ -437,8 +436,16 @@ export type WatcherBackendChangeEvent =
     }>;
 export type WatcherBackendOptions = Readonly<{
   ignored: null | undefined | RegExp;
-  globs: ReadonlyArray<string>;
-  dot: boolean;
+  included: null | undefined | WatcherIncludedFiles;
+}>;
+/**
+ * Regular files a watcher reports changes to: those matching any of the
+ * extensions (without a leading dot), basenames, or basename prefixes.
+ */
+export type WatcherIncludedFiles = Readonly<{
+  extensions: ReadonlySet<string>;
+  basenames: ReadonlySet<string>;
+  basenamePrefixes: ReadonlyArray<string>;
 }>;
 export type WatchmanClockSpec =
   | string

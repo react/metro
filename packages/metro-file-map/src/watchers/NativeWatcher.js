@@ -8,10 +8,11 @@
  * @format
  */
 
+import type {WatcherIncludedFiles} from '../flow-types';
 import type {FSWatcher} from 'fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {includedByGlob, typeFromStat} from './common';
+import {isIncluded, typeFromStat} from './common';
 import {promises as fsPromises, watch} from 'fs';
 import {platform} from 'os';
 import * as path from 'path';
@@ -54,8 +55,7 @@ export default class NativeWatcher extends AbstractWatcher {
     dir: string,
     opts: Readonly<{
       ignored: ?RegExp,
-      globs: ReadonlyArray<string>,
-      dot: boolean,
+      included: ?WatcherIncludedFiles,
       ...
     }>,
   ) {
@@ -122,7 +122,7 @@ export default class NativeWatcher extends AbstractWatcher {
         return;
       }
 
-      if (!includedByGlob(type, this.globs, this.dot, relativePath)) {
+      if (!isIncluded(type, this.included, relativePath)) {
         return;
       }
 
