@@ -14,11 +14,9 @@
  * https://github.com/amasad/sane/blob/64ff3a870c42e84f744086884bf55a4f9c22d376/src/common.js
  */
 
-import type {ChangeEventMetadata} from '../flow-types';
+import type {ChangeEventMetadata, WatcherIncludedFiles} from '../flow-types';
 import type {Stats} from 'fs';
 
-// $FlowFixMe[untyped-import] - Write libdefs for `micromatch`
-import micromatch from 'micromatch';
 import path from 'path';
 
 /**
@@ -30,8 +28,7 @@ export const RECRAWL_EVENT = 'recrawl';
 export const ALL_EVENT = 'all';
 
 export type WatcherOptions = Readonly<{
-  globs: ReadonlyArray<string>,
-  dot: boolean,
+  included: ?WatcherIncludedFiles,
   ignored: ?RegExp,
   watchmanDeferStates: ReadonlyArray<string>,
   watchman?: unknown,
@@ -39,20 +36,43 @@ export type WatcherOptions = Readonly<{
 }>;
 
 /**
- * Checks a file relative path against the globs array.
+ * Whether a watcher should report a change at the given relative path. Only
+ * regular files are checked against `included`, and every file is included
+ * when it is null.
+ *
+ * A file matches an extension when its basename ends with `.` followed by
+ * that extension, so `.env` matches `env` and `foo.d.ts` matches `d.ts`.
  */
-export function includedByGlob(
+export function isIncluded(
   type: ?('f' | 'l' | 'd'),
-  globs: ReadonlyArray<string>,
-  dot: boolean,
+  included: ?WatcherIncludedFiles,
   relativePath: string,
 ): boolean {
-  // For non-regular files or if there are no glob matchers, just respect the
-  // `dot` option to filter dotfiles if dot === false.
-  if (globs.length === 0 || type !== 'f') {
-    return dot || micromatch.some(relativePath, '**/*');
+  if (included == null || type !== 'f') {
+    return true;
   }
-  return micromatch.some(relativePath, globs, {dot});
+  const basename = path.basename(relativePath);
+  return (
+    hasIncludedExtension(included.extensions, basename) ||
+    included.basenames.has(basename) ||
+    included.basenamePrefixes.some(prefix => basename.startsWith(prefix))
+  );
+}
+
+function hasIncludedExtension(
+  extensions: ReadonlySet<string>,
+  basename: string,
+): boolean {
+  for (
+    let i = basename.indexOf('.');
+    i !== -1;
+    i = basename.indexOf('.', i + 1)
+  ) {
+    if (extensions.has(basename.slice(i + 1))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

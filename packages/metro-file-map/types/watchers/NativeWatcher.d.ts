@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @noformat
- * @generated SignedSource<<b68c5620efd3f5bec83279059d0d1b4e>>
+ * @generated SignedSource<<cc212ccae826adc69c1f83b1859707d0>>
  *
  * This file was translated from Flow by scripts/generateTypeScriptDefinitions.js
  * Original file: packages/metro-file-map/src/watchers/NativeWatcher.js
@@ -13,6 +13,8 @@
  *   js1 build metro-ts-defs (internal) OR
  *   yarn run build-ts-defs (OSS) 
  */
+
+import type {WatcherIncludedFiles} from '../flow-types';
 
 import {AbstractWatcher} from './AbstractWatcher';
 /**
@@ -41,8 +43,7 @@ declare class NativeWatcher extends AbstractWatcher {
     dir: string,
     opts: Readonly<{
       ignored: null | undefined | RegExp;
-      globs: ReadonlyArray<string>;
-      dot: boolean;
+      included: null | undefined | WatcherIncludedFiles;
     }>,
   );
   startWatching(): Promise<void>;

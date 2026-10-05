@@ -69,8 +69,11 @@ describe.each(Object.keys(WATCHERS))(
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const opts: WatcherOptions = {
-        dot: true,
-        globs: ['**/package.json', '**/*.js', '**/cookie-*'],
+        included: {
+          extensions: new Set(['js', 'env', 'local', 'd.ts']),
+          basenames: new Set(['package.json']),
+          basenamePrefixes: ['cookie-'],
+        },
         // We need to ignore `.watchmanconfig` to keep these tests stable.
         // Even though we write it before initialising watchers, OS-level
         // delays/debouncing(?) can mean the write is *sometimes* reported by
@@ -122,9 +125,16 @@ describe.each(Object.keys(WATCHERS))(
       await rm(watchRoot, {recursive: true});
     });
 
-    maybeTest('detects a new, changed, deleted file', async () => {
-      const testFile = join(appRoot, 'test.js');
-      const relativePath = join('app', 'test.js');
+    maybeTest.each([
+      'test.js',
+      '.env',
+      '.env.local',
+      'types.d.ts',
+      'package.json',
+      '.hidden.js',
+    ])('detects a new, changed, deleted %s file', async filename => {
+      const testFile = join(appRoot, filename);
+      const relativePath = join('app', filename);
       expect(
         await eventHelpers.nextEvent(() => writeFile(testFile, 'hello world')),
       ).toStrictEqual({
