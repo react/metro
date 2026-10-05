@@ -85,7 +85,8 @@ export type HealthCheckResult =
 
 export class Watcher extends EventEmitter {
   #activeWatcher: ?string;
-  #backends: ReadonlyArray<WatcherBackend> = [];
+  #backends: Array<WatcherBackend> = [];
+  #createBackend: ?(root: Path) => Promise<WatcherBackend>;
   readonly #instanceId: number;
   #nextHealthCheckId: number = 0;
   readonly #options: WatcherOptions;
@@ -273,9 +274,23 @@ export class Watcher extends EventEmitter {
       });
     };
 
+    this.#createBackend = createWatcherBackend;
     this.#backends = await Promise.all(
       this.#options.roots.map(createWatcherBackend),
     );
+  }
+
+  /**
+   * Start watching a root in addition to those given at construction,
+   * reporting its changes to the `onChange` passed to `watch()`. Does nothing
+   * if `watch()` has not been called, i.e. outside watch mode.
+   */
+  async watchRoot(root: Path): Promise<void> {
+    const createBackend = this.#createBackend;
+    if (createBackend == null) {
+      return;
+    }
+    this.#backends.push(await createBackend(root));
   }
 
   #handleHealthCheckObservation(basename: string) {

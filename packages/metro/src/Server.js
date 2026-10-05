@@ -177,7 +177,9 @@ export default class Server {
         ].map(ext => '.' + ext),
       ),
     ];
-    this._rootUrlMap = new RootUrlMap(config);
+    this._rootUrlMap = new RootUrlMap(config, () =>
+      this._bundler.getBundler().getDynamicRoots(),
+    );
     this._isEnded = false;
     this._fetchTimings = [];
     this._activeFetchCount = 0;
@@ -443,6 +445,7 @@ export default class Server {
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
       watchFolders: this._config.watchFolders,
+      dynamicRoots: this._bundler.getBundler().getDynamicRoots(),
     });
   }
 
@@ -700,8 +703,18 @@ export default class Server {
     } else if (pathname === '/symbolicate') {
       await this._symbolicate(req, res);
     } else {
-      const sourceFilePath =
+      let sourceFilePath =
         this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      if (
+        sourceFilePath == null &&
+        filePathname.startsWith('/[metro-watchFolders]/')
+      ) {
+        // The id may belong to a root added as the dependency graph
+        // initialises.
+        await this._bundler.getBundler().ready();
+        sourceFilePath =
+          this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      }
       if (sourceFilePath != null) {
         await this._processSourceRequest(sourceFilePath, res);
       } else {

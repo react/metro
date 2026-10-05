@@ -29,6 +29,7 @@ import type {
   FileData,
   FileMapPlugin,
   FileMapPluginWorker,
+  FileMapRoot,
   FileMetadata,
   FileSystem,
   HasteMapData,
@@ -163,6 +164,7 @@ export type {
   CrawlerOptions,
   CrawlResult,
   DependencyExtractor,
+  FileMapRoot,
   WatcherStatus,
 } from './flow-types';
 
@@ -267,14 +269,24 @@ export default class FileMap extends EventEmitter {
   readonly #cacheManager: CacheManager;
   #canUseWatchmanPromise: Promise<boolean>;
   #changeID: number;
+  // Serialises changes to the file system once it is built: watcher events
+  // and roots added by `addRoot`.
+  #changeQueue: Promise<null | void> = Promise.resolve();
   #changeInterval: ?ReturnType<typeof setInterval>;
   readonly #console: Console;
   readonly #crawlerAbortController: AbortController;
   readonly #fileProcessor: FileProcessor;
   #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
+  #roots: ReadonlyArray<FileMapRoot>;
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;
+  // Roots added by `addRoot`, mapped to the completion of each addition.
+  readonly #dynamicRoots: Map<string, Promise<void>> = new Map();
+  #fileSystem: ?MutableFileSystem;
+  // Emits any watcher events waiting on the change interval. Set in watch
+  // mode.
+  #flushPendingChanges: ?() => void;
   readonly #plugins: ReadonlyArray<IndexedPlugin>;
   readonly #startupPerfLogger: ?PerfLogger;
   #watcher: ?Watcher;
@@ -382,6 +394,11 @@ export default class FileMap extends EventEmitter {
 
     this.#buildPromise = null;
     this.#pathUtils = new RootPathUtils(options.rootDir);
+    this.#roots = this.#options.roots.map(absolutePath => ({
+      absolutePath,
+      rootRelativePath: this.#pathUtils.absoluteToNormal(absolutePath),
+      dynamic: false,
+    }));
     this.#startupPerfLogger?.point('constructor_end');
     this.#crawlerAbortController = new AbortController();
     this.#changeID = 0;
@@ -506,6 +523,17 @@ export default class FileMap extends EventEmitter {
           ),
         ]);
 
+        // Roots added by `addRoot` are not part of the cache key, so a cache
+        // may hold files that only an earlier process was watching. Those
+        // roots last for one session: drop their files, also from plugins.
+        if (initialData != null) {
+          for (const canonicalPath of fileSystem.pathsOutsideRoots(
+            this.#options.roots,
+          )) {
+            fileDelta.removedFiles.add(canonicalPath);
+          }
+        }
+
         // Update `fileSystem` and plugins based on the file delta.
         const actualChanges = await this.#applyFileDelta(
           fileSystem,
@@ -528,6 +556,7 @@ export default class FileMap extends EventEmitter {
         debug('Finished mapping files (%d changes).', changeSize);
 
         await this.#watch(fileSystem, watchmanClocks, plugins);
+        this.#fileSystem = fileSystem;
         return {fileSystem};
       })();
     }
@@ -535,6 +564,113 @@ export default class FileMap extends EventEmitter {
       this.#startupPerfLogger?.point('build_end');
       return result;
     });
+  }
+
+  /**
+   * The directories whose files this file map holds: the `roots` it was
+   * constructed with, followed by any added with `addRoot`, in the order they
+   * were added. The same array is returned until the roots change.
+   */
+  getRoots(): ReadonlyArray<FileMapRoot> {
+    return this.#roots;
+  }
+
+  #setDynamicRoot(absoluteRoot: string, added: ?Promise<void>): void {
+    if (added != null) {
+      this.#dynamicRoots.set(absoluteRoot, added);
+    } else {
+      this.#dynamicRoots.delete(absoluteRoot);
+    }
+    this.#roots = [
+      ...this.#roots.filter(root => !root.dynamic),
+      ...Array.from(this.#dynamicRoots.keys(), absolutePath => ({
+        absolutePath,
+        rootRelativePath: this.#pathUtils.absoluteToNormal(absolutePath),
+        dynamic: true,
+      })),
+    ];
+  }
+
+  /**
+   * Add a directory to the file map after `build()`, crawling it and (in
+   * watch mode) watching it for the lifetime of this instance. Resolves once
+   * its files are available and a 'change' event has been emitted for them.
+   *
+   * Added roots are not persisted: a later instance reading this one's cache
+   * starts with only its own `roots`.
+   */
+  addRoot(root: string): Promise<void> {
+    const buildPromise = this.#buildPromise;
+    invariant(
+      buildPromise != null,
+      'metro-file-map: addRoot() must be called after build()',
+    );
+    const absoluteRoot = path.resolve(root);
+    const existing = this.#dynamicRoots.get(absoluteRoot);
+    if (existing != null) {
+      return existing;
+    }
+    if (this.#options.roots.some(r => path.resolve(r) === absoluteRoot)) {
+      return Promise.resolve();
+    }
+    // A root within one that is already present has nothing more to crawl or
+    // watch, and is recorded only so that it is reported by getRoots().
+    const isWithin = (r: string) =>
+      absoluteRoot.startsWith(path.resolve(r) + path.sep);
+    let covering: ?Promise<unknown> = this.#options.roots.some(isWithin)
+      ? buildPromise
+      : null;
+    for (const [dynamicRoot, added] of this.#dynamicRoots) {
+      if (covering == null && isWithin(dynamicRoot)) {
+        covering = added;
+      }
+    }
+    const promise = (
+      covering != null
+        ? covering.then(() => {})
+        : buildPromise.then(() => this.#crawlAndWatchRoot(absoluteRoot))
+    ).catch(error => {
+      this.#setDynamicRoot(absoluteRoot, null);
+      throw error;
+    });
+    this.#setDynamicRoot(absoluteRoot, promise);
+    return promise;
+  }
+
+  async #crawlAndWatchRoot(absoluteRoot: string): Promise<void> {
+    const watcher = this.#watcher;
+    const fileSystem = this.#fileSystem;
+    invariant(
+      watcher != null && fileSystem != null,
+      'Expected #watcher and #fileSystem to have been initialised by build()',
+    );
+    // Watch before crawling, so that a change made during the crawl is still
+    // reported.
+    await watcher.watchRoot(absoluteRoot);
+
+    const crawlAndApply = this.#changeQueue.then(async () => {
+      this.#flushPendingChanges?.();
+      const crawlResult = await watcher.recrawl(
+        this.#pathUtils.absoluteToNormal(absoluteRoot),
+        fileSystem,
+      );
+      const changeAggregator = await this.#applyFileDelta(
+        fileSystem,
+        this.#plugins,
+        crawlResult,
+      );
+      if (changeAggregator.getSize() === 0) {
+        return;
+      }
+      const changeEvent: ChangeEvent = {
+        changes: changeAggregator.getMappedView(toPublicMetadata),
+        logger: null,
+        rootDir: this.#options.rootDir,
+      };
+      this.emit('change', changeEvent);
+    });
+    this.#changeQueue = crawlAndApply.catch(() => {});
+    await crawlAndApply;
   }
 
   /**
@@ -849,13 +985,6 @@ export default class FileMap extends EventEmitter {
         );
       });
 
-      const toPublicMetadata = (
-        metadata: Readonly<FileMetadata>,
-      ): ChangedFileMetadata => ({
-        isSymlink: metadata[H.SYMLINK] !== 0,
-        modifiedTime: metadata[H.MTIME] ?? null,
-      });
-
       const changesWithMetadata =
         changeAggregator.getMappedView(toPublicMetadata);
 
@@ -879,8 +1008,6 @@ export default class FileMap extends EventEmitter {
       this.emit('change', changeEvent);
       nextEmit = null;
     };
-
-    let changeQueue: Promise<null | void> = Promise.resolve();
 
     const onChange = (change: WatcherBackendChangeEvent) => {
       // Recrawl events bypass normal filtering - they trigger a full subdirectory scan
@@ -920,7 +1047,7 @@ export default class FileMap extends EventEmitter {
         nextEmit.events.push(event);
       };
 
-      changeQueue = changeQueue
+      this.#changeQueue = this.#changeQueue
         .then(async () => {
           // If we get duplicate events for the same file, ignore them.
           if (
@@ -1032,13 +1159,6 @@ export default class FileMap extends EventEmitter {
             }
 
             // Emit changes directly
-            const toPublicMetadata = (
-              metadata: Readonly<FileMetadata>,
-            ): ChangedFileMetadata => ({
-              isSymlink: metadata[H.SYMLINK] !== 0,
-              modifiedTime: metadata[H.MTIME] ?? null,
-            });
-
             const changesWithMetadata =
               recrawlChangeAggregator.getMappedView(toPublicMetadata);
 
@@ -1062,6 +1182,7 @@ export default class FileMap extends EventEmitter {
         });
     };
 
+    this.#flushPendingChanges = emitChange;
     this.#changeInterval = setInterval(emitChange, CHANGE_INTERVAL);
 
     invariant(
@@ -1156,6 +1277,13 @@ export default class FileMap extends EventEmitter {
 
   static H: HType = H;
 }
+
+const toPublicMetadata = (
+  metadata: Readonly<FileMetadata>,
+): ChangedFileMetadata => ({
+  isSymlink: metadata[H.SYMLINK] !== 0,
+  modifiedTime: metadata[H.MTIME] ?? null,
+});
 
 // TODO: Replace with it.map() from Node 22+
 const mapIterable: <T, S>(Iterable<T>, (T) => S) => IteratorObject<S> = (
