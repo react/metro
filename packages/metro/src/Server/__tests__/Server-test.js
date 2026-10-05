@@ -1485,6 +1485,54 @@ describe('processRequest', () => {
         expect(result.codeFrame).toBeNull();
       });
 
+      test.each([
+        ['/[metro-project]/mybundle.js', '/root/mybundle.js'],
+        ['/[metro-project]/My%20App.js', '/root/My App.js'],
+        ['/%5Bmetro-project%5D/My%20App.js', '/root/My App.js'],
+        ['/[metro-project]/My App.js', '/root/My App.js'],
+        ['/[metro-project]/100%.js', '/root/100%.js'],
+      ])(
+        'should return codeFrame when file is the virtual path %s',
+        async (file, filePath) => {
+          fs.writeFileSync(p(filePath), 'this\nis\nfake source');
+
+          const response = await makeRequest('/symbolicate', {
+            headers: {'content-type': 'application/json'},
+            data: JSON.stringify({
+              stack: [{file, lineNumber: 2, column: 0, methodName: 'test'}],
+            }),
+          });
+
+          const result = response._getJSON();
+          expect(result.stack[0].file).toBe(file);
+          expect(result.codeFrame).not.toBeNull();
+          expect(result.codeFrame.fileName).toBe(file);
+          expect(result.codeFrame.content).toEqual(expect.any(String));
+        },
+      );
+
+      test('should return codeFrame when file is a relative path (resolved against projectRoot)', async () => {
+        const response = await makeRequest('/symbolicate', {
+          headers: {'content-type': 'application/json'},
+          data: JSON.stringify({
+            stack: [
+              {
+                file: 'mybundle.js',
+                lineNumber: 2,
+                column: 0,
+                methodName: 'test',
+              },
+            ],
+          }),
+        });
+
+        const result = response._getJSON();
+        expect(result.stack[0].file).toBe('mybundle.js');
+        expect(result.codeFrame).not.toBeNull();
+        expect(result.codeFrame.fileName).toBe('mybundle.js');
+        expect(result.codeFrame.content).toEqual(expect.any(String));
+      });
+
       // TODO: This probably should restore the *original* file before rewrite
       // or normalisation.
       test('should leave original file and position when cannot symbolicate (after normalisation and rewriting?)', async () => {
