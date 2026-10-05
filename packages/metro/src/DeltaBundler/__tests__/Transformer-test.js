@@ -248,6 +248,40 @@ describe('Transformer', function () {
     );
   });
 
+  test('passes a dynamic root URL path to asset transforms, reading roots on each transform', async () => {
+    const workerTransform =
+      require('../WorkerFarm').default.prototype.transform;
+    workerTransform.mockClear();
+    workerTransform.mockReturnValue({
+      sha1: 'abcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      result: {},
+    });
+    let dynamicRoots: ReadonlyArray<{id: string, rootDir: string}> = [];
+    const getDynamicRoots = jest.fn(() => dynamicRoots);
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [],
+        watchFolders: ['/root'],
+      },
+      {getDynamicRoots, getOrComputeSha1},
+    );
+    dynamicRoots = [{id: '01234567', rootDir: '/other'}];
+
+    await transformerInstance.transformFile('/other/imgs/a.png', {
+      type: 'asset',
+    });
+
+    expect(getDynamicRoots).toHaveBeenCalled();
+    expect(workerTransform).toHaveBeenCalledWith(
+      path.join('..', 'other', 'imgs', 'a.png'),
+      {type: 'asset'},
+      undefined,
+      '[metro-watchFolders]/01234567/imgs/a.png',
+    );
+  });
+
   test('does not start workers if the transformer cache key throws', () => {
     const error = new Error("Cannot find module 'babel-preset-expo'");
     require('../getTransformCacheKey').mockImplementationOnce(() => {
