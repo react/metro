@@ -29,6 +29,7 @@ import type {
   FileData,
   FileMapPlugin,
   FileMapPluginWorker,
+  FileMapRoot,
   FileMetadata,
   FileSystem,
   HasteMapData,
@@ -163,6 +164,7 @@ export type {
   CrawlerOptions,
   CrawlResult,
   DependencyExtractor,
+  FileMapRoot,
   WatcherStatus,
 } from './flow-types';
 
@@ -273,6 +275,7 @@ export default class FileMap extends EventEmitter {
   readonly #fileProcessor: FileProcessor;
   #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
+  #roots: ReadonlyArray<FileMapRoot>;
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;
   readonly #plugins: ReadonlyArray<IndexedPlugin>;
@@ -382,6 +385,11 @@ export default class FileMap extends EventEmitter {
 
     this.#buildPromise = null;
     this.#pathUtils = new RootPathUtils(options.rootDir);
+    this.#roots = this.#options.roots.map(absolutePath => ({
+      absolutePath,
+      rootRelativePath: this.#pathUtils.absoluteToNormal(absolutePath),
+      dynamic: false,
+    }));
     this.#startupPerfLogger?.point('constructor_end');
     this.#crawlerAbortController = new AbortController();
     this.#changeID = 0;
@@ -535,6 +543,14 @@ export default class FileMap extends EventEmitter {
       this.#startupPerfLogger?.point('build_end');
       return result;
     });
+  }
+
+  /**
+   * The directories whose files this file map holds. The same array is
+   * returned until the roots change.
+   */
+  getRoots(): ReadonlyArray<FileMapRoot> {
+    return this.#roots;
   }
 
   /**
