@@ -13,12 +13,14 @@ import type {
   BundlerResolution,
   TransformResultDependency,
 } from '../DeltaBundler/types';
+import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {ResolverInputOptions} from '../shared/types';
 import type {ModuleResolver} from './DependencyGraph/ModuleResolution';
 import type {ConfigT} from 'metro-config';
 import type {
   ChangeEvent,
   DependencyPlugin,
+  FileMapRoot,
   FileSystem,
   HasteMap,
   HealthCheckResult,
@@ -26,6 +28,7 @@ import type {
   default as MetroFileMap,
 } from 'metro-file-map';
 
+import {getDynamicRoots} from '../lib/dynamicRoots';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
 import {PackageCache} from './PackageCache';
@@ -83,6 +86,8 @@ export default class DependencyGraph extends EventEmitter {
     >,
   >;
   _initializedPromise: Promise<void>;
+  #dynamicRoots: ReadonlyArray<DynamicRoot> = [];
+  #dynamicRootsSource: ?ReadonlyArray<FileMapRoot> = null;
 
   constructor(
     config: ConfigT,
@@ -135,6 +140,19 @@ export default class DependencyGraph extends EventEmitter {
       });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. The same array is returned until the roots change.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    const fileMapRoots = this._haste.getRoots();
+    if (fileMapRoots !== this.#dynamicRootsSource) {
+      this.#dynamicRoots = getDynamicRoots(fileMapRoots);
+      this.#dynamicRootsSource = fileMapRoots;
+    }
+    return this.#dynamicRoots;
   }
 
   _onWatcherHealthCheck(result: HealthCheckResult) {

@@ -89,6 +89,20 @@ export type CacheManagerWriteOptions = Readonly<{
 //  - Real (no symlinks in path, though the path itself may be a symlink)
 export type CanonicalPath = string;
 
+/**
+ * A directory whose files a file map holds.
+ */
+export type FileMapRoot = Readonly<{
+  absolutePath: string,
+  // Relative to `rootDir`, in the form of other paths relative to it, which
+  // reaches a root on another Windows drive as if the drive were a top-level
+  // directory, e.g. `..\..\D:\foo`. Empty for `rootDir` itself.
+  rootRelativePath: string,
+  // Whether the root was added after construction, rather than given in
+  // `roots`.
+  dynamic: boolean,
+}>;
+
 export type ChangedFileMetadata = Readonly<{
   isSymlink: boolean,
   modifiedTime?: ?number,
