@@ -703,8 +703,17 @@ export default class Server {
     } else if (pathname === '/symbolicate') {
       await this._symbolicate(req, res);
     } else {
-      const sourceFilePath =
+      let sourceFilePath =
         this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      if (
+        sourceFilePath == null &&
+        filePathname.startsWith('/[metro-watchFolders]/')
+      ) {
+        // The id may belong to a root added before the bundler is ready.
+        await this._bundler.getBundler().ready();
+        sourceFilePath =
+          this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      }
       if (sourceFilePath != null) {
         await this._processSourceRequest(sourceFilePath, res);
       } else {

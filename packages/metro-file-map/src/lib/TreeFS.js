@@ -152,6 +152,58 @@ export default class TreeFS implements MutableFileSystem {
     return tfs;
   }
 
+  /**
+   * Canonical paths of all files and symlinks outside every given directory.
+   * Does not visit the contents of any directory within one.
+   */
+  *pathsOutsideRoots(mixedRoots: ReadonlyArray<Path>): Iterable<string> {
+    const rootPrefixes = mixedRoots.map(root =>
+      this.#absoluteDirPrefix(this.#normalizePath(root)),
+    );
+    yield* this.#pathsOutsideRoots(this.#rootNode, '', rootPrefixes);
+  }
+
+  *#pathsOutsideRoots(
+    node: DirectoryNode,
+    prefix: string,
+    rootPrefixes: ReadonlyArray<string>,
+  ): Iterable<string> {
+    for (const [name, child] of node) {
+      const childPath = prefix === '' ? name : prefix + path.sep + name;
+      if (name === '..' && isDirectory(child)) {
+        // Past the top of a Windows drive, '..' holds the other drives, which
+        // a root containing its own path does not contain.
+        yield* this.#pathsOutsideRoots(child, childPath, rootPrefixes);
+        continue;
+      }
+      const childPrefix = this.#absoluteDirPrefix(childPath);
+      if (rootPrefixes.some(root => childPrefix.startsWith(root))) {
+        continue;
+      }
+      if (!isDirectory(child)) {
+        yield childPath;
+      } else if (rootPrefixes.some(root => root.startsWith(childPrefix))) {
+        yield* this.#pathsOutsideRoots(child, childPath, rootPrefixes);
+      } else {
+        for (const {canonicalPath} of this.#metadataIterator(
+          child,
+          {includeNodeModules: true, includeSymlinks: true},
+          childPath,
+        )) {
+          yield canonicalPath;
+        }
+      }
+    }
+  }
+
+  // The absolute path of a normal path, with a trailing separator.
+  #absoluteDirPrefix(normalPath: string): string {
+    const absolutePath = this.#pathUtils.normalToAbsolute(normalPath);
+    return absolutePath.endsWith(path.sep)
+      ? absolutePath
+      : absolutePath + path.sep;
+  }
+
   getSize(mixedPath: Path): ?number {
     const fileMetadata = this.#getFileData(mixedPath);
     return (fileMetadata && fileMetadata[H.SIZE]) ?? null;
