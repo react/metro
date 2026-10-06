@@ -29,6 +29,7 @@ import type {
 } from 'metro-file-map';
 
 import {getDynamicRoots} from '../lib/dynamicRoots';
+import {getMetroBabelRuntimePackageJsonPath} from '../lib/metroBabelRuntime';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
 import {PackageCache} from './PackageCache';
@@ -121,7 +122,8 @@ export default class DependencyGraph extends EventEmitter {
     this._haste = fileMap;
     this._haste.on('status', status => this._onWatcherStatus(status));
 
-    this._initializedPromise = fileMap.build().then(({fileSystem}) => {
+    this._initializedPromise = fileMap.build().then(async ({fileSystem}) => {
+      await this._addMetroBabelRuntimeRoot();
       log(createActionEndEntry(initializingMetroLogEntry));
       config.reporter.update({type: 'dep_graph_loaded'});
 
@@ -140,6 +142,22 @@ export default class DependencyGraph extends EventEmitter {
       });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * `metro:babel-runtime` resolves into the `@babel/runtime` that
+   * metro-runtime depends on, wherever it is installed, so its files must be
+   * in the file map even when no configured root contains them.
+   */
+  async _addMetroBabelRuntimeRoot(): Promise<void> {
+    let packageJsonPath;
+    try {
+      packageJsonPath = getMetroBabelRuntimePackageJsonPath();
+    } catch {
+      // Reported by the `metro:` scheme resolver, if it is ever used.
+      return;
+    }
+    await this._haste.addRoot(path.dirname(packageJsonPath));
   }
 
   /**
