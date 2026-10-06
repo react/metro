@@ -149,8 +149,8 @@ export default class DependencyGraph extends EventEmitter {
   getDynamicRoots(): ReadonlyArray<DynamicRoot> {
     const fileMapRoots = this._haste.getRoots();
     if (fileMapRoots !== this.#dynamicRootsSource) {
-      this.#dynamicRootsSource = fileMapRoots;
       this.#dynamicRoots = getDynamicRoots(fileMapRoots);
+      this.#dynamicRootsSource = fileMapRoots;
     }
     return this.#dynamicRoots;
   }
