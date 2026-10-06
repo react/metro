@@ -1723,10 +1723,7 @@ export default class Server {
   };
 
   _getEntryPointAbsolutePath(entryFile: string): string {
-    return (
-      this._rootUrlMap.filePathOfUrlDecodedPathname(entryFile) ??
-      path.resolve(this._rootUrlMap.serverRootDir, entryFile)
-    );
+    return path.resolve(this._rootUrlMap.serverRootDir, entryFile);
   }
 
   // Wait for the server to finish initializing.

@@ -118,21 +118,17 @@ test('allows specifying paths to save bundle and maps', async () => {
   );
 });
 
-// $FlowFixMe[prop-missing] - test.failing is not in Flow's Jest types
-test.failing(
-  'builds a bundle from a file in a directory literally named [metro-project]',
-  async () => {
-    const config = await Metro.loadConfig({
-      config: require.resolve('../metro.config.js'),
-    });
+test('builds a bundle from a file in a directory literally named [metro-project]', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
 
-    const result = await Metro.runBuild(config, {
-      entry: './[metro-project]/LiteralDir.js',
-    });
+  const result = await Metro.runBuild(config, {
+    entry: './[metro-project]/LiteralDir.js',
+  });
 
-    expect(execBundle(result.code)).toBe('from-literal-dir');
-  },
-);
+  expect(execBundle(result.code)).toBe('from-literal-dir');
+});
 
 // $FlowFixMe[prop-missing] - test.failing is not in Flow's Jest types
 test.failing(
