@@ -134,6 +134,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         output: [],
         path: p('/bundle'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
       fooModule = {
@@ -158,6 +159,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         output: [],
         path: p('/foo'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
       barModule = {
@@ -166,6 +168,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         output: [],
         path: p('/bar'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
       bazModule = {
@@ -174,6 +177,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         output: [],
         path: p('/baz'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
       quxModule = {
@@ -182,6 +186,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         output: [],
         path: p('/qux'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
 
@@ -392,6 +397,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
       output: [],
       path: p('/qux'),
       // $FlowFixMe[prop-missing]
+      // $FlowFixMe[incompatible-type]
       getSource: () => Buffer.of(),
     };
 
