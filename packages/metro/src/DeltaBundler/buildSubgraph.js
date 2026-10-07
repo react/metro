@@ -16,6 +16,7 @@ import type {
   ResolveFn,
   TransformFn,
   TransformResultDependency,
+  VirtualSource,
 } from './types';
 
 import {deriveAbsolutePathFromContext} from '../lib/contextModule';
@@ -25,19 +26,25 @@ import path from 'node:path';
 type Parameters<T> = Readonly<{
   resolve: ResolveFn,
   transform: TransformFn<T>,
-  shouldTraverse: ResolvedDependency => boolean,
+  shouldTraverse: (ResolvedDependency, ?VirtualSource) => boolean,
 }>;
+
+// The content each virtual module was resolved with so far in one traversal,
+// so that two edges disagreeing about a module's source is an error rather
+// than an order-dependent bundle.
+type VirtualContents = Map<string, {sha1: string, parentPath: string}>;
 
 function resolveDependencies(
   parentPath: string,
   dependencies: ReadonlyArray<TransformResultDependency>,
   resolve: ResolveFn,
+  virtualContents: VirtualContents,
 ): {
   dependencies: Map<string, Dependency>,
-  resolvedContexts: Map<string, RequireContext>,
+  virtualSources: Map<string, VirtualSource>,
 } {
   const maybeResolvedDeps = new Map<string, Dependency>();
-  const resolvedContexts = new Map<string, RequireContext>();
+  const virtualSources = new Map<string, VirtualSource>();
 
   for (const dep of dependencies) {
     let maybeResolvedDep: Dependency;
@@ -61,27 +68,46 @@ function resolveDependencies(
         recursive: contextParams.recursive,
       };
 
-      resolvedContexts.set(key, resolvedContext);
+      virtualSources.set(key, {
+        type: 'requireContext',
+        requireContext: resolvedContext,
+      });
 
       maybeResolvedDep = {
         absolutePath,
         data: dep,
       };
     } else {
+      let resolution;
       try {
-        maybeResolvedDep = {
-          absolutePath: resolve(parentPath, dep).filePath,
-          data: dep,
-        };
+        resolution = resolve(parentPath, dep);
       } catch (error) {
         // Ignore unavailable optional dependencies. They are guarded
         // with a try-catch block and will be handled during runtime.
         if (dep.data.isOptional !== true) {
           throw error;
         }
-        maybeResolvedDep = {
-          data: dep,
-        };
+      }
+      if (resolution == null) {
+        maybeResolvedDep = {data: dep};
+      } else {
+        if (resolution.type === 'virtualModule') {
+          const {filePath, source, sha1, virtualPath} = resolution;
+          const previous = virtualContents.get(filePath);
+          if (previous != null && previous.sha1 !== sha1) {
+            throw new Error(
+              `Virtual module '${filePath}' was resolved with different ` +
+                `contents from '${previous.parentPath}' and '${parentPath}'. ` +
+                'A resolver must produce the same source for the same ' +
+                'virtual path and specifier.',
+            );
+          }
+          virtualContents.set(filePath, {sha1, parentPath});
+          // The source travels with the edge that produced it, so it lives
+          // exactly as long as the module is reachable.
+          virtualSources.set(key, {type: 'buffer', source, sha1, virtualPath});
+        }
+        maybeResolvedDep = {absolutePath: resolution.filePath, data: dep};
       }
     }
 
@@ -95,13 +121,13 @@ function resolveDependencies(
 
   return {
     dependencies: maybeResolvedDeps,
-    resolvedContexts,
+    virtualSources,
   };
 }
 
 export async function buildSubgraph<T>(
   entryPaths: ReadonlySet<string>,
-  resolvedContexts: ReadonlyMap<string, ?RequireContext>,
+  virtualSources: ReadonlyMap<string, ?VirtualSource>,
   {resolve, transform, shouldTraverse}: Parameters<T>,
 ): Promise<{
   moduleData: Map<string, ModuleData<T>>,
@@ -110,23 +136,31 @@ export async function buildSubgraph<T>(
   const moduleData: Map<string, ModuleData<T>> = new Map();
   const errors: Map<string, Error> = new Map();
   const visitedPaths: Set<string> = new Set();
+  const virtualContents: VirtualContents = new Map();
 
   async function visit(
     absolutePath: string,
-    requireContext: ?RequireContext,
+    virtualSource: ?VirtualSource,
   ): Promise<void> {
     if (visitedPaths.has(absolutePath)) {
       return;
     }
     visitedPaths.add(absolutePath);
-    const transformResult = await transform(absolutePath, requireContext);
+    // A virtual module is transformed as, and resolves its dependencies from,
+    // its virtual path. The identity suffix exists only in the graph.
+    const sourcePath =
+      virtualSource?.type === 'buffer'
+        ? virtualSource.virtualPath
+        : absolutePath;
+    const transformResult = await transform(sourcePath, virtualSource);
 
     // Get the absolute path of all sub-dependencies (some of them could have been
     // moved but maintain the same relative path).
     const resolutionResult = resolveDependencies(
-      absolutePath,
+      sourcePath,
       transformResult.dependencies,
       resolve,
+      virtualContents,
     );
 
     moduleData.set(absolutePath, {
@@ -134,24 +168,28 @@ export async function buildSubgraph<T>(
       ...resolutionResult,
     });
 
-    await Promise.all(
-      [...resolutionResult.dependencies.values()]
-        .filter(
-          dependency =>
-            isResolvedDependency(dependency) && shouldTraverse(dependency),
-        )
-        .map(dependency =>
-          visit(
-            dependency.absolutePath,
-            resolutionResult.resolvedContexts.get(dependency.data.data.key),
-          ).catch(error => errors.set(dependency.absolutePath, error)),
-        ),
-    );
+    const toVisit = [];
+    for (const dependency of resolutionResult.dependencies.values()) {
+      if (!isResolvedDependency(dependency)) {
+        continue;
+      }
+      const dependencyVirtualSource = resolutionResult.virtualSources.get(
+        dependency.data.data.key,
+      );
+      if (shouldTraverse(dependency, dependencyVirtualSource)) {
+        toVisit.push(
+          visit(dependency.absolutePath, dependencyVirtualSource).catch(error =>
+            errors.set(dependency.absolutePath, error),
+          ),
+        );
+      }
+    }
+    await Promise.all(toVisit);
   }
 
   await Promise.all(
     [...entryPaths].map(absolutePath =>
-      visit(absolutePath, resolvedContexts.get(absolutePath)).catch(error =>
+      visit(absolutePath, virtualSources.get(absolutePath)).catch(error =>
         errors.set(absolutePath, error),
       ),
     ),

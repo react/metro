@@ -32,10 +32,10 @@
  *   boxes/lines as needed).
  */
 
-import type {RequireContext} from '../../lib/contextModule';
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
 import type {Result} from '../Graph';
 import type {
+  BundlerResolution,
   Dependency,
   MixedOutput,
   Module,
@@ -46,10 +46,12 @@ import type {
   TransformFn,
   TransformResultDependency,
   TransformResultWithSource,
+  VirtualSource,
 } from '../types';
 
 import {deriveAbsolutePathFromContext} from '../../lib/contextModule';
 import CountingSet from '../../lib/CountingSet';
+import {deriveVirtualModulePath} from '../../lib/virtualModule';
 import {Graph} from '../Graph';
 import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
@@ -316,9 +318,24 @@ class TestGraph extends Graph<> {
     // Get a snapshot of the graph before the traversal.
     const dependenciesBefore = new Set(this.dependencies.keys());
     const modifiedPaths = new Set(files);
+    // The mocks don't model file contents, but they do model virtual module
+    // contents: a virtual module whose transform output key changes is
+    // expected to be reported as modified.
+    const virtualKeysBefore = new Map(
+      [...this.dependencies]
+        .filter(([path]) => path.includes('?virtual='))
+        .map(([path, module]) => [path, module.unstable_transformResultKey]),
+    );
 
     // Mutate the graph and calculate a delta.
     const delta = await super.traverseDependencies(paths, options);
+
+    for (const [path, keyBefore] of virtualKeysBefore) {
+      const module = this.dependencies.get(path);
+      if (module != null && module.unstable_transformResultKey !== keyBefore) {
+        modifiedPaths.add(path);
+      }
+    }
 
     // Validate the delta against the current state of the graph.
     const expectedDelta = computeDelta(
@@ -357,10 +374,10 @@ beforeEach(async () => {
 
   mockTransform = jest
     .fn<
-      [string, ?RequireContext],
+      [string, ?VirtualSource],
       Promise<TransformResultWithSource<MixedOutput>>,
     >()
-    .mockImplementation(async (path: string, context: ?RequireContext) => {
+    .mockImplementation(async (path: string, context: ?VirtualSource) => {
       const override = transformOverrides.get(path);
       if (override != null) {
         return override(path, context);
@@ -556,7 +573,7 @@ test('should retry traversing dependencies after a transform error', async () =>
 
   const localOptions = {
     ...options,
-    transform(path: string, context: ?RequireContext) {
+    transform(path: string, context: ?VirtualSource) {
       if (path === '/bad') {
         throw new BadError();
       }
@@ -2351,7 +2368,7 @@ describe('edge cases', () => {
       let fastResolved = false;
 
       localMockTransform.mockImplementation(
-        async (path: string, context: ?RequireContext) => {
+        async (path: string, context: ?VirtualSource) => {
           const result = await mockTransform(path, context);
 
           if (path === slowPath && !fastResolved) {
@@ -2946,6 +2963,198 @@ describe('only reachable errors are reported', () => {
   });
 });
 
+describe('virtual modules', () => {
+  const p = createPathNormalizer();
+  // The virtual module is anchored at a path with no file of its own, so the
+  // transform mock can be keyed on it independently of the real modules.
+  const virtualPath = p('/virtual.js');
+  const sha1 = (source: Buffer) =>
+    require('node:crypto').createHash('sha1').update(source).digest('hex');
+  let virtualSource: Buffer;
+  let localOptions;
+
+  beforeEach(() => {
+    virtualSource = Buffer.from('v1');
+    // Whatever the resolver produces for `virtual:x` is served from
+    // `virtualSource`, so a test can change the module's content without
+    // changing its identity.
+    localOptions = {
+      ...options,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'virtual:x'
+          ? {
+              type: 'virtualModule',
+              filePath: deriveVirtualModulePath(virtualPath, to.name),
+              source: virtualSource,
+              sha1: sha1(virtualSource),
+              virtualPath,
+            }
+          : options.resolve(from, to),
+    };
+    transformOverrides.set(virtualPath, async (path, context) => {
+      if (context?.type !== 'buffer') {
+        throw new Error('expected the virtual module source');
+      }
+      const {source} = context;
+      return {
+        dependencies: [],
+        getSource: () => source,
+        output: [
+          {
+            data: {code: source.toString(), lineCount: 1, map: []},
+            type: 'js/module',
+          },
+        ],
+        unstable_transformResultKey: path + ' ' + context.sha1,
+      };
+    });
+    Actions.addDependency('/foo', virtualPath, {name: 'virtual:x'});
+    files.clear();
+  });
+
+  const modulePath = () => deriveVirtualModulePath(virtualPath, 'virtual:x');
+
+  test('a virtual module is added once and named after its virtual path and specifier', async () => {
+    expect(
+      getPaths(await graph.initialTraverseDependencies(localOptions)),
+    ).toEqual({
+      added: new Set(['/bundle', '/foo', '/bar', '/baz', modulePath()]),
+      modified: new Set(),
+      deleted: new Set(),
+    });
+    expect(mockTransform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source: virtualSource,
+      sha1: sha1(virtualSource),
+      virtualPath,
+    });
+  });
+
+  test('a content change for the same specifier is a modification of the same module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+
+    expect(
+      getPaths(await graph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(),
+      modified: new Set(['/foo', modulePath()]),
+      deleted: new Set(),
+    });
+    expect(
+      nullthrows(graph.dependencies.get(modulePath())).getSource().toString(),
+    ).toBe('v2');
+  });
+
+  test('re-resolving to the same content does not modify the virtual module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+
+    Actions.modifyFile('/foo');
+
+    expect(
+      getPaths(await graph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(),
+      modified: new Set(['/foo']),
+      deleted: new Set(),
+    });
+  });
+
+  test('after a content change, a later edit to the importer does not revisit the virtual module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    mockTransform.mockClear();
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    expect(mockTransform).not.toHaveBeenCalledWith(
+      virtualPath,
+      expect.anything(),
+    );
+  });
+
+  test('after a content change, revisiting the virtual module directly uses the new content', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    // As getModifiedModulesForDeletedPath does for an inverse dependency of a
+    // deleted file.
+    files.clear();
+    mockTransform.mockClear();
+    await graph.traverseDependencies([modulePath()], localOptions);
+
+    expect(mockTransform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source: Buffer.from('v2'),
+      sha1: sha1(Buffer.from('v2')),
+      virtualPath,
+    });
+  });
+
+  test('a content conflict on an optional dependency is still an error', async () => {
+    Actions.addDependency('/bar', virtualPath, {
+      name: 'virtual:x',
+      data: {isOptional: true},
+    });
+    files.clear();
+    const conflictingOptions = {
+      ...localOptions,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'virtual:x'
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath(),
+              source: Buffer.from(from),
+              sha1: sha1(Buffer.from(from)),
+              virtualPath,
+            }
+          : options.resolve(from, to),
+    };
+
+    await expect(
+      graph.initialTraverseDependencies(conflictingOptions),
+    ).rejects.toThrow(/was resolved with different contents/);
+  });
+
+  test('two importers resolving the same virtual module to different content is an error', async () => {
+    Actions.addDependency('/bar', virtualPath, {name: 'virtual:x'});
+    files.clear();
+    const conflictingOptions = {
+      ...localOptions,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'virtual:x'
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath(),
+              source: Buffer.from(from),
+              sha1: sha1(Buffer.from(from)),
+              virtualPath,
+            }
+          : options.resolve(from, to),
+    };
+
+    await expect(
+      graph.initialTraverseDependencies(conflictingOptions),
+    ).rejects.toThrow(/was resolved with different contents/);
+  });
+});
+
 describe('require.context', () => {
   // Context modules are derived from and matched against file paths, so use
   // system paths throughout.
@@ -2967,10 +3176,13 @@ describe('require.context', () => {
   };
 
   const ctxResolved = {
-    recursive: true,
-    mode: 'sync',
-    filter: /.*/,
-    from: p('/ctx'),
+    type: 'requireContext',
+    requireContext: {
+      recursive: true,
+      mode: 'sync',
+      filter: /.*/,
+      from: p('/ctx'),
+    },
   };
 
   const ctxPath = deriveAbsolutePathFromContext(p('/ctx'), ctxParams);
@@ -3301,10 +3513,13 @@ describe('require.context', () => {
     };
 
     const narrowCtxResolved = {
-      recursive: true,
-      mode: 'sync',
-      filter: /\.\/narrow\/.*/,
-      from: p('/ctx'),
+      type: 'requireContext',
+      requireContext: {
+        recursive: true,
+        mode: 'sync',
+        filter: /\.\/narrow\/.*/,
+        from: p('/ctx'),
+      },
     };
 
     const narrowCtxPath = deriveAbsolutePathFromContext(
@@ -3592,7 +3807,7 @@ describe('optional dependencies', () => {
   const createMockTransform = (notOptional?: string[]) => {
     /* $FlowFixMe[missing-this-annot] The 'this' type annotation(s) required by
      * Flow's LTI update could not be added via codemod */
-    return async function (path: string, context: ?RequireContext) {
+    return async function (path: string, context: ?VirtualSource) {
       const result = await mockTransform.call(this, path, context);
       return {
         ...result,
