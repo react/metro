@@ -147,9 +147,17 @@ export default class DeltaCalculator<T> extends EventEmitter {
       // processed (since we haven't actually created any delta). If we do not
       // do so, asking for a delta after an error will produce an empty Delta,
       // which is not correct.
-      modifiedFiles.forEach((file: string) => this._modifiedFiles.add(file));
-      deletedFiles.forEach((file: string) => this._deletedFiles.add(file));
-      addedFiles.forEach((file: string) => this._addedFiles.add(file));
+      // Changes that arrived while this delta was being built happened after
+      // the ones it took, so they are applied on top of them.
+      const laterAddedFiles = this._addedFiles;
+      const laterModifiedFiles = this._modifiedFiles;
+      const laterDeletedFiles = this._deletedFiles;
+      this._addedFiles = addedFiles;
+      this._modifiedFiles = modifiedFiles;
+      this._deletedFiles = deletedFiles;
+      laterAddedFiles.forEach((file: string) => this.#markAdded(file));
+      laterModifiedFiles.forEach((file: string) => this.#markModified(file));
+      laterDeletedFiles.forEach((file: string) => this.#markDeleted(file));
 
       throw error;
     } finally {
@@ -199,51 +207,60 @@ export default class DeltaCalculator<T> extends EventEmitter {
     return false;
   }
 
+  // Deleted+added = modified, otherwise added.
+  #markAdded(absolutePath: string): void {
+    if (this._deletedFiles.has(absolutePath)) {
+      this._deletedFiles.delete(absolutePath);
+      this._modifiedFiles.add(absolutePath);
+    } else {
+      this._addedFiles.add(absolutePath);
+      this._modifiedFiles.delete(absolutePath);
+    }
+  }
+
+  // Added+modified stays added, otherwise modified.
+  #markModified(absolutePath: string): void {
+    if (!this._addedFiles.has(absolutePath)) {
+      this._modifiedFiles.add(absolutePath);
+    }
+    this._deletedFiles.delete(absolutePath);
+  }
+
+  // Added+deleted = no change, otherwise deleted.
+  #markDeleted(absolutePath: string): void {
+    if (this._addedFiles.has(absolutePath)) {
+      this._addedFiles.delete(absolutePath);
+    } else {
+      this._deletedFiles.add(absolutePath);
+      this._modifiedFiles.delete(absolutePath);
+    }
+  }
+
   _handleMultipleFileChanges = (changeEvent: ChangeEvent) => {
     const {changes, logger, rootDir} = changeEvent;
 
-    // Process added files: deleted+added = modified, otherwise added
     for (const [canonicalPath, metadata] of changes.addedFiles) {
       debug('Handling add: %s', canonicalPath);
       if (this.#shouldReset(canonicalPath, metadata)) {
         this._requiresReset = true;
       }
-      const absolutePath = path.join(rootDir, canonicalPath);
-      if (this._deletedFiles.has(absolutePath)) {
-        this._deletedFiles.delete(absolutePath);
-        this._modifiedFiles.add(absolutePath);
-      } else {
-        this._addedFiles.add(absolutePath);
-        this._modifiedFiles.delete(absolutePath);
-      }
+      this.#markAdded(path.join(rootDir, canonicalPath));
     }
 
-    // Process modified files: added+modified stays added, otherwise modified
     for (const [canonicalPath, metadata] of changes.modifiedFiles) {
       debug('Handling change: %s', canonicalPath);
       if (this.#shouldReset(canonicalPath, metadata)) {
         this._requiresReset = true;
       }
-      const absolutePath = path.join(rootDir, canonicalPath);
-      if (!this._addedFiles.has(absolutePath)) {
-        this._modifiedFiles.add(absolutePath);
-      }
-      this._deletedFiles.delete(absolutePath);
+      this.#markModified(path.join(rootDir, canonicalPath));
     }
 
-    // Process removed files: added+deleted = no change, otherwise deleted
     for (const [canonicalPath, metadata] of changes.removedFiles) {
       debug('Handling delete: %s', canonicalPath);
       if (this.#shouldReset(canonicalPath, metadata)) {
         this._requiresReset = true;
       }
-      const absolutePath = path.resolve(rootDir, canonicalPath);
-      if (this._addedFiles.has(absolutePath)) {
-        this._addedFiles.delete(absolutePath);
-      } else {
-        this._deletedFiles.add(absolutePath);
-        this._modifiedFiles.delete(absolutePath);
-      }
+      this.#markDeleted(path.resolve(rootDir, canonicalPath));
     }
 
     let changeId = changeEventIds.get(changeEvent);
@@ -284,6 +301,15 @@ export default class DeltaCalculator<T> extends EventEmitter {
         if (!deletedFiles.has(modifiedModulePath)) {
           modifiedFiles.add(modifiedModulePath);
         }
+      }
+    });
+
+    // An added file that already has a module in the graph was deleted and
+    // recreated while a build was in flight. The graph never saw the deletion,
+    // so the module it holds is stale and needs revisiting.
+    addedFiles.forEach((filePath: string) => {
+      if (this._graph.dependencies.has(filePath)) {
+        modifiedFiles.add(filePath);
       }
     });
 

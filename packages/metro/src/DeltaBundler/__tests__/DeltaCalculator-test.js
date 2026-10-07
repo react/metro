@@ -304,7 +304,7 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
   test('should calculate a delta after a file addition', async () => {
     await deltaCalculator.getDelta({reset: false, shallow: false});
 
-    emitChange({addedFiles: ['foo']});
+    emitChange({addedFiles: ['unrelated']});
 
     traverseDependencies.mockResolvedValueOnce({
       added: new Map([[p('/foo'), fooModule]]),
@@ -564,6 +564,103 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
 
     expect(traverseDependencies).toHaveBeenCalledTimes(1);
     expect(traverseDependencies.mock.calls[0][0]).toEqual([p('/foo')]);
+  });
+
+  test('should traverse a file re-added while a failed delta was being built', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    emitChange({removedFiles: ['foo']});
+
+    let rejectTraversal: (error: Error) => void = () => {};
+    traverseDependencies.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        rejectTraversal = reject;
+      }),
+    );
+    const failedDelta = deltaCalculator.getDelta({
+      reset: false,
+      shallow: false,
+    });
+
+    // The file is recreated while the delta that saw it deleted is still being built.
+    emitChange({addedFiles: ['foo']});
+    rejectTraversal(new Error('Unable to resolve module'));
+    await expect(failedDelta).rejects.toBeInstanceOf(Error);
+
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/foo'), fooModule]]),
+      deleted: new Set(),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toContain(p('/foo'));
+  });
+
+  test('should not traverse a file deleted while a failed delta was being built', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    emitChange({modifiedFiles: ['foo']});
+
+    let rejectTraversal: (error: Error) => void = () => {};
+    traverseDependencies.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        rejectTraversal = reject;
+      }),
+    );
+    const failedDelta = deltaCalculator.getDelta({
+      reset: false,
+      shallow: false,
+    });
+
+    emitChange({removedFiles: ['foo']});
+    rejectTraversal(new Error('Unable to resolve module'));
+    await expect(failedDelta).rejects.toBeInstanceOf(Error);
+
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/bundle'), entryModule]]),
+      deleted: new Set([p('/foo')]),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toEqual([p('/bundle')]);
+  });
+
+  test('should traverse a file re-added while a successful delta was being built', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    emitChange({removedFiles: ['foo']});
+
+    let resolveTraversal: (result: Result<$FlowFixMe>) => void = () => {};
+    traverseDependencies.mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveTraversal = resolve;
+      }),
+    );
+    const delta = deltaCalculator.getDelta({reset: false, shallow: false});
+
+    // The file is recreated before its importer re-resolves it, so the build
+    // succeeds without revisiting the module the graph already holds.
+    emitChange({addedFiles: ['foo']});
+    resolveTraversal({
+      added: new Map(),
+      modified: new Map([[p('/bundle'), entryModule]]),
+      deleted: new Set(),
+    });
+    await delta;
+
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/foo'), fooModule]]),
+      deleted: new Set(),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toEqual([p('/foo')]);
   });
 
   test.each(['add', 'delete'])(
