@@ -299,9 +299,17 @@ export default class DependencyGraph extends EventEmitter {
       mapByResolverOptions,
       resolverOptionsKey,
     );
-    const mapByTarget = getOrCreateMap(mapByOrigin, originKey);
-    const mapByPlatform = getOrCreateMap(mapByTarget, targetKey);
-    let resolution: ?BundlerResolution = mapByPlatform.get(platformKey);
+    // A virtual module's identity is derived from the importing module itself,
+    // not its directory, so its resolution is memoised per origin file: the
+    // same specifier in two sibling files is two modules. Look there first,
+    // then in the per-directory memo every other resolution uses.
+    let resolution: ?BundlerResolution = mapByOrigin
+      .get(originModulePath)
+      ?.get(targetKey)
+      ?.get(platformKey);
+    if (!resolution) {
+      resolution = mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey);
+    }
 
     if (!resolution) {
       try {
@@ -327,7 +335,12 @@ export default class DependencyGraph extends EventEmitter {
       }
     }
 
-    mapByPlatform.set(platformKey, resolution);
+    const memoOriginKey =
+      resolution.type === 'virtualModule' ? originModulePath : originKey;
+    getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
+      platformKey,
+      resolution,
+    );
     return resolution;
   }
 

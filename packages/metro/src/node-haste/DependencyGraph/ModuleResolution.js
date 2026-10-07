@@ -25,10 +25,12 @@ import type {
 } from 'metro-resolver';
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
+import {deriveVirtualModulePath} from '../../lib/virtualModule';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
 import createDefaultContext from 'metro-resolver/private/createDefaultContext';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
@@ -163,7 +165,7 @@ export class ModuleResolver {
         dependency.name,
         platform,
       );
-      return this._getFileResolvedModule(result);
+      return this._getFileResolvedModule(result, dependency.name);
     } catch (error) {
       if (error instanceof Resolver.FailedToResolvePathError) {
         const {candidates} = error;
@@ -229,7 +231,10 @@ export class ModuleResolver {
   /**
    * TODO: Return Resolution instead of coercing to BundlerResolution here
    */
-  _getFileResolvedModule(resolution: Resolution): BundlerResolution {
+  _getFileResolvedModule(
+    resolution: Resolution,
+    specifier: string,
+  ): BundlerResolution {
     switch (resolution.type) {
       case 'sourceFile':
         return resolution;
@@ -242,8 +247,24 @@ export class ModuleResolver {
       case 'empty':
         return this._getEmptyModule();
       case 'virtualModule':
-        // Reserved for future implementation.
-        throw new Error('Virtual modules are not yet implemented.');
+        // A module with no base needs its dependencies resolved with a null
+        // `originModulePath`, which `ResolutionContext` does not allow yet.
+        // Lifting this is a breaking change to the resolver contract.
+        const {virtualPath} = resolution;
+        invariant(
+          virtualPath != null,
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+        const source =
+          typeof resolution.source === 'string'
+            ? Buffer.from(resolution.source, 'utf8')
+            : resolution.source;
+        return {
+          type: 'virtualModule',
+          filePath: deriveVirtualModulePath(virtualPath, specifier),
+          source,
+          sha1: crypto.createHash('sha1').update(source).digest('hex'),
+        };
       default:
         resolution.type as empty;
         throw new Error('invalid type');
