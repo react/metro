@@ -32,7 +32,6 @@
  *   boxes/lines as needed).
  */
 
-import type {RequireContext} from '../../lib/contextModule';
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
 import type {Result} from '../Graph';
 import type {
@@ -43,6 +42,7 @@ import type {
   ReadOnlyDependencies,
   ReadOnlyGraph,
   ResolvedDependency,
+  ResolvedModuleInput,
   TransformFn,
   TransformResultDependency,
   TransformResultWithSource,
@@ -357,10 +357,10 @@ beforeEach(async () => {
 
   mockTransform = jest
     .fn<
-      [string, ?RequireContext],
+      [string, ?ResolvedModuleInput],
       Promise<TransformResultWithSource<MixedOutput>>,
     >()
-    .mockImplementation(async (path: string, context: ?RequireContext) => {
+    .mockImplementation(async (path: string, context: ?ResolvedModuleInput) => {
       const override = transformOverrides.get(path);
       if (override != null) {
         return override(path, context);
@@ -556,7 +556,7 @@ test('should retry traversing dependencies after a transform error', async () =>
 
   const localOptions = {
     ...options,
-    transform(path: string, context: ?RequireContext) {
+    transform(path: string, context: ?ResolvedModuleInput) {
       if (path === '/bad') {
         throw new BadError();
       }
@@ -2351,7 +2351,7 @@ describe('edge cases', () => {
       let fastResolved = false;
 
       localMockTransform.mockImplementation(
-        async (path: string, context: ?RequireContext) => {
+        async (path: string, context: ?ResolvedModuleInput) => {
           const result = await mockTransform(path, context);
 
           if (path === slowPath && !fastResolved) {
@@ -2967,10 +2967,13 @@ describe('require.context', () => {
   };
 
   const ctxResolved = {
-    recursive: true,
-    mode: 'sync',
-    filter: /.*/,
-    from: p('/ctx'),
+    type: 'requireContext',
+    requireContext: {
+      recursive: true,
+      mode: 'sync',
+      filter: /.*/,
+      from: p('/ctx'),
+    },
   };
 
   const ctxPath = deriveAbsolutePathFromContext(p('/ctx'), ctxParams);
@@ -3301,10 +3304,13 @@ describe('require.context', () => {
     };
 
     const narrowCtxResolved = {
-      recursive: true,
-      mode: 'sync',
-      filter: /\.\/narrow\/.*/,
-      from: p('/ctx'),
+      type: 'requireContext',
+      requireContext: {
+        recursive: true,
+        mode: 'sync',
+        filter: /\.\/narrow\/.*/,
+        from: p('/ctx'),
+      },
     };
 
     const narrowCtxPath = deriveAbsolutePathFromContext(
@@ -3592,7 +3598,7 @@ describe('optional dependencies', () => {
   const createMockTransform = (notOptional?: string[]) => {
     /* $FlowFixMe[missing-this-annot] The 'this' type annotation(s) required by
      * Flow's LTI update could not be added via codemod */
-    return async function (path: string, context: ?RequireContext) {
+    return async function (path: string, context: ?ResolvedModuleInput) {
       const result = await mockTransform.call(this, path, context);
       return {
         ...result,

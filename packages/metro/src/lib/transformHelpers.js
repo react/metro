@@ -13,12 +13,12 @@ import type Bundler from '../Bundler';
 import type {TransformFn, default as DeltaBundler} from '../DeltaBundler';
 import type {
   BundlerResolution,
+  ResolvedModuleInput,
   TransformInputOptions,
   TransformResultDependency,
 } from '../DeltaBundler/types';
 import type {TransformOptions} from '../DeltaBundler/Worker';
 import type {ResolverInputOptions} from '../shared/types';
-import type {RequireContext} from './contextModule';
 import type {ConfigT} from 'metro-config';
 import type {Type} from 'metro-transform-worker';
 
@@ -152,10 +152,13 @@ export async function getTransformFn(
   );
   const assetExts = new Set(config.resolver.assetExts);
 
-  return async (modulePath: string, requireContext: ?RequireContext) => {
-    let templateBuffer: Buffer;
+  return async (modulePath: string, resolvedInput: ?ResolvedModuleInput) => {
+    let fileBuffer: ?Buffer;
 
-    if (requireContext) {
+    if (resolvedInput?.type === 'source') {
+      fileBuffer = resolvedInput.source;
+    } else if (resolvedInput?.type === 'requireContext') {
+      const {requireContext} = resolvedInput;
       const graph = await bundler.getDependencyGraph();
 
       // TODO: Check delta changes to avoid having to look over all files each time
@@ -175,7 +178,7 @@ export async function getTransformFn(
         files,
       );
 
-      templateBuffer = Buffer.from(template);
+      fileBuffer = Buffer.from(template);
     }
 
     return await bundler.transformFile(
@@ -188,7 +191,7 @@ export async function getTransformFn(
         ),
         type: getType(transformOptions.type, modulePath, assetExts),
       },
-      templateBuffer,
+      fileBuffer ?? undefined,
     );
   };
 }
