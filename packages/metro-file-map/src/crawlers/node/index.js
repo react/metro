@@ -16,11 +16,19 @@ import * as fs from 'graceful-fs';
 import * as path from 'node:path';
 
 function find(options: CrawlerOptions): Promise<FileData> {
-  const {console, extensions, ignore, includeSymlinks, rootDir, roots} =
-    options;
+  const {
+    basenames,
+    console,
+    extensions,
+    ignore,
+    includeSymlinks,
+    rootDir,
+    roots,
+  } = options;
   const result: FileData = new Map();
   const pathUtils = new RootPathUtils(rootDir);
   const exts = new Set(extensions);
+  const includedBasenames = new Set(basenames);
 
   return new Promise(resolve => {
     let activeCalls = 0;
@@ -76,7 +84,11 @@ function find(options: CrawlerOptions): Promise<FileData> {
             }
 
             const ext = path.extname(name).substr(1);
-            if (!isSymbolicLink && !exts.has(ext)) {
+            if (
+              !isSymbolicLink &&
+              !exts.has(ext) &&
+              !includedBasenames.has(name)
+            ) {
               continue;
             }
 
