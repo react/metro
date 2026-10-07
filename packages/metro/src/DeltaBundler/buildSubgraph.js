@@ -13,6 +13,7 @@ import type {
   Dependency,
   ModuleData,
   ResolvedDependency,
+  ResolvedModuleInput,
   ResolveFn,
   TransformFn,
   TransformResultDependency,
@@ -34,10 +35,10 @@ function resolveDependencies(
   resolve: ResolveFn,
 ): {
   dependencies: Map<string, Dependency>,
-  resolvedContexts: Map<string, RequireContext>,
+  resolvedInputs: Map<string, ResolvedModuleInput>,
 } {
   const maybeResolvedDeps = new Map<string, Dependency>();
-  const resolvedContexts = new Map<string, RequireContext>();
+  const resolvedInputs = new Map<string, ResolvedModuleInput>();
 
   for (const dep of dependencies) {
     let maybeResolvedDep: Dependency;
@@ -61,7 +62,10 @@ function resolveDependencies(
         recursive: contextParams.recursive,
       };
 
-      resolvedContexts.set(key, resolvedContext);
+      resolvedInputs.set(key, {
+        type: 'requireContext',
+        requireContext: resolvedContext,
+      });
 
       maybeResolvedDep = {
         absolutePath,
@@ -69,8 +73,17 @@ function resolveDependencies(
       };
     } else {
       try {
+        const resolution = resolve(parentPath, dep);
+        if (resolution.type === 'virtualModule') {
+          // The source travels with the edge that produced it, so it lives
+          // exactly as long as the module is reachable.
+          resolvedInputs.set(key, {
+            type: 'source',
+            source: Buffer.from(resolution.source, 'utf8'),
+          });
+        }
         maybeResolvedDep = {
-          absolutePath: resolve(parentPath, dep).filePath,
+          absolutePath: resolution.filePath,
           data: dep,
         };
       } catch (error) {
@@ -95,13 +108,13 @@ function resolveDependencies(
 
   return {
     dependencies: maybeResolvedDeps,
-    resolvedContexts,
+    resolvedInputs,
   };
 }
 
 export async function buildSubgraph<T>(
   entryPaths: ReadonlySet<string>,
-  resolvedContexts: ReadonlyMap<string, ?RequireContext>,
+  resolvedInputs: ReadonlyMap<string, ?ResolvedModuleInput>,
   {resolve, transform, shouldTraverse}: Parameters<T>,
 ): Promise<{
   moduleData: Map<string, ModuleData<T>>,
@@ -113,13 +126,13 @@ export async function buildSubgraph<T>(
 
   async function visit(
     absolutePath: string,
-    requireContext: ?RequireContext,
+    resolvedInput: ?ResolvedModuleInput,
   ): Promise<void> {
     if (visitedPaths.has(absolutePath)) {
       return;
     }
     visitedPaths.add(absolutePath);
-    const transformResult = await transform(absolutePath, requireContext);
+    const transformResult = await transform(absolutePath, resolvedInput);
 
     // Get the absolute path of all sub-dependencies (some of them could have been
     // moved but maintain the same relative path).
@@ -143,7 +156,7 @@ export async function buildSubgraph<T>(
         .map(dependency =>
           visit(
             dependency.absolutePath,
-            resolutionResult.resolvedContexts.get(dependency.data.data.key),
+            resolutionResult.resolvedInputs.get(dependency.data.data.key),
           ).catch(error => errors.set(dependency.absolutePath, error)),
         ),
     );
@@ -151,7 +164,7 @@ export async function buildSubgraph<T>(
 
   await Promise.all(
     [...entryPaths].map(absolutePath =>
-      visit(absolutePath, resolvedContexts.get(absolutePath)).catch(error =>
+      visit(absolutePath, resolvedInputs.get(absolutePath)).catch(error =>
         errors.set(absolutePath, error),
       ),
     ),

@@ -99,4 +99,10 @@ export type ResolveAsset = (dirPath: string, assetName: string, extension: strin
 
 export type Result<TResolution, TCandidates> = {readonly type: 'resolved'; readonly resolution: TResolution} | {readonly type: 'failed'; readonly candidates: TCandidates};
 
+export type VirtualResolution = Readonly<{
+  type: 'virtualModule';
+  originModulePath: null | undefined | string;
+  source: string;
+}>;
+
 ```
