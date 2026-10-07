@@ -30,14 +30,34 @@ export type AssetResolution = Readonly<{
 export type FileResolution = AssetResolution | SourceFileResolution;
 
 /**
- * A JS module whose contents are provided out-of-band rather than read from a file
- * on disk.
+ * A JS module whose contents are provided by the resolver rather than read from
+ * a file on disk.
  *
- * NOTE: Resolving to a virtual module is not yet implemented. This is a reservation.
+ * Metro derives the module's identity from `virtualPath` and a hash of
+ * `source`, so the same source at the same virtual path is the same module,
+ * and a change to either is a different module. That identity is also the
+ * transform cache key: nothing about a virtual module can go stale.
  */
 export type VirtualResolution = Readonly<{
   type: 'virtualModule',
-  ...
+  /**
+   * The path the module notionally lives at. It need not exist on disk. Metro
+   * appends a suffix derived from `source` to form the module's path, so
+   * relative and package imports inside the virtual module resolve from this
+   * path's directory, and path-based transform configuration (Babel
+   * overrides, `inlineRequires` block lists, and so on) sees a path derived
+   * from it. A resolver that passes the importing module's own path gets one
+   * module per importer; a fixed path gets one module per distinct source.
+   *
+   * `null` declares a module with no base, as a `data:` URL has: identity is
+   * the source alone and relative imports inside it are errors. Resolving the
+   * dependencies of such a module needs a `ResolutionContext` with no
+   * `originModulePath`, which is a breaking change to the resolver contract,
+   * so Metro does not accept `null` yet.
+   */
+  virtualPath: ?string,
+  /** The complete source of the module, as text or UTF-8 bytes. */
+  source: string | Buffer,
 }>;
 
 export type FileAndDirCandidates = {

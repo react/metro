@@ -90,9 +90,19 @@ export type Module<T = MixedOutput> = Readonly<{
   unstable_transformResultKey?: ?string,
 }>;
 
+/**
+ * The source of a module that has no file, as supplied by the resolution that
+ * produced it: the bytes themselves for a virtual module, or, for a
+ * `require.context` module, the parameters the transform expands into one.
+ */
+export type VirtualSource =
+  | Readonly<{type: 'requireContext', requireContext: RequireContext}>
+  | Readonly<{type: 'inline', source: Buffer}>;
+
 export type ModuleData<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyMap<string, Dependency>,
-  resolvedContexts: ReadonlyMap<string, RequireContext>,
+  /** Keyed by dependency key, for the dependencies that resolved to a module with no file. */
+  virtualSources: ReadonlyMap<string, VirtualSource>,
   output: ReadonlyArray<T>,
   getSource: () => Buffer,
   unstable_transformResultKey?: ?string,
@@ -137,7 +147,7 @@ export type TransformResultWithSource<T = MixedOutput> = Readonly<{
 
 export type TransformFn<T = MixedOutput> = (
   string,
-  ?RequireContext,
+  ?VirtualSource,
 ) => Promise<TransformResultWithSource<T>>;
 
 export type ResolveFn = (
@@ -151,10 +161,21 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
-export type BundlerResolution = Readonly<{
-  type: 'sourceFile',
-  filePath: string,
-}>;
+export type BundlerResolution =
+  | Readonly<{
+      type: 'sourceFile',
+      filePath: string,
+    }>
+  | Readonly<{
+      type: 'virtualModule',
+      /**
+       * The module's identity in the graph: the virtual path with a suffix
+       * derived from a hash of `source`. See `lib/virtualModule.js`.
+       */
+      filePath: string,
+      /** Carried to the transform as the module's input in place of a file read. */
+      source: Buffer,
+    }>;
 
 export type Options<T = MixedOutput> = Readonly<{
   resolve: ResolveFn,

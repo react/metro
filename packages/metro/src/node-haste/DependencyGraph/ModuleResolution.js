@@ -25,6 +25,7 @@ import type {
 } from 'metro-resolver';
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
+import {deriveVirtualModulePath} from '../../lib/virtualModule';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
@@ -242,8 +243,24 @@ export class ModuleResolver {
       case 'empty':
         return this._getEmptyModule();
       case 'virtualModule':
-        // Reserved for future implementation.
-        throw new Error('Virtual modules are not yet implemented.');
+        // A module with no base needs its dependencies resolved with a null
+        // `originModulePath`, which `ResolutionContext` does not allow yet.
+        // Lifting this is a breaking change to the resolver contract.
+        invariant(
+          resolution.virtualPath != null,
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+        return {
+          type: 'virtualModule',
+          filePath: deriveVirtualModulePath(
+            resolution.virtualPath,
+            resolution.source,
+          ),
+          source:
+            typeof resolution.source === 'string'
+              ? Buffer.from(resolution.source, 'utf8')
+              : resolution.source,
+        };
       default:
         resolution.type as empty;
         throw new Error('invalid type');
