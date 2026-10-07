@@ -13,12 +13,14 @@ import type {
   BundlerResolution,
   TransformResultDependency,
 } from '../DeltaBundler/types';
+import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {ResolverInputOptions} from '../shared/types';
 import type {ModuleResolver} from './DependencyGraph/ModuleResolution';
 import type {ConfigT} from 'metro-config';
 import type {
   ChangeEvent,
   DependencyPlugin,
+  FileMapRoot,
   FileSystem,
   HasteMap,
   HealthCheckResult,
@@ -26,6 +28,7 @@ import type {
   default as MetroFileMap,
 } from 'metro-file-map';
 
+import {getDynamicRoots} from '../lib/dynamicRoots';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
 import {PackageCache} from './PackageCache';
@@ -83,6 +86,8 @@ export default class DependencyGraph extends EventEmitter {
     >,
   >;
   _initializedPromise: Promise<void>;
+  #dynamicRoots: ReadonlyArray<DynamicRoot> = [];
+  #dynamicRootsSource: ?ReadonlyArray<FileMapRoot> = null;
 
   constructor(
     config: ConfigT,
@@ -135,6 +140,19 @@ export default class DependencyGraph extends EventEmitter {
       });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. The same array is returned until the roots change.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    const fileMapRoots = this._haste.getRoots();
+    if (fileMapRoots !== this.#dynamicRootsSource) {
+      this.#dynamicRoots = getDynamicRoots(fileMapRoots);
+      this.#dynamicRootsSource = fileMapRoots;
+    }
+    return this.#dynamicRoots;
   }
 
   _onWatcherHealthCheck(result: HealthCheckResult) {
@@ -281,9 +299,17 @@ export default class DependencyGraph extends EventEmitter {
       mapByResolverOptions,
       resolverOptionsKey,
     );
-    const mapByTarget = getOrCreateMap(mapByOrigin, originKey);
-    const mapByPlatform = getOrCreateMap(mapByTarget, targetKey);
-    let resolution: ?BundlerResolution = mapByPlatform.get(platformKey);
+    // A virtual module's identity is derived from the importing module itself,
+    // not its directory, so its resolution is memoised per origin file: the
+    // same specifier in two sibling files is two modules. Look there first,
+    // then in the per-directory memo every other resolution uses.
+    let resolution: ?BundlerResolution = mapByOrigin
+      .get(originModulePath)
+      ?.get(targetKey)
+      ?.get(platformKey);
+    if (!resolution) {
+      resolution = mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey);
+    }
 
     if (!resolution) {
       try {
@@ -309,7 +335,12 @@ export default class DependencyGraph extends EventEmitter {
       }
     }
 
-    mapByPlatform.set(platformKey, resolution);
+    const memoOriginKey =
+      resolution.type === 'virtualModule' ? originModulePath : originKey;
+    getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
+      platformKey,
+      resolution,
+    );
     return resolution;
   }
 

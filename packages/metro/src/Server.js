@@ -177,7 +177,9 @@ export default class Server {
         ].map(ext => '.' + ext),
       ),
     ];
-    this._rootUrlMap = new RootUrlMap(config);
+    this._rootUrlMap = new RootUrlMap(config, () =>
+      this._bundler.getBundler().getDynamicRoots(),
+    );
     this._isEnded = false;
     this._fetchTimings = [];
     this._activeFetchCount = 0;
@@ -443,6 +445,7 @@ export default class Server {
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
       watchFolders: this._config.watchFolders,
+      dynamicRoots: this._bundler.getBundler().getDynamicRoots(),
     });
   }
 
