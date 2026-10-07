@@ -184,14 +184,14 @@ function main() {
     // comments/
     `declare type CommentTypeShorthand = 'leading' | 'inner' | 'trailing'`,
     // eslint-disable-next-line max-len
-    `declare export function addComment<T: Node>(node: T, type: CommentTypeShorthand, content: string, line?: boolean): T`,
+    `declare export function addComment<T extends Node>(node: T, type: CommentTypeShorthand, content: string, line?: boolean): T`,
     // eslint-disable-next-line max-len
-    `declare export function addComments<T: Node>(node: T, type: CommentTypeShorthand, comments: Array<Comment>): T`,
+    `declare export function addComments<T extends Node>(node: T, type: CommentTypeShorthand, comments: Array<Comment>): T`,
     `declare export function inheritInnerComments(node: Node, parent: Node): void`,
     `declare export function inheritLeadingComments(node: Node, parent: Node): void`,
-    `declare export function inheritsComments<T: Node>(node: T, parent: Node): void`,
+    `declare export function inheritsComments<T extends Node>(node: T, parent: Node): void`,
     `declare export function inheritTrailingComments(node: Node, parent: Node): void`,
-    `declare export function removeComments<T: Node>(node: T): T`,
+    `declare export function removeComments<T extends Node>(node: T): T`,
 
     // converters/
     `declare export function ensureBlock(node: ${NODE_PREFIX}, key: string): ${NODE_PREFIX}BlockStatement`,
@@ -216,7 +216,7 @@ function main() {
     // eslint-disable-next-line max-len
     `declare export function appendToMemberExpression(member: ${NODE_PREFIX}MemberExpression, append: ${NODE_PREFIX}, computed?: boolean): ${NODE_PREFIX}MemberExpression`,
     // eslint-disable-next-line max-len
-    `declare export function inherits<T: Node>(child: T, parent: ${NODE_PREFIX} | null | void): T`,
+    `declare export function inherits<T extends Node>(child: T, parent: ${NODE_PREFIX} | null | void): T`,
     // eslint-disable-next-line max-len
     `declare export function prependToMemberExpression(member: ${NODE_PREFIX}MemberExpression, prepend: ${NODE_PREFIX}Expression): ${NODE_PREFIX}MemberExpression`,
     `declare export function removeProperties<T>(n: T, opts: ?{}): void;`,
@@ -268,7 +268,7 @@ function main() {
     `declare export function isVar(node: BabelNode): node is VariableDeclaration`,
     // eslint-disable-next-line max-len
     `declare export function matchesPattern(node: ?BabelNode, match: string | Array<string>, allowPartial?: boolean): boolean`,
-    `declare export function validate(n: BabelNode, key: string, value: mixed): void;`,
+    `declare export function validate(n: BabelNode, key: string, value: unknown): void;`,
   );
 
   typeDecls += `declare type ${NODE_PREFIX} = ${Object.keys(t.NODE_FIELDS)
