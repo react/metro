@@ -13,9 +13,9 @@ import type Bundler from '../Bundler';
 import type {TransformFn, default as DeltaBundler} from '../DeltaBundler';
 import type {
   BundlerResolution,
+  VirtualSource,
   TransformInputOptions,
   TransformResultDependency,
-  VirtualSource,
 } from '../DeltaBundler/types';
 import type {TransformOptions} from '../DeltaBundler/Worker';
 import type {ResolverInputOptions} from '../shared/types';
@@ -155,7 +155,9 @@ export async function getTransformFn(
   return async (modulePath: string, virtualSource: ?VirtualSource) => {
     let fileBuffer: ?Buffer;
 
-    if (virtualSource?.type === 'requireContext') {
+    if (virtualSource?.type === 'buffer') {
+      fileBuffer = virtualSource.source;
+    } else if (virtualSource?.type === 'requireContext') {
       const {requireContext} = virtualSource;
       const graph = await bundler.getDependencyGraph();
 

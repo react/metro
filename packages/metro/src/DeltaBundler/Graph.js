@@ -183,14 +183,38 @@ export class Graph<T = MixedOutput> {
 
     const allModifiedPaths = new Set(paths);
 
+    // Virtual modules already in the graph whose edge now supplies different
+    // content. Their identity is unchanged, so they are revisited and committed
+    // like modified files.
+    const changedVirtualSources = new Map<string, VirtualSource>();
+
     const delta = await this._buildDelta(
       modifiedPathsInBaseGraph,
       internalOptions,
-      // Traverse new or modified paths
-      absolutePath =>
-        !this.dependencies.has(absolutePath) ||
-        allModifiedPaths.has(absolutePath),
+      // Traverse new or modified paths, and virtual modules with new content.
+      (absolutePath, virtualSource) => {
+        if (
+          !this.dependencies.has(absolutePath) ||
+          allModifiedPaths.has(absolutePath)
+        ) {
+          return true;
+        }
+        const current = this.#virtualSources.get(absolutePath);
+        if (
+          virtualSource?.type === 'buffer' &&
+          current?.type === 'buffer' &&
+          current.sha1 !== virtualSource.sha1
+        ) {
+          changedVirtualSources.set(absolutePath, virtualSource);
+          return true;
+        }
+        return false;
+      },
     );
+
+    for (const path of changedVirtualSources.keys()) {
+      modifiedPathsInBaseGraph.add(path);
+    }
 
     // If we have errors we might need to roll back any changes - take
     // snapshots of all modified modules at the base state. We'll also snapshot
@@ -280,6 +304,14 @@ export class Graph<T = MixedOutput> {
       throw error;
     }
 
+    // The graph now holds the new content of revisited virtual modules, so
+    // later traversals compare against, and re-transform with, that content.
+    for (const [path, virtualSource] of changedVirtualSources) {
+      if (this.dependencies.has(path)) {
+        this.#virtualSources.set(path, virtualSource);
+      }
+    }
+
     const added = new Map<string, Module<T>>();
     for (const path of delta.added) {
       added.set(path, nullthrows(this.dependencies.get(path)));
@@ -349,15 +381,21 @@ export class Graph<T = MixedOutput> {
   async _buildDelta(
     pathsToVisit: ReadonlySet<string>,
     options: InternalOptions<T>,
-    moduleFilter?: (path: string) => boolean,
+    moduleFilter?: (path: string, virtualSource: ?VirtualSource) => boolean,
   ): Promise<Delta<T>> {
     const subGraph = await buildSubgraph(pathsToVisit, this.#virtualSources, {
       resolve: options.resolve,
-      shouldTraverse: (dependency: ResolvedDependency) => {
+      shouldTraverse: (
+        dependency: ResolvedDependency,
+        virtualSource: ?VirtualSource,
+      ) => {
         if (options.shallow || isWeakOrLazy(dependency, options)) {
           return false;
         }
-        return moduleFilter == null || moduleFilter(dependency.absolutePath);
+        return (
+          moduleFilter == null ||
+          moduleFilter(dependency.absolutePath, virtualSource)
+        );
       },
       transform: async (absolutePath, virtualSource) => {
         options.onDependencyAdd();
@@ -561,8 +599,8 @@ export class Graph<T = MixedOutput> {
       if (virtualSource) {
         this.#virtualSources.set(path, virtualSource);
       } else {
-        // This dependency may have existed previously as a require.context -
-        // clean it up.
+        // This dependency may have existed previously as a require.context or
+        // virtual module - clean it up.
         this.#virtualSources.delete(path);
       }
     }
