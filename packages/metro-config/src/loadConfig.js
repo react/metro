@@ -9,7 +9,12 @@
  * @oncall react_native
  */
 
-import type {ConfigT, InputConfigT, YargArguments} from './types';
+import type {
+  ConfigT,
+  InputConfigT,
+  ServerMiddleware,
+  YargArguments,
+} from './types';
 
 import getDefaultConfig from './defaults';
 import validConfig from './defaults/validConfig';
@@ -152,6 +157,7 @@ function mergeConfigObjects<T extends InputConfigT>(
     server: {
       ...base.server,
       ...overrides.server,
+      ...mergeServerHandlers(base.server, overrides.server),
       // $FlowFixMe[exponential-spread]
       ...(base.server?.tls != null ? {tls: base.server?.tls} : null),
       // only override base tls config with false or an object
@@ -193,6 +199,48 @@ function mergeConfigObjects<T extends InputConfigT>(
       },
     },
   };
+}
+
+// Later configs wrap earlier ones: their `unstable_middleware` runs last and
+// their `unstable_priorityMiddleware` runs first.
+function mergeServerHandlers(
+  base: InputConfigT['server'],
+  overrides: InputConfigT['server'],
+): {
+  unstable_middleware?: ReadonlyArray<ServerMiddleware>,
+  unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+} {
+  const merged: {
+    unstable_middleware?: ReadonlyArray<ServerMiddleware>,
+    unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+  } = {};
+  const middleware = concatUnique(
+    base?.unstable_middleware,
+    overrides?.unstable_middleware,
+  );
+  if (middleware != null) {
+    merged.unstable_middleware = middleware;
+  }
+  const priorityMiddleware = concatUnique(
+    overrides?.unstable_priorityMiddleware,
+    base?.unstable_priorityMiddleware,
+  );
+  if (priorityMiddleware != null) {
+    merged.unstable_priorityMiddleware = priorityMiddleware;
+  }
+  return merged;
+}
+
+// An entry in both lists (e.g. copied by spreading the base config) is kept
+// once, at its first position.
+function concatUnique<T>(
+  first: ?ReadonlyArray<T>,
+  second: ?ReadonlyArray<T>,
+): ?ReadonlyArray<T> {
+  if (first == null || second == null) {
+    return first ?? second;
+  }
+  return [...new Set([...first, ...second])];
 }
 
 async function mergeConfigAsync<T extends InputConfigT>(

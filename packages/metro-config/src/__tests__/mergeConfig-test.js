@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {InputConfigT} from '../types';
+import type {InputConfigT, ServerMiddleware} from '../types';
 import type {CustomResolver} from 'metro-resolver';
 
 import {mergeConfig} from '../loadConfig';
@@ -202,6 +202,36 @@ describe('mergeConfig', () => {
         const result = mergeConfig(base, override);
         expect(result.server?.tls).toBeUndefined();
       });
+    });
+  });
+
+  describe('server middleware merging', () => {
+    const a: ServerMiddleware = (req, res, next) => next();
+    const b: ServerMiddleware = (req, res, next) => next();
+    const c: ServerMiddleware = ['/c', (req, res, next) => next()];
+
+    test('later configs wrap earlier ones', () => {
+      const result = mergeConfig(
+        {server: {unstable_priorityMiddleware: [a], unstable_middleware: [a]}},
+        {server: {unstable_priorityMiddleware: [b], unstable_middleware: [b]}},
+      );
+      expect(result.server?.unstable_priorityMiddleware).toEqual([b, a]);
+      expect(result.server?.unstable_middleware).toEqual([a, b]);
+    });
+
+    test('keeps entries copied from the base config once', () => {
+      const result = mergeConfig(
+        {server: {unstable_priorityMiddleware: [a, c]}},
+        (config: InputConfigT) => ({
+          server: {
+            unstable_priorityMiddleware: [
+              b,
+              ...(config.server?.unstable_priorityMiddleware ?? []),
+            ],
+          },
+        }),
+      );
+      expect(result.server?.unstable_priorityMiddleware).toEqual([b, a, c]);
     });
   });
 

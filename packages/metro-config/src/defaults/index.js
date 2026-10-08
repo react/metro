@@ -17,6 +17,7 @@ import {
   assetExts,
   assetResolutions,
   defaultCreateModuleIdFactory,
+  defaultEnhanceMiddleware,
   noopPerfLoggerFactory,
   platforms,
   sourceExts,
@@ -75,10 +76,14 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
   },
 
   server: {
-    enhanceMiddleware: (middleware, _) => middleware,
+    enhanceMiddleware: defaultEnhanceMiddleware,
     forwardClientLogs: true,
     port: 8081,
     rewriteRequestUrl: url => url,
+    // merged with user middleware as [...defaults, ...user]
+    unstable_middleware: [],
+    // merged with user middleware as [...user, ...defaults]
+    unstable_priorityMiddleware: [],
     unstable_serverRoot: null,
     useGlobalHotkey: true,
     verifyConnections: false,
