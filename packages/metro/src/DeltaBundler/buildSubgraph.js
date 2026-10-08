@@ -16,6 +16,7 @@ import type {
   ResolveFn,
   TransformFn,
   TransformResultDependency,
+  VirtualSource,
 } from './types';
 
 import {deriveAbsolutePathFromContext} from '../lib/contextModule';
@@ -34,10 +35,10 @@ function resolveDependencies(
   resolve: ResolveFn,
 ): {
   dependencies: Map<string, Dependency>,
-  resolvedContexts: Map<string, RequireContext>,
+  virtualSources: Map<string, VirtualSource>,
 } {
   const maybeResolvedDeps = new Map<string, Dependency>();
-  const resolvedContexts = new Map<string, RequireContext>();
+  const virtualSources = new Map<string, VirtualSource>();
 
   for (const dep of dependencies) {
     let maybeResolvedDep: Dependency;
@@ -61,7 +62,10 @@ function resolveDependencies(
         recursive: contextParams.recursive,
       };
 
-      resolvedContexts.set(key, resolvedContext);
+      virtualSources.set(key, {
+        type: 'requireContext',
+        requireContext: resolvedContext,
+      });
 
       maybeResolvedDep = {
         absolutePath,
@@ -95,13 +99,13 @@ function resolveDependencies(
 
   return {
     dependencies: maybeResolvedDeps,
-    resolvedContexts,
+    virtualSources,
   };
 }
 
 export async function buildSubgraph<T>(
   entryPaths: ReadonlySet<string>,
-  resolvedContexts: ReadonlyMap<string, ?RequireContext>,
+  virtualSources: ReadonlyMap<string, ?VirtualSource>,
   {resolve, transform, shouldTraverse}: Parameters<T>,
 ): Promise<{
   moduleData: Map<string, ModuleData<T>>,
@@ -113,13 +117,13 @@ export async function buildSubgraph<T>(
 
   async function visit(
     absolutePath: string,
-    requireContext: ?RequireContext,
+    virtualSource: ?VirtualSource,
   ): Promise<void> {
     if (visitedPaths.has(absolutePath)) {
       return;
     }
     visitedPaths.add(absolutePath);
-    const transformResult = await transform(absolutePath, requireContext);
+    const transformResult = await transform(absolutePath, virtualSource);
 
     // Get the absolute path of all sub-dependencies (some of them could have been
     // moved but maintain the same relative path).
@@ -143,7 +147,7 @@ export async function buildSubgraph<T>(
         .map(dependency =>
           visit(
             dependency.absolutePath,
-            resolutionResult.resolvedContexts.get(dependency.data.data.key),
+            resolutionResult.virtualSources.get(dependency.data.data.key),
           ).catch(error => errors.set(dependency.absolutePath, error)),
         ),
     );
@@ -151,7 +155,7 @@ export async function buildSubgraph<T>(
 
   await Promise.all(
     [...entryPaths].map(absolutePath =>
-      visit(absolutePath, resolvedContexts.get(absolutePath)).catch(error =>
+      visit(absolutePath, virtualSources.get(absolutePath)).catch(error =>
         errors.set(absolutePath, error),
       ),
     ),
