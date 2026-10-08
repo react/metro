@@ -812,7 +812,9 @@ const DefaultDependencyTransformer: DependencyTransformer = {
     >;
     // Always add the debug name argument last
     if (state.keepRequireNames) {
-      path.node.arguments.push(types.stringLiteral(dependency.name));
+      path.node.arguments.push(
+        types.stringLiteral(getDebugName(dependency.name)),
+      );
     }
   },
 
@@ -906,7 +908,7 @@ function createModuleIDExpression(
 }
 
 function createModuleNameLiteral(dependency: InternalDependency) {
-  return types.stringLiteral(dependency.name);
+  return types.stringLiteral(getDebugName(dependency.name));
 }
 
 /**
@@ -929,6 +931,26 @@ function createModuleNameLiteral(dependency: InternalDependency) {
  *
  * This method should be utilized by `registerDependency`.
  */
+const INLINE_MODULE_PREFIX = 'metro:inline';
+
+/**
+ * The name shown beside a dependency in development output. An inline module
+ * specifier carries a whole module in its payload, so only its header is kept.
+ */
+function getDebugName(name: string): string {
+  if (
+    name.length > INLINE_MODULE_PREFIX.length &&
+    name.slice(0, INLINE_MODULE_PREFIX.length).toLowerCase() ===
+      INLINE_MODULE_PREFIX
+  ) {
+    const commaIndex = name.indexOf(',');
+    if (commaIndex !== -1) {
+      return name.slice(0, commaIndex + 1) + '...';
+    }
+  }
+  return name;
+}
+
 function getKeyForDependency(qualifier: ImportQualifier): string {
   const {asyncType, contextParams, isESMImport, name} = qualifier;
 
