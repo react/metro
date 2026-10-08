@@ -282,6 +282,112 @@ describe('Transformer', function () {
     );
   });
 
+  test('shares one transform between concurrent requests for the same key', async () => {
+    const workerTransform =
+      require('../WorkerFarm').default.prototype.transform;
+    workerTransform.mockClear();
+    workerTransform.mockReturnValue({
+      sha1: '0123456789012345678901234567890123456789',
+      result: {output: []},
+    });
+    const get = jest.fn();
+    const set = jest.fn();
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set}],
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const [a, b, c] = await Promise.all([
+      transformerInstance.transformFile('/root/foo.js', {dev: true}),
+      transformerInstance.transformFile('/root/foo.js', {dev: true}),
+      transformerInstance.transformFile('/root/foo.js', {dev: false}),
+    ]);
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(workerTransform).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenCalledTimes(2);
+    expect(a).toBe(b);
+    expect(a.unstable_transformResultKey).toBe(b.unstable_transformResultKey);
+    expect(c.unstable_transformResultKey).not.toBe(
+      a.unstable_transformResultKey,
+    );
+  });
+
+  test('shares a transform until its cache write settles', async () => {
+    const workerTransform =
+      require('../WorkerFarm').default.prototype.transform;
+    workerTransform.mockClear();
+    workerTransform.mockReturnValue({
+      sha1: '0123456789012345678901234567890123456789',
+      result: {output: []},
+    });
+    let finishWrite;
+    const get = jest.fn();
+    const set = jest.fn(
+      () =>
+        new Promise(resolve => {
+          finishWrite = resolve;
+        }),
+    );
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set}],
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    await transformerInstance.transformFile('/root/foo.js', {});
+    await transformerInstance.transformFile('/root/foo.js', {});
+    expect(get).toHaveBeenCalledTimes(1);
+
+    finishWrite();
+    await jest.runAllTimersAsync();
+
+    await transformerInstance.transformFile('/root/foo.js', {});
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(workerTransform).toHaveBeenCalledTimes(2);
+  });
+
+  test('retries a transform after a shared transform fails', async () => {
+    const error = new Error('SyntaxError');
+    const workerTransform =
+      require('../WorkerFarm').default.prototype.transform;
+    workerTransform.mockClear();
+    workerTransform.mockRejectedValueOnce(error).mockReturnValue({
+      sha1: '0123456789012345678901234567890123456789',
+      result: {output: []},
+    });
+
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [],
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const results = await Promise.allSettled([
+      transformerInstance.transformFile('/root/foo.js', {}),
+      transformerInstance.transformFile('/root/foo.js', {}),
+    ]);
+    expect(results).toEqual([
+      {status: 'rejected', reason: error},
+      {status: 'rejected', reason: error},
+    ]);
+
+    await transformerInstance.transformFile('/root/foo.js', {});
+    expect(workerTransform).toHaveBeenCalledTimes(2);
+  });
+
   test('does not start workers if the transformer cache key throws', () => {
     const error = new Error("Cannot find module 'babel-preset-expo'");
     require('../getTransformCacheKey').mockImplementationOnce(() => {

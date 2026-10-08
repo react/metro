@@ -37,6 +37,7 @@ export default class Transformer {
   _baseHash: string;
   _getDynamicRoots: () => ReadonlyArray<DynamicRoot>;
   _getSha1: GetOrComputeSha1Fn;
+  _pending: Map<string, Promise<TransformResultWithSource<>>> = new Map();
   _workerFarm: WorkerFarm;
 
   constructor(
@@ -157,7 +158,7 @@ export default class Transformer {
     ]);
 
     let sha1: string;
-    let content: ?Buffer;
+    let content: Buffer | void;
     if (fileBuffer) {
       // Shortcut for virtual modules which provide the contents with the filename.
       sha1 = crypto.createHash('sha1').update(fileBuffer).digest('hex');
@@ -170,57 +171,78 @@ export default class Transformer {
       }
     }
 
-    let fullKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
-    let result;
-    try {
-      result = await cache.get(fullKey);
-    } catch (error) {
-      this._config.reporter.update({
-        type: 'cache_read_error',
-        error,
-      });
-      throw error;
+    const requestKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
+
+    // Concurrent requests for the same key, typically from different graphs,
+    // share one cache lookup, transform and result.
+    const pendingKey = requestKey.toString('binary');
+    const existing = this._pending.get(pendingKey);
+    if (existing != null) {
+      return existing;
     }
 
-    // A valid result from the cache is used directly; otherwise we call into
-    // the transformer to computed the corresponding result.
-    const data: Readonly<{
-      result: TransformResult<>,
-      sha1: string,
-    }> = result
-      ? {result, sha1}
-      : await this._workerFarm.transform(
-          projectRelativePath,
-          transformerOptions,
-          content,
-          assetUrlPath ?? undefined,
-        );
+    const pending = (async () => {
+      let fullKey = requestKey;
+      let result;
+      try {
+        result = await cache.get(fullKey);
+      } catch (error) {
+        this._config.reporter.update({
+          type: 'cache_read_error',
+          error,
+        });
+        throw error;
+      }
 
-    // Only re-compute the full key if the SHA-1 changed. This is because
-    // references are used by the cache implementation in a weak map to keep
-    // track of the cache that returned the result.
-    if (sha1 !== data.sha1) {
-      fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
-    }
+      // A valid result from the cache is used directly; otherwise we call into
+      // the transformer to computed the corresponding result.
+      const data: Readonly<{
+        result: TransformResult<>,
+        sha1: string,
+      }> = result
+        ? {result, sha1}
+        : await this._workerFarm.transform(
+            projectRelativePath,
+            transformerOptions,
+            content,
+            assetUrlPath ?? undefined,
+          );
 
-    // Fire-and-forget cache set promise.
-    cache.set(fullKey, data.result).catch(error => {
-      this._config.reporter.update({
-        type: 'cache_write_error',
-        error,
-      });
-    });
+      // Only re-compute the full key if the SHA-1 changed. This is because
+      // references are used by the cache implementation in a weak map to keep
+      // track of the cache that returned the result.
+      if (sha1 !== data.sha1) {
+        fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
+      }
 
-    return {
-      ...data.result,
-      unstable_transformResultKey: fullKey.toString(),
-      getSource(): Buffer {
-        if (fileBuffer) {
-          return fileBuffer;
-        }
-        return fs.readFileSync(filePath);
-      },
-    };
+      // Fire-and-forget cache set promise. The pending entry is held until it
+      // settles, so that a later request either joins it or reads the result
+      // back from the cache. This always runs after the entry is set below,
+      // because it follows an await.
+      cache
+        .set(fullKey, data.result)
+        .catch(error => {
+          this._config.reporter.update({
+            type: 'cache_write_error',
+            error,
+          });
+        })
+        .finally(() => this._pending.delete(pendingKey));
+
+      return {
+        ...data.result,
+        unstable_transformResultKey: fullKey.toString(),
+        getSource(): Buffer {
+          if (fileBuffer) {
+            return fileBuffer;
+          }
+          return fs.readFileSync(filePath);
+        },
+      };
+    })();
+    this._pending.set(pendingKey, pending);
+    pending.catch(() => this._pending.delete(pendingKey));
+    return pending;
   }
 
   async end(): Promise<void> {
