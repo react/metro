@@ -92,13 +92,29 @@ export type Module<T = MixedOutput> = Readonly<{
 
 /**
  * How the transform obtains the source of a module that has no file, as
- * supplied by the resolution that produced it. A `require.context` module
- * arrives as the parameters the transform expands by enumerating the file map.
+ * supplied by the resolution that produced it. A virtual module arrives as the
+ * buffer itself. A `require.context` module arrives as the parameters the
+ * transform expands by enumerating the file map: a derived module whose inputs
+ * are discovered at transform time rather than pinned at resolution, which is
+ * why it has its own invalidation in `Graph.markModifiedContextModules`.
  */
-export type VirtualSource = Readonly<{
-  type: 'requireContext',
-  requireContext: RequireContext,
-}>;
+export type VirtualSource =
+  | Readonly<{type: 'requireContext', requireContext: RequireContext}>
+  | Readonly<{
+      type: 'buffer',
+      source: Buffer,
+      /**
+       * SHA-1 of `source`. A virtual module's identity is independent of its
+       * content, so this is how the graph notices that an edge now supplies
+       * different content for an existing module and re-transforms it.
+       */
+      sha1: string,
+      /**
+       * The path the module is transformed as and resolves its dependencies
+       * from. Its graph path adds an identity suffix to this.
+       */
+      virtualPath: string,
+    }>;
 
 export type ModuleData<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyMap<string, Dependency>,
@@ -162,10 +178,25 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
-export type BundlerResolution = Readonly<{
-  type: 'sourceFile',
-  filePath: string,
-}>;
+export type BundlerResolution =
+  | Readonly<{
+      type: 'sourceFile',
+      filePath: string,
+    }>
+  | Readonly<{
+      type: 'virtualModule',
+      /**
+       * The module's identity in the graph: the virtual path with a suffix
+       * derived from the specifier. See `lib/virtualModule.js`.
+       */
+      filePath: string,
+      /** Carried to the transform as the module's input in place of a file read. */
+      source: Buffer,
+      /** SHA-1 of `source`. */
+      sha1: string,
+      /** `filePath` without its identity suffix. */
+      virtualPath: string,
+    }>;
 
 export type Options<T = MixedOutput> = Readonly<{
   resolve: ResolveFn,
