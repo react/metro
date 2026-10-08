@@ -90,9 +90,20 @@ export type Module<T = MixedOutput> = Readonly<{
   unstable_transformResultKey?: ?string,
 }>;
 
+/**
+ * How the transform obtains the source of a module that has no file, as
+ * supplied by the resolution that produced it. A `require.context` module
+ * arrives as the parameters the transform expands by enumerating the file map.
+ */
+export type VirtualSource = Readonly<{
+  type: 'requireContext',
+  requireContext: RequireContext,
+}>;
+
 export type ModuleData<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyMap<string, Dependency>,
-  resolvedContexts: ReadonlyMap<string, RequireContext>,
+  /** Keyed by dependency key, for the dependencies that resolved to a module with no file. */
+  virtualSources: ReadonlyMap<string, VirtualSource>,
   output: ReadonlyArray<T>,
   getSource: () => Buffer,
   unstable_transformResultKey?: ?string,
@@ -137,7 +148,7 @@ export type TransformResultWithSource<T = MixedOutput> = Readonly<{
 
 export type TransformFn<T = MixedOutput> = (
   string,
-  ?RequireContext,
+  ?VirtualSource,
 ) => Promise<TransformResultWithSource<T>>;
 
 export type ResolveFn = (
