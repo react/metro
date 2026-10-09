@@ -20,6 +20,7 @@ import type {
   ConditionalExpression as BabelNodeConditionalExpression,
   FunctionDeclaration as BabelNodeFunctionDeclaration,
   FunctionExpression as BabelNodeFunctionExpression,
+  Identifier as BabelNodeIdentifier,
   IfStatement as BabelNodeIfStatement,
   LogicalExpression as BabelNodeLogicalExpression,
   OptionalCallExpression as BabelNodeOptionalCallExpression,
@@ -38,7 +39,13 @@ export default function constantFoldingPlugin(context: {
   ...
 }): PluginObj<State> {
   const t = context.types;
-  const {isLiteral, isVariableDeclarator, isUnaryExpression} = t;
+  const {
+    isArrayPattern,
+    isLiteral,
+    isObjectPattern,
+    isUnaryExpression,
+    isVariableDeclarator,
+  } = t;
 
   const traverse = context.traverse;
 
@@ -55,6 +62,33 @@ export default function constantFoldingPlugin(context: {
       state: {safe: boolean},
     ) => {
       state.safe = false;
+    };
+    const unsafeDestructuredReference = (
+      path: NodePath<BabelNodeIdentifier>,
+      state: {safe: boolean},
+    ) => {
+      if (!path.isReferenced()) {
+        return;
+      }
+      const binding = path.scope.getBinding(path.node.name);
+      const bindingPath = binding?.path;
+      if (
+        bindingPath != null &&
+        (bindingPath.isObjectPattern() ||
+          bindingPath.isArrayPattern() ||
+          (bindingPath.isVariableDeclarator() &&
+            (isObjectPattern(bindingPath.node.id) ||
+              isArrayPattern(bindingPath.node.id))) ||
+          bindingPath.findParent(
+            parent => parent.isObjectPattern() || parent.isArrayPattern(),
+          ) != null)
+      ) {
+        // evaluate() resolves a destructured binding to its declarator's
+        // whole init, so folding through it produces confidently wrong
+        // values (`{e} + 1` -> "[object Object]1", `(hi - lo) * scale`
+        // -> `0 / 0`).
+        state.safe = false;
+      }
     };
 
     if (isUnaryExpression(path.node) && path.node.operator === 'void') {
@@ -73,6 +107,7 @@ export default function constantFoldingPlugin(context: {
       {
         AssignmentExpression: unsafe,
         CallExpression: unsafe,
+        Identifier: unsafeDestructuredReference,
         /**
          * This will mark `foo?.()` as unsafe, so it is not replaced with `undefined` down the line.
          *
@@ -83,6 +118,11 @@ export default function constantFoldingPlugin(context: {
       },
       state,
     );
+    // path.traverse() does not visit the root, e.g. a bare `flag` test.
+    if (path.isIdentifier()) {
+      // $FlowFixMe[incompatible-type] isIdentifier() does not refine NodePath
+      unsafeDestructuredReference(path, state);
+    }
 
     try {
       if (!state.safe) {
