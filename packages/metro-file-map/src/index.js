@@ -1090,7 +1090,7 @@ export default class FileMap extends EventEmitter {
       this.#watcher != null,
       'Expected #watcher to have been initialised by build()',
     );
-    await this.#watcher.watch(onChange);
+    await this.#watcher.watch(onChange, clocks);
 
     if (this.#options.healthCheck.enabled) {
       const performHealthCheck = () => {

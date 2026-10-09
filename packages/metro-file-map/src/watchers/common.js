@@ -14,7 +14,11 @@
  * https://github.com/amasad/sane/blob/64ff3a870c42e84f744086884bf55a4f9c22d376/src/common.js
  */
 
-import type {ChangeEventMetadata, WatcherIncludedFiles} from '../flow-types';
+import type {
+  ChangeEventMetadata,
+  WatcherIncludedFiles,
+  WatchmanClockSpec,
+} from '../flow-types';
 import type {Stats} from 'node:fs';
 
 import path from 'node:path';
@@ -28,6 +32,11 @@ export const RECRAWL_EVENT = 'recrawl';
 export const ALL_EVENT = 'all';
 
 export type WatcherOptions = Readonly<{
+  // Clocks captured by the crawl, keyed by absolute Watchman watch root.
+  // Only consumed by WatchmanWatcher, which subscribes `since` the clock for
+  // its root rather than a fresh one, so that changes made while the crawl
+  // result is applied and persisted are not missed.
+  clocks?: ?Map<string, WatchmanClockSpec>,
   included: ?WatcherIncludedFiles,
   ignored: ?RegExp,
   watchmanDeferStates: ReadonlyArray<string>,
