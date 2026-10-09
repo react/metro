@@ -1371,6 +1371,54 @@ function dep(name: string): TransformResultDependency {
           filePath: p('/root/node_modules/aPackage/main-custom.js'),
         });
       });
+
+      // The "browser" field of the package containing a file applies to it.
+      // These use platform-specific files, which are redirected per candidate
+      // extension rather than with the extensionless path.
+      describe('package scope of files reached through a symlink', () => {
+        test('a node_modules symlink to a package root', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            store: {
+              deps: {
+                'package.json': JSON.stringify({
+                  name: 'deps',
+                  browser: {'./foo.ios.js': './foo-browser.js'},
+                }),
+                'foo.ios.js': '',
+                'foo-browser.js': '',
+              },
+            },
+          });
+          fs.symlinkSync(p('/root/store/deps'), p('/root/node_modules'));
+
+          resolver = await createResolver({}, 'ios');
+          expect(resolver.resolve(p('/root/index.js'), dep('foo'))).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/store/deps/foo-browser.js'),
+          });
+        });
+
+        test('a symlink to a node_modules directory', async () => {
+          setMockFileSystem({
+            'package.json': JSON.stringify({
+              name: 'app',
+              browser: {'./vendor/bar.ios.js': false},
+            }),
+            'index.js': '',
+            other: {node_modules: {'bar.ios.js': ''}},
+          });
+          fs.symlinkSync(p('/root/other/node_modules'), p('/root/vendor'));
+
+          resolver = await createResolver({}, 'ios');
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('./vendor/bar')),
+          ).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/other/node_modules/bar.ios.js'),
+          });
+        });
+      });
     });
 
     describe('platforms', () => {
