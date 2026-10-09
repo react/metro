@@ -41,6 +41,7 @@ export type JsTransformerConfig = Readonly<{
   unstable_disableModuleWrapping: boolean;
   unstable_disableNormalizePseudoGlobals: boolean;
   unstable_compactOutput: boolean;
+  unstable_disableInputAstCloning?: boolean | undefined;
   unstable_allowRequireContext: boolean;
   unstable_memoizeInlineRequires?: boolean | undefined;
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;

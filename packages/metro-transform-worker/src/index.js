@@ -37,7 +37,7 @@ import type {
 
 import * as assetTransformer from './utils/assetTransformer';
 import getMinifier from './utils/getMinifier';
-import {transformFromAstSync} from '@babel/core';
+import {transformFromAstSync, traverse} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
@@ -107,6 +107,8 @@ export type JsTransformerConfig = Readonly<{
   unstable_disableModuleWrapping: boolean,
   unstable_disableNormalizePseudoGlobals: boolean,
   unstable_compactOutput: boolean,
+  /** Skip cloning the AST before the main Babel pass. */
+  unstable_disableInputAstCloning?: boolean,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
   /** With inlineRequires, enable a module-scope memo var and inline as (v || v=require('foo')) */
@@ -347,7 +349,7 @@ async function transformJS(
       // However, switching the flag to false caused issues with ES Modules if `experimentalImportSupport` isn't used https://github.com/react/metro/issues/641
       // either because one of the plugins is doing something funky or Babel messes up some caches.
       // Make sure to test the above mentioned case before flipping the flag back to false.
-      cloneInputAst: true,
+      cloneInputAst: config.unstable_disableInputAstCloning !== true,
       code: false,
       comments: true,
       configFile: false,
@@ -361,6 +363,12 @@ async function transformJS(
     // Run the constant folding plugin in its own pass, avoiding race conditions
     // with other plugins that have exit() visitors on Program (e.g. the ESM
     // transform).
+    if (config.unstable_disableInputAstCloning === true) {
+      // Babel reuses scopes cached by earlier passes over the same uncloned
+      // AST, so constant folding would strip functions those passes started
+      // using (https://github.com/react/metro/issues/641).
+      traverse.cache.clearScope();
+    }
     ast = nullthrows(
       transformFromAstSync(ast, '', {
         ast: true,
