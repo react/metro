@@ -37,7 +37,7 @@ import type {
 
 import * as assetTransformer from './utils/assetTransformer';
 import getMinifier from './utils/getMinifier';
-import {transformFromAstSync} from '@babel/core';
+import {transformFromAstSync, traverse} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
@@ -342,12 +342,7 @@ async function transformJS(
     transformFromAstSync(ast, '', {
       ast: true,
       babelrc: false,
-      // Not-Cloning the input AST here should be safe because other code paths above this call
-      // are mutating the AST as well and no code is depending on the original AST.
-      // However, switching the flag to false caused issues with ES Modules if `experimentalImportSupport` isn't used https://github.com/react/metro/issues/641
-      // either because one of the plugins is doing something funky or Babel messes up some caches.
-      // Make sure to test the above mentioned case before flipping the flag back to false.
-      cloneInputAst: true,
+      cloneInputAst: false,
       code: false,
       comments: true,
       configFile: false,
@@ -361,6 +356,11 @@ async function transformJS(
     // Run the constant folding plugin in its own pass, avoiding race conditions
     // with other plugins that have exit() visitors on Program (e.g. the ESM
     // transform).
+    // Babel reuses scopes cached by earlier passes over the same uncloned AST,
+    // so constant folding would strip functions those passes started using
+    // (https://github.com/react/metro/issues/641). Remove this clear when the
+    // "Babel keeps stale scope bindings when reusing an AST" test fails.
+    traverse.cache.clearScope();
     ast = nullthrows(
       transformFromAstSync(ast, '', {
         ast: true,
