@@ -22,13 +22,13 @@ import type {
   HasteMap,
   MockMap,
   ReadonlyFileSystemChanges,
-  WatcherBackendOptions,
   WorkerSetupArgs,
 } from '../flow-types';
 import type {DependencyPlugin} from '../index';
 import type {default as FileMapT} from '../index';
 import type {HasteMapOptions} from '../plugins/HastePlugin';
 import type {MockMapOptions} from '../plugins/MockPlugin';
+import type {WatcherOptions} from '../watchers/common';
 import typeof WorkerModule from '../worker';
 
 import {AbstractWatcher} from '../watchers/AbstractWatcher';
@@ -51,6 +51,11 @@ const toPosixMessage = (message: string): string =>
   process.platform === 'win32'
     ? message.replaceAll('C:\\', '/').replaceAll('\\', '/')
     : message;
+
+// Format a posix path as a Watchman-native path on the current platform, i.e.,
+// on Windows, drive letters on absolute paths, but posix-style separators.
+const wp = (filePath: string): string =>
+  process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
 
 function mockHashContents(contents: string | Buffer) {
   return crypto.createHash('sha1').update(contents).digest('hex');
@@ -140,8 +145,11 @@ jest.mock('../crawlers/watchman', () => ({
 }));
 
 class MockWatcher extends AbstractWatcher {
-  constructor(root: string, opts: WatcherBackendOptions) {
+  readonly opts: WatcherOptions;
+
+  constructor(root: string, opts: WatcherOptions) {
     super(root, opts);
+    this.opts = opts;
     mockEmitters[root] = this;
   }
 
@@ -1768,6 +1776,56 @@ describe('FileMap', () => {
       modifiedTime: 45,
       size: 55,
     };
+
+    fm_it(
+      'passes the clocks from the crawl to the watcher, keyed by watch root',
+      async () => {
+        for (const root of [p('/project/fruits'), p('/project/vegetables')]) {
+          expect(mockEmitters[root].opts.clocks).toEqual(
+            new Map([
+              [wp('/project/fruits'), 'c:fake-clock:1'],
+              [wp('/project/vegetables'), 'c:fake-clock:2'],
+              [wp('/project/video'), 'c:fake-clock:3'],
+            ]),
+          );
+        }
+      },
+    );
+
+    test('does not miss a change made while the file map is being built', async () => {
+      mockNodeCrawler.mockImplementationOnce(async () => {
+        // The watcher is already running at this point, so this reports a
+        // change that the crawl itself cannot see.
+        mockFs[p('/project/fruits/Tomato.js')] = '// Tomato!';
+        mockEmitters[p('/project/fruits')]?.emitFileEvent({
+          event: 'touch',
+          relativePath: 'Tomato.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        return {changedFiles: new Map(), removedFiles: new Set()};
+      });
+
+      let fileMap: ?FileMapT = null;
+      let fileSystem: ?FileSystem = null;
+      try {
+        ({fileMap, fileSystem} = await buildNewFileMap({
+          useWatchman: false,
+          watch: true,
+        }));
+        const changeEvent = await Promise.race([
+          waitForItToChange(fileMap),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]);
+        expect(fileSystem?.exists(p('/project/fruits/Tomato.js'))).toBe(true);
+        expect(
+          [...(changeEvent?.changes.addedFiles ?? [])].map(
+            ([filePath]) => filePath,
+          ),
+        ).toContain(path.join('fruits', 'Tomato.js'));
+      } finally {
+        await fileMap?.end();
+      }
+    });
 
     fm_it(
       'handles several change events at once',
