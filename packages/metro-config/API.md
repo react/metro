@@ -187,6 +187,8 @@ export type ServerConfigT = {
   forwardClientLogs: boolean;
   port: number;
   rewriteRequestUrl: (url: string) => string;
+  unstable_middleware: ReadonlyArray<ServerMiddleware>;
+  unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>;
   unstable_serverRoot: null | undefined | string;
   useGlobalHotkey: boolean;
   verifyConnections: boolean;
@@ -199,6 +201,8 @@ export type ServerConfigT = {
         requestCert?: boolean | undefined;
       };
 };
+
+export type ServerMiddleware = Middleware | Readonly<[path: string, handler: Middleware]>;
 
 export type SymbolicatorConfigT = {
   customizeFrame: (frame: {

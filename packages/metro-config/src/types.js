@@ -60,6 +60,11 @@ export type GetTransformOptions = (
 
 export type Middleware = HandleFunction;
 
+export type ServerMiddleware =
+  | Middleware
+  // Mounted with connect semantics: prefix match, stripped from `req.url`.
+  | Readonly<[path: string, handler: Middleware]>;
+
 type PerfAnnotations = Partial<{
   string: Readonly<{[key: string]: string}>,
   int: Readonly<{[key: string]: number}>,
@@ -184,7 +189,7 @@ type MetalConfigT = {
 type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult<>>>;
 
 type ServerConfigT = {
-  /** @deprecated */
+  /** @deprecated Use `unstable_middleware`, `unstable_priorityMiddleware`, or `runServer`'s `unstable_onServerCreated` */
   enhanceMiddleware: (
     middleware: Middleware,
     server: MetroServer,
@@ -192,6 +197,11 @@ type ServerConfigT = {
   forwardClientLogs: boolean,
   port: number,
   rewriteRequestUrl: (url: string) => string,
+  // Only receives requests that Metro endpoints did not handle.
+  unstable_middleware: ReadonlyArray<ServerMiddleware>,
+  // Runs before Metro endpoints, which only receive a request if this
+  // middleware calls `next()`.
+  unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>,
   unstable_serverRoot: ?string,
   useGlobalHotkey: boolean,
   verifyConnections: boolean,

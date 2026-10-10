@@ -280,6 +280,9 @@ export type RunServerOptions = Readonly<{
   secureCert?: string | undefined;
   secureKey?: string | undefined;
   unstable_extraMiddleware?: ReadonlyArray<HandleFunction> | undefined;
+  unstable_middleware?: ReadonlyArray<ServerMiddleware> | undefined;
+  unstable_onServerCreated?: ((metroServer: MetroServer) => void) | undefined;
+  unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware> | undefined;
   waitForBundler?: boolean | undefined;
   watch?: boolean | undefined;
   websocketEndpoints?: Readonly<{[path: string]: Server_4}> | undefined;
