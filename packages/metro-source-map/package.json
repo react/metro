@@ -18,7 +18,7 @@
     "cleanup-release": "test ! -e build && mv src build && mv src.real src"
   },
   "dependencies": {
-    "@babel/traverse": "^7.29.0",
+    "@babel/traverse": "^7.29.10",
     "@babel/types": "^7.29.8",
     "flow-enums-runtime": "^0.0.6",
     "invariant": "^2.2.4",
