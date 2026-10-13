@@ -12,6 +12,7 @@
 import type {
   FileAndDirCandidates,
   FileCandidates,
+  PackageForModule,
   Resolution,
   ResolutionContext,
   Result,
@@ -31,6 +32,7 @@ import {
   getPackageEntryPoint,
   matchSubpathFromMainFields,
   redirectModulePath,
+  redirectPackageSubpath,
 } from './PackageResolve';
 import resolveAsset from './resolveAsset';
 import isAssetFile from './utils/isAssetFile';
@@ -743,7 +745,12 @@ function resolveFile(
 
   const candidateExts: Array<string> = [];
   const filePathPrefix = path.join(dirPath, fileName);
-  const sfContext = {...context, candidateExts, filePathPrefix};
+  const sfContext = {
+    ...context,
+    candidateExts,
+    filePathPrefix,
+    candidatePackageScope: getCandidatePackageScope(context, dirPath, fileName),
+  };
   const sourceFileResolution = resolveSourceFile(sfContext, platform);
   if (sourceFileResolution != null) {
     if (typeof sourceFileResolution === 'string') {
@@ -758,6 +765,9 @@ type SourceFileContext = Readonly<{
   ...ResolutionContext,
   candidateExts: Array<string>,
   filePathPrefix: string,
+  // The package scope of every candidate extension, with `packageRelativePath`
+  // that of `filePathPrefix`, or null if they belong to no package
+  candidatePackageScope: ?PackageForModule,
 }>;
 
 // Either a full path, or a restricted subset of Resolution.
@@ -829,9 +839,17 @@ function resolveSourceFileForExt(
   extension: string,
 ): SourceFileResolution {
   const filePath = `${context.filePathPrefix}${extension}`;
+  const {candidatePackageScope} = context;
   const redirectedPath =
     // Any redirections for the bare path have already happened
-    extension !== '' ? redirectModulePath(context, filePath) : filePath;
+    extension !== '' && candidatePackageScope != null
+      ? redirectPackageSubpath(
+          context,
+          filePath,
+          candidatePackageScope,
+          candidatePackageScope.packageRelativePath + extension,
+        )
+      : filePath;
   if (redirectedPath === false) {
     return {type: 'empty'};
   }
@@ -841,6 +859,59 @@ function resolveSourceFileForExt(
   }
   context.candidateExts.push(extension);
   return null;
+}
+
+// A file name, which need not exist, that stands in for any file in a directory
+// when asking for their package scope. While it names a package root, `_` is
+// appended, up to MAX_ANY_FILE_NAME_ATTEMPTS names in all.
+const ANY_FILE_NAME = '.metro-package-scope';
+const MAX_ANY_FILE_NAME_ATTEMPTS = 3;
+
+/**
+ * The package scope of the candidate files `fileName` + extension in `dirPath`,
+ * with the `packageRelativePath` of `fileName` in `dirPath`. Every file directly
+ * in a directory has the same package scope, which may differ from the scope of
+ * the directory, or of a directory named `fileName`: a package root is its own
+ * scope, and a `node_modules` directory is in the scope containing it, but the
+ * files directly in it are in none.
+ */
+function getCandidatePackageScope(
+  context: ResolutionContext,
+  dirPath: string,
+  fileName: string,
+): ?PackageForModule {
+  const dirPrefix = dirPath.endsWith(path.sep) ? dirPath : dirPath + path.sep;
+  let name = ANY_FILE_NAME;
+  for (let attempt = 1; ; attempt++) {
+    const modulePath = dirPrefix + name;
+    const pkg = context.getPackageForModule(modulePath);
+    if (pkg == null) {
+      return null;
+    }
+    const {packageRelativePath} = pkg;
+    const dirRelativeLength = packageRelativePath.length - name.length;
+    if (
+      packageRelativePath.endsWith(name) &&
+      (dirRelativeLength === 0 ||
+        packageRelativePath[dirRelativeLength - 1] === path.sep)
+    ) {
+      return {
+        ...pkg,
+        packageRelativePath:
+          packageRelativePath.slice(0, dirRelativeLength) + fileName,
+      };
+    }
+    // Otherwise this is the scope of something other than the files here,
+    // usually a package root named `name`.
+    if (attempt === MAX_ANY_FILE_NAME_ATTEMPTS) {
+      throw new Error(
+        `getPackageForModule(${JSON.stringify(modulePath)}) returned ` +
+          `packageRelativePath ${JSON.stringify(packageRelativePath)}, ` +
+          `which should end in ${JSON.stringify(name)}.`,
+      );
+    }
+    name += '_';
+  }
 }
 
 function isRelativeImport(filePath: string) {
