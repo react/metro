@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {ResolutionObservations} from '../../DeltaBundler/types';
 import type {PackageCache} from '../PackageCache';
 import type {ConfigT} from 'metro-config';
 import type {FileSystem, HasteMap} from 'metro-file-map';
@@ -31,8 +32,11 @@ export default function createModuleResolver({
   hasteMap,
   packageCache,
 }: CreateModuleResolverOptions): ModuleResolver {
-  const fileSystemLookup = (filePath: string): ReturnType<FileSystemLookup> => {
-    const result = fileSystem.lookup(filePath);
+  const fileSystemLookup = (
+    filePath: string,
+    observations?: ?ResolutionObservations,
+  ): ReturnType<FileSystemLookup> => {
+    const result = fileSystem.lookup(filePath, observations);
     if (result.exists) {
       return {
         exists: true,
@@ -46,7 +50,18 @@ export default function createModuleResolver({
   return new ModuleResolver({
     assetExts: new Set(config.resolver.assetExts),
     disableHierarchicalLookup: config.resolver.disableHierarchicalLookup,
-    doesFileExist: (filePath: string) => fileSystem.exists(filePath),
+    doesFileExist: (
+      filePath: string,
+      observations?: ?ResolutionObservations,
+    ) => {
+      if (observations == null) {
+        return fileSystem.exists(filePath);
+      }
+      // `exists` cannot record what it observed, and is true for exactly the
+      // paths that `lookup` finds to be a file.
+      const result = fileSystem.lookup(filePath, observations);
+      return result.exists && result.type === 'f';
+    },
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
@@ -62,14 +77,21 @@ export default function createModuleResolver({
         return null;
       }
     },
-    getPackageForModule: (absolutePath: string) =>
-      packageCache.getPackageForModule(absolutePath),
+    getPackageForModule: (
+      absolutePath: string,
+      observations?: ?ResolutionObservations,
+    ) => packageCache.getPackageForModule(absolutePath, observations),
     mainFields: config.resolver.resolverMainFields,
     nodeModulesPaths: config.resolver.nodeModulesPaths,
     preferNativePlatform: true,
     projectRoot: config.projectRoot,
     reporter: config.reporter,
-    resolveAsset: (dirPath: string, assetName: string, extension: string) => {
+    resolveAsset: (
+      dirPath: string,
+      assetName: string,
+      extension: string,
+      observations?: ?ResolutionObservations,
+    ) => {
       const basePath = dirPath + path.sep + assetName;
       const assets = [
         basePath + extension,
@@ -77,7 +99,7 @@ export default function createModuleResolver({
           resolution => basePath + '@' + resolution + 'x' + extension,
         ),
       ]
-        .map(assetPath => fileSystemLookup(assetPath).realPath)
+        .map(assetPath => fileSystemLookup(assetPath, observations).realPath)
         .filter(Boolean);
 
       return assets.length ? assets : null;
