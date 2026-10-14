@@ -39,7 +39,7 @@ Our recommended workflow is to use [`yarn link`][1] to register local `metro` pa
 
 3. **Configure Metro `watchFolders` to work with our linked packages**
 
-    Because `yarn link` has included files outside of the immediate React Native project folder, we need to inform Metro that this set of files exists (as it will not automatically follow the symlinks). Add the following to your `metro.config.js`:
+    Because `yarn link` has included files outside of the immediate React Native project folder, we need to inform Metro that this set of files exists. Metro follows symlinks, but a symlink's target must itself be within `projectRoot` or `watchFolders` to be resolvable. Add the following to your `metro.config.js`:
 
     ```diff
     + const path = require('path');
