@@ -19,7 +19,12 @@ export function matchSubpathPattern(
   subpathPattern: string,
   subpath: string,
 ): string | null {
-  const [patternBase, patternTrailer] = subpathPattern.split('*');
+  const wildcardIndex = subpathPattern.indexOf('*');
+  if (wildcardIndex === -1 || subpathPattern.indexOf('*', wildcardIndex + 1) !== -1) {
+    return null;
+  }
+  const patternBase = subpathPattern.substring(0, wildcardIndex);
+  const patternTrailer = subpathPattern.substring(wildcardIndex + 1);
 
   if (
     subpath.startsWith(patternBase) &&

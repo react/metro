@@ -29,7 +29,6 @@ export function isSubpathDefinedInExportsLike(
   // Attempt to match after expanding any subpath pattern keys
   for (const key of exportsLikeMap.keys()) {
     if (
-      key.split('*').length === 2 &&
       matchSubpathPattern(key, subpath) != null
     ) {
       return true;
