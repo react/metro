@@ -2123,6 +2123,98 @@ describe('FileMap', () => {
       {config: {enableSymlinks: true}},
     );
 
+    // A watcher may report a file beneath a directory after that directory has
+    // been replaced by a symlink, eg when linking a package. The file map
+    // resolves the path through the symlink, so applying the report would
+    // change the symlink's target.
+    fm_it(
+      'ignores changes reported through a symlink',
+      async ({fileMap}) => {
+        const {fileSystem} = await fileMap.build();
+        const e = mockEmitters[p('/project/fruits')];
+        mockFs[p('/project/fruits/linked/Added.js')] = '// Added';
+        mockFs[p('/project/fruits/linkedOut/Added.js')] = '// Added';
+        e.emitFileEvent({event: 'delete', relativePath: 'linked/Melon.js'});
+        e.emitFileEvent({
+          event: 'touch',
+          relativePath: 'linked/Added.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        // The target of this one isn't in the file map.
+        e.emitFileEvent({
+          event: 'touch',
+          relativePath: 'linkedOut/Added.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        mockFs[p('/project/fruits/Strawberry.js')] = '// Strawberry!!';
+        e.emitFileEvent({
+          event: 'touch',
+          relativePath: 'Strawberry.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        const {changes} = await waitForItToChange(fileMap);
+        expectChanges(changes, {
+          modifiedFiles: [
+            [
+              path.join('fruits', 'Strawberry.js'),
+              {isSymlink: false, modifiedTime: 45},
+            ],
+          ],
+        });
+        expect(fileSystem.exists(p('/project/vegetables/Melon.js'))).toBe(true);
+        expect(fileSystem.exists(p('/project/vegetables/Added.js'))).toBe(
+          false,
+        );
+        expect(fileSystem.exists(p('/outside/Added.js'))).toBe(false);
+      },
+      {
+        config: {enableSymlinks: true},
+        mockFs: {
+          [p('/project/fruits/Strawberry.js')]: '// Strawberry!',
+          [p('/project/fruits/linked')]: {link: '../vegetables'},
+          [p('/project/fruits/linkedOut')]: {link: '../../outside'},
+          [p('/project/vegetables/Melon.js')]: '// Melon!',
+        },
+      },
+    );
+
+    // A watched root may itself be a symlink, eg a linked package added to
+    // `watchFolders`, so changes it reports go through that symlink.
+    fm_it(
+      'applies changes reported by a watched root that is a symlink',
+      async ({fileMap}) => {
+        const {fileSystem} = await fileMap.build();
+        mockFs[p('/project/fruits/linked/Added.js')] = '// Added';
+        mockEmitters[p('/project/fruits/linked')].emitFileEvent({
+          event: 'touch',
+          relativePath: 'Added.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        // A change elsewhere, so that a change event is emitted either way.
+        mockFs[p('/project/fruits/Strawberry.js')] = '// Strawberry!!';
+        mockEmitters[p('/project/fruits')].emitFileEvent({
+          event: 'touch',
+          relativePath: 'Strawberry.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        await waitForItToChange(fileMap);
+        expect(fileSystem.exists(p('/project/fruits/linked/Added.js'))).toBe(
+          true,
+        );
+      },
+      {
+        config: {
+          enableSymlinks: true,
+          roots: [p('/project/fruits'), p('/project/fruits/linked')],
+        },
+        mockFs: {
+          [p('/project/fruits/Strawberry.js')]: '// Strawberry!',
+          [p('/project/fruits/linked')]: {link: '../vegetables'},
+          [p('/project/vegetables/Melon.js')]: '// Melon!',
+        },
+      },
+    );
+
     fm_it(
       'symlink deletion is handled without affecting the symlink target',
       async ({fileMap, hasteMap}) => {

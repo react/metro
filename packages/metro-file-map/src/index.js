@@ -130,12 +130,15 @@ type InternalEnqueuedEvent = Readonly<
   | {
       clock: ?ChangeEventClock,
       relativeFilePath: string,
+      // The normal path of the watched root that reported the change.
+      rootPath: string,
       metadata: FileMetadata,
       type: 'touch',
     }
   | {
       clock: ?ChangeEventClock,
       relativeFilePath: string,
+      rootPath: string,
       type: 'delete',
     },
 >;
@@ -822,6 +825,27 @@ export default class FileMap extends EventEmitter {
       firstEnqueuedTimestamp: number,
     } = null;
 
+    // Watchers report the paths of entries they observed, so a path that the
+    // file map resolves through a symlink beneath its watched root is stale: it
+    // was reported before a directory above it was replaced by that symlink.
+    // Applying it would add or remove files in the symlink's target instead.
+    // The root itself may be a symlink, so only directories beneath it count.
+    const isThroughSymlink = (
+      relativeFilePath: string,
+      rootPath: string,
+    ): boolean => {
+      for (
+        let dir = path.dirname(relativeFilePath);
+        dir !== '.' && dir !== rootPath;
+        dir = path.dirname(dir)
+      ) {
+        if (fileSystem.linkStats(dir)?.fileType === 'l') {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const emitChange = () => {
       if (nextEmit == null) {
         // Nothing to emit
@@ -838,6 +862,10 @@ export default class FileMap extends EventEmitter {
       // this sequence.
       for (const event of events) {
         const {relativeFilePath, clock} = event;
+        this.#updateClock(clocks, clock);
+        if (isThroughSymlink(relativeFilePath, event.rootPath)) {
+          continue;
+        }
         if (event.type === 'delete') {
           fileSystem.remove(relativeFilePath, changeAggregator);
         } else {
@@ -847,7 +875,6 @@ export default class FileMap extends EventEmitter {
             changeAggregator,
           );
         }
-        this.#updateClock(clocks, clock);
       }
 
       const changeSize = changeAggregator.getSize();
@@ -930,6 +957,7 @@ export default class FileMap extends EventEmitter {
 
       const relativeFilePath =
         this.#pathUtils.absoluteToNormal(absoluteFilePath);
+      const rootPath = this.#pathUtils.absoluteToNormal(change.root);
 
       const onChangeStartTime = performance.timeOrigin + performance.now();
 
@@ -993,6 +1021,7 @@ export default class FileMap extends EventEmitter {
               enqueueEvent({
                 clock: change.clock,
                 relativeFilePath,
+                rootPath,
                 metadata: fileMetadata,
                 type: change.event,
               });
@@ -1011,6 +1040,7 @@ export default class FileMap extends EventEmitter {
             enqueueEvent({
               clock: change.clock,
               relativeFilePath,
+              rootPath,
               type: 'delete',
             });
           } else if (change.event === 'recrawl') {
