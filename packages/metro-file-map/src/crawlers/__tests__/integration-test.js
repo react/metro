@@ -78,6 +78,7 @@ const CASES = [
     new Map([
       ['foo.js', [expect.any(Number), 245, 0, null, 0]],
       [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
+      [join('directory', 'package.json'), [expect.any(Number), 3, 0, null, 0]],
       [
         'link-to-directory',
         [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory')],
@@ -92,6 +93,7 @@ const CASES = [
     false,
     new Map([
       [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
+      [join('directory', 'package.json'), [expect.any(Number), 3, 0, null, 0]],
       ['foo.js', [expect.any(Number), 245, 0, null, 0]],
     ]),
   ],
@@ -121,6 +123,7 @@ describe.each(Object.keys(CRAWLERS))(
           },
           includeSymlinks,
           extensions: ['js'],
+          basenames: ['package.json'],
           ignore: path => path.includes('ignored'),
           roots: [FIXTURES_DIR],
           rootDir: FIXTURES_DIR,

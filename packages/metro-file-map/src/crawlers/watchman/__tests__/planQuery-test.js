@@ -17,6 +17,7 @@ describe('planQuery with includeSymlinks: false', () => {
       since: 'clock',
       directoryFilters: ['/dir1', '/dir2'],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: false,
     });
@@ -38,6 +39,7 @@ describe('planQuery with includeSymlinks: false', () => {
       since: 'clock',
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: false,
     });
@@ -54,6 +56,7 @@ describe('planQuery with includeSymlinks: false', () => {
       since: null,
       directoryFilters: ['/dir1', '/dir2'],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: false,
     });
@@ -71,6 +74,7 @@ describe('planQuery with includeSymlinks: false', () => {
       since: null,
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: false,
     });
@@ -87,6 +91,7 @@ describe('planQuery with includeSymlinks: false', () => {
       since: null,
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: false,
       includeSymlinks: false,
     });
@@ -104,6 +109,7 @@ test('does not request type if includeSymlinks == false', () => {
     since: null,
     directoryFilters: [],
     extensions: ['js', 'ts'],
+    basenames: [],
     includeSha1: false,
     includeSymlinks: false,
   });
@@ -121,6 +127,7 @@ describe('planQuery with includeSymlinks: true', () => {
       since: 'clock',
       directoryFilters: ['/dir1', '/dir2'],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: true,
     });
@@ -145,6 +152,7 @@ describe('planQuery with includeSymlinks: true', () => {
       since: 'clock',
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: true,
     });
@@ -165,6 +173,7 @@ describe('planQuery with includeSymlinks: true', () => {
       since: null,
       directoryFilters: ['/dir1', '/dir2'],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: true,
     });
@@ -186,6 +195,7 @@ describe('planQuery with includeSymlinks: true', () => {
       since: null,
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: true,
       includeSymlinks: true,
     });
@@ -205,6 +215,7 @@ describe('planQuery with includeSymlinks: true', () => {
       since: null,
       directoryFilters: [],
       extensions: ['js', 'ts'],
+      basenames: [],
       includeSha1: false,
       includeSymlinks: true,
     });
@@ -213,6 +224,87 @@ describe('planQuery with includeSymlinks: true', () => {
       expression: [
         'anyof',
         ['allof', ['type', 'f'], ['suffix', ['js', 'ts']]],
+        ['type', 'l'],
+      ],
+      fields: ['name', 'exists', 'mtime_ms', 'size', 'type'],
+    });
+  });
+});
+
+describe('planQuery with basenames', () => {
+  test('does not change a query when extensions match every basename', () => {
+    const options = {
+      since: null,
+      directoryFilters: [],
+      extensions: ['js', 'json'],
+      includeSha1: false,
+      includeSymlinks: false,
+    };
+    expect(planQuery({...options, basenames: ['package.json']})).toEqual(
+      planQuery({...options, basenames: []}),
+    );
+  });
+
+  test('plans a "suffix" query that also generates basename suffixes', () => {
+    const {query, queryGenerator} = planQuery({
+      since: null,
+      directoryFilters: [],
+      extensions: ['js', 'ts'],
+      basenames: ['package.json'],
+      includeSha1: false,
+      includeSymlinks: false,
+    });
+    expect(queryGenerator).toBe('suffix');
+    expect(query).toEqual({
+      suffix: ['js', 'ts', 'json'],
+      expression: [
+        'allof',
+        ['type', 'f'],
+        ['anyof', ['suffix', ['js', 'ts']], ['name', ['package.json']]],
+      ],
+      fields: ['name', 'exists', 'mtime_ms', 'size'],
+    });
+  });
+
+  test('plans an "all" query for a basename with no extension', () => {
+    const {query, queryGenerator} = planQuery({
+      since: null,
+      directoryFilters: [],
+      extensions: ['js', 'ts'],
+      basenames: ['BUCK'],
+      includeSha1: false,
+      includeSymlinks: false,
+    });
+    expect(queryGenerator).toBe('all');
+    expect(query).toEqual({
+      expression: [
+        'allof',
+        ['type', 'f'],
+        ['anyof', ['suffix', ['js', 'ts']], ['name', ['BUCK']]],
+      ],
+      fields: ['name', 'exists', 'mtime_ms', 'size'],
+    });
+  });
+
+  test('includes basenames alongside symlinks', () => {
+    const {query, queryGenerator} = planQuery({
+      since: 'clock',
+      directoryFilters: [],
+      extensions: ['js', 'ts'],
+      basenames: ['package.json'],
+      includeSha1: false,
+      includeSymlinks: true,
+    });
+    expect(queryGenerator).toBe('since');
+    expect(query).toEqual({
+      since: 'clock',
+      expression: [
+        'anyof',
+        [
+          'allof',
+          ['type', 'f'],
+          ['anyof', ['suffix', ['js', 'ts']], ['name', ['package.json']]],
+        ],
         ['type', 'l'],
       ],
       fields: ['name', 'exists', 'mtime_ms', 'size', 'type'],

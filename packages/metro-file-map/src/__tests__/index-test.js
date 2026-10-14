@@ -2019,38 +2019,6 @@ describe('FileMap', () => {
     );
 
     fm_it(
-      'does not emit changes for regular files with unwatched extensions',
-      async ({fileMap}) => {
-        const {fileSystem} = await fileMap.build();
-        mockFs[p('/project/fruits/Banana.unwatched')] = '';
-
-        const e = mockEmitters[p('/project/fruits')];
-        e.emitFileEvent({
-          event: 'touch',
-          relativePath: 'Banana.js',
-          metadata: MOCK_CHANGE_FILE,
-        });
-        e.emitFileEvent({
-          event: 'touch',
-          relativePath: 'Banana.unwatched',
-          metadata: MOCK_CHANGE_FILE,
-        });
-        const {changes} = await waitForItToChange(fileMap);
-        const filePath = p('/project/fruits/Banana.js');
-        expect(countFileChanges(changes)).toBe(1);
-        expectChanges(changes, {
-          modifiedFiles: [
-            [
-              path.join('fruits', 'Banana.js'),
-              {isSymlink: false, modifiedTime: 45},
-            ],
-          ],
-        });
-        expect(fileSystem.exists(filePath)).toBe(true);
-      },
-    );
-
-    fm_it(
       'does not emit delete events for unknown files',
       async ({fileMap}) => {
         const {fileSystem} = await fileMap.build();

@@ -48,6 +48,7 @@ function makeWatchmanError(error: Error): Error {
 
 export default async function watchmanCrawl({
   abortSignal,
+  basenames,
   computeSha1,
   extensions,
   ignore,
@@ -204,6 +205,7 @@ export default async function watchmanCrawl({
           const {query, queryGenerator} = planQuery({
             since,
             extensions,
+            basenames,
             directoryFilters,
             includeSha1: computeSha1,
             includeSymlinks,

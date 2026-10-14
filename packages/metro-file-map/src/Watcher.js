@@ -37,6 +37,10 @@ const debug = debugModule('Metro:Watcher');
 
 const MAX_WAIT_TIME = 240000;
 
+// Files crawled and watched regardless of `extensions`. package.json files are
+// crucial for module resolution.
+const INCLUDED_BASENAMES: ReadonlyArray<string> = ['package.json'];
+
 type InternalCrawlOptions = Readonly<{
   previousState: CrawlerOptions['previousState'],
   roots: ReadonlyArray<string>,
@@ -148,6 +152,7 @@ export class Watcher extends EventEmitter {
       console: options.console,
       includeSymlinks: options.enableSymlinks,
       extensions: options.extensions,
+      basenames: INCLUDED_BASENAMES,
       ignore: ignoreForCrawl,
       onStatus: status => {
         this.emit('status', status);
@@ -223,9 +228,7 @@ export class Watcher extends EventEmitter {
       const watcherOptions: WatcherBackendOptions = {
         included: {
           extensions: new Set(extensions),
-          // Ensure we always include package.json files, which are crucial for
-          // module resolution.
-          basenames: new Set(['package.json']),
+          basenames: new Set(INCLUDED_BASENAMES),
           // Ensure we always watch any health check files
           basenamePrefixes: [this.#options.healthCheckFilePrefix],
         },

@@ -67,6 +67,7 @@ export type CrawlerFactoryOptions = Readonly<{
 
 export type CrawlerOptions = {
   abortSignal?: null | undefined | AbortSignal;
+  basenames: ReadonlyArray<string>;
   computeSha1: boolean;
   console: Console_2;
   extensions: ReadonlyArray<string>;
