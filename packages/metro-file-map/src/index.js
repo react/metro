@@ -846,6 +846,42 @@ export default class FileMap extends EventEmitter {
       return false;
     };
 
+    // A watcher may report a new entry without the removal of the one it
+    // replaced. FSEvents can report only the replaced path, and NativeWatcher
+    // keeps no record of what was beneath it. So before adding a file, remove
+    // a directory at its path, or a regular file at one of its ancestors.
+    const removeReplacedEntry = (
+      relativeFilePath: string,
+      changeAggregator: FileSystemChangeAggregator,
+    ) => {
+      if (fileSystem.linkStats(relativeFilePath) == null) {
+        const existing = fileSystem.lookup(relativeFilePath);
+        if (
+          existing.exists &&
+          existing.type === 'd' &&
+          // Not reached through a symlink, which was itself replaced.
+          existing.realPath ===
+            this.#pathUtils.normalToAbsolute(relativeFilePath)
+        ) {
+          fileSystem.remove(relativeFilePath, changeAggregator);
+        }
+      }
+      const parent = fileSystem.lookup(path.dirname(relativeFilePath));
+      if (parent.exists && parent.type === 'd') {
+        return;
+      }
+      for (
+        let ancestor = path.dirname(relativeFilePath);
+        ancestor !== '.';
+        ancestor = path.dirname(ancestor)
+      ) {
+        if (fileSystem.linkStats(ancestor)?.fileType === 'f') {
+          fileSystem.remove(ancestor, changeAggregator);
+          return;
+        }
+      }
+    };
+
     const emitChange = () => {
       if (nextEmit == null) {
         // Nothing to emit
@@ -869,6 +905,7 @@ export default class FileMap extends EventEmitter {
         if (event.type === 'delete') {
           fileSystem.remove(relativeFilePath, changeAggregator);
         } else {
+          removeReplacedEntry(relativeFilePath, changeAggregator);
           fileSystem.addOrModify(
             relativeFilePath,
             event.metadata,
