@@ -24,9 +24,43 @@ jest
   .mock('metro-transform-plugins', () => ({
     ...jest.requireActual('metro-transform-plugins'),
     inlinePlugin: () => ({}),
-    constantFoldingPlugin: () => ({}),
   }))
-  .mock('metro-minify-terser');
+  .mock('metro-minify-terser')
+  .mock(
+    'stale-scope-babel-transformer',
+    () => {
+      const {transformSync, types} = jest.requireActual('@babel/core');
+      return {
+        // Replaces the second statement with a call to `stringifySafe` without
+        // updating the scope, which Babel crawled before the replacement.
+        transform({src}: {src: string}) {
+          return transformSync(src, {
+            ast: true,
+            babelrc: false,
+            code: false,
+            configFile: false,
+            plugins: [
+              () => ({
+                visitor: {
+                  Program: {
+                    exit(path) {
+                      path.node.body[1] = types.expressionStatement(
+                        types.callExpression(
+                          types.identifier('stringifySafe'),
+                          [types.stringLiteral('value')],
+                        ),
+                      );
+                    },
+                  },
+                },
+              }),
+            ],
+          });
+        },
+      };
+    },
+    {virtual: true},
+  );
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
@@ -43,6 +77,10 @@ const babelTransformerPath =
 const HEADER_DEV =
   '__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {';
 const HEADER_PROD = '__d(function (g, r, i, a, m, e, d) {';
+const STALE_SCOPE_SOURCE = [
+  'function stringifySafe(arg) { return String(arg); }',
+  'STALE_SCOPE_REFERENCE;',
+].join('\n');
 
 let fs: FSType;
 let Transformer: TransformerType;
@@ -201,6 +239,43 @@ test('transforms a module with dependencies', async () => {
     {data: expect.objectContaining({asyncType: null}), name: './a'},
     {data: expect.objectContaining({asyncType: null}), name: 'b'},
   ]);
+});
+
+test('keeps functions referenced by earlier passes in production', async () => {
+  const result = await Transformer.transform(
+    {...baseConfig, babelTransformerPath: 'stale-scope-babel-transformer'},
+    '/root',
+    'local/file.js',
+    Buffer.from(STALE_SCOPE_SOURCE, 'utf8'),
+    {...baseTransformOptions, dev: false, minify: true},
+  );
+
+  expect(result.output[0].data.code).toContain('function stringifySafe(arg)');
+  expect(result.output[0].data.code).toContain('stringifySafe("value")');
+});
+
+test('Babel keeps stale scope bindings when reusing an AST', () => {
+  const {ast} = jest
+    .requireMock('stale-scope-babel-transformer')
+    .transform({src: STALE_SCOPE_SOURCE});
+  const {transformFromAstSync} = jest.requireActual('@babel/core');
+  const {constantFoldingPlugin} = jest.requireActual('metro-transform-plugins');
+
+  const result = transformFromAstSync(ast, '', {
+    ast: false,
+    babelrc: false,
+    cloneInputAst: false,
+    code: true,
+    configFile: false,
+    plugins: [constantFoldingPlugin],
+  });
+
+  // Babel reuses the scope crawled before `stringifySafe` was called, so
+  // constant folding deletes the function while its call remains. This is why
+  // transformJS clears the scope cache before constant folding. If this test
+  // starts failing, Babel no longer reuses stale scopes: delete that
+  // `traverse.cache.clearScope()` call and this test.
+  expect(result.code).toBe('stringifySafe("value");');
 });
 
 test('transforms an es module with asyncToGenerator', async () => {
