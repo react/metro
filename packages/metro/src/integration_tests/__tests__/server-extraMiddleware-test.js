@@ -12,6 +12,7 @@
 
 const Metro = require('../../..');
 const MetroServer = require('../../Server').default;
+const WebSocket = require('ws');
 
 jest.useRealTimers();
 jest.setTimeout(60 * 1000);
@@ -132,6 +133,80 @@ describe('runServer custom middleware', () => {
 
     expect((await request('/custom/a')).text).toBe('/a /custom/a');
     expect((await request(BUNDLE_PATH)).status).toBe(200);
+  });
+
+  const greetingServer = (greeting: string) => {
+    const wss = new WebSocket.Server({noServer: true});
+    wss.on('connection', socket => socket.send(greeting));
+    return wss;
+  };
+
+  const receiveGreeting = (pathname: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const ws = new WebSocket(
+        `ws://localhost:${httpServer.address().port}${pathname}`,
+      );
+      ws.on('message', data => {
+        ws.close();
+        resolve(String(data));
+      });
+      ws.on('error', reject);
+    });
+
+  test('serves config websocket endpoints', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const wss = greetingServer('hello');
+    await startServer(
+      await loadConfig({unstable_websocketEndpoints: {'/custom-ws': wss}}),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+
+    expect(await receiveGreeting('/custom-ws')).toBe('hello');
+    wss.close();
+  });
+
+  test('runServer websocket endpoints win over config ones', async () => {
+    const configWss = greetingServer('config');
+    const frameworkWss = greetingServer('framework');
+    await startServer(
+      await loadConfig({
+        unstable_websocketEndpoints: {'/custom-ws': configWss},
+      }),
+      {websocketEndpoints: {'/custom-ws': frameworkWss}},
+    );
+
+    expect(await receiveGreeting('/custom-ws')).toBe('framework');
+    configWss.close();
+    frameworkWss.close();
+  });
+
+  test('a supplied /hot is ignored with a warning', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const wss = new WebSocket.Server({noServer: true});
+    const onConnection = jest.fn();
+    wss.on('connection', onConnection);
+    await startServer(
+      await loadConfig({unstable_websocketEndpoints: {'/hot': wss}}),
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('WARNING'),
+      expect.stringContaining('`/hot`'),
+    );
+    warn.mockRestore();
+    await new Promise((resolve, reject) => {
+      const ws = new WebSocket(
+        `ws://localhost:${httpServer.address().port}/hot`,
+      );
+      ws.on('open', () => {
+        ws.close();
+        resolve();
+      });
+      ws.on('error', reject);
+    });
+    expect(onConnection).not.toHaveBeenCalled();
+    wss.close();
   });
 
   test('calls config, then runServer unstable_onServerCreated, before listening', async () => {

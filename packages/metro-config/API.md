@@ -8,6 +8,7 @@ import EventEmitter from 'node:events';
 import type {HandleFunction} from 'connect';
 import type {IncomingMessage} from 'connect';
 import type {Server as Server_2} from 'connect';
+import type {Server as Server_3} from 'ws';
 import type {ServerResponse} from 'node:http';
 
 export type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult>>;
@@ -191,6 +192,7 @@ export type ServerConfigT = {
   unstable_onServerCreated: (metroServer: Server) => void;
   unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>;
   unstable_serverRoot: null | undefined | string;
+  unstable_websocketEndpoints: Readonly<{[path: string]: Server_3}>;
   useGlobalHotkey: boolean;
   verifyConnections: boolean;
   tls:

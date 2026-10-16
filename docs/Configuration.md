@@ -741,6 +741,16 @@ Called with Metro's server instance when [`runServer`](./API.md#async-runserverc
 
 `runServer` also takes an `unstable_onServerCreated` option, which is called after this one.
 
+#### `unstable_websocketEndpoints` <div class="label experimental">Experimental</div>
+
+Type: `{[path: string]: WebSocketServer}`
+
+[`ws`](https://www.npmjs.com/package/ws) servers, created with `noServer: true`, to handle WebSocket upgrades on the given paths.
+
+`/hot` is reserved for Metro's hot reloading. A supplied `/hot` endpoint is ignored, with a warning.
+
+[`runServer`](./API.md#async-runserverconfig-options) also takes a `websocketEndpoints` option, which wins over these for the same path.
+
 #### `rewriteRequestUrl`
 
 Type: `string => string`
@@ -868,7 +878,7 @@ This allows overriding and removing default config parameters such as `platforms
 
 :::
 
-`server.unstable_middleware` and `server.unstable_priorityMiddleware` are combined instead: later configs wrap earlier ones, so their `unstable_middleware` runs last and their `unstable_priorityMiddleware` runs first. An entry already in an earlier config, e.g. copied with a spread, is kept once.
+`server.unstable_middleware` and `server.unstable_priorityMiddleware` are combined instead: later configs wrap earlier ones, so their `unstable_middleware` runs last and their `unstable_priorityMiddleware` runs first. An entry already in an earlier config, e.g. copied with a spread, is kept once. `server.unstable_websocketEndpoints` are combined too; for the same path, a later config's server wins.
 
 #### Merging Example
 

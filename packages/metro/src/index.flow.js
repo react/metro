@@ -91,6 +91,7 @@ export type RunServerOptions = Readonly<{
   unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
   waitForBundler?: boolean,
   watch?: boolean,
+  // Wins over `config.server.unstable_websocketEndpoints` for the same path.
   websocketEndpoints?: Readonly<{
     [path: string]: WebSocketServer,
   }>,
@@ -265,23 +266,26 @@ export const createConnectMiddleware = async function (
 
   return {
     attachHmrServer(httpServer: HttpServer | HttpsServer): void {
-      const wss = createWebsocketServer({
-        websocketServer: new MetroHmrServer(
-          metroServer.getBundler(),
-          metroServer.getCreateModuleId(),
-          config,
-        ),
-      });
-      httpServer.on('upgrade', (request, socket, head) => {
-        const {pathname} = new URL(request.url, 'resolve://');
-        if (pathname === '/hot') {
-          wss.handleUpgrade(request, socket, head, ws => {
-            wss.emit('connection', ws, request);
-          });
-        } else {
-          socket.destroy();
-        }
-      });
+      if (config.server.unstable_websocketEndpoints['/hot'] != null) {
+        logWarning(
+          'WARNING',
+          'The supplied `/hot` websocket endpoint is ignored: `/hot` is ' +
+            "reserved for Metro's hot reloading.",
+        );
+      }
+      attachWebsocketEndpoints(
+        httpServer,
+        {
+          '/hot': createWebsocketServer({
+            websocketServer: new MetroHmrServer(
+              metroServer.getBundler(),
+              metroServer.getCreateModuleId(),
+              config,
+            ),
+          }),
+        },
+        config.server.unstable_websocketEndpoints,
+      );
     },
     metroServer,
     middleware: composeMiddleware(
@@ -314,7 +318,7 @@ export const runServer = async (
     unstable_onServerCreated,
     unstable_priorityMiddleware = [],
     waitForBundler = false,
-    websocketEndpoints: userWebsocketEndpoints = {},
+    websocketEndpoints = {},
     watch,
   } = opts;
   await earlyPortCheck(host, config.server.port);
@@ -327,14 +331,28 @@ export const runServer = async (
     );
   }
   const {
+    attachHmrServer,
     middleware,
     end: endMiddleware,
     metroServer,
-  } = await createConnectMiddleware(config, {
-    hasReducedPerformance,
-    waitForBundler,
-    watch,
-  });
+  } = await createConnectMiddleware(
+    {
+      ...config,
+      server: {
+        ...config.server,
+        // `runServer`'s endpoints win over the config's for the same path.
+        unstable_websocketEndpoints: {
+          ...config.server.unstable_websocketEndpoints,
+          ...websocketEndpoints,
+        },
+      },
+    },
+    {
+      hasReducedPerformance,
+      waitForBundler,
+      watch,
+    },
+  );
 
   unstable_onServerCreated?.(metroServer);
 
@@ -375,6 +393,7 @@ export const runServer = async (
   } else {
     httpServer = http.createServer(serverApp);
   }
+
   return new Promise((resolve, reject) => {
     httpServer.on('error', error => {
       endMiddleware().finally(() => {
@@ -392,32 +411,7 @@ export const runServer = async (
         family,
       });
 
-      const websocketEndpoints = {
-        ...userWebsocketEndpoints,
-        '/hot': createWebsocketServer({
-          websocketServer: new MetroHmrServer(
-            metroServer.getBundler(),
-            metroServer.getCreateModuleId(),
-            config,
-          ),
-        }),
-      };
-
-      httpServer.on('upgrade', (request, socket, head) => {
-        const {pathname} = new URL(request.url, 'resolve://');
-        if (pathname != null && websocketEndpoints[pathname]) {
-          websocketEndpoints[pathname].handleUpgrade(
-            request,
-            socket,
-            head,
-            ws => {
-              websocketEndpoints[pathname].emit('connection', ws, request);
-            },
-          );
-        } else {
-          socket.destroy();
-        }
-      });
+      attachHmrServer(httpServer);
 
       if (onReady) {
         onReady(httpServer);
@@ -610,9 +604,13 @@ async function earlyPortCheck(host: void | string, port: number) {
 }
 
 function logDeprecationWarning(message: string): void {
+  logWarning('DEPRECATED', message);
+}
+
+function logWarning(label: string, message: string): void {
   // eslint-disable-next-line no-console
   console.warn(
-    util.styleText(['inverse', 'yellow', 'bold'], ' DEPRECATED '),
+    util.styleText(['inverse', 'yellow', 'bold'], ` ${label} `),
     message,
   );
 }
@@ -634,4 +632,30 @@ function composeMiddleware(
     }
   }
   return app;
+}
+
+// Earlier maps take precedence for the same path.
+function attachWebsocketEndpoints(
+  httpServer: HttpServer | HttpsServer,
+  ...endpointMaps: ReadonlyArray<Readonly<{[path: string]: WebSocketServer}>>
+): void {
+  const websocketEndpoints: {[path: string]: WebSocketServer} = {};
+  for (const endpointMap of endpointMaps) {
+    for (const [path, server] of Object.entries(endpointMap)) {
+      if (websocketEndpoints[path] == null) {
+        websocketEndpoints[path] = server;
+      }
+    }
+  }
+  httpServer.on('upgrade', (request, socket, head) => {
+    const {pathname} = new URL(request.url, 'resolve://');
+    const endpoint = pathname != null ? websocketEndpoints[pathname] : null;
+    if (endpoint == null) {
+      socket.destroy();
+      return;
+    }
+    endpoint.handleUpgrade(request, socket, head, ws => {
+      endpoint.emit('connection', ws, request);
+    });
+  });
 }

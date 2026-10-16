@@ -9,9 +9,9 @@ import EventEmitter from 'node:events';
 import type {HandleFunction} from 'connect';
 import type {IncomingMessage} from 'connect';
 import type {Server} from 'connect';
-import type {Server as Server_2} from 'node:http';
-import type {Server as Server_3} from 'node:https';
-import type {Server as Server_4} from 'ws';
+import type {Server as Server_2} from 'ws';
+import type {Server as Server_3} from 'node:http';
+import type {Server as Server_4} from 'node:https';
 import type {ServerOptions as ServerOptions_2} from 'node:https';
 import type {ServerResponse} from 'node:http';
 import type {Socket} from 'node:net';
@@ -273,7 +273,7 @@ export type RunServerOptions = Readonly<{
   hasReducedPerformance?: boolean | undefined;
   host?: string | undefined;
   onError?: ((err: Error & {code?: string | undefined}) => void) | undefined;
-  onReady?: ((server: Server_2 | Server_3) => void) | undefined;
+  onReady?: ((server: Server_3 | Server_4) => void) | undefined;
   onClose?: (() => void) | undefined;
   secureServerOptions?: ServerOptions_2 | undefined;
   secure?: boolean | undefined;
@@ -285,10 +285,10 @@ export type RunServerOptions = Readonly<{
   unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware> | undefined;
   waitForBundler?: boolean | undefined;
   watch?: boolean | undefined;
-  websocketEndpoints?: Readonly<{[path: string]: Server_4}> | undefined;
+  websocketEndpoints?: Readonly<{[path: string]: Server_2}> | undefined;
 }>;
 
-export type RunServerResult = {httpServer: Server_2 | Server_3};
+export type RunServerResult = {httpServer: Server_3 | Server_4};
 
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string;

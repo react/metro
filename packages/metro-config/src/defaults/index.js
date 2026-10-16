@@ -87,6 +87,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     // merged with user middleware as [...user, ...defaults]
     unstable_priorityMiddleware: [],
     unstable_serverRoot: null,
+    unstable_websocketEndpoints: {},
     useGlobalHotkey: true,
     verifyConnections: false,
     tls: false,

@@ -11,6 +11,7 @@
 
 import type {InputConfigT, ServerMiddleware} from '../types';
 import type {CustomResolver} from 'metro-resolver';
+import type {Server as WebSocketServer} from 'ws';
 
 import {mergeConfig} from '../loadConfig';
 import path from 'node:path';
@@ -232,6 +233,70 @@ describe('mergeConfig', () => {
         }),
       );
       expect(result.server?.unstable_priorityMiddleware).toEqual([b, a, c]);
+    });
+  });
+
+  describe('server websocket endpoint merging', () => {
+    const a: WebSocketServer = {} as $FlowFixMe;
+    const b: WebSocketServer = {} as $FlowFixMe;
+
+    test('combines endpoints from both configs', () => {
+      const result = mergeConfig(
+        {server: {unstable_websocketEndpoints: {'/a': a}}},
+        {server: {unstable_websocketEndpoints: {'/b': b}}},
+      );
+      expect(result.server?.unstable_websocketEndpoints).toEqual({
+        '/a': a,
+        '/b': b,
+      });
+    });
+
+    test('keeps endpoints defined by only one config', () => {
+      const withA: InputConfigT = {
+        server: {unstable_websocketEndpoints: {'/a': a}},
+      };
+      const withB: InputConfigT = {
+        server: {unstable_websocketEndpoints: {'/b': b}},
+      };
+      const empty: InputConfigT = {server: {}};
+      expect(
+        mergeConfig(withA, empty).server?.unstable_websocketEndpoints,
+      ).toEqual({'/a': a});
+      expect(
+        mergeConfig(empty, withB).server?.unstable_websocketEndpoints,
+      ).toEqual({'/b': b});
+    });
+
+    test('keeps base endpoints when the override sets them to undefined', () => {
+      const withA: InputConfigT = {
+        server: {unstable_websocketEndpoints: {'/a': a}},
+      };
+      const explicitUndefined: InputConfigT = {
+        server: {unstable_websocketEndpoints: undefined},
+      };
+      expect(
+        mergeConfig(withA, explicitUndefined).server
+          ?.unstable_websocketEndpoints,
+      ).toEqual({'/a': a});
+    });
+
+    test('keeps an endpoint copied from the base config', () => {
+      const result = mergeConfig(
+        {server: {unstable_websocketEndpoints: {'/a': a}}},
+        {server: {unstable_websocketEndpoints: {'/a': a, '/b': b}}},
+      );
+      expect(result.server?.unstable_websocketEndpoints).toEqual({
+        '/a': a,
+        '/b': b,
+      });
+    });
+
+    test('a later config wins for the same path', () => {
+      const result = mergeConfig(
+        {server: {unstable_websocketEndpoints: {'/a': a}}},
+        {server: {unstable_websocketEndpoints: {'/a': b}}},
+      );
+      expect(result.server?.unstable_websocketEndpoints).toEqual({'/a': b});
     });
   });
 

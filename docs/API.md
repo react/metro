@@ -66,11 +66,11 @@ Bundles `entry` for the given `platform`, and saves it to location `out`. If `so
 
 ### `async runServer(config, <options>)`
 
-**Basic options:** `host`, `port`, `secureServerOptions`, `unstable_middleware`, `unstable_priorityMiddleware`, `unstable_onServerCreated`, `secure (DEPRECATED)`, `secureKey (DEPRECATED)`, `secureCert (DEPRECATED)`
+**Basic options:** `host`, `port`, `secureServerOptions`, `unstable_middleware`, `unstable_priorityMiddleware`, `websocketEndpoints`, `unstable_onServerCreated`, `secure (DEPRECATED)`, `secureKey (DEPRECATED)`, `secureCert (DEPRECATED)`
 
 Starts a full Metro HTTP server. It will listen on the specified `host:port`, and can then be queried to retrieve bundles for various entry points. If the `secureServerOptions` family of options are present, the server will be exposed over HTTPS.
 
-`unstable_middleware` and `unstable_priorityMiddleware` take the same shapes as [`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental) and [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental), and wrap them: `unstable_middleware` passed here runs after the config's, and `unstable_priorityMiddleware` runs before the config's.
+`unstable_middleware`, `unstable_priorityMiddleware` and `websocketEndpoints` take the same shapes as [`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental), [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental) and [`server.unstable_websocketEndpoints`](./Configuration.md#unstable_websocketendpoints-experimental), and wrap them: `unstable_middleware` passed here runs after the config's, and `unstable_priorityMiddleware` runs before the config's. For the same websocket path, `websocketEndpoints` passed here win over those from the config. [`/hot`](./Configuration.md#unstable_websocketendpoints-experimental) is reserved for Metro.
 
 Priority middleware handlers must call `next()` for every request they don't fully handle, so that Metro can serve bundles, source maps, assets and its other endpoints.
 

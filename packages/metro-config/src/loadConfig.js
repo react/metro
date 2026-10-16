@@ -15,6 +15,7 @@ import type {
   ServerMiddleware,
   YargArguments,
 } from './types';
+import type {Server as WebSocketServer} from 'ws';
 
 import getDefaultConfig from './defaults';
 import validConfig from './defaults/validConfig';
@@ -201,18 +202,21 @@ function mergeConfigObjects<T extends InputConfigT>(
   };
 }
 
-// Later configs wrap earlier ones: their `unstable_middleware` runs last and
-// their `unstable_priorityMiddleware` runs first.
+// Later configs wrap earlier ones: their `unstable_middleware` runs last, their
+// `unstable_priorityMiddleware` runs first, and their websocket endpoints take
+// precedence.
 function mergeServerHandlers(
   base: InputConfigT['server'],
   overrides: InputConfigT['server'],
 ): {
   unstable_middleware?: ReadonlyArray<ServerMiddleware>,
   unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+  unstable_websocketEndpoints?: Readonly<{[path: string]: WebSocketServer}>,
 } {
   const merged: {
     unstable_middleware?: ReadonlyArray<ServerMiddleware>,
     unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+    unstable_websocketEndpoints?: Readonly<{[path: string]: WebSocketServer}>,
   } = {};
   const middleware = concatUnique(
     base?.unstable_middleware,
@@ -227,6 +231,12 @@ function mergeServerHandlers(
   );
   if (priorityMiddleware != null) {
     merged.unstable_priorityMiddleware = priorityMiddleware;
+  }
+  const baseEndpoints = base?.unstable_websocketEndpoints;
+  const overrideEndpoints = overrides?.unstable_websocketEndpoints;
+  if (baseEndpoints != null || overrideEndpoints != null) {
+    const fromBase: {[path: string]: WebSocketServer} = {...baseEndpoints};
+    merged.unstable_websocketEndpoints = {...fromBase, ...overrideEndpoints};
   }
   return merged;
 }
@@ -425,7 +435,12 @@ async function loadConfig(
 
   validate(configuration, {
     exampleConfig: await validConfig(),
-    recursiveDenylist: ['reporter', 'resolver', 'transformer'],
+    recursiveDenylist: [
+      'reporter',
+      'resolver',
+      'transformer',
+      'server.unstable_websocketEndpoints',
+    ],
     deprecatedConfig: {},
   });
 

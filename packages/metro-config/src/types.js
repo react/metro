@@ -24,6 +24,7 @@ import type {
 import type {Reporter} from 'metro/private/lib/reporting';
 import type MetroServer from 'metro/private/Server';
 import type {IntermediateStackFrame} from 'metro/private/Server/symbolicate';
+import type {Server as WebSocketServer} from 'ws';
 
 export type ExtraTransformOptions = Readonly<{
   preloadedModules?: Readonly<{[path: string]: true, ...}> | false,
@@ -209,6 +210,9 @@ type ServerConfigT = {
   // handlers.
   unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>,
   unstable_serverRoot: ?string,
+  // `runServer`'s `websocketEndpoints` option wins over these for the same
+  // path.
+  unstable_websocketEndpoints: Readonly<{[path: string]: WebSocketServer}>,
   useGlobalHotkey: boolean,
   verifyConnections: boolean,
   tls:
