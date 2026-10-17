@@ -603,9 +603,11 @@ This option only has an effect under the default [`transformerPath`](#transforme
 
 Type: `boolean | string`
 
-Whether the transformer should use the `@babel/transform/runtime` plugin. Defaults to `true`.
+Whether the transformer should use the `@babel/plugin-transform-runtime` plugin. Defaults to `true`.
 
-If the value is a string, it is treated as a runtime version number and passed as `version` to the `@babel/plugin-transform-runtime` configuration. This allows you to optimize the generated Babel runtime calls based on the version installed in your project.
+When `true`, Metro tells Babel presets that support it, through [caller data](https://babeljs.io/docs/options#caller), to import helpers from Metro's own `@babel/runtime` (`babelRuntimeModuleName: 'metro:babel-runtime'`) at its installed version (`enableBabelRuntime`). Helpers then come from a `@babel/runtime` that always exists at a known version, whether or not your project installs one.
+
+<div class="label deprecated">Deprecated</div> If the value is a string, it is treated as a version of your project's own `@babel/runtime`, passed as `version` to `@babel/plugin-transform-runtime`, and helpers are imported from that copy. Use `true` instead.
 
 :::note
 This option only works under the default settings for React Native. It may have no effect in a project that uses custom [`transformerPath`](#transformerpath), a custom [`babelTransformerPath`](#babeltransformerpath) or a custom [Babel config file](https://babeljs.io/docs/en/config-files).
