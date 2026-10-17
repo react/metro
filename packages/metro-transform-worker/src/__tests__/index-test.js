@@ -28,6 +28,11 @@ jest
   }))
   .mock('metro-minify-terser');
 
+const mockedMetroCacheKey = jest.fn();
+jest.mock('metro-cache-key', () => ({
+  getCacheKey: mockedMetroCacheKey,
+}));
+
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
 import typeof FSType from 'node:fs';
@@ -81,6 +86,7 @@ const baseTransformOptions: JsTransformOptions = {
 
 beforeEach(() => {
   jest.resetModules();
+  mockedMetroCacheKey.mockClear();
 
   jest.mock(
     'node:fs',
@@ -96,6 +102,19 @@ beforeEach(() => {
   fs.reset();
 
   fs.mkdirSync(p('/root/local'), {recursive: true});
+});
+
+test('includes transform-affecting internal modules in cache key inputs', () => {
+  mockedMetroCacheKey.mockReturnValue('cache-key');
+
+  Transformer.getCacheKey(baseConfig, {projectRoot: '/root'});
+
+  expect(mockedMetroCacheKey).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      require.resolve('metro/private/ModuleGraph/worker/collectDependencies'),
+      require.resolve('metro/private/ModuleGraph/worker/importLocationsPlugin'),
+    ]),
+  );
 });
 
 test('transforms a simple script', async () => {
