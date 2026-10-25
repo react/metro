@@ -17,6 +17,7 @@ import type {
   ChangeEventMetadata,
   WatcherBackendChangeEvent,
 } from '../flow-types';
+import type {WatcherOptions} from './common';
 import type {FSWatcher, Stats} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
@@ -50,59 +51,105 @@ const CRAWL_CONCURRENCY = 32;
 export default class FallbackWatcher extends AbstractWatcher {
   readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
-  readonly #dirRegistry: {
-    [directory: string]: {[file: string]: true, __proto__: null},
-    __proto__: null,
-  } = Object.create(null);
+  // Directories and symlinks we have registered. Regular files aren't
+  // tracked: whether a deletion is wanted follows from the file's name, and the
+  // file map removes a directory's files when told the directory is deleted.
+  readonly #knownDirs: Set<string> = new Set();
+  readonly #knownSymlinks: Set<string> = new Set();
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
+  readonly #crawlFed: boolean;
+  // Directories reported by the crawl that are not to be watched, because
+  // they or an ancestor are ignored.
+  readonly #crawlSkipped: Set<string> = new Set();
+
+  constructor(dir: string, opts: WatcherOptions) {
+    super(dir, opts);
+    this.#crawlFed = opts.crawlFed === true;
+  }
+
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
+    if (this.#crawlFed) {
+      return;
+    }
 
-    await recReaddir(
+    await recReaddirTypes(
       this.root,
       dir => {
         this.#watchdir(dir);
       },
-      filename => {
-        this.#register(filename, 'f');
-      },
+      () => {},
       symlink => {
         this.#register(symlink, 'l');
       },
       this.#checkedEmitError,
       this.ignored,
     );
+  }
 
-    if (platform === 'win32') {
-      // Inherited from sane: win32 needs a settling period after the watches
-      // are registered before events can be relied on.
-      await new Promise(resolve => setTimeout(resolve, 1000));
+  #isCrawlSkipped(dir: string): boolean {
+    if (this.#crawlSkipped.has(path.dirname(dir))) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    if (
+      this.ignored != null &&
+      common.posixPathMatchesPattern(this.ignored, dir)
+    ) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * In crawl-fed mode, a directory under the root the crawl is about to list.
+   */
+  watchCrawledDirectory(dir: string): void {
+    if (dir !== this.root && !this.#isCrawlSkipped(dir)) {
+      this.#watchdir(dir);
     }
   }
 
   /**
-   * Register files that matches our globs to know what to type of event to
-   * emit in the future.
-   *
-   * Registry looks like the following:
-   *
-   *  dirRegister => Map {
-   *    dirpath => Map {
-   *       filename => true
-   *    }
-   *  }
-   *
-   *  Return false if ignored or already registered.
+   * In crawl-fed mode, a symlink the crawl found.
+   */
+  registerCrawledSymlink(symlink: string): void {
+    if (!this.#crawlSkipped.has(path.dirname(symlink))) {
+      this.#register(symlink, 'l');
+    }
+  }
+
+  /**
+   * In crawl-fed mode, a directory the crawl skipped as ignored, which is
+   * walked and watched here unless this watcher ignores it too.
+   */
+  async walkCrawlSkippedDirectory(dir: string): Promise<void> {
+    if (this.#isCrawlSkipped(dir)) {
+      return;
+    }
+    await recReaddirTypes(
+      dir,
+      subdir => {
+        this.#watchdir(subdir);
+      },
+      () => {},
+      symlink => {
+        this.#register(symlink, 'l');
+      },
+      this.#checkedEmitError,
+      this.ignored,
+    );
+  }
+
+  /**
+   * Whether events for a path are wanted, i.e. it is neither ignored nor (for
+   * a regular file) excluded. A directory or symlink is also recorded as known,
+   * and false is returned if it already was.
    */
   #register(filepath: string, type: ChangeEventMetadata['type']): boolean {
-    const dir = path.dirname(filepath);
-    const filename = path.basename(filepath);
-    if (this.#dirRegistry[dir] && this.#dirRegistry[dir][filename]) {
-      return false;
-    }
-
     const relativePath = path.relative(this.root, filepath);
     if (
       this.doIgnore(relativePath) ||
@@ -110,61 +157,37 @@ export default class FallbackWatcher extends AbstractWatcher {
     ) {
       return false;
     }
-
-    if (!this.#dirRegistry[dir]) {
-      this.#dirRegistry[dir] = Object.create(null);
+    const known =
+      type === 'd'
+        ? this.#knownDirs
+        : type === 'l'
+          ? this.#knownSymlinks
+          : null;
+    if (known != null) {
+      if (known.has(filepath)) {
+        return false;
+      }
+      known.add(filepath);
     }
-
-    this.#dirRegistry[dir][filename] = true;
-
     return true;
   }
 
   /**
-   * Removes a file from the registry.
+   * Forget a path, and if it was a directory, everything beneath it.
    */
-  #unregister(filepath: string) {
-    const dir = path.dirname(filepath);
-    if (this.#dirRegistry[dir]) {
-      const filename = path.basename(filepath);
-      delete this.#dirRegistry[dir][filename];
+  #unregister(filepath: string): void {
+    this.#knownSymlinks.delete(filepath);
+    if (!this.#knownDirs.has(filepath)) {
+      return;
     }
-  }
-
-  /**
-   * Removes a dir from the registry, returning all files that were registered
-   * under it (recursively).
-   */
-  #unregisterDir(dirpath: string): Array<string> {
-    const removedFiles: Array<string> = [];
-
-    // Find and remove all entries under this directory
-    for (const registeredDir of Object.keys(this.#dirRegistry)) {
-      if (
-        registeredDir === dirpath ||
-        registeredDir.startsWith(dirpath + path.sep)
-      ) {
-        // Collect all files in this directory
-        for (const filename of Object.keys(this.#dirRegistry[registeredDir])) {
-          removedFiles.push(path.join(registeredDir, filename));
+    const prefix = filepath + path.sep;
+    for (const known of [this.#knownDirs, this.#knownSymlinks]) {
+      for (const entry of known) {
+        if (entry === filepath || entry.startsWith(prefix)) {
+          known.delete(entry);
         }
-        delete this.#dirRegistry[registeredDir];
       }
     }
-
-    return removedFiles;
-  }
-
-  /**
-   * Checks if a file or directory exists in the registry.
-   */
-  #registered(fullpath: string): boolean {
-    const dir = path.dirname(fullpath);
-    return !!(
-      this.#dirRegistry[fullpath] ||
-      (this.#dirRegistry[dir] &&
-        this.#dirRegistry[dir][path.basename(fullpath)])
-    );
   }
 
   /**
@@ -301,14 +324,12 @@ export default class FallbackWatcher extends AbstractWatcher {
    */
   async #processUnnamedChange(dir: string) {
     // Watch and register anything new, so that later changes are reported.
-    await recReaddir(
+    await recReaddirTypes(
       dir,
       subdir => {
         this.#watchdir(subdir);
       },
-      filename => {
-        this.#register(filename, 'f');
-      },
+      () => {},
       symlink => {
         this.#register(symlink, 'l');
       },
@@ -329,7 +350,8 @@ export default class FallbackWatcher extends AbstractWatcher {
     const fullPath = path.join(dir, file);
     const relativePath = path.join(path.relative(this.root, dir), file);
 
-    const registered = this.#registered(fullPath);
+    const isKnownDir = this.#knownDirs.has(fullPath);
+    const isKnownSymlink = this.#knownSymlinks.has(fullPath);
 
     try {
       const stat = await fsPromises.lstat(fullPath);
@@ -392,7 +414,7 @@ export default class FallbackWatcher extends AbstractWatcher {
         // A directory we already knew about has been replaced, so entries we
         // registered under it may since have changed or been removed. Have the
         // file map reconcile it.
-        if (registered) {
+        if (isKnownDir) {
           this.#emitEvent({event: RECRAWL_EVENT, relativePath});
         }
       } else {
@@ -405,12 +427,8 @@ export default class FallbackWatcher extends AbstractWatcher {
           size: stat.size,
           type,
         };
-        if (registered) {
+        if (this.#register(fullPath, type)) {
           this.#emitEvent({event: TOUCH_EVENT, relativePath, metadata});
-        } else {
-          if (this.#register(fullPath, type)) {
-            this.#emitEvent({event: TOUCH_EVENT, relativePath, metadata});
-          }
         }
       }
     } catch (error) {
@@ -419,16 +437,13 @@ export default class FallbackWatcher extends AbstractWatcher {
         return;
       }
       this.#unregister(fullPath);
-      // When a directory is deleted, emit delete events for all files we
-      // knew about under that directory
-      const removedFiles = this.#unregisterDir(fullPath);
-      for (const removedFile of removedFiles) {
-        this.#emitEvent({
-          event: DELETE_EVENT,
-          relativePath: path.relative(this.root, removedFile),
-        });
-      }
-      if (registered) {
+      // For a directory, the file map removes everything under it too.
+      if (
+        isKnownDir ||
+        isKnownSymlink ||
+        (!this.doIgnore(relativePath) &&
+          common.isIncluded('f', this.included, relativePath))
+      ) {
         this.#emitEvent({event: DELETE_EVENT, relativePath});
       }
       // Close every handle under a deleted directory. Left open, a handle stops
@@ -436,7 +451,7 @@ export default class FallbackWatcher extends AbstractWatcher {
       // also follows the directory if it was moved (as npm moves a package
       // aside to update it), so it goes on watching the old copy. macOS
       // watches by path, so there an open handle is merely redundant.
-      if (removedFiles.length > 0 || this.#watched[fullPath]) {
+      if (isKnownDir || this.#watched[fullPath]) {
         await this.#stopWatchingTree(fullPath);
       }
     }
@@ -487,10 +502,6 @@ function isIgnorableFileError(error: Error | {code: string}) {
 
 /**
  * Traverse a directory recursively, reporting every entry with its stats.
- *
- * Entries are visited depth-first by a bounded pool, so neither the queue of
- * pending entries nor the number of in-flight fs requests grows with the size
- * of the tree.
  */
 async function recReaddir(
   root: string,
@@ -531,7 +542,81 @@ async function recReaddir(
     }
   };
 
-  await new Promise((resolve, reject) => {
+  await visitAll(pending, visit);
+}
+
+/**
+ * As `recReaddir`, but without stats: entries are classified by the types
+ * `readdir` reports, so nothing is stat'd unless its type is unknown.
+ */
+async function recReaddirTypes(
+  root: string,
+  dirCallback: string => void,
+  fileCallback: string => void,
+  symlinkCallback: string => void,
+  errorCallback: Error => void,
+  ignored: ?RegExp,
+): Promise<void> {
+  const isIgnored = (dir: string) =>
+    ignored != null && common.posixPathMatchesPattern(ignored, dir);
+  if (isIgnored(root)) {
+    return;
+  }
+  const pending = [root];
+
+  const visit = async (dir: string) => {
+    // Report the directory before listing it. A consumer that starts watching
+    // here would otherwise miss anything written between the two.
+    dirCallback(dir);
+    let entries;
+    try {
+      entries = await fsPromises.readdir(dir, {withFileTypes: true});
+    } catch (error) {
+      errorCallback(error);
+      return;
+    }
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name.toString());
+      let isDirectory = entry.isDirectory();
+      let isSymbolicLink = entry.isSymbolicLink();
+      let isFile = entry.isFile();
+      if (!isDirectory && !isSymbolicLink && !isFile) {
+        // A file system that doesn't report types gives none of these.
+        try {
+          const stats = await fsPromises.lstat(entryPath);
+          isDirectory = stats.isDirectory();
+          isSymbolicLink = stats.isSymbolicLink();
+          isFile = stats.isFile();
+        } catch (error) {
+          errorCallback(error);
+          continue;
+        }
+      }
+      if (isDirectory) {
+        if (!isIgnored(entryPath)) {
+          pending.push(entryPath);
+        }
+      } else if (isSymbolicLink) {
+        symlinkCallback(entryPath);
+      } else if (isFile) {
+        fileCallback(entryPath);
+      }
+    }
+  };
+
+  await visitAll(pending, visit);
+}
+
+/**
+ * Visit `pending` and whatever visits add to it, depth-first, by a bounded
+ * pool, so neither the queue of pending entries nor the number of in-flight fs
+ * requests grows with the size of the tree.
+ */
+function visitAll(
+  pending: Array<string>,
+  visit: string => Promise<void>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
     let active = 0;
     const pump = () => {
       while (active < CRAWL_CONCURRENCY) {

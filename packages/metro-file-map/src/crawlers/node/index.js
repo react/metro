@@ -11,22 +11,42 @@
 
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
+import H from '../../constants';
 import {RootPathUtils} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
-function find(options: CrawlerOptions): Promise<FileData> {
+/**
+ * A watcher that watches what the crawl lists, as it lists it, instead of
+ * walking the roots itself.
+ */
+export type CrawlWatcher = Readonly<{
+  // Called with each directory just before it is listed, so that it can be
+  // watched first.
+  onDirectory: (absolutePath: string) => void,
+  // Called with each directory the crawl skips as ignored, which the watcher
+  // may still need to watch. The crawl waits for the returned promise.
+  onSkippedDirectory: (absolutePath: string) => Promise<void>,
+  // Called with each symlink found, whether or not the crawl includes it.
+  onSymlink: (absolutePath: string) => void,
+}>;
+
+async function find(
+  options: CrawlerOptions,
+  watcher: ?CrawlWatcher,
+): Promise<FileData> {
   const {console, extensions, ignore, includeSymlinks, rootDir, roots} =
     options;
+  const skippedDirectoryWalks: Array<Promise<void>> = [];
   const result: FileData = new Map();
   const pathUtils = new RootPathUtils(rootDir);
   const exts = new Set(extensions);
 
-  return new Promise(resolve => {
+  await new Promise<void>(resolve => {
     let activeCalls = 0;
     const resolveIfDone = () => {
       if (activeCalls === 0) {
-        resolve(result);
+        resolve();
       }
     };
 
@@ -39,6 +59,7 @@ function find(options: CrawlerOptions): Promise<FileData> {
       isWithinRoot: boolean,
     ): void {
       activeCalls++;
+      watcher?.onDirectory(directory);
       fs.readdir(directory, {withFileTypes: true}, (err, entries) => {
         activeCalls--;
         if (err) {
@@ -51,7 +72,16 @@ function find(options: CrawlerOptions): Promise<FileData> {
             const file = dirPrefix + name;
 
             const isSymbolicLink = entry.isSymbolicLink();
-            if (ignore(file) || (!includeSymlinks && isSymbolicLink)) {
+            if (isSymbolicLink) {
+              watcher?.onSymlink(file);
+            }
+            if (ignore(file)) {
+              if (watcher != null && entry.isDirectory()) {
+                skippedDirectoryWalks.push(watcher.onSkippedDirectory(file));
+              }
+              continue;
+            }
+            if (!includeSymlinks && isSymbolicLink) {
               continue;
             }
 
@@ -80,6 +110,14 @@ function find(options: CrawlerOptions): Promise<FileData> {
               continue;
             }
 
+            if (!isSymbolicLink) {
+              // Regular files are recorded without a stat. Those with a
+              // modified time in the previous state are stat'd once the
+              // difference is known (see `statPreviouslyStatted`).
+              result.set(childNormal, [null, 0, 0, null, 0]);
+              continue;
+            }
+
             activeCalls++;
             fs.lstat(file, (err, stat) => {
               activeCalls--;
@@ -90,7 +128,7 @@ function find(options: CrawlerOptions): Promise<FileData> {
                   stat.size,
                   0,
                   null,
-                  isSymbolicLink ? 1 : 0,
+                  1,
                 ]);
               }
               resolveIfDone();
@@ -115,10 +153,13 @@ function find(options: CrawlerOptions): Promise<FileData> {
     // Resolve now if there were no roots to search.
     resolveIfDone();
   });
+  await Promise.all(skippedDirectoryWalks);
+  return result;
 }
 
 export default async function nodeCrawl(
   options: CrawlerOptions,
+  watcher?: ?CrawlWatcher,
 ): Promise<CrawlResult> {
   const {abortSignal, perfLogger, previousState, subpath} = options;
 
@@ -126,14 +167,57 @@ export default async function nodeCrawl(
 
   perfLogger?.point('nodeCrawl_start');
 
-  const fileData = await find(options);
+  const fileData = await find(options, watcher);
 
   abortSignal?.throwIfAborted();
 
   const difference = previousState.fileSystem.getDifference(fileData, {
     subpath,
   });
+  await statPreviouslyStatted(options, difference.changedFiles);
 
   perfLogger?.point('nodeCrawl_end');
   return difference;
+}
+
+/**
+ * A regular file crawled without a stat is reported changed only if it had a
+ * modified time before, i.e. it may have data derived from what it held then.
+ * Stat those, and drop any whose modified time matches.
+ */
+async function statPreviouslyStatted(
+  options: CrawlerOptions,
+  changedFiles: FileData,
+): Promise<void> {
+  const {previousState, rootDir} = options;
+  const pathUtils = new RootPathUtils(rootDir);
+  const stats: Array<Promise<void>> = [];
+  for (const [normalPath, metadata] of changedFiles) {
+    if (metadata[H.MTIME] != null || metadata[H.SYMLINK] !== 0) {
+      continue;
+    }
+    const previous = previousState.fileSystem.linkStats(normalPath);
+    if (previous == null || previous.modifiedTime == null) {
+      continue;
+    }
+    stats.push(
+      new Promise(resolve => {
+        fs.lstat(pathUtils.normalToAbsolute(normalPath), (err, stat) => {
+          if (!err && stat) {
+            const mtime = stat.mtime.getTime();
+            if (previous.fileType === 'f' && mtime === previous.modifiedTime) {
+              changedFiles.delete(normalPath);
+            } else {
+              metadata[H.MTIME] = mtime;
+              metadata[H.SIZE] = stat.size;
+            }
+          }
+          // Otherwise deleted since it was crawled, which processing will
+          // discover.
+          resolve();
+        });
+      }),
+    );
+  }
+  await Promise.all(stats);
 }

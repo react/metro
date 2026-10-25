@@ -47,30 +47,50 @@ class Worker {
   processFile(data /*: WorkerMessage */) /*: WorkerMetadata */ {
     let content;
     let sha1;
-
-    const {computeSha1, filePath, pluginsToRun} = data;
-
-    const getContent = () /*: Buffer */ => {
-      if (content == null) {
-        content = fs.readFileSync(filePath);
-      }
-
-      return content;
-    };
-
-    const workerUtils = {getContent};
-    const pluginData = pluginsToRun.map(pluginIdx =>
-      this.#plugins[pluginIdx].processFile(data, workerUtils),
-    );
-
-    // If a SHA-1 is requested on update, compute it.
-    if (computeSha1) {
-      sha1 = sha1hex(getContent());
+    const {computeSha1, filePath, pluginsToRun, recordStats} = data;
+    if (!computeSha1 && pluginsToRun.length === 0) {
+      return {pluginData: [], sha1};
     }
 
-    return content && data.maybeReturnContent
-      ? {content, pluginData, sha1}
-      : {pluginData, sha1};
+    // To record stats, stat the file before deriving anything from it, through
+    // the descriptor its content is read from, so that the recorded modified
+    // time is never newer than the content the data was derived from.
+    const fd = recordStats === true ? fs.openSync(filePath, 'r') : null;
+    try {
+      const stat = fd != null ? fs.fstatSync(fd) : null;
+
+      const getContent = () /*: Buffer */ => {
+        if (content == null) {
+          content = fs.readFileSync(fd ?? filePath);
+        }
+
+        return content;
+      };
+
+      const workerUtils = {getContent};
+      const pluginData = pluginsToRun.map(pluginIdx =>
+        this.#plugins[pluginIdx].processFile(data, workerUtils),
+      );
+
+      // If a SHA-1 is requested on update, compute it.
+      if (computeSha1) {
+        sha1 = sha1hex(getContent());
+      }
+
+      const result /*: {...WorkerMetadata} */ =
+        content && data.maybeReturnContent
+          ? {content, pluginData, sha1}
+          : {pluginData, sha1};
+      if (stat != null) {
+        result.mtime = stat.mtime.getTime();
+        result.size = stat.size;
+      }
+      return result;
+    } finally {
+      if (fd != null) {
+        fs.closeSync(fd);
+      }
+    }
   }
 }
 

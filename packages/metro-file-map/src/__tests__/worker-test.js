@@ -46,9 +46,34 @@ jest.mock('node:fs', () => {
       `,
   };
 
+  // Descriptors opened by `openSync`, mapped to their paths.
+  const openFiles = new Map<number, string>();
+
   return {
     ...jest.createMockFromModule('node:fs'),
-    readFileSync: jest.fn((path, options) => {
+    openSync: jest.fn((filePath: string) => {
+      if (mockFs[filePath] == null) {
+        throw new Error(`Cannot open path '${filePath}'.`);
+      }
+      const fd = openFiles.size + 100;
+      openFiles.set(fd, filePath);
+      return fd;
+    }),
+    closeSync: jest.fn((fd: number) => {
+      openFiles.delete(fd);
+    }),
+    fstatSync: jest.fn((fd: number) => {
+      const entry = mockFs[openFiles.get(fd) ?? ''];
+      return {
+        mtime: new Date(1700000000000),
+        size: typeof entry === 'string' ? entry.length : 8,
+      };
+    }),
+    readFileSync: jest.fn((pathOrFd: string | number, options) => {
+      const path =
+        typeof pathOrFd === 'number'
+          ? (openFiles.get(pathOrFd) ?? '')
+          : pathOrFd;
       const entry = mockFs[path];
       if (entry) {
         if (typeof entry === 'string') {
@@ -236,6 +261,51 @@ describe('worker', () => {
       pluginData: ['Pear'],
       sha1: undefined,
     });
+  });
+
+  test('records the stats of the content it reads, when asked', async () => {
+    expect(
+      await worker({
+        ...defaults,
+        computeSha1: true,
+        filePath: path.join('/project', 'fruits', 'apple.png'),
+        recordStats: true,
+      }),
+    ).toEqual({
+      mtime: 1700000000000,
+      pluginData: [],
+      sha1: '4caece539b039b16e16206ea2478f8c5ffb2ca05',
+      size: 8,
+    });
+    // Stat'd and read through one descriptor
+    expect(fs.fstatSync).toHaveBeenCalledWith(100);
+    expect(fs.readFileSync).toHaveBeenCalledWith(100);
+    expect(fs.closeSync).toHaveBeenCalledWith(100);
+  });
+
+  test('records stats for data derived without reading content', async () => {
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        filePath: path.join('/project', 'fruits', 'Pear.js'),
+        recordStats: true,
+      }),
+    ).toEqual({
+      mtime: 1700000000000,
+      pluginData: ['Pear'],
+      size: expect.any(Number),
+    });
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  test('does not stat a file unless asked', async () => {
+    await worker({
+      ...defaults,
+      computeSha1: true,
+      filePath: path.join('/project', 'fruits', 'Banana.js'),
+    });
+    expect(fs.openSync).not.toHaveBeenCalled();
+    expect(fs.fstatSync).not.toHaveBeenCalled();
   });
 
   test('can be loaded directly without transpilation', async () => {

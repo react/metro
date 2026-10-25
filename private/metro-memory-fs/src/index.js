@@ -506,7 +506,7 @@ class MemoryFs {
   };
 
   readFileSync: (
-    filePath: FilePath,
+    filePath: FilePath | number,
     options?:
       | {
           encoding?: Encoding,
@@ -515,7 +515,7 @@ class MemoryFs {
         }
       | Encoding,
   ) => Buffer | string = (
-    filePath: FilePath,
+    filePath: FilePath | number,
     options?:
       | {
           encoding?: Encoding,
@@ -530,7 +530,12 @@ class MemoryFs {
     } else if (options != null) {
       ({encoding, flag} = options);
     }
-    const fd = this._open(pathStr(filePath), flag || 'r');
+    // As Node, a file descriptor is read from its current position and left
+    // open.
+    const fd =
+      typeof filePath === 'number'
+        ? filePath
+        : this._open(pathStr(filePath), flag || 'r');
     const chunks = [];
     try {
       const buffer = Buffer.alloc(1024);
@@ -545,7 +550,9 @@ class MemoryFs {
         chunks.push(chunk);
       } while (bytesRead > 0);
     } finally {
-      this.closeSync(fd);
+      if (fd !== filePath) {
+        this.closeSync(fd);
+      }
     }
     const result = Buffer.concat(chunks);
     if (encoding == null) {

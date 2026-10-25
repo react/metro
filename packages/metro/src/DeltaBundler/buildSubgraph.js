@@ -138,19 +138,24 @@ export async function buildSubgraph<T>(
       ...resolutionResult,
     });
 
-    await Promise.all(
-      [...resolutionResult.dependencies.values()]
-        .filter(
-          dependency =>
-            isResolvedDependency(dependency) && shouldTraverse(dependency),
-        )
-        .map(dependency =>
+    const visitPromises: Array<Promise<void>> = [];
+    for (const dependency of resolutionResult.dependencies.values()) {
+      if (
+        isResolvedDependency(dependency) &&
+        shouldTraverse(dependency) &&
+        !visitedPaths.has(dependency.absolutePath)
+      ) {
+        visitPromises.push(
           visit(
             dependency.absolutePath,
             resolutionResult.virtualSources.get(dependency.data.data.key),
-          ).catch(error => errors.set(dependency.absolutePath, error)),
-        ),
-    );
+          ).catch(error => {
+            errors.set(dependency.absolutePath, error);
+          }),
+        );
+      }
+    }
+    await Promise.all(visitPromises);
   }
 
   await Promise.all(

@@ -90,6 +90,28 @@ describe('package scope lookups', () => {
     ]);
   });
 
+  test('relative file, when a candidate is a package root', () => {
+    useFileMap({
+      ...fileMap,
+      // A package whose "browser" field applies to its own directory
+      [p('/root/src/bar.js/package.json')]: JSON.stringify({
+        name: 'bar.js',
+        browser: {'./': './replacement.js'},
+      }),
+      [p('/root/src/bar.js/replacement.js')]: '',
+    });
+    expect(Resolver.resolve(context, './bar', 'ios')).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/src/bar.js/replacement.js'),
+    });
+    // The directory candidate is looked up as a module of its own
+    expect(lookedUpPaths()).toEqual([
+      p('/root/src/bar'),
+      filesIn('/root/src'),
+      p('/root/src/bar.js'),
+    ]);
+  });
+
   test('throws if the scope is never that of the stand-in file', () => {
     getPackageForModule = jest.fn(() => ({
       rootPath: p('/root'),

@@ -7,6 +7,7 @@ packages/*/build/**
 # this transient dep bundles tests with their package, which flow attempts to parse
 # and crashes out as the test includes purposely malformed json
 **/node_modules/resolve/test/**
+**/node_modules/invariant/**
 
 [options]
 emoji=true
@@ -37,4 +38,4 @@ untyped-import
 untyped-type-import
 
 [version]
-^0.336.0
+^0.337.0

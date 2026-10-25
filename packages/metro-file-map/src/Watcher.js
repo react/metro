@@ -8,6 +8,7 @@
  * @format
  */
 
+import type {CrawlWatcher} from './crawlers/node';
 import type {
   Console,
   Crawler,
@@ -43,6 +44,8 @@ const debug = debugModule('Metro:Watcher');
 const MAX_WAIT_TIME = 240000;
 
 type InternalCrawlOptions = Readonly<{
+  // Watching what the node crawl lists, if the crawl is to report it.
+  crawlWatcher?: ?CrawlWatcher,
   previousState: CrawlerOptions['previousState'],
   roots: ReadonlyArray<string>,
   subpath?: string,
@@ -122,11 +125,23 @@ export class Watcher extends EventEmitter {
     // the same window. If the Watchman crawl falls back to the node crawler,
     // there is no clock, so #crawl() starts non-Watchman backends before the
     // node crawl instead.
+    //
+    // The node crawler lists every directory under the roots, so a
+    // FallbackWatcher started for it watches each just before it is listed,
+    // instead of walking the roots again.
+    let crawlWatcher: ?CrawlWatcher = null;
     if (!options.useWatchman) {
-      await this.#startBackendsBeforeCrawl();
+      const crawlFed = options.crawl == null;
+      await this.#startBackendsBeforeCrawl({crawlFed});
+      if (crawlFed) {
+        crawlWatcher = createCrawlWatcher(
+          this.#backends.filter(backend => backend instanceof FallbackWatcher),
+        );
+      }
     }
 
     const result = await this.#crawl({
+      crawlWatcher,
       previousState: options.previousState,
       roots: options.roots,
       useWatchman: options.useWatchman,
@@ -136,11 +151,13 @@ export class Watcher extends EventEmitter {
     return result;
   }
 
-  async #startBackendsBeforeCrawl(): Promise<void> {
+  async #startBackendsBeforeCrawl(
+    opts?: Readonly<{crawlFed?: boolean}>,
+  ): Promise<void> {
     if (!this.#options.watch) {
       return;
     }
-    await this.#startBackends();
+    await this.#startBackends(undefined, opts?.crawlFed === true);
     // end() may have closed us before the backends were set - don't leak them.
     if (this.#options.abortSignal.aborted) {
       await this.close();
@@ -164,7 +181,7 @@ export class Watcher extends EventEmitter {
 
   async #crawl(crawlOptions: InternalCrawlOptions): Promise<CrawlResult> {
     const options = this.#options;
-    const {useWatchman, subpath} = crawlOptions;
+    const {crawlWatcher, useWatchman, subpath} = crawlOptions;
 
     const ignoreForCrawl = (filePath: string) =>
       options.ignoreForCrawl(filePath) ||
@@ -200,7 +217,10 @@ export class Watcher extends EventEmitter {
 
     let delta: CrawlResult;
     try {
-      delta = await crawl(crawlerOptions);
+      delta =
+        crawlWatcher != null && crawl === nodeCrawl
+          ? await nodeCrawl(crawlerOptions, crawlWatcher)
+          : await crawl(crawlerOptions);
     } catch (firstError) {
       if (crawl !== watchmanCrawl) {
         throw firstError;
@@ -259,7 +279,10 @@ export class Watcher extends EventEmitter {
     }
   }
 
-  async #startBackends(clocks?: WatchmanClocks): Promise<void> {
+  async #startBackends(
+    clocks?: WatchmanClocks,
+    crawlFed?: boolean = false,
+  ): Promise<void> {
     const {extensions, ignorePatternForWatch} = this.#options;
     const useWatchman = this.#useWatchmanWatcher;
 
@@ -299,8 +322,10 @@ export class Watcher extends EventEmitter {
     const createWatcherBackend = (
       root: Path,
       rootClocks: ?Map<string, WatchmanClockSpec>,
+      crawlFed: boolean,
     ): Promise<WatcherBackend> => {
       const watcherOptions: WatcherBackendOptions = {
+        crawlFed: crawlFed && WatcherImpl === FallbackWatcher,
         included: {
           extensions: new Set(extensions),
           // Ensure we always include package.json files, which are crucial for
@@ -358,10 +383,10 @@ export class Watcher extends EventEmitter {
 
     // A root added by watchRoot() is watched before it is crawled, so it
     // needs no crawl clock.
-    this.#createBackend = root => createWatcherBackend(root, null);
+    this.#createBackend = root => createWatcherBackend(root, null, false);
     this.#backends = await Promise.all(
       this.#options.roots.map(root =>
-        createWatcherBackend(root, watchmanClocks),
+        createWatcherBackend(root, watchmanClocks, crawlFed),
       ),
     );
   }
@@ -466,4 +491,44 @@ export class Watcher extends EventEmitter {
     debug('Health check result: %o', result);
     return nullthrows(result);
   }
+}
+
+/**
+ * Report what the node crawl lists to the FallbackWatchers whose roots it is
+ * under.
+ */
+function createCrawlWatcher(
+  backends: ReadonlyArray<FallbackWatcher>,
+): ?CrawlWatcher {
+  if (backends.length === 0) {
+    return null;
+  }
+  const within = (backend: FallbackWatcher, absolutePath: string) =>
+    absolutePath === backend.root ||
+    absolutePath.startsWith(
+      backend.root.endsWith(path.sep) ? backend.root : backend.root + path.sep,
+    );
+  return {
+    onDirectory: absolutePath => {
+      for (const backend of backends) {
+        if (within(backend, absolutePath)) {
+          backend.watchCrawledDirectory(absolutePath);
+        }
+      }
+    },
+    onSkippedDirectory: async absolutePath => {
+      await Promise.all(
+        backends
+          .filter(backend => within(backend, absolutePath))
+          .map(backend => backend.walkCrawlSkippedDirectory(absolutePath)),
+      );
+    },
+    onSymlink: absolutePath => {
+      for (const backend of backends) {
+        if (within(backend, absolutePath)) {
+          backend.registerCrawledSymlink(absolutePath);
+        }
+      }
+    },
+  };
 }

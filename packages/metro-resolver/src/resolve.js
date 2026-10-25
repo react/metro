@@ -839,21 +839,29 @@ function resolveSourceFileForExt(
   extension: string,
 ): SourceFileResolution {
   const filePath = `${context.filePathPrefix}${extension}`;
-  const {candidatePackageScope} = context;
-  const redirectedPath =
-    // Any redirections for the bare path have already happened
-    extension !== '' && candidatePackageScope != null
-      ? redirectPackageSubpath(
-          context,
-          filePath,
-          candidatePackageScope,
-          candidatePackageScope.packageRelativePath + extension,
-        )
-      : filePath;
-  if (redirectedPath === false) {
-    return {type: 'empty'};
+  let lookupResult = context.fileSystemLookup(filePath);
+  // Any redirections for the bare path have already happened
+  if (extension !== '') {
+    const {candidatePackageScope} = context;
+    const redirectedPath =
+      lookupResult.exists && lookupResult.type === 'd'
+        ? // A directory may be a package root, i.e. its own package scope
+          redirectModulePath(context, filePath)
+        : candidatePackageScope != null
+          ? redirectPackageSubpath(
+              context,
+              filePath,
+              candidatePackageScope,
+              candidatePackageScope.packageRelativePath + extension,
+            )
+          : filePath;
+    if (redirectedPath === false) {
+      return {type: 'empty'};
+    }
+    if (redirectedPath !== filePath) {
+      lookupResult = context.fileSystemLookup(redirectedPath);
+    }
   }
-  const lookupResult = context.fileSystemLookup(redirectedPath);
   if (lookupResult.exists && lookupResult.type === 'f') {
     return lookupResult.realPath;
   }

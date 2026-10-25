@@ -392,6 +392,7 @@ describe('FileMap.addRoot', () => {
       await fileMap.build();
       await fileMap.addRoot(EXTERNAL_DIR);
       const stopWatching = jest.spyOn(
+        // $FlowFixMe[incompatible-type] Flow 0.337
         mockWatchers.get(EXTERNAL_DIR),
         'stopWatching',
       );
