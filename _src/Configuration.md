@@ -175,7 +175,7 @@ The number of workers to use for parallel processing in Metro. Defaults to rough
 
 Type: `string`
 
-The path to the `metro-file-map` cache directory, defaults to `os.tmpdir()`.
+The path to the `metro-file-map` cache directory, defaults to `os.tmpdir()`. Created on first write if it doesn't exist.
 
 #### `hasteMapCacheDirectory` <div class="label deprecated">Deprecated</div>
 
