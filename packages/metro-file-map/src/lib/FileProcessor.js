@@ -170,7 +170,9 @@ export class FileProcessor {
       filePath: absolutePath,
       maybeReturnContent: false,
       pluginsToRun: [pluginIdx],
+      recordStats: fileMetadata[H.MTIME] == null,
     });
+    recordStat(reply, fileMetadata);
     // `undefined` is reserved to mean that no worker has run.
     const pluginData = reply.pluginData?.[0] ?? null;
     // $FlowFixMe[invalid-tuple-index]
@@ -219,6 +221,7 @@ export class FileProcessor {
       filePath: this.#rootPathUtils.normalToAbsolute(normalPath),
       maybeReturnContent,
       pluginsToRun,
+      recordStats: fileMetadata[H.MTIME] == null,
     };
   }
 
@@ -270,6 +273,7 @@ function processWorkerReply(
   fileMetadata: FileMetadata,
 ) {
   fileMetadata[H.VISITED] = 1;
+  recordStat(metadata, fileMetadata);
   const pluginData = metadata.pluginData;
   if (pluginData) {
     for (const [i, pluginIdx] of pluginsRun.entries()) {
@@ -284,6 +288,19 @@ function processWorkerReply(
   }
 
   return metadata.content;
+}
+
+/**
+ * A file crawled without a stat has its modified time and size recorded when
+ * data is first derived from it, so that a file with no modified time never
+ * has derived data, and is safe to treat as unchanged without a stat.
+ */
+function recordStat(metadata: WorkerMetadata, fileMetadata: FileMetadata) {
+  const {mtime, size} = metadata;
+  if (mtime != null && size != null) {
+    fileMetadata[H.MTIME] = mtime;
+    fileMetadata[H.SIZE] = size;
+  }
 }
 
 function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {

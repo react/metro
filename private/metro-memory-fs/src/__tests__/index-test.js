@@ -89,6 +89,14 @@ describe('posix support', () => {
     expect(fs.readFileSync('/foo.txt')).toEqual(Buffer.from([1, 2, 3, 4]));
   });
 
+  test('can read a file from a descriptor, and leaves it open', () => {
+    fs.writeFileSync('/foo.txt', 'test');
+    const fd = fs.openSync('/foo.txt', 'r');
+    expect(fs.readFileSync(fd, 'utf8')).toEqual('test');
+    expect(fs.fstatSync(fd).size).toBe(4);
+    fs.closeSync(fd);
+  });
+
   test('can write a file with a relative path', () => {
     fs.mkdirSync('/current');
     fs.mkdirSync('/current/working');
