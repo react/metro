@@ -72,30 +72,38 @@ function oneOf(this: $FlowFixMe, actual: unknown, ...expectOneOf: unknown[]) {
  * https://fburl.com/gdoc/y8dn025u */
 expect.extend({oneOf});
 
-const CASES = [
-  [
-    true,
-    new Map([
-      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
-      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
-      [
-        'link-to-directory',
-        [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory')],
-      ],
-      [
-        'link-to-foo.js',
-        [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js')],
-      ],
-    ]),
-  ],
-  [
-    false,
-    new Map([
-      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
-      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
-    ]),
-  ],
-];
+// Watchman reports the stats of regular files, which the node crawler leaves
+// to be filled in when a file is first read.
+const getCases = (crawlerName: string) => {
+  const regularFile =
+    crawlerName === 'watchman'
+      ? [expect.any(Number), 245, 0, null, 0]
+      : [null, 0, 0, null, 0];
+  return [
+    [
+      true,
+      new Map([
+        ['foo.js', regularFile],
+        [join('directory', 'bar.js'), regularFile],
+        [
+          'link-to-directory',
+          [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory')],
+        ],
+        [
+          'link-to-foo.js',
+          [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js')],
+        ],
+      ]),
+    ],
+    [
+      false,
+      new Map([
+        [join('directory', 'bar.js'), regularFile],
+        ['foo.js', regularFile],
+      ]),
+    ],
+  ];
+};
 
 describe.each(Object.keys(CRAWLERS))(
   'Crawler integration tests (%s)',
@@ -103,7 +111,7 @@ describe.each(Object.keys(CRAWLERS))(
     const crawl = CRAWLERS[crawlerName];
     const maybeTest = crawl ? test : test.skip;
 
-    maybeTest.each(CASES)(
+    maybeTest.each(getCases(crawlerName))(
       'Finds the expected files (includeSymlinks: %s)',
       async (includeSymlinks, expectedChangedFiles) => {
         invariant(crawl, 'crawl should not be null within maybeTest');
