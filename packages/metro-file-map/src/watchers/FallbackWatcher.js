@@ -60,7 +60,7 @@ export default class FallbackWatcher extends AbstractWatcher {
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
 
-    await recReaddir(
+    await recReaddirTypes(
       this.root,
       dir => {
         this.#watchdir(dir);
@@ -301,7 +301,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    */
   async #processUnnamedChange(dir: string) {
     // Watch and register anything new, so that later changes are reported.
-    await recReaddir(
+    await recReaddirTypes(
       dir,
       subdir => {
         this.#watchdir(subdir);
@@ -487,10 +487,6 @@ function isIgnorableFileError(error: Error | {code: string}) {
 
 /**
  * Traverse a directory recursively, reporting every entry with its stats.
- *
- * Entries are visited depth-first by a bounded pool, so neither the queue of
- * pending entries nor the number of in-flight fs requests grows with the size
- * of the tree.
  */
 async function recReaddir(
   root: string,
@@ -531,7 +527,81 @@ async function recReaddir(
     }
   };
 
-  await new Promise((resolve, reject) => {
+  await visitAll(pending, visit);
+}
+
+/**
+ * As `recReaddir`, but without stats: entries are classified by the types
+ * `readdir` reports, so nothing is stat'd unless its type is unknown.
+ */
+async function recReaddirTypes(
+  root: string,
+  dirCallback: string => void,
+  fileCallback: string => void,
+  symlinkCallback: string => void,
+  errorCallback: Error => void,
+  ignored: ?RegExp,
+): Promise<void> {
+  const isIgnored = (dir: string) =>
+    ignored != null && common.posixPathMatchesPattern(ignored, dir);
+  if (isIgnored(root)) {
+    return;
+  }
+  const pending = [root];
+
+  const visit = async (dir: string) => {
+    // Report the directory before listing it. A consumer that starts watching
+    // here would otherwise miss anything written between the two.
+    dirCallback(dir);
+    let entries;
+    try {
+      entries = await fsPromises.readdir(dir, {withFileTypes: true});
+    } catch (error) {
+      errorCallback(error);
+      return;
+    }
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name.toString());
+      let isDirectory = entry.isDirectory();
+      let isSymbolicLink = entry.isSymbolicLink();
+      let isFile = entry.isFile();
+      if (!isDirectory && !isSymbolicLink && !isFile) {
+        // A file system that doesn't report types gives none of these.
+        try {
+          const stats = await fsPromises.lstat(entryPath);
+          isDirectory = stats.isDirectory();
+          isSymbolicLink = stats.isSymbolicLink();
+          isFile = stats.isFile();
+        } catch (error) {
+          errorCallback(error);
+          continue;
+        }
+      }
+      if (isDirectory) {
+        if (!isIgnored(entryPath)) {
+          pending.push(entryPath);
+        }
+      } else if (isSymbolicLink) {
+        symlinkCallback(entryPath);
+      } else if (isFile) {
+        fileCallback(entryPath);
+      }
+    }
+  };
+
+  await visitAll(pending, visit);
+}
+
+/**
+ * Visit `pending` and whatever visits add to it, depth-first, by a bounded
+ * pool, so neither the queue of pending entries nor the number of in-flight fs
+ * requests grows with the size of the tree.
+ */
+function visitAll(
+  pending: Array<string>,
+  visit: string => Promise<void>,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
     let active = 0;
     const pump = () => {
       while (active < CRAWL_CONCURRENCY) {
