@@ -425,6 +425,10 @@ export interface FileSystem {
   /**
    * Analogous to posix lstat. If the file at `file` is a symlink, return
    * information about the symlink without following it.
+   *
+   * `modifiedTime` and `size` are null for a regular file that hasn't been
+   * stat'd. The node crawler stats a regular file only once its contents have
+   * been read, eg to compute its SHA-1 or plugin data.
    */
   linkStats(file: Path): ?FileStats;
 
@@ -680,11 +684,15 @@ export type WorkerMessage = Readonly<{
   filePath: string,
   maybeReturnContent: boolean,
   pluginsToRun: ReadonlyArray<number>,
+  // Whether to report the file's `mtime` and `size`, for a file that has none.
+  recordStats?: boolean,
 }>;
 
 export type WorkerMetadata = Readonly<{
   sha1?: ?string,
   content?: ?Buffer,
+  mtime?: ?number,
+  size?: ?number,
   pluginData?: ReadonlyArray<V8Serializable>,
 }>;
 
