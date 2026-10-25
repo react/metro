@@ -15,16 +15,20 @@ import type {
   WatchmanQuerySince,
 } from 'fb-watchman';
 
+import * as path from 'node:path';
+
 export function planQuery({
   since,
   directoryFilters,
   extensions,
+  basenames,
   includeSha1,
   includeSymlinks,
 }: Readonly<{
   since: ?WatchmanQuerySince,
   directoryFilters: ReadonlyArray<string>,
   extensions: ReadonlyArray<string>,
+  basenames: ReadonlyArray<string>,
   includeSha1: boolean,
   includeSymlinks: boolean,
 }>): {
@@ -53,14 +57,20 @@ export function planQuery({
     fields.push('type');
   }
 
+  // Basenames that a suffix term on `extensions` doesn't already match.
+  const extraBasenames = basenames.filter(
+    basename => !extensions.includes(path.extname(basename).slice(1)),
+  );
+  const extraSuffixes = [
+    ...new Set(extraBasenames.map(basename => path.extname(basename).slice(1))),
+  ];
+  const fileTerm: WatchmanExpression =
+    extraBasenames.length > 0
+      ? ['anyof', ['suffix', extensions], ['name', extraBasenames]]
+      : ['suffix', extensions];
+
   const allOfTerms: Array<WatchmanExpression> = includeSymlinks
-    ? [
-        [
-          'anyof',
-          ['allof', ['type', 'f'], ['suffix', extensions]],
-          ['type', 'l'],
-        ],
-      ]
+    ? [['anyof', ['allof', ['type', 'f'], fileTerm], ['type', 'l']]]
     : [['type', 'f']];
 
   const query: WatchmanQuery = {fields};
@@ -109,10 +119,11 @@ export function planQuery({
     query.glob = directoryFilters.map(directory => `${directory}/**`);
     query.glob_includedotfiles = true;
     queryGenerator = 'glob';
-  } else if (!includeSymlinks) {
-    // Use the `suffix` generator with no path/extension filtering, as long
-    // as we don't need (suffixless) directory symlinks.
-    query.suffix = extensions;
+  } else if (!includeSymlinks && !extraSuffixes.includes('')) {
+    // Use the `suffix` generator, as long as we don't need suffixless
+    // directory symlinks or basenames. It also generates the suffixes of any
+    // extra basenames, which the file term then narrows to those basenames.
+    query.suffix = [...extensions, ...extraSuffixes];
     queryGenerator = 'suffix';
   } else {
     // Fall back to `all` if we need symlinks and don't have a clock or
@@ -121,9 +132,13 @@ export function planQuery({
   }
 
   // `includeSymlinks` implies we need (suffixless) directory links. In the
-  // case of the `suffix` generator, a suffix expression would be redundant.
-  if (!includeSymlinks && queryGenerator !== 'suffix') {
-    allOfTerms.push(['suffix', extensions]);
+  // case of the `suffix` generator with no extra basenames, the file term
+  // would be redundant.
+  if (
+    !includeSymlinks &&
+    (queryGenerator !== 'suffix' || extraBasenames.length > 0)
+  ) {
+    allOfTerms.push(fileTerm);
   }
 
   // If we only have one "all of" expression we can use it directly, otherwise

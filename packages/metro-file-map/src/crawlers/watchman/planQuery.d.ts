@@ -15,6 +15,7 @@ export declare function planQuery(
     since: WatchmanQuerySince;
     directoryFilters: ReadonlyArray<string>;
     extensions: ReadonlyArray<string>;
+    basenames: ReadonlyArray<string>;
     includeSha1: boolean;
     includeSymlinks: boolean;
   }>,
