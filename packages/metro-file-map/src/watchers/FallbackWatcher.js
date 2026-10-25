@@ -74,12 +74,6 @@ export default class FallbackWatcher extends AbstractWatcher {
       this.#checkedEmitError,
       this.ignored,
     );
-
-    if (platform === 'win32') {
-      // Inherited from sane: win32 needs a settling period after the watches
-      // are registered before events can be relied on.
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
   }
 
   /**
