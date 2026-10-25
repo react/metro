@@ -37,6 +37,9 @@ export type WatcherOptions = Readonly<{
   // its root rather than a fresh one, so that changes made while the crawl
   // result is applied and persisted are not missed.
   clocks?: ?Map<string, WatchmanClockSpec>,
+  // FallbackWatcher only: watch only the root on start, and the rest as the
+  // crawl reports it (see getCrawlWatcher), instead of walking.
+  crawlFed?: boolean,
   included: ?WatcherIncludedFiles,
   ignored: ?RegExp,
   watchmanDeferStates: ReadonlyArray<string>,

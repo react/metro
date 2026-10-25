@@ -13,10 +13,12 @@
  * Originally vendored from https://github.com/amasad/sane/blob/64ff3a870c42e84f744086884bf55a4f9c22d376/src/node_watcher.js
  */
 
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   ChangeEventMetadata,
   WatcherBackendChangeEvent,
 } from '../flow-types';
+import type {WatcherOptions} from './common';
 import type {Dirent, FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
@@ -58,8 +60,22 @@ export default class FallbackWatcher extends AbstractWatcher {
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
+  #closed: boolean = false;
+  readonly #crawlFed: boolean;
+  // Directories reported by the crawl that are not to be watched, because
+  // they or an ancestor are ignored.
+  readonly #crawlSkipped: Set<string> = new Set();
+
+  constructor(dir: string, opts: WatcherOptions) {
+    super(dir, opts);
+    this.#crawlFed = opts.crawlFed === true;
+  }
+
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
+    if (this.#crawlFed) {
+      return;
+    }
 
     await this.#watchTree(this.root);
   }
@@ -80,6 +96,48 @@ export default class FallbackWatcher extends AbstractWatcher {
       this.#checkedEmitError,
       this.ignored,
     );
+  }
+
+  // Whether a directory the crawl reports isn't to be watched, because it or
+  // an ancestor is ignored. Records it if so, for its descendants.
+  #isCrawlSkipped(dir: string): boolean {
+    if (this.#crawlSkipped.has(path.dirname(dir))) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    if (
+      this.ignored != null &&
+      common.posixPathMatchesPattern(this.ignored, dir)
+    ) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * In crawl-fed mode, what to watch as the crawl lists this watcher's root.
+   */
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: dir => {
+        if (dir !== this.root && !this.#isCrawlSkipped(dir)) {
+          this.#watchdir(dir);
+        }
+      },
+      // The crawl skipped it as ignored, so walk it here unless this watcher
+      // ignores it too.
+      onSkippedDirectory: async dir => {
+        if (!this.#isCrawlSkipped(dir)) {
+          await this.#watchTree(dir);
+        }
+      },
+      onSymlink: symlink => {
+        if (!this.#crawlSkipped.has(path.dirname(symlink))) {
+          this.#register(symlink, 'l');
+        }
+      },
+    };
   }
 
   /**
@@ -141,7 +199,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    * Watch a directory.
    */
   #watchdir: (dir: string) => boolean = (dir: string) => {
-    if (this.#watched[dir]) {
+    if (this.#closed || this.#watched[dir]) {
       return false;
     }
     if (this.root !== dir) {
@@ -236,6 +294,8 @@ export default class FallbackWatcher extends AbstractWatcher {
    * End watching.
    */
   async stopWatching(): Promise<void> {
+    // A walk or crawl may still be listing directories.
+    this.#closed = true;
     await super.stopWatching();
     const promises = Object.keys(this.#watched).map(dir =>
       this.#stopWatching(dir),
