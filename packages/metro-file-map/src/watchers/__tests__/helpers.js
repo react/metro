@@ -109,6 +109,38 @@ export const startWatching = async (
 
   await watcherInstance.startWatching();
 
+  // As Metro's Watcher does, confirm a watch that isn't live on start with a
+  // change of its own - a cookie file, matched by the `cookie-*` prefix.
+  // Watchers emit in order, so once the latest is reported, none of the
+  // earlier ones remain in flight to leak into a test.
+  if (!Watcher.isLiveOnStart()) {
+    const deadline = Date.now() + 10000;
+    for (let i = 1; ; i++) {
+      const cookie = `cookie-live-${i}`;
+      let unsubscribe: () => void = () => {};
+      const observed = new Promise<boolean>(resolve => {
+        unsubscribe = watcherInstance.onFileEvent(change => {
+          if (change.relativePath === cookie) {
+            resolve(true);
+          }
+        });
+      });
+      await writeFile(join(watchRoot, cookie), '');
+      const live = await Promise.race([
+        observed,
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 200)),
+      ]);
+      unsubscribe();
+      if (live) {
+        break;
+      }
+      invariant(
+        Date.now() < deadline,
+        `${watcherName} watch never became live`,
+      );
+    }
+  }
+
   const eventHelpers: EventHelpers = {
     nextEvent: afterFn =>
       Promise.all([
