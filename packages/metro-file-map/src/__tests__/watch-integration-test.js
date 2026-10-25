@@ -50,6 +50,31 @@ async function until(label: string, check: () => boolean): Promise<void> {
 
 const exists = (normalPath: string) => fileSystem.exists(abs(normalPath));
 
+function createFileMap({retainAllFiles}: {retainAllFiles: boolean}) {
+  return new FileMap({
+    cacheManagerFactory: () => ({
+      read: async () => null,
+      write: async () => {},
+      end: async () => {},
+    }),
+    enableSymlinks: true,
+    extensions: ['js'],
+    healthCheck: {
+      enabled: false,
+      interval: 10000,
+      timeout: 1000,
+      filePrefix: '.metro-file-map-health-check',
+    },
+    ignorePattern: /ignored-dir/,
+    maxWorkers: 1,
+    retainAllFiles,
+    rootDir,
+    roots: [rootDir],
+    useWatchman: false,
+    watch: true,
+  });
+}
+
 maybeDescribe('FileMap with FallbackWatcher', () => {
   beforeEach(async () => {
     rootDir = fs.realpathSync(
@@ -70,28 +95,7 @@ maybeDescribe('FileMap with FallbackWatcher', () => {
     );
 
     removedFiles = new Set();
-    fileMap = new FileMap({
-      cacheManagerFactory: () => ({
-        read: async () => null,
-        write: async () => {},
-        end: async () => {},
-      }),
-      enableSymlinks: true,
-      extensions: ['js'],
-      healthCheck: {
-        enabled: false,
-        interval: 10000,
-        timeout: 1000,
-        filePrefix: '.metro-file-map-health-check',
-      },
-      ignorePattern: /ignored-dir/,
-      maxWorkers: 1,
-      retainAllFiles: true,
-      rootDir,
-      roots: [rootDir],
-      useWatchman: false,
-      watch: true,
-    });
+    fileMap = createFileMap({retainAllFiles: true});
     ({fileSystem} = await fileMap.build());
     fileMap.on('change', ({changes}: ChangeEvent) => {
       for (const [canonicalPath] of changes.removedFiles) {
@@ -169,5 +173,18 @@ maybeDescribe('FileMap with FallbackWatcher', () => {
     write('src/marker.js');
     await until('marker.js added', () => exists('src/marker.js'));
     expect(exists('ignored-dir/y.js')).toBe(false);
+  });
+
+  // The crawl skips node_modules without `retainAllFiles`, but changes in it
+  // are still reported in watch mode.
+  test('watches a directory the crawl skips', async () => {
+    write('node_modules/pkg/index.js');
+    await fileMap.end();
+    fileMap = createFileMap({retainAllFiles: false});
+    ({fileSystem} = await fileMap.build());
+    expect(exists('node_modules/pkg/index.js')).toBe(false);
+
+    write('node_modules/pkg/new.js');
+    await until('new.js added', () => exists('node_modules/pkg/new.js'));
   });
 });
