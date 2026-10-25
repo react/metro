@@ -17,6 +17,7 @@ import type {
   ChangeEventMetadata,
   WatcherBackendChangeEvent,
 } from '../flow-types';
+import type {WatcherOptions} from './common';
 import type {FSWatcher, Stats} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
@@ -58,13 +59,81 @@ export default class FallbackWatcher extends AbstractWatcher {
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
+  readonly #crawlFed: boolean;
+  // Directories reported by the crawl that are not to be watched, because
+  // they or an ancestor are ignored.
+  readonly #crawlSkipped: Set<string> = new Set();
+
+  constructor(dir: string, opts: WatcherOptions) {
+    super(dir, opts);
+    this.#crawlFed = opts.crawlFed === true;
+  }
+
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
+    if (this.#crawlFed) {
+      return;
+    }
 
     await recReaddirTypes(
       this.root,
       dir => {
         this.#watchdir(dir);
+      },
+      () => {},
+      symlink => {
+        this.#register(symlink, 'l');
+      },
+      this.#checkedEmitError,
+      this.ignored,
+    );
+  }
+
+  #isCrawlSkipped(dir: string): boolean {
+    if (this.#crawlSkipped.has(path.dirname(dir))) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    if (
+      this.ignored != null &&
+      common.posixPathMatchesPattern(this.ignored, dir)
+    ) {
+      this.#crawlSkipped.add(dir);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * In crawl-fed mode, a directory under the root the crawl is about to list.
+   */
+  watchCrawledDirectory(dir: string): void {
+    if (dir !== this.root && !this.#isCrawlSkipped(dir)) {
+      this.#watchdir(dir);
+    }
+  }
+
+  /**
+   * In crawl-fed mode, a symlink the crawl found.
+   */
+  registerCrawledSymlink(symlink: string): void {
+    if (!this.#crawlSkipped.has(path.dirname(symlink))) {
+      this.#register(symlink, 'l');
+    }
+  }
+
+  /**
+   * In crawl-fed mode, a directory the crawl skipped as ignored, which is
+   * walked and watched here unless this watcher ignores it too.
+   */
+  async walkCrawlSkippedDirectory(dir: string): Promise<void> {
+    if (this.#isCrawlSkipped(dir)) {
+      return;
+    }
+    await recReaddirTypes(
+      dir,
+      subdir => {
+        this.#watchdir(subdir);
       },
       () => {},
       symlink => {
