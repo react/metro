@@ -50,24 +50,30 @@ const CRAWL_CONCURRENCY = 32;
 export default class FallbackWatcher extends AbstractWatcher {
   readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
-  readonly #dirRegistry: {
-    [directory: string]: {[file: string]: true, __proto__: null},
-    __proto__: null,
-  } = Object.create(null);
+  // Directories and symlinks we have registered. Regular files aren't
+  // tracked: whether a deletion is wanted follows from the file's name, and the
+  // file map removes a directory's files when told the directory is deleted.
+  readonly #knownDirs: Set<string> = new Set();
+  readonly #knownSymlinks: Set<string> = new Set();
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
 
-    await recReaddir(
-      this.root,
-      dir => {
-        this.#watchdir(dir);
+    await this.#watchTree(this.root);
+  }
+
+  /**
+   * Watch every directory under `dir`, and register its symlinks.
+   */
+  #watchTree(dir: string): Promise<void> {
+    return recReaddir(
+      dir,
+      subdir => {
+        this.#watchdir(subdir);
       },
-      filename => {
-        this.#register(filename, 'f');
-      },
+      () => {},
       symlink => {
         this.#register(symlink, 'l');
       },
@@ -77,26 +83,11 @@ export default class FallbackWatcher extends AbstractWatcher {
   }
 
   /**
-   * Register files that matches our globs to know what to type of event to
-   * emit in the future.
-   *
-   * Registry looks like the following:
-   *
-   *  dirRegister => Map {
-   *    dirpath => Map {
-   *       filename => true
-   *    }
-   *  }
-   *
-   *  Return false if ignored or already registered.
+   * Whether events for a path are wanted, i.e. it is neither ignored nor (for
+   * a regular file) excluded. A directory or symlink is also recorded as known,
+   * and false is returned if it already was.
    */
   #register(filepath: string, type: ChangeEventMetadata['type']): boolean {
-    const dir = path.dirname(filepath);
-    const filename = path.basename(filepath);
-    if (this.#dirRegistry[dir] && this.#dirRegistry[dir][filename]) {
-      return false;
-    }
-
     const relativePath = path.relative(this.root, filepath);
     if (
       this.doIgnore(relativePath) ||
@@ -104,61 +95,37 @@ export default class FallbackWatcher extends AbstractWatcher {
     ) {
       return false;
     }
-
-    if (!this.#dirRegistry[dir]) {
-      this.#dirRegistry[dir] = Object.create(null);
+    const known =
+      type === 'd'
+        ? this.#knownDirs
+        : type === 'l'
+          ? this.#knownSymlinks
+          : null;
+    if (known != null) {
+      if (known.has(filepath)) {
+        return false;
+      }
+      known.add(filepath);
     }
-
-    this.#dirRegistry[dir][filename] = true;
-
     return true;
   }
 
   /**
-   * Removes a file from the registry.
+   * Forget a path, and if it was a directory, everything beneath it.
    */
-  #unregister(filepath: string) {
-    const dir = path.dirname(filepath);
-    if (this.#dirRegistry[dir]) {
-      const filename = path.basename(filepath);
-      delete this.#dirRegistry[dir][filename];
+  #unregister(filepath: string): void {
+    this.#knownSymlinks.delete(filepath);
+    if (!this.#knownDirs.has(filepath)) {
+      return;
     }
-  }
-
-  /**
-   * Removes a dir from the registry, returning all files that were registered
-   * under it (recursively).
-   */
-  #unregisterDir(dirpath: string): Array<string> {
-    const removedFiles: Array<string> = [];
-
-    // Find and remove all entries under this directory
-    for (const registeredDir of Object.keys(this.#dirRegistry)) {
-      if (
-        registeredDir === dirpath ||
-        registeredDir.startsWith(dirpath + path.sep)
-      ) {
-        // Collect all files in this directory
-        for (const filename of Object.keys(this.#dirRegistry[registeredDir])) {
-          removedFiles.push(path.join(registeredDir, filename));
+    const prefix = filepath + path.sep;
+    for (const known of [this.#knownDirs, this.#knownSymlinks]) {
+      for (const entry of known) {
+        if (entry === filepath || entry.startsWith(prefix)) {
+          known.delete(entry);
         }
-        delete this.#dirRegistry[registeredDir];
       }
     }
-
-    return removedFiles;
-  }
-
-  /**
-   * Checks if a file or directory exists in the registry.
-   */
-  #registered(fullpath: string): boolean {
-    const dir = path.dirname(fullpath);
-    return !!(
-      this.#dirRegistry[fullpath] ||
-      (this.#dirRegistry[dir] &&
-        this.#dirRegistry[dir][path.basename(fullpath)])
-    );
   }
 
   /**
@@ -176,6 +143,11 @@ export default class FallbackWatcher extends AbstractWatcher {
   #watchdir: (dir: string) => boolean = (dir: string) => {
     if (this.#watched[dir]) {
       return false;
+    }
+    if (this.root !== dir) {
+      // Known even if it can't be watched, so that its deletion, reported by
+      // its parent, still removes what's under it.
+      this.#register(dir, 'd');
     }
     let watcher: FSWatcher;
     try {
@@ -212,9 +184,6 @@ export default class FallbackWatcher extends AbstractWatcher {
       this.#checkedEmitError(error);
     });
 
-    if (this.root !== dir) {
-      this.#register(dir, 'd');
-    }
     return true;
   };
 
@@ -295,20 +264,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    */
   async #processUnnamedChange(dir: string) {
     // Watch and register anything new, so that later changes are reported.
-    await recReaddir(
-      dir,
-      subdir => {
-        this.#watchdir(subdir);
-      },
-      filename => {
-        this.#register(filename, 'f');
-      },
-      symlink => {
-        this.#register(symlink, 'l');
-      },
-      this.#checkedEmitError,
-      this.ignored,
-    );
+    await this.#watchTree(dir);
     // Then have the file map reconcile everything under `dir`.
     this.#emitEvent({
       event: RECRAWL_EVENT,
@@ -323,7 +279,13 @@ export default class FallbackWatcher extends AbstractWatcher {
     const fullPath = path.join(dir, file);
     const relativePath = path.join(path.relative(this.root, dir), file);
 
-    const registered = this.#registered(fullPath);
+    const isKnownDir = this.#knownDirs.has(fullPath);
+    // Whether something here may have been reported to the file map.
+    const mayBeKnown =
+      isKnownDir ||
+      this.#knownSymlinks.has(fullPath) ||
+      (!this.doIgnore(relativePath) &&
+        common.isIncluded('f', this.included, relativePath));
 
     try {
       const stat = await fsPromises.lstat(fullPath);
@@ -348,10 +310,10 @@ export default class FallbackWatcher extends AbstractWatcher {
           this.#checkedEmitError,
           this.ignored,
         );
-        // A directory we already knew about has been replaced, so entries we
-        // registered under it may since have changed or been removed. Have the
-        // file map reconcile it.
-        if (registered) {
+        // What was reported here before has been replaced by a directory, or
+        // entries under a directory we knew may have changed or been removed.
+        // Have the file map reconcile it.
+        if (mayBeKnown) {
           this.#emitEvent({event: RECRAWL_EVENT, relativePath});
         }
       } else {
@@ -364,12 +326,8 @@ export default class FallbackWatcher extends AbstractWatcher {
           size: stat.size,
           type,
         };
-        if (registered) {
+        if (this.#register(fullPath, type)) {
           this.#emitEvent({event: TOUCH_EVENT, relativePath, metadata});
-        } else {
-          if (this.#register(fullPath, type)) {
-            this.#emitEvent({event: TOUCH_EVENT, relativePath, metadata});
-          }
         }
       }
     } catch (error) {
@@ -378,16 +336,8 @@ export default class FallbackWatcher extends AbstractWatcher {
         return;
       }
       this.#unregister(fullPath);
-      // When a directory is deleted, emit delete events for all files we
-      // knew about under that directory
-      const removedFiles = this.#unregisterDir(fullPath);
-      for (const removedFile of removedFiles) {
-        this.#emitEvent({
-          event: DELETE_EVENT,
-          relativePath: path.relative(this.root, removedFile),
-        });
-      }
-      if (registered) {
+      // For a directory, the file map removes everything under it too.
+      if (mayBeKnown) {
         this.#emitEvent({event: DELETE_EVENT, relativePath});
       }
       // Close every handle under a deleted directory. Left open, a handle stops
@@ -395,7 +345,7 @@ export default class FallbackWatcher extends AbstractWatcher {
       // also follows the directory if it was moved (as npm moves a package
       // aside to update it), so it goes on watching the old copy. macOS
       // watches by path, so there an open handle is merely redundant.
-      if (removedFiles.length > 0 || this.#watched[fullPath]) {
+      if (isKnownDir || this.#watched[fullPath]) {
         await this.#stopWatchingTree(fullPath);
       }
     }
