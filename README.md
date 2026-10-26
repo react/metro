@@ -36,6 +36,19 @@ Meta has adopted a Code of Conduct that we expect project participants to adhere
 
 Read our [contributing guide](https://github.com/react/metro/blob/main/CONTRIBUTING.md) to learn about our development process, how to propose bug fixes and improvements, and how to build and test your changes to Metro.
 
+### Package managers
+
+Metro is developed with Yarn (v1), and `yarn.lock` is the source of truth for dependency versions - commit changes to `yarn.lock`, not `pnpm-lock.yaml`.
+
+pnpm is also supported, by generating a (git-ignored) `pnpm-lock.yaml` from `yarn.lock`:
+
+```sh
+pnpm import --config.link-workspace-packages=true
+pnpm install --frozen-lockfile
+```
+
+`link-workspace-packages` is needed because Metro's packages depend on each other by exact version, and without it pnpm would fetch them from npm rather than linking them locally.
+
 ### Discussions
 
 Larger discussions and proposals concerning React Native and Metro are discussed in [**@react-native-community/discussions-and-proposals**](https://github.com/react-native-community/discussions-and-proposals).

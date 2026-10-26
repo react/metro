@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+  - private/*
+
+allowBuilds:
+  core-js-pure: false
