@@ -120,6 +120,7 @@ describe.each([...ALL_PACKAGES])('%s', packagePath => {
   test('all .flow.js files have an adjacent babel-registering entry point', async () => {
     const absolutePackageRoot = path.resolve(WORKSPACE_ROOT, packagePath);
     const filePaths = [];
+    // $FlowFixMe[incompatible-type]
     for await (const relativeFlowFile of fs.promises.glob('src/**/*.flow.js', {
       cwd: absolutePackageRoot,
       exclude: basename => basename === 'node_modules',
