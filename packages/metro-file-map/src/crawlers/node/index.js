@@ -16,7 +16,24 @@ import {RootPathUtils} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
-function find(options: CrawlerOptions): Promise<FileData> {
+/**
+ * Watches a root as the crawl lists it, instead of walking it itself.
+ */
+export type CrawlWatcher = Readonly<{
+  // Called with each directory just before it is listed, so that it can be
+  // watched first.
+  onDirectory: (absolutePath: string) => void,
+  // Called with each directory the crawl skips as ignored, which the watcher
+  // may still need to watch. The crawl waits for the returned promise.
+  onSkippedDirectory: (absolutePath: string) => Promise<void>,
+  // Called with each symlink found, whether or not the crawl includes it.
+  onSymlink: (absolutePath: string) => void,
+}>;
+
+async function find(
+  options: CrawlerOptions,
+  watchers: ?ReadonlyArray<?CrawlWatcher>,
+): Promise<FileData> {
   const {
     console,
     extensions,
@@ -30,15 +47,16 @@ function find(options: CrawlerOptions): Promise<FileData> {
   // consumers (e.g. a package.json cache) may hold contents read without a
   // stat, so it stats every file.
   const statRegularFiles = subpath != null;
+  const skippedDirectoryWalks: Array<Promise<void>> = [];
   const result: FileData = new Map();
   const pathUtils = new RootPathUtils(rootDir);
   const exts = new Set(extensions);
 
-  return new Promise(resolve => {
+  await new Promise<void>(resolve => {
     let activeCalls = 0;
     const resolveIfDone = () => {
       if (activeCalls === 0) {
-        resolve(result);
+        resolve();
       }
     };
 
@@ -49,8 +67,10 @@ function find(options: CrawlerOptions): Promise<FileData> {
       dirPrefix: string,
       dirNormal: string,
       isWithinRoot: boolean,
+      watcher: ?CrawlWatcher,
     ): void {
       activeCalls++;
+      watcher?.onDirectory(directory);
       fs.readdir(directory, {withFileTypes: true}, (err, entries) => {
         activeCalls--;
         if (err) {
@@ -63,7 +83,16 @@ function find(options: CrawlerOptions): Promise<FileData> {
             const file = dirPrefix + name;
 
             const isSymbolicLink = entry.isSymbolicLink();
-            if (ignore(file) || (!includeSymlinks && isSymbolicLink)) {
+            if (isSymbolicLink) {
+              watcher?.onSymlink(file);
+            }
+            if (ignore(file)) {
+              if (watcher != null && entry.isDirectory()) {
+                skippedDirectoryWalks.push(watcher.onSkippedDirectory(file));
+              }
+              continue;
+            }
+            if (!includeSymlinks && isSymbolicLink) {
               continue;
             }
 
@@ -83,6 +112,7 @@ function find(options: CrawlerOptions): Promise<FileData> {
                 file + path.sep,
                 childNormal,
                 isWithinRoot || childNormal === '',
+                watcher,
               );
               continue;
             }
@@ -121,7 +151,7 @@ function find(options: CrawlerOptions): Promise<FileData> {
       });
     }
 
-    for (const root of roots) {
+    roots.forEach((root, rootIndex) => {
       const rootNormal = pathUtils.absoluteToNormal(root);
       const isWithinRoot =
         rootNormal !== '..' && !rootNormal.startsWith('..' + path.sep);
@@ -130,15 +160,20 @@ function find(options: CrawlerOptions): Promise<FileData> {
         root.endsWith(path.sep) ? root : root + path.sep,
         rootNormal,
         isWithinRoot,
+        watchers?.[rootIndex],
       );
-    }
+    });
     // Resolve now if there were no roots to search.
     resolveIfDone();
   });
+  await Promise.all(skippedDirectoryWalks);
+  return result;
 }
 
 export default async function nodeCrawl(
   options: CrawlerOptions,
+  // If given, a watcher for each of `options.roots`, in order.
+  watchers?: ?ReadonlyArray<?CrawlWatcher>,
 ): Promise<CrawlResult> {
   const {abortSignal, perfLogger, previousState, subpath} = options;
 
@@ -146,7 +181,7 @@ export default async function nodeCrawl(
 
   perfLogger?.point('nodeCrawl_start');
 
-  const fileData = await find(options);
+  const fileData = await find(options, watchers);
 
   abortSignal?.throwIfAborted();
 

@@ -174,4 +174,17 @@ maybeDescribe('FileMap with FallbackWatcher', () => {
     await until('marker.js added', () => exists('src/marker.js'));
     expect(exists('ignored-dir/y.js')).toBe(false);
   });
+
+  // The crawl skips node_modules without `retainAllFiles`, but changes in it
+  // are still reported in watch mode.
+  test('watches a directory the crawl skips', async () => {
+    write('node_modules/pkg/index.js');
+    await fileMap.end();
+    fileMap = createFileMap({retainAllFiles: false});
+    ({fileSystem} = await fileMap.build());
+    expect(exists('node_modules/pkg/index.js')).toBe(false);
+
+    write('node_modules/pkg/new.js');
+    await until('new.js added', () => exists('node_modules/pkg/new.js'));
+  });
 });

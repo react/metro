@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   CacheData,
   ChangeEvent,
@@ -89,6 +90,14 @@ class MockWatcher extends AbstractWatcher {
 
   static isSupported(): boolean {
     return true;
+  }
+  // Stands in for FallbackWatcher too, which a node crawl may report to
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: () => {},
+      onSkippedDirectory: async () => {},
+      onSymlink: () => {},
+    };
   }
 }
 
