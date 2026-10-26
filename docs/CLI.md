@@ -3,38 +3,52 @@ id: cli
 title: Metro CLI Options
 ---
 
-The `metro` command line runner has a number of useful options. You can run `metro
---help` to view all available options. Here is a brief overview:
+The `metro` CLI has three commands:
+
+- [`build`](#build-entry): Builds a bundle.
+- [`serve`](#serve): Runs a development server.
+- [`get-dependencies`](#get-dependencies-entryfile): Lists the files in a bundle.
+
+Run `npx metro <command>`; `metro --help` shows all options.
+
+React Native apps typically use `npx react-native start` and `npx react-native bundle` instead, which call the same APIs, [`runServer`](./API.md#async-runserverconfig-options) and [`runBuild`](./API.md#async-runbuildconfig-options), with React Native's configuration.
 
 ## `build <entry>`
 
-Generates a JavaScript bundle containing the specified entrypoint and its descendants.
+Builds a bundle from the given [entry point](./Concepts.md#entry-point) and its dependencies, and writes it to `--out`. Equivalent to [`runBuild`](./API.md#async-runbuildconfig-options).
+
+```bash
+npx metro build index.js --out bundle.js --platform ios
+```
 
 ### Options
 
 | Option   | Alias    | Description    | Value |
 |----------|----------|----------|----------|
-| `out`    | `O` | File name where to store the output (required) | String |
-| `platform` | `p` | Which platform to bundle for (e.g. `web`, `android`, `ios`) | String |
-| `minify` | `z` | Whether Metro should minify the bundle | Boolean |
+| `out`    | `O` | Output file name (required) | String |
+| `platform` | `p` | [Platform](./Concepts.md#platform) to bundle for (e.g. `web`, `android`, `ios`) | String |
+| `minify` | `z` | Minify the bundle | Boolean |
 | `dev` | `g` | Create a development build, in which `__DEV__` is `true` | Boolean |
-| `config` | `c` | Location of the `metro.config.js` to use | String |
-| `max-workers` | `j` | The number of workers Metro should parallelize the transformer on. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()` | Number |
-| `project-roots` | `P` | Accepted, but has no effect | Array |
-| `source-map` |  | Whether Metro should generate source maps | Boolean |
-| `source-map-url` |  | URL where the source map can be found | String |
-| `legacy-bundler` |  | Accepted, but has no effect | Boolean |
-| `resolver-option` |  | [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed) of the form `key=value` | Array |
-| `transform-option` | `transformer-option` | Custom transform options of the form `key=value` | Array |
-| `reset-cache` |  | **Deprecated.** Clears Metro's caches before building, like [`resetCache`](./Configuration.md#resetcache) | Boolean |
-| `output-type` | `t` | Accepted, but has no effect | String |
-
+| `config` | `c` | Path to the `metro.config.js` to use | String |
+| `max-workers` | `j` | Number of transformer workers. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()` | Number |
+| `source-map` |  | Generate a source map | Boolean |
+| `source-map-url` |  | Source map URL (e.g. `--source-map --source-map-url bundle.map` adds `//# sourceMappingURL=bundle.map` to the bundle) | String |
+| `resolver-option` |  | [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed) as URL-encoded `key=value`. Repeatable (e.g. `--resolver-option foo=bar --resolver-option baz=1` passes `{foo: 'bar', baz: '1'}`) | Array |
+| `transform-option` | `transformer-option` | Custom transform options as URL-encoded `key=value`. Repeatable (e.g. `--transform-option foo=a%20b` passes `{foo: 'a b'}`) | Array |
+| `reset-cache` |  | **Deprecated.** Clear Metro's caches before building, like [`resetCache`](./Configuration.md#resetcache) | Boolean |
+| `project-roots` | `P` | Accepted but ignored | Array |
+| `legacy-bundler` |  | Accepted but ignored | Boolean |
+| `output-type` | `t` | Accepted but ignored | String |
 
 ## `serve`
 
 Alias: `start`
 
-Starts Metro on the given port, building bundles on the fly. Restarts the server when the config file changes.
+Starts a Metro development server that builds bundles on request, and restarts it when the config file changes. Equivalent to [`runServer`](./API.md#async-runserverconfig-options).
+
+```bash
+npx metro serve --port 8082
+```
 
 ### Options
 
@@ -42,28 +56,35 @@ Starts Metro on the given port, building bundles on the fly. Restarts the server
 |----------|----------|----------|----------|
 | `host` | `h` | Host to listen on. Defaults to `localhost` | String |
 | `port` | `p` | Port to listen on. Defaults to `8081`, overriding [`server.port`](./Configuration.md#port) | Number |
-| `config` | `c` | Location of the `metro.config.js` to use | String |
-| `max-workers` | `j` | The number of workers Metro should parallelize the transformer on. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()` | Number |
-| `secure-server-options` | `s` | Options for the HTTPS server, using dot notation (e.g. `-s.cert="$(cat path/to/cert)" -s.key="$(cat path/to/key)"`) | Object |
+| `config` | `c` | Path to the `metro.config.js` to use | String |
+| `max-workers` | `j` | Number of transformer workers. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()` | Number |
+| `secure-server-options` | `s` | HTTPS server options, in dot notation (e.g. `-s.cert="$(cat path/to/cert)" -s.key="$(cat path/to/key)"`) | Object |
 | `secure` |  | **Deprecated.** Serve over HTTPS. Use `secure-server-options` instead | Boolean |
 | `secure-key` |  | **Deprecated.** Path to the key file for HTTPS when `secure` is set | String |
 | `secure-cert` |  | **Deprecated.** Path to the cert file for HTTPS when `secure` is set | String |
-| `reset-cache` |  | **Deprecated.** Clears Metro's caches on startup, like [`resetCache`](./Configuration.md#resetcache) | Boolean |
-| `project-roots` | `P` | Accepted, but has no effect | Array |
-| `hmr-enabled` | `hmr` | Accepted, but has no effect | Boolean |
+| `reset-cache` |  | **Deprecated.** Clear Metro's caches on startup, like [`resetCache`](./Configuration.md#resetcache) | Boolean |
+| `project-roots` | `P` | Accepted but ignored | Array |
+| `hmr-enabled` | `hmr` | Accepted but ignored | Boolean |
 
 ## `get-dependencies [entryFile]`
 
-List all dependencies that will be bundled for a given entry point.
+Lists all files bundled for a given [entry point](./Concepts.md#entry-point) as absolute paths, one per line, including every resolution of an asset. For example, `npx metro get-dependencies "$PWD/index.js" --platform ios` prints:
+
+```text
+/path/to/app/index.js
+/path/to/app/App.js
+/path/to/app/logo.png
+/path/to/app/logo@2x.png
+```
 
 ### Options
 
-| Option | Description |
-|---|---|
-| `entry-file` | Absolute path to the root JS file. This can also be given as the first positional arg. |
-| `output` | File name where to store the output, ex. /tmp/dependencies.txt |
-| `platform` | The platform extension used for selecting modules |
-| `transformer` | Specify a custom transformer to be used |
-| `max-workers` | Specifies the maximum number of workers the worker-pool will spawn for transforming files. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()`. |
-| `dev` | If false, skip all dev-only code path. Defaults to `true` |
-| `verbose` | Enables logging. Defaults to `false` |
+| Option | Description | Value |
+|---|---|---|
+| `entry-file` | Absolute path to the root JS file. Or pass it as the first positional argument | String |
+| `output` | Output file name, e.g. `/tmp/dependencies.txt` | String |
+| `platform` | [Platform](./Concepts.md#platform) extension used for selecting modules | String |
+| `transformer` | Custom transformer to use | String |
+| `max-workers` | Maximum number of transformer workers. Overrides [`maxWorkers`](./Configuration.md#maxworkers) which defaults to a number based on `os.availableParallelism()` | Number |
+| `dev` | If `false`, skip dev-only code paths. Defaults to `true` | Boolean |
+| `verbose` | Enables logging. Defaults to `false` | Boolean |
