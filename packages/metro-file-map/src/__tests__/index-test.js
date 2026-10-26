@@ -1501,6 +1501,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Banana.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         },
       ],
       [
@@ -1509,6 +1510,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         },
       ],
       [
@@ -1517,6 +1519,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Strawberry.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         },
       ],
       [
@@ -1525,6 +1528,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/__mocks__/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         },
       ],
       [
@@ -1533,6 +1537,7 @@ describe('FileMap', () => {
           filePath: p('/project/vegetables/Melon.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         },
       ],
     ]);
