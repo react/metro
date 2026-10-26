@@ -204,6 +204,66 @@ describe('FallbackWatcher', () => {
     },
   );
 
+  test('reports the deletion of a directory it cannot watch', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'b', 'file.js'), '');
+    watchFailure = {code: 'ENOSPC', path: join(watchRoot, 'a')};
+    // As Metro does, include only some files - not, by name, the directory.
+    watcher = new FallbackWatcher(watchRoot, {
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      ignored: null,
+      watchmanDeferStates: [],
+    });
+    watcher.onError(() => {});
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    await watcher?.startWatching();
+    // Wait until the root's watch is reporting changes
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    await rm(join(watchRoot, 'a'), {recursive: true});
+
+    // The file map removes everything under it
+    await waitFor(() => events.includes('delete:a'));
+    expect(events).toContain('delete:a');
+  });
+
+  // As npm replaces a linked package with a copy. The file map holds the
+  // symlink, so it must reconcile the path.
+  test('requests a recrawl of a symlink replaced by a directory', async () => {
+    const link = join(watchRoot, 'link');
+    await mkdir(join(watchRoot, 'target'));
+    await fs.promises.symlink(join(watchRoot, 'target'), link, 'junction');
+    await watcher?.startWatching();
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher?.onFileEvent(event => {
+      events.push(event);
+    });
+    // Report the change only once the swap is complete
+    mutedDirs.add(watchRoot);
+    // A junction on Windows, which is removed as a directory
+    await (
+      process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
+    )(link);
+    await mkdir(link);
+    await writeFile(join(link, 'file.js'), '');
+    listeners.get(watchRoot)?.('rename', 'link');
+
+    await waitFor(() => events.some(event => event.event === 'recrawl'));
+    expect(events).toContainEqual({
+      event: 'recrawl',
+      relativePath: 'link',
+      root: watchRoot,
+    });
+  });
+
   describe('after a directory watcher errors', () => {
     let erroredWatcher: ErroredFSWatcher;
 
