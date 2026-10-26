@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  - private/*
+
+# Metro's packages depend on each other by exact version - link them locally
+# rather than fetching them from npm.
+linkWorkspacePackages: true
+
+allowBuilds:
+  core-js-pure: false
