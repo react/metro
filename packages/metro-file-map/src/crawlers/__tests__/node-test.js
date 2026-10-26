@@ -276,16 +276,128 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
       roots: [p('/project/fruits')],
     });
 
+    // New files are recorded without a stat.
     expect(changedFiles).toEqual(
       createMap({
-        'fruits/directory/strawberry.js': [33, 42, 0, null, 0],
-        'fruits/tomato.js': [32, 42, 0, null, 0],
+        'fruits/directory/strawberry.js': [null, 0, 0, null, 0],
+        'fruits/tomato.js': [null, 0, 0, null, 0],
       }),
     );
     expect(removedFiles).toEqual(new Set());
     // once for /project/fruits, once for /project/fruits/directory
     expect(fs.readdir).toHaveBeenCalledTimes(2);
-    // once for strawberry.js, once for tomato.js
+    expect(fs.lstat).not.toHaveBeenCalled();
+  });
+
+  test("does not stat a file that was not stat'd before", async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    // Neither file has any data derived from its content, so neither can be
+    // stale, whatever has changed on disk.
+    const files = createMap({
+      'fruits/directory/strawberry.js': [null, 0, 0, null, 0],
+      'fruits/tomato.js': [null, 0, 0, null, 0],
+    });
+
+    const {changedFiles, removedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+    });
+
+    expect(changedFiles).toEqual(new Map());
+    expect(removedFiles).toEqual(new Set());
+    expect(fs.lstat).not.toHaveBeenCalled();
+  });
+
+  test("stats only the files that were stat'd before", async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    const files = createMap({
+      'fruits/directory/strawberry.js': [null, 0, 0, null, 0],
+      'fruits/tomato.js': [30, 40, 1, 'abc', 0],
+    });
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+    });
+
+    // tomato.js's mtime is now 32, so its SHA-1 is no longer valid.
+    expect(changedFiles).toEqual(
+      createMap({'fruits/tomato.js': [32, 42, 0, null, 0]}),
+    );
+    expect(fs.lstat).toHaveBeenCalledTimes(1);
+    expect(fs.lstat).toHaveBeenCalledWith(
+      p('/project/fruits/tomato.js'),
+      expect.any(Function),
+    );
+  });
+
+  test('does not compare a file with one reached through a previous symlink', async () => {
+    nodeCrawl = require('../node').default;
+
+    // Before, `directory` was a symlink to `other`, whose strawberry.js has the
+    // same modified time as the crawled one (as a hard link would).
+    const files = createMap({
+      'fruits/directory': [0, 0, 0, null, 'fruits/other'],
+      'fruits/other/strawberry.js': [32, 42, 1, 'abc', 0],
+      'fruits/tomato.js': [null, 0, 0, null, 0],
+    });
+
+    const {changedFiles, removedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+    });
+
+    expect(changedFiles).toEqual(
+      createMap({'fruits/directory/strawberry.js': [null, 0, 0, null, 0]}),
+    );
+    expect(removedFiles).toEqual(
+      new Set([p('fruits/directory'), p('fruits/other/strawberry.js')]),
+    );
+  });
+
+  test("a scoped recrawl stats files that weren't stat'd before", async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    const files = createMap({
+      'fruits/directory/strawberry.js': [null, 0, 0, null, 0],
+      'fruits/tomato.js': [null, 0, 0, null, 0],
+    });
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+      subpath: p('fruits'),
+    });
+
+    // Their contents may have been read outside the file map, so they're
+    // reported as changed.
+    expect(changedFiles).toEqual(
+      createMap({
+        'fruits/directory/strawberry.js': [expect.any(Number), 42, 0, null, 0],
+        'fruits/tomato.js': [expect.any(Number), 42, 0, null, 0],
+      }),
+    );
     expect(fs.lstat).toHaveBeenCalledTimes(2);
   });
 
@@ -391,8 +503,9 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
       ['fruits/directory/strawberry.js', 'fruits/tomato.js'].map(p),
     );
     expect(ignore).toHaveBeenCalledWith(p('/project'));
-    expect(fs.lstat).toHaveBeenCalledWith(
-      p('/project/fruits/tomato.js'),
+    expect(fs.readdir).toHaveBeenCalledWith(
+      p('/project/fruits/directory'),
+      expect.anything(),
       expect.any(Function),
     );
   });

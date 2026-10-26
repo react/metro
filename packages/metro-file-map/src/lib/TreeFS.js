@@ -226,7 +226,10 @@ export default class TreeFS implements MutableFileSystem {
 
   getSize(mixedPath: Path): ?number {
     const fileMetadata = this.#getFileData(mixedPath);
-    return (fileMetadata && fileMetadata[H.SIZE]) ?? null;
+    // A file crawled without a stat has no known size until it is read.
+    return fileMetadata != null && fileMetadata[H.MTIME] != null
+      ? fileMetadata[H.SIZE]
+      : null;
   }
 
   getDifference(
@@ -287,6 +290,16 @@ export default class TreeFS implements MutableFileSystem {
           newMetadata[H.MTIME] === metadata[H.MTIME]
         ) {
           // Types and modified time match - not changed.
+          changedFiles.delete(canonicalPath);
+        } else if (
+          newMetadata[H.MTIME] == null &&
+          newMetadata[H.SHA1] == null &&
+          metadata[H.MTIME] == null &&
+          isRegularFile(metadata)
+        ) {
+          // Never stat'd. A file with derived data (SHA-1, plugin data)
+          // always has a modified time, so there is nothing here that could
+          // be stale.
           changedFiles.delete(canonicalPath);
         } else if (
           newMetadata[H.SHA1] != null &&
@@ -403,10 +416,12 @@ export default class TreeFS implements MutableFileSystem {
       return null;
     }
     const fileType = isRegularFile(fileMetadata) ? 'f' : 'l';
+    const modifiedTime = fileMetadata[H.MTIME];
     return {
       fileType,
-      modifiedTime: fileMetadata[H.MTIME],
-      size: fileMetadata[H.SIZE],
+      modifiedTime,
+      // A file crawled without a stat has no known size until it is read.
+      size: modifiedTime != null ? fileMetadata[H.SIZE] : null,
     };
   }
 
