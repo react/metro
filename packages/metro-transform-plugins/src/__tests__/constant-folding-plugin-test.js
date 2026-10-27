@@ -396,4 +396,44 @@ describe('constant expressions', () => {
 
     compare([constantFoldingPlugin], code, expected);
   });
+
+  test('does not fold arithmetic on destructured bindings to NaN', () => {
+    const code = `
+      const SHAPE = { lo: 80, hi: 85, scale: 2.8 };
+      export function f() {
+        const { lo, hi, scale } = SHAPE;
+        const span = (hi - lo) * scale;
+      }
+    `;
+
+    const expected = `
+      const SHAPE = { lo: 80, hi: 85, scale: 2.8 };
+      export function f() {
+        const { lo, hi, scale } = SHAPE;
+        const span = (hi - lo) * scale;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('does not fold arithmetic on destructured bindings to object string concatenation', () => {
+    const code = `
+      const O = { e: 80 };
+      export function f() {
+        const { e } = O;
+        return e + 1;
+      }
+    `;
+
+    const expected = `
+      const O = { e: 80 };
+      export function f() {
+        const { e } = O;
+        return e + 1;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
 });

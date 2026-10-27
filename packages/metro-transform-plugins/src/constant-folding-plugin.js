@@ -20,6 +20,7 @@ import type {
   ConditionalExpression as BabelNodeConditionalExpression,
   FunctionDeclaration as BabelNodeFunctionDeclaration,
   FunctionExpression as BabelNodeFunctionExpression,
+  Identifier as BabelNodeIdentifier,
   IfStatement as BabelNodeIfStatement,
   LogicalExpression as BabelNodeLogicalExpression,
   OptionalCallExpression as BabelNodeOptionalCallExpression,
@@ -57,6 +58,21 @@ export default function constantFoldingPlugin(context: {
       state.safe = false;
     };
 
+    const isDestructuredBinding = (binding: ?any): boolean => {
+      return Boolean(
+        binding?.path != null &&
+          isVariableDeclarator(binding.path.node) &&
+          !t.isIdentifier(binding.path.node.id),
+      );
+    };
+
+    if (
+      t.isIdentifier(path.node) &&
+      isDestructuredBinding(path.scope.getBinding(path.node.name))
+    ) {
+      return {confident: false, value: null};
+    }
+
     if (isUnaryExpression(path.node) && path.node.operator === 'void') {
       // Void expressions always evaluate to undefined but would rarely be used
       // to express a constant (with the exception of `void 0`). More often,
@@ -80,6 +96,16 @@ export default function constantFoldingPlugin(context: {
          * resulting in the expression call being skipped.
          */
         OptionalCallExpression: unsafe,
+        Identifier(
+          idPath: NodePath<BabelNodeIdentifier>,
+          state: {safe: boolean},
+        ) {
+          if (
+            isDestructuredBinding(idPath.scope.getBinding(idPath.node.name))
+          ) {
+            state.safe = false;
+          }
+        },
       },
       state,
     );
@@ -161,7 +187,10 @@ export default function constantFoldingPlugin(context: {
       exit(path) {
         const result = evaluate(path);
 
-        if (result.confident) {
+        if (
+          result.confident &&
+          (typeof result.value !== 'number' || Number.isFinite(result.value))
+        ) {
           path.replaceWith(t.valueToNode(result.value));
           path.skip();
         }
