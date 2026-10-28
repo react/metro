@@ -3,31 +3,34 @@ id: api
 title: Bundling API
 ---
 
+Metro's JavaScript API lets you build a bundle that a React Native app can load offline at startup, start a development server that React Native apps connect to during development to receive the latest changes and hot reloads, or integrate such a server into an existing Node.js server.
+
+In a React Native app, `npx react-native start` already calls [`runServer`](#async-runserverconfig-options) and `npx react-native bundle` already calls [`runBuild`](#async-runbuildconfig-options). You only need this API if your own tooling does this directly. For a guided introduction, see [Getting Started](./GettingStarted.md#running-programmatically).
+
 ## Quick Start
 
-- Compile a file
+All examples assume `const Metro = require('metro');`.
+
+- Build a bundle and write it to disk
 
   ```js
   const config = await Metro.loadConfig();
-
   await Metro.runBuild(config, {
     entry: 'index.js',
     out: 'bundle.js',
   });
   ```
 
-- Run a server and watch the filesystem for changes
+- Run a development server that rebuilds bundles as files change
 
   ```js
   const config = await Metro.loadConfig();
-
   await Metro.runServer(config);
   ```
 
-- Create a Connect middleware and plug it into a server
+- Add Metro to an existing Express or Connect server
 
   ```js
-  const Metro = require('metro');
   const express = require('express');
   const app = express();
   const server = require('http').Server(app);
@@ -44,62 +47,153 @@ title: Bundling API
 
 ## Reference
 
-The `config` object accepted by the functions below is the [Metro configuration](./Configuration.md) exported by your `metro.config.js` file, which you can obtain with `Metro.loadConfig`.
+The `config` object accepted by the functions below is the [Metro configuration](./Configuration.md) exported by your `metro.config.js` file.
 
 ### `loadConfig(<options>, <defaultConfigOverrides>)`
 
-**Basic options:** `config`, `cwd`
+Loads your Metro configuration (`metro.config.js`).
 
-Load the Metro configuration, either from the path given in `config` if specified, or by traversing the directory hierarchy from `cwd` up to the user's home directory until it finds a [config file](./Configuration.md). The returned configuration will have been normalized and merged with Metro's default values, after applying `defaultConfigOverrides` to the defaults.
+**Options:**
 
-`loadConfig` also accepts the options of the [CLI](./CLI.md), which override the corresponding config values: `port` ([`server.port`](./Configuration.md#port)), `projectRoot`, `watchFolders`, `assetExts`, `sourceExts` and `platforms` (the `resolver` options of the same names), [`maxWorkers`](./Configuration.md#maxworkers) (which defaults to a number based on `os.availableParallelism()`), `transformer` ([`transformer.babelTransformerPath`](./Configuration.md#babeltransformerpath)), `resetCache`, and `verbose` (`false` silences Metro's terminal output).
+- `config` (string): Path to the [config file](./Configuration.md), e.g. `'/path/to/app/metro.config.dev.js'`. If not given, Metro searches from `cwd` up to the user's home directory.
+- `cwd` (string): Directory to start searching from.
+
+`loadConfig` also accepts these [CLI](./CLI.md) options, which override the corresponding config values:
+
+- `port`: Sets [`server.port`](./Configuration.md#port).
+- [`projectRoot`](./Configuration.md#projectroot), [`watchFolders`](./Configuration.md#watchfolders) and [`resetCache`](./Configuration.md#resetcache): Set the top-level options of the same names.
+- [`assetExts`](./Configuration.md#assetexts), [`sourceExts`](./Configuration.md#sourceexts) and [`platforms`](./Configuration.md#platforms): Set the `resolver` options of the same names.
+- [`maxWorkers`](./Configuration.md#maxworkers): Defaults to a number based on `os.availableParallelism()`.
+- `transformer`: Sets [`transformer.babelTransformerPath`](./Configuration.md#babeltransformerpath).
+- `verbose`: `false` silences Metro's terminal output.
+
+For example, `Metro.loadConfig({port: 8082})` loads your config with `server.port` set to `8082`.
+
+The returned configuration is normalized and merged with Metro's defaults. `defaultConfigOverrides` is applied to the defaults before your config is merged in, e.g. `Metro.loadConfig({}, {resolver: {sourceExts: ['js', 'ts']}})` uses `['js', 'ts']` unless your config sets `resolver.sourceExts` itself. A config file that exports a function receives these modified defaults as its argument.
 
 ### `async runMetro(config, <options>)`
 
-**Basic options:** `waitForBundler`, `watch`, `onBundleBuilt`, `hasReducedPerformance`
+Creates and returns a Metro server without starting an HTTP server. Use its `processRequest` method as a request handler or middleware in your own server (see [Getting Started](./GettingStarted.md#method-runmetroconfig)).
 
-Creates a Metro server based on the config and returns it. Its `processRequest` method can be used as a middleware in your existing server. `hasReducedPerformance` only makes Metro's terminal output warn that Metro is operating with reduced performance.
+Prefer [`createConnectMiddleware`](#createconnectmiddlewareconfig-options) if you also want your config's middleware ([`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental) and [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental)) and Fast Refresh support.
+
+**Options:**
+
+- `waitForBundler` (boolean): Whether to wait for the [bundler](./Concepts.md#bundling-stages) to finish initializing before returning.
+- `hasReducedPerformance` (boolean): Makes Metro's terminal output warn that Metro is operating with reduced performance. Has no other effect.
+- `watch` (boolean): Whether to [watch the filesystem for changes](./Concepts.md#file-watching).
+- `onBundleBuilt` (Function): Called with the request's URL path when a bundle has been built, e.g. `'/index.bundle'` for a request to `/index.bundle?platform=ios&dev=true`.
 
 ### `async runBuild(config, <options>)`
 
-**Required options:** `entry`
+Builds a single bundle for `entry`, like [`metro build`](./CLI.md#build-entry). Resolves to an object with `code`, `map` and, if `assets` is `true`, `assets`. The bundle is written to disk only if `out` or `bundleOut` is given.
 
-**Basic options:** `out`, `bundleOut`, `sourceMapOut`, `dev`, `minify`, `platform`, `sourceMap`, `sourceMapUrl`, `assets`, `onBegin`, `onProgress`, `onComplete`, `customResolverOptions`, `customTransformOptions`, `unstable_transformProfile`, `output`
+**Options:**
 
-Bundles `entry` for the given `platform` (defaults to `'web'`). If `out` or `bundleOut` is given, saves the bundle to `bundleOut`, or to `out` with a `.js` extension. If `sourceMap` is set, also generates a source map. The source map will be inlined, unless `sourceMapUrl` is also defined, in which case `sourceMapUrl` is used as the bundle's `sourceMappingURL`. When saving to disk, the source map is also written to `sourceMapOut`, or to `out` with a `.map` extension. If `assets` is `true`, an array of `AssetData` will be generated and returned in the `assets` property of the result object.
-
-`output` replaces how the bundle is built and written to disk. It is an object with two functions: `build(server, requestOptions, buildOptions)`, whose result `runBuild` resolves to and passes to `save`, and `save(bundle, outputOptions, log)`, which is only called if `out` or `bundleOut` is given. Defaults to Metro's plain bundle output, `metro/private/shared/output/bundle`. For example, `require('metro/private/shared/output/RamBundle')` writes a [RAM bundle](./Bundling.md#indexed-ram-bundle) instead.
+- `entry` (string): **Required.** The [entry point](./Concepts.md#entry-point) file to bundle.
+- `platform` (string): The [platform](./Concepts.md#platform) to bundle for (e.g. `'web'`, `'android'`, `'ios'`). Defaults to `'web'`.
+- `dev` (boolean): Build a development bundle, in which `__DEV__` is `true`. Otherwise, `__DEV__` and `process.env.NODE_ENV` are inlined as `false` and `'production'`. Defaults to `false`.
+- `minify` (boolean): Whether to minify the bundle. Defaults to `true`.
+- `out` (string): Path for the bundle (with `.js` added if missing) and source map (with `.map` extension). Override either path with `bundleOut` or `sourceMapOut`. For example, `out: 'dist/main'` or `out: 'dist/main.js'` with `sourceMap: true` writes `dist/main.js` and `dist/main.map`.
+- `bundleOut` (string): Path to write the bundle to. No extension is added.
+- `sourceMap` (boolean): Whether to generate a source map. Defaults to `false`.
+- `sourceMapOut` (string): Path to write the source map to, if `sourceMap` is `true`. No extension is added.
+- `sourceMapUrl` (string): URL written as the bundle's `sourceMappingURL`, e.g. `'https://example.com/main.map'` adds `//# sourceMappingURL=https://example.com/main.map`. If `sourceMap` is `true` and `sourceMapUrl` is not set, the source map is inlined into the bundle.
+- `assets` (boolean): Whether to return an array of `AssetData` in the `assets` property of the result. Defaults to `false`.
+- `customResolverOptions` (Object): [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed), e.g. `{foo: 'bar'}`, equivalent to the bundle URL parameter `resolver.foo=bar`.
+- `customTransformOptions` (Object): Custom options for the [transformer](./Concepts.md#transformation), e.g. `{foo: 'bar'}`, equivalent to `transform.foo=bar`. A Babel transformer reads it as `options.customTransformOptions.foo`.
+- `onBegin` (Function): Called when bundling starts.
+- `onProgress` (Function): Called whenever the number of transformed modules is updated.
+- `onComplete` (Function): Called when bundling finishes.
+- `unstable_transformProfile` (`'default'` | `'hermes-stable'` | `'hermes-canary'`): Passed to the [Babel transformer](./Configuration.md#babeltransformerpath), which can use it to target a specific JavaScript engine. Defaults to `'default'`.
+- `output` (Object): Replaces how the bundle is built and written. Defaults to Metro's [plain bundle](./Bundling.md#plain-bundle) output, `metro/private/shared/output/bundle`; e.g. pass `require('metro/private/shared/output/RamBundle')` to write a [RAM bundle](./Bundling.md#ram-bundles). An object with two functions:
+  - `build(server, requestOptions, buildOptions)`: Builds the bundle. `runBuild` resolves to its result, which is also passed to `save`. The default output resolves to `{code, map, assets?}`.
+  - `save(bundle, outputOptions, log)`: Writes the result of `build` to disk, only if `out` or `bundleOut` is given. `outputOptions` contains `bundleOutput`, `sourcemapOutput`, `dev` and `platform`.
 
 ### `async runServer(config, <options>)`
 
-**Basic options:** `host`, `onReady`, `onClose`, `onError`, `waitForBundler`, `watch`, `hasReducedPerformance`, `websocketEndpoints`, `secureServerOptions`, `unstable_middleware`, `unstable_priorityMiddleware`, `unstable_onServerCreated`, `secure (DEPRECATED)`, `secureKey (DEPRECATED)`, `secureCert (DEPRECATED)`
+Starts a full Metro HTTP development server, like [`metro serve`](./CLI.md#serve). It listens on `host` and [`server.port`](./Configuration.md#port) and serves bundles for any [entry point](./Concepts.md#entry-point) on request (see [URL and bundle request](./GettingStarted.md#url-and-bundle-request)). Resolves to `{httpServer}`, the Node.js HTTP(S) server, which uses HTTPS if `secureServerOptions` or [`server.tls`](./Configuration.md#tls) is set.
 
-Starts a full Metro HTTP server. It will listen on the specified `host` and [`server.port`](./Configuration.md#port), and can then be queried to retrieve bundles for various entry points. If `secureServerOptions` or [`server.tls`](./Configuration.md#tls) is present, the server will be exposed over HTTPS. Resolves to `{httpServer}`.
+**Options:** `waitForBundler`, `hasReducedPerformance` and `watch` (see [`runMetro`](#async-runmetroconfig-options)), plus:
 
-`unstable_middleware` and `unstable_priorityMiddleware` take the same shapes as [`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental) and [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental), and wrap them: `unstable_middleware` passed here runs after the config's, and `unstable_priorityMiddleware` runs before the config's.
+- `host` (string): Host to listen on.
+- `onReady` (Function): Called with the HTTP(S) server when it is ready to serve requests.
+- `onError` (Function): Called with the error if the HTTP(S) server fails.
+- `onClose` (Function): Called when the server and all other Metro processes are closed. To observe only the HTTP server closing, use `httpServer.on('close', () => {})`.
+- `websocketEndpoints` (Object): Map of URL paths to [`ws`](https://github.com/websockets/ws) `WebSocketServer` instances that handle upgrade requests on those paths. For example, to accept connections at `ws://localhost:8081/my-endpoint`:
 
-Priority middleware handlers must call `next()` for every request they don't fully handle, so that Metro can serve bundles, source maps, assets and its other endpoints.
+  ```js
+  const WebSocket = require('ws');
+  const wss = new WebSocket.Server({noServer: true});
+  wss.on('connection', socket => socket.send('hello'));
 
-`unstable_onServerCreated` is called with Metro's server instance before the HTTP server starts listening, after [`server.unstable_onServerCreated`](./Configuration.md#unstable_onservercreated-experimental).
+  await Metro.runServer(config, {
+    websocketEndpoints: {'/my-endpoint': wss},
+  });
+  ```
 
-`secure`, `secureKey`, `secureCert` are now deprecated and will be removed in a later release. The presence of `secureServerOptions`, along with its options will make Metro run over https.
+- `secureServerOptions` (Object): Options for Metro's HTTPS server; setting it enables HTTPS. See the [Node docs](https://nodejs.org/api/https.html#https_https_createserver_options_requestlistener) for valid options.
+- `unstable_middleware` (Array): Middleware that runs after the config's [`server.unstable_middleware`](./Configuration.md#unstable_middleware-experimental). Takes the same shape.
+- `unstable_priorityMiddleware` (Array): Middleware that runs before the config's [`server.unstable_priorityMiddleware`](./Configuration.md#unstable_prioritymiddleware-experimental). Takes the same shape. Handlers must call `next()` for every request they don't fully handle, so Metro can serve bundles, source maps, assets and its other endpoints.
+- `unstable_onServerCreated` (Function): Called with Metro's server instance before the HTTP server starts listening, after the config's [`server.unstable_onServerCreated`](./Configuration.md#unstable_onservercreated-experimental).
+- `secure` (boolean), `secureKey` (string), `secureCert` (string): **Deprecated**, to be removed in a later release; use `secureServerOptions` or [`server.tls`](./Configuration.md#tls) instead. Whether to use HTTPS, and paths to the key and cert files when `secure` is set.
 
 ### `createConnectMiddleware(config, <options>)`
 
-**Basic options:** `onBundleBuilt`, `watch`, `waitForBundler`, `hasReducedPerformance`
+Creates a [Connect](https://github.com/senchalabs/connect) middleware that serves Metro's bundles, to add Metro to your own Express or Connect server (see the [Quick Start](#quick-start)). It handles the same requests as Metro's own server, for example:
 
-Instead of creating the full server, creates a Connect middleware that answers to bundle requests. This middleware can then be plugged into your own servers. Resolves to `{middleware, attachHmrServer(httpServer), metroServer, end()}`. The `onBundleBuilt` function is optional, is passed the bundle path, and is called when the server has finished creating the bundle.
+- `/index.bundle?platform=ios&dev=true`: The bundle for `index.js` (see [URL and bundle request](./GettingStarted.md#url-and-bundle-request)).
+- `/index.map?platform=ios&dev=true`: The source map for that bundle.
+- `/assets/src/images/logo@2x.png?platform=ios`: An asset.
+- `/symbolicate`: Symbolicates stack traces (see [Symbolicator Options](./Configuration.md#symbolicator-options)).
+
+Other requests are passed on with `next()`. Resolves to an object with:
+
+- `middleware`: The middleware to pass to `app.use()`, including your config's middleware.
+- `attachHmrServer(httpServer)`: Attaches Metro's Fast Refresh endpoint (a WebSocket at `/hot`) to your HTTP server.
+- `metroServer`: The Metro server instance.
+- `end()`: Shuts down the Metro server.
+
+**Options:** The same as [`runMetro`](#async-runmetroconfig-options): `waitForBundler`, `hasReducedPerformance`, `watch` and `onBundleBuilt`.
 
 ### `async buildGraph(config, <options>)`
 
-**Required options:** `entries`
+[Resolves](./Concepts.md#resolution) and [transforms](./Concepts.md#transformation) the [dependency graph](./Concepts.md#dependency-graph) for `entries` and returns it without [serializing](./Concepts.md#serialization) a bundle. This is mostly for tooling that inspects modules and their dependencies.
 
-**Basic options:** `dev`, `minify`, `platform`, `type`, `customTransformOptions`
+**Options:**
 
-Resolves and transforms the dependency graph for the given `entries` without serializing a bundle, and returns the graph.
+- `entries` (Array): **Required.** The [entry point](./Concepts.md#entry-point) files.
+- `platform` (string): The [platform](./Concepts.md#platform) to build for. Defaults to `'web'`.
+- `dev` (boolean): Build in development mode. Defaults to `false`.
+- `minify` (boolean): Whether to minify. Defaults to `false`.
+- `type` (`'module'` | `'script'`): Transform the files as modules, or as [scripts](./Bundling.md#scripts) (like polyfills), which have no dependencies and are not registered as modules. Defaults to `'module'`.
+- `customTransformOptions` (Object): Custom options passed to the transformer.
+
+The graph's `entryPoints` is a `Set` of the entries' absolute paths, and `dependencies` maps each module's absolute path to the module:
+
+```js
+const graph = await Metro.buildGraph(config, {entries: ['index.js']});
+
+for (const [modulePath, module] of graph.dependencies) {
+  console.log(modulePath, module.dependencies.size);
+}
+```
 
 ### `attachMetroCli(yargs, <options>)`
 
-**Basic options:** `build`, `serve`, `dependencies`
+Registers Metro's [CLI commands](./CLI.md) on a [`yargs`](https://yargs.js.org/) instance, to include them in your own CLI.
 
-Registers Metro's [CLI commands](./CLI.md) on a `yargs` instance. Pass `null` for a command to omit it.
+**Options:**
+
+- `build`, `serve`, `dependencies`: Pass `null` to omit the corresponding command, e.g. to omit `get-dependencies`:
+
+  ```js
+  const {attachMetroCli} = require('metro');
+  const yargs = require('yargs');
+
+  const cli = yargs
+    .scriptName('my-cli')
+    .command('hello', 'Print a greeting', {}, () => console.log('Hello!'));
+
+  attachMetroCli(cli, {dependencies: null}).argv;
+  ```
