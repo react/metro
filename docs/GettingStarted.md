@@ -6,7 +6,9 @@ title: Getting Started
 Metro is the JavaScript bundler used by React Native. This page shows how to install Metro and run it from the command line or your own Node.js code. For how Metro works, see [Concepts](./Concepts.md).
 
 :::note Using React Native?
+
 React Native projects already include Metro: `npx react-native start` starts a Metro development server, and `npx react-native bundle` builds a bundle. To customize Metro, edit your `metro.config.js` (see [Configuring Metro](./Configuration.md)). Read on to use Metro outside React Native or build your own tooling on it.
+
 :::
 
 Install Metro using [`npm`](https://www.npmjs.com/) or [`yarn`](https://yarnpkg.com/):

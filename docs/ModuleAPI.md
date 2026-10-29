@@ -41,7 +41,9 @@ Similar to [`module.exports`](https://nodejs.org/api/modules.html#moduleexports)
 To support `import` and `export` in Metro projects, we recommend using [`@babel/plugin-transform-modules-commonjs`](https://babeljs.io/docs/babel-plugin-transform-modules-commonjs).
 
 :::note
+
 In React Native projects that use `@react-native/babel-preset`, `import` and `export` are supported out of the box.
+
 :::
 
 ## `import()` (dynamic import)
@@ -49,11 +51,13 @@ In React Native projects that use `@react-native/babel-preset`, `import` and `ex
 [`import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) calls are supported out of the box. In React Native, using `import()` automatically splits your application code so that it loads faster during development, without affecting release builds.
 
 :::info
+
 **For framework implementers**:
 1. Enable [lazy bundling](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md) by adding `&lazy=true` to the initial HTTP bundle URL your framework requests from Metro.
 2. At runtime, `import()` calls a framework-defined function to [fetch and evaluate](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) the split bundle. Your framework **must** implement this function if it uses the `lazy=true` parameter, or runtime errors will occur.
 
    For example, if the initial bundle URL is `/index.bundle?platform=ios&dev=true&lazy=true`, then `import('./src/Settings')` calls `global.__loadBundleAsync('/src/Settings.bundle?platform=ios&dev=true&lazy=true&modulesOnly=true&runModule=false')` before evaluating the module.
+
 :::
 
 ## `require.resolveWeak()`

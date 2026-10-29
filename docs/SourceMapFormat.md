@@ -8,7 +8,9 @@ Metro produces standard [source maps](https://tc39.es/ecma426/#sec-source-map-fo
 It's for authors of tools that read, generate or transform Metro's source maps, such as debuggers, symbolication services or bundle post-processors. App developers can skip it: their tools consume these fields.
 
 :::note
+
 The content on this page assumes familiarity with the [source map specification](https://tc39.es/ecma426/#sec-source-map-format). Check out [Anatomy of source maps](https://web.archive.org/web/2023/https://www.bugsnag.com/blog/source-maps) for a general introduction to source maps and how they work.
+
 :::
 
 ## `x_facebook_sources`
@@ -22,9 +24,11 @@ In nested (indexed) source maps, `x_facebook_sources` may appear as part of any 
 If present, `x_facebook_sources` may be a different length than `sources` (but usually shouldn't be). If it's shorter, it's interpreted as if padded with `null` values to the length of `sources`.
 
 :::info
+
 For a tool that processes Metro's source maps to output a valid `x_facebook_sources` field, it mainly needs to ensure that `x_facebook_sources[i]` still corresponds to `sources[i]` in the output - even if it reorders, adds or deletes elements in `sources`. This can be done *without* parsing/decoding the metadata tuples: unless your tool needs the information within them, treat them as opaque blobs of JSON.
 
 If a tool cannot guarantee that the `sources` and `x_facebook_sources` arrays will stay in sync, it should delete the `x_facebook_sources` field from its output.
+
 :::
 
 ### Metadata tuple
@@ -59,6 +63,7 @@ The `mappings` field follows the _Mappings_ production of this grammar:
 5. `VLQ =` _A single Base64-encoded variable-length quantity, as defined in the [source map specification](https://tc39.es/ecma426/#sec-base64-vlq)_.
 
 :::note
+
 The above grammar uses the following BNF-like notation:
 
 | Notation | Meaning |
@@ -83,7 +88,9 @@ The three VLQs in _FirstColumnMapping_ or _ColumnMapping_ represent, in this ord
 A complete source map for a single source file `file.js` might look like this:
 
 :::note
+
 Comments are for illustrative purposes - the source map format does not allow comments.
+
 :::
 
 ```json
