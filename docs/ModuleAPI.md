@@ -22,7 +22,7 @@ The argument to `require()` must be a compile-time constant, such as a string li
 
 At build time, Metro [resolves](./Concepts.md#resolution) module names to absolute paths and [assigns an opaque module ID](./Configuration.md#createmoduleidfactory) to each one.
 
-At runtime, `require` refers to a function that takes an opaque module ID (*not* a name or path) and returns a module. This is useful if you already have a module ID from another module API, such as [`require.resolveWeak`](#requireresolveweak).
+At runtime, `require` refers to a function that takes an opaque module ID (_not_ a name or path) and returns a module. This is useful if you already have a module ID from another module API, such as [`require.resolveWeak`](#requireresolveweak).
 
 ```js
 const localModule = require('./path/module');
@@ -53,6 +53,7 @@ In React Native projects that use `@react-native/babel-preset`, `import` and `ex
 :::info
 
 **For framework implementers**:
+
 1. Enable [lazy bundling](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md) by adding `&lazy=true` to the initial HTTP bundle URL your framework requests from Metro.
 2. At runtime, `import()` calls a framework-defined function to [fetch and evaluate](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) the split bundle. Your framework **must** implement this function if it uses the `lazy=true` parameter, or runtime errors will occur.
 

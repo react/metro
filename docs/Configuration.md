@@ -85,7 +85,7 @@ Type: `CacheStores` (see details below)
 
 Storage adapters for Metro's [transformer cache](./Caching.md): any mix of [built-in](./Caching.md#built-in-cache-stores) and [custom](./Caching.md#custom-cache-stores) stores. Defaults to a single on-disk store in a temporary directory.
 
-Metro reads each store in order using a machine-independent cache key for the file, then writes the transform result to *all* stores that returned `null` (a cache miss) for that key.
+Metro reads each store in order using a machine-independent cache key for the file, then writes the transform result to _all_ stores that returned `null` (a cache miss) for that key.
 
 ```flow
 type CacheStores =
@@ -132,9 +132,9 @@ Directories outside [`projectRoot`](#projectroot) that can contain source files 
 
 :::info
 
-Despite its name, this isn't only about [file watching](./Concepts.md#file-watching): even in an offline build (e.g. CI), all files must be visible through `watchFolders` and `projectRoot`. Symlink targets *must also be within `watchFolders`* and not otherwise excluded.
+Despite its name, this isn't only about [file watching](./Concepts.md#file-watching): even in an offline build (e.g. CI), all files must be visible through `watchFolders` and `projectRoot`. Symlink targets _must also be within `watchFolders`_ and not otherwise excluded.
 
-In a workspace, such as a [Yarn workspace](https://classic.yarnpkg.com/lang/en/docs/workspaces/), you'll likely want to include the workspace *root* so Metro can resolve other workspaces and hoisted `node_modules`. For [linked packages](https://classic.yarnpkg.com/lang/en/docs/cli/link/), list their source locations (or a containing directory).
+In a workspace, such as a [Yarn workspace](https://classic.yarnpkg.com/lang/en/docs/workspaces/), you'll likely want to include the workspace _root_ so Metro can resolve other workspaces and hoisted `node_modules`. For [linked packages](https://classic.yarnpkg.com/lang/en/docs/cli/link/), list their source locations (or a containing directory).
 
 ```js
 // <workspace root>/apps/my-app/metro.config.js
@@ -210,11 +210,11 @@ function unstable_perfLoggerFactory(
   opts?: $ReadOnly<{key?: number}>,
 ): RootPerfLogger {
   // ...
-};
+}
 ```
 
-* **`type`**: The event type. See [PerfLoggerFactory](https://github.com/react/metro/blob/main/packages/metro-config/src/types.js) for the full list.
-* **`opts.key`**: An opaque identifier distinguishing instances of an event type (e.g. multiple, possibly concurrent, HMR requests).
+- **`type`**: The event type. See [PerfLoggerFactory](https://github.com/react/metro/blob/main/packages/metro-config/src/types.js) for the full list.
+- **`opts.key`**: An opaque identifier distinguishing instances of an event type (e.g. multiple, possibly concurrent, HMR requests).
 
 It returns a [RootPerfLogger](https://github.com/react/metro/blob/main/packages/metro-config/src/types.js). A no-op example:
 
@@ -238,6 +238,7 @@ const unstable_perfLoggerFactory = (type, factoryOpts) => {
 ```
 
 ---
+
 ### Resolver Options
 
 Resolver options control [resolution](./Concepts.md#resolution): how Metro finds the file that an import such as `'./Button'` or `'react-native'` refers to. See [Module Resolution](./Resolution.md) for the full algorithm.
@@ -330,7 +331,7 @@ resolveRequest: (context, moduleName, platform) => {
   }
   // Optionally, chain to the standard Metro resolver.
   return context.resolveRequest(context, moduleName, platform);
-}
+};
 ```
 
 #### `schemeResolvers`
@@ -350,15 +351,15 @@ schemeResolvers: {
 
 Differences from [`resolveRequest`](#resolverequest):
 
-- They run *within* Metro's default resolution instead of replacing it. A user `resolveRequest` takes precedence; scheme resolvers apply once it delegates back via `context.resolveRequest`.
+- They run _within_ Metro's default resolution instead of replacing it. A user `resolveRequest` takes precedence; scheme resolvers apply once it delegates back via `context.resolveRequest`.
 - Only specifiers with a registered scheme are dispatched. Relative (`./`, `../`) and subpath (`#…`) imports are resolved first and never treated as schemes.
 - The resolver's [`context.resolveRequest`](./Resolution.md#resolverequest-customresolver) delegates to Metro's default resolution, for easy chaining.
 
-Schemes are lowercased before lookup, so keys must be lowercase; `Foo:` and `foo:` both match `'foo'`. `mergeConfig` merges `schemeResolvers` per scheme: a later config replaces an earlier resolver only for the same key. Metro's built-in scheme resolvers (currently `metro:`), registered when it builds a resolution context, apply *beneath* this option, so an entry here overrides a built-in with the same key.
+Schemes are lowercased before lookup, so keys must be lowercase; `Foo:` and `foo:` both match `'foo'`. `mergeConfig` merges `schemeResolvers` per scheme: a later config replaces an earlier resolver only for the same key. Metro's built-in scheme resolvers (currently `metro:`), registered when it builds a resolution context, apply _beneath_ this option, so an entry here overrides a built-in with the same key.
 
 :::note Backwards compatibility
 
-`schemeResolvers` itself is not deprecated. But when a specifier's scheme has *no* registered resolver, Metro currently falls back to its other resolution methods (Haste, `node_modules`, [`extraNodeModules`](#extranodemodules)) before failing, in case a project already uses scheme-like specifiers with those. This fallback is deprecated; once removed, unregistered schemes will fail immediately.
+`schemeResolvers` itself is not deprecated. But when a specifier's scheme has _no_ registered resolver, Metro currently falls back to its other resolution methods (Haste, `node_modules`, [`extraNodeModules`](#extranodemodules)) before failing, in case a project already uses scheme-like specifiers with those. This fallback is deprecated; once removed, unregistered schemes will fail immediately.
 
 :::
 
@@ -392,8 +393,12 @@ Path to the project's [Haste](./Concepts.md#haste) implementation. Most React Na
 
 ```flow
 module.exports = {
-  getHasteName(filePath: string): ?string { /* ... */ },
-  getCacheKey(): string { /* ... */ },
+  getHasteName(filePath: string): ?string {
+    /* ... */
+  },
+  getCacheKey(): string {
+    /* ... */
+  },
 };
 ```
 
@@ -405,6 +410,7 @@ Type: `?string`
 
 Path to a module that extracts each file's dependencies for the file map. They're stored as file map metadata, not used for bundling. Expected signature:
 
+<!-- prettier-ignore -->
 ```flow
 module.exports = {
   extract(
@@ -493,6 +499,7 @@ Modules that trigger a full reload instead of a Fast Refresh update when changed
 Transformer options control [transformation](./Concepts.md#transformation): how each module is compiled (by default, with Babel) and minified, and how assets are handled.
 
 <!-- Keep old links to `asyncRequireModulePath` working -->
+
 <a name="asyncrequiremodulepath"></a>
 
 #### `asyncRequireModulePath` <div class="label deprecated">Deprecated</div>
@@ -515,8 +522,8 @@ Type: `'throwAtRuntime' | 'reject'`
 
 How Metro handles dependencies inside `node_modules` that can't be statically analyzed, e.g. `require('./' + someFunction() + '.js')`. Such dependencies outside `node_modules` are always rejected.
 
-* **`'throwAtRuntime'`** (the default): Metro keeps bundling, but the `require` call throws at runtime.
-* **`'reject'`**: Metro stops bundling and reports an error.
+- **`'throwAtRuntime'`** (the default): Metro keeps bundling, but the `require` call throws at runtime.
+- **`'reject'`**: Metro stops bundling and reports an error.
 
 #### `getTransformOptions`
 
@@ -540,12 +547,12 @@ function getTransformOptions(
 }
 ```
 
-* **`entryPoints`**: Absolute paths to the bundle's [entry points](./Concepts.md#entry-point) (typically just one).
-* **`options`**:
-  * **`dev`**: Whether the bundle is built in development mode.
-  * **`hot`**: <div class="label deprecated">Deprecated</div> Always true.
-  * **`platform`**: The target platform (e.g. `ios`, `android`).
-* **`getDependenciesOf`**: Given a module's absolute path, resolves to the absolute paths of its transitive dependencies.
+- **`entryPoints`**: Absolute paths to the bundle's [entry points](./Concepts.md#entry-point) (typically just one).
+- **`options`**:
+  - **`dev`**: Whether the bundle is built in development mode.
+  - **`hot`**: <div class="label deprecated">Deprecated</div> Always true.
+  - **`platform`**: The target platform (e.g. `ios`, `android`).
+- **`getDependenciesOf`**: Given a module's absolute path, resolves to the absolute paths of its transitive dependencies.
 
 It returns a promise resolving to:
 
@@ -561,12 +568,12 @@ type ExtraTransformOptions = {
 };
 ```
 
-* **`preloadedModules`**: A plain object whose keys are absolute paths of modules to mark for eager evaluation at runtime when serializing an [indexed RAM bundle](https://reactnative.dev/docs/ram-bundles-inline-requires#enable-the-ram-format).
-* **`ramGroups`**: Absolute paths. In an indexed RAM bundle, each listed module is serialized with its transitive dependencies, which are all parsed together at runtime as soon as any one of them is evaluated.
-* **`transform`**: Advanced transformer options.
-  * **`experimentalImportSupport`**: Whether to transform ES module `import`/`export` statements with Metro's own import/export plugin.
-  * **`inlineRequires`**: A boolean enables or disables inline requires in this bundle. An object enables them in all modules except those whose absolute paths are keys of `inlineRequires.blockList`. Inline requires replace a top-level `require` assigned to a variable with the `require` call at each use, e.g. `const Foo = require('foo'); f(Foo);` becomes `f(require('foo'));`. This also applies to a property access (`const Bar = require('foo').bar`) and to destructuring (`const {Baz, qux: Qux} = require('foo')`), but not to destructuring with defaults, rest elements, nesting or computed keys.
-  * **`nonInlinedRequires`**: Unresolved module specifiers (e.g. `react`, `react-native`) to never inline, even when inline requires are enabled. Defaults to `['React', 'react', 'react/jsx-dev-runtime', 'react/jsx-runtime', 'react-compiler-runtime', 'react-native']`.
+- **`preloadedModules`**: A plain object whose keys are absolute paths of modules to mark for eager evaluation at runtime when serializing an [indexed RAM bundle](https://reactnative.dev/docs/ram-bundles-inline-requires#enable-the-ram-format).
+- **`ramGroups`**: Absolute paths. In an indexed RAM bundle, each listed module is serialized with its transitive dependencies, which are all parsed together at runtime as soon as any one of them is evaluated.
+- **`transform`**: Advanced transformer options.
+  - **`experimentalImportSupport`**: Whether to transform ES module `import`/`export` statements with Metro's own import/export plugin.
+  - **`inlineRequires`**: A boolean enables or disables inline requires in this bundle. An object enables them in all modules except those whose absolute paths are keys of `inlineRequires.blockList`. Inline requires replace a top-level `require` assigned to a variable with the `require` call at each use, e.g. `const Foo = require('foo'); f(Foo);` becomes `f(require('foo'));`. This also applies to a property access (`const Bar = require('foo').bar`) and to destructuring (`const {Baz, qux: Qux} = require('foo')`), but not to destructuring with defaults, rest elements, nesting or computed keys.
+  - **`nonInlinedRequires`**: Unresolved module specifiers (e.g. `react`, `react-native`) to never inline, even when inline requires are enabled. Defaults to `['React', 'react', 'react/jsx-dev-runtime', 'react/jsx-runtime', 'react-compiler-runtime', 'react-native']`.
 
 #### `minifierPath`
 
@@ -677,6 +684,7 @@ Type: `boolean`
 Whether to parse JavaScript with [`flow-parser`](https://www.npmjs.com/package/flow-parser) instead of Babel. Only has an effect with the [Babel transformers](#babeltransformerpath) built into Metro; custom ones may ignore it. Defaults to `false`.
 
 ---
+
 ### Serializer Options
 
 Serializer options control [serialization](./Concepts.md#serialization): how transformed modules are combined into the final bundle, and what runs before your app code.
@@ -750,6 +758,7 @@ Type: `boolean`
 Whether the default serializer defines each module lazily, on its first `require`, instead of running every `__d(...)` call at startup, reducing startup cost and peak memory for large bundles. Does not affect Fast Refresh updates. Defaults to `false`.
 
 ---
+
 ### Server Options
 
 Options for Metro's development server, which your app downloads its bundle from during development.
@@ -980,7 +989,9 @@ export default (defaults: ConfigT) =>
     defaults,
     // Function form: extends the default additionalExts
     config => ({
-      watcher: {additionalExts: [...config.watcher.additionalExts, 'mts', 'cts']},
+      watcher: {
+        additionalExts: [...config.watcher.additionalExts, 'mts', 'cts'],
+      },
     }),
     // Plain object form
     {transformer: {minifierPath: 'metro-minify-terser'}},

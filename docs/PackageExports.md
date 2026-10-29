@@ -10,7 +10,7 @@ Many npm packages use the `"exports"` field in `package.json` to declare which f
 
 ## Background
 
-Package Exports, introduced in Node.js 12.7.0, let a package declare its **entry points** in `"exports"`: which subpaths can be imported from outside the package, and which file each resolves to. A subpath can have different targets depending on [*conditions*](https://nodejs.org/api/packages.html#conditional-exports), such as browser vs. Node.js, or `import` vs. `require`.
+Package Exports, introduced in Node.js 12.7.0, let a package declare its **entry points** in `"exports"`: which subpaths can be imported from outside the package, and which file each resolves to. A subpath can have different targets depending on [_conditions_](https://nodejs.org/api/packages.html#conditional-exports), such as browser vs. Node.js, or `import` vs. `require`.
 
 Package Exports support has been enabled by default in Metro since [0.82](https://github.com/react/metro/releases/tag/v0.82.0) (React Native 0.79).
 
@@ -20,10 +20,10 @@ Package Exports support has been enabled by default in Metro since [0.82](https:
 
 ## Configuration options
 
-| Option | Description |
-| --- | --- |
-| [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) | Enable/disable Package Exports support. |
-| [`resolver.unstable_conditionNames`](./Configuration.md#unstable_conditionnames-experimental) | Condition names to assert when resolving conditional exports. |
+| Option                                                                                                    | Description                                                                          |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) | Enable/disable Package Exports support.                                              |
+| [`resolver.unstable_conditionNames`](./Configuration.md#unstable_conditionnames-experimental)             | Condition names to assert when resolving conditional exports.                        |
 | [`resolver.unstable_conditionsByPlatform`](./Configuration.md#unstable_conditionsbyplatform-experimental) | Additional condition names to assert for a given [platform](./Concepts.md#platform). |
 
 ## How Metro applies `import`/`require` exports conditions
@@ -219,7 +219,7 @@ Subpath patterns conveniently export many assets; we recommend specifying asset 
 
 Since `"exports"` takes priority, Metro may resolve a package to a file not designed for React Native. Symptoms include:
 
-- *"`import.meta` can not be used outside a module"*. `import.meta` support is coming.
+- _"`import.meta` can not be used outside a module"_. `import.meta` support is coming.
 - Errors relating to `document` or other web globals in your mobile app.
 
 In these cases, **React Native developers** can:
@@ -240,7 +240,7 @@ To use the `browser` condition for `some-pkg` and its subpaths:
 
 ```js
 // metro.config.js
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
 const config = {
   resolver: {
@@ -273,7 +273,7 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), config);
 
 Bugs in earlier versions of Metro's implementation may cause:
 
-- *"`_interopRequireDefault` is not a function"*.
+- _"`_interopRequireDefault` is not a function"_.
 - Non-deterministic builds that sometimes result in ESM-related errors.
 
 These should be fixed in Metro 0.82.3 (for React Native 0.79) or Metro 0.81.5 (if you opted in to `exports` support in older React Native versions).

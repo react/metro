@@ -3,7 +3,7 @@ id: bundling
 title: Bundling
 ---
 
-*Bundling* turns your app's source files into a *bundle*: the JavaScript your app loads at runtime. A bundle contains every [module](./Concepts.md#module) reachable from the [entry point](./Concepts.md#entry-point), [transformed](./Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](./Concepts.md#serialization).
+_Bundling_ turns your app's source files into a _bundle_: the JavaScript your app loads at runtime. A bundle contains every [module](./Concepts.md#module) reachable from the [entry point](./Concepts.md#entry-point), [transformed](./Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](./Concepts.md#serialization).
 
 ## Building a bundle
 
@@ -26,6 +26,7 @@ To build a bundle, Metro:
 
 Each module's code is wrapped in a function and registered under its numeric ID. For example, an `index.js` that requires `./Button` becomes (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 // index.js: module ID 0, depends on module 1
 __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
@@ -45,7 +46,7 @@ Modules refer to each other by numeric IDs assigned at build time, not by path. 
 
 ### Scripts
 
-Metro's runtime and the polyfills from [`serializer.getPolyfills`](./Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](./Configuration.md#polyfillmodulenames) are transformed as *scripts* instead of modules, and placed at the start of the bundle, before the modules. A script:
+Metro's runtime and the polyfills from [`serializer.getPolyfills`](./Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](./Configuration.md#polyfillmodulenames) are transformed as _scripts_ instead of modules, and placed at the start of the bundle, before the modules. A script:
 
 - Is wrapped in a function that runs as soon as the bundle loads, with the global object as its `global` argument, instead of in a `__d` call.
 - Is not registered as a module, so it has no module ID and can't be required.
@@ -85,6 +86,7 @@ The standard format, for environments that expect a single JS file, such as Reac
 
 For example, the `index.js` and `Button.js` [above](#modules) become this bundle (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 var __DEV__ = false, process = globalThis.process || {};
 (function (global) {
@@ -117,6 +119,7 @@ Hermes runs bytecode compiled at build time, so there's no source to parse at st
 
 For example, as a [file RAM bundle](#file-ram-bundle), the `index.js` and `Button.js` [above](#modules) become these files (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 // index.android.bundle: the startup code, run when the bundle loads
 var __DEV__ = false, process = globalThis.process || {};

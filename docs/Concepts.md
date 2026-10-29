@@ -3,7 +3,7 @@ id: concepts
 title: Concepts
 ---
 
-Metro is React Native's default JavaScript bundler. It takes an entry file and various options, and returns a single JavaScript file containing all your code and its dependencies: a *bundle*.
+Metro is React Native's default JavaScript bundler. It takes an entry file and various options, and returns a single JavaScript file containing all your code and its dependencies: a _bundle_.
 
 Starting a React Native app in development (e.g. `npx react-native start`) starts a Metro server. Your app downloads its bundle from it, and Metro keeps the bundle updated as you edit files, powering [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
 
@@ -15,17 +15,17 @@ Metro's bundling process has three separate stages: resolution, transformation a
 
 ### Resolution
 
-A *resolver* finds which file each `import` or `require` refers to, so that Metro can build the [dependency graph](#dependency-graph). For example, the resolver decides that `import Button from './Button'` refers to `./Button.ios.js` in an iOS bundle.
+A _resolver_ finds which file each `import` or `require` refers to, so that Metro can build the [dependency graph](#dependency-graph). For example, the resolver decides that `import Button from './Button'` refers to `./Button.ios.js` in an iOS bundle.
 
 This actually runs in parallel with transformation, as Metro discovers each module's dependencies while transforming it. See [Module Resolution](./Resolution.md) for the full algorithm. To customize resolution, set [`resolver.resolveRequest`](./Configuration.md#resolverequest) to your own resolver.
 
 ### Transformation
 
-A *transformer* converts (transpiles) every module to a format the target platform (e.g. React Native) understands. For example, the default transformer uses [Babel](https://babeljs.io/) to compile JSX, TypeScript and Flow syntax. Modules are transformed in parallel, based on your number of cores, and the results are [cached](./Caching.md). To customize how each file's code is compiled, set [`transformer.babelTransformerPath`](./Configuration.md#babeltransformerpath); to replace the whole transformer, set [`transformerPath`](./Configuration.md#transformerpath).
+A _transformer_ converts (transpiles) every module to a format the target platform (e.g. React Native) understands. For example, the default transformer uses [Babel](https://babeljs.io/) to compile JSX, TypeScript and Flow syntax. Modules are transformed in parallel, based on your number of cores, and the results are [cached](./Caching.md). To customize how each file's code is compiled, set [`transformer.babelTransformerPath`](./Configuration.md#babeltransformerpath); to replace the whole transformer, set [`transformerPath`](./Configuration.md#transformerpath).
 
 ### Serialization
 
-Once all modules are transformed, a *serializer* combines them, along with Metro's module runtime, into one or more bundles: JavaScript files your app can load and run. See [Bundling](./Bundling.md). To customize serialization, set [`serializer.customSerializer`](./Configuration.md#customserializer).
+Once all modules are transformed, a _serializer_ combines them, along with Metro's module runtime, into one or more bundles: JavaScript files your app can load and run. See [Bundling](./Bundling.md). To customize serialization, set [`serializer.customSerializer`](./Configuration.md#customserializer).
 
 ## Terminology
 
