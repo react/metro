@@ -74,7 +74,9 @@ You only need the formats below if you work with Metro's output directly, e.g. i
 - [RAM bundle](#ram-bundles): RAM (Random Access Modules) bundles store each module separately, so the app can load a module's code only when it's first required.
 
 :::note
+
 React Native doesn't use RAM bundles with Hermes, its default engine. See [RAM bundles](#ram-bundles).
+
 :::
 
 ### Plain bundle
@@ -106,7 +108,9 @@ __r(0);
 A RAM bundle stores each module's code separately, either in its own file or at its own offset in a single file. A runtime that parses JavaScript source can then parse only the startup code at launch, and each module when it's first required, instead of the whole bundle. With [inline requires](./Configuration.md#gettransformoptions), a module is required, and so parsed, only when code first uses it, not when a file that imports it loads. This helps when parsing a large bundle slows startup. Metro only writes RAM bundles as build output; the development server doesn't serve them.
 
 :::note
+
 In React Native, RAM bundles were designed for JavaScriptCore, and aren't used with Hermes, React Native's default engine.
+
 :::
 
 Hermes runs bytecode compiled at build time, so there's no source to parse at startup, and it memory-maps the bytecode, loading only the parts that run. A plain bundle compiled to Hermes bytecode already gets the benefit a RAM bundle would give. React Native's legacy architecture is also the only one that can load RAM bundles, and React Native doesn't write them by default: its release builds run its `bundle` command, which writes a [plain bundle](#plain-bundle), unless configured to run a different command (`bundleCommand` in the Android Gradle plugin, `BUNDLE_COMMAND` for iOS's `react-native-xcode.sh`).
