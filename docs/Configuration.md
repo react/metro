@@ -331,7 +331,7 @@ resolveRequest: (context, moduleName, platform) => {
 
 #### `schemeResolvers`
 
-Type: `{[scheme: string]: `[`CustomResolver`](./Resolution.md#resolverequest-customresolver)`}`
+Type: `{[scheme: string]: CustomResolver}` (see [`CustomResolver`](./Resolution.md#resolverequest-customresolver))
 
 Custom resolvers for import specifiers that start with a URI scheme, such as `my-scheme:foo`. Keys are lowercase scheme names (the prefix before the first `:`, without the colon). Metro's default resolution calls the matching resolver with the full specifier. Defaults to `{}`.
 
@@ -950,7 +950,7 @@ This lets you override and remove defaults such as `platforms` or `getModulesRun
 
 `server.unstable_middleware` and `server.unstable_priorityMiddleware` are combined instead: later configs wrap earlier ones, so their `unstable_middleware` runs last and their `unstable_priorityMiddleware` runs first. An entry already in an earlier config, e.g. copied with a spread, is kept once.
 
-#### Merging Example
+### Merging Example
 
 ```typescript
 // metro.config.ts

@@ -129,7 +129,7 @@ The Node.js spec explains how to add `"exports"` without breaking changes, but t
 **Please do not rely on [lenient package encapsulation](#package-encapsulation-is-lenient) under Metro.** Metro is lenient for backwards compatibility, but packages should follow `"exports"` as documented in the spec and strictly implemented by other tools.
 :::
 
-#### File extensions are important!
+#### File extensions are important
 
 Each subpath is an exact specifier ([see section in RFC](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0534-metro-package-exports-support.md#exact-path-specifiers)). For packages targeting React Native, we recommend continuing to use **extensionless specifiers** for subpaths, or **defining both extensioned and extensionless specifiers**, as users expect.
 

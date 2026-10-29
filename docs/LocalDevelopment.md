@@ -5,7 +5,7 @@ title: Local Development Setup
 
 This page is for contributors to Metro itself.
 
-### Testing Metro Changes inside a React Native Project
+## Testing Metro Changes inside a React Native Project
 
 To test your changes end-to-end, we recommend using [`yarn link`][1] to register the local packages in your Metro clone, then switching a target project to use them. These instructions cover linking into a React Native app created with `npx @react-native-community/cli init MetroTestApp`, with this directory layout:
 
@@ -63,7 +63,7 @@ To test your changes end-to-end, we recommend using [`yarn link`][1] to register
 
     To go back to the published npm versions of the `metro` packages in your target project, repeat step 2 (and optionally step 1) with `yarn unlink`.
 
-### Debug Logging
+## Debug Logging
 
 Metro uses the [debug](https://www.npmjs.com/package/debug) package to write logs under named debug scopes (e.g. `Metro:WatchmanWatcher`). To enable logs whose scope matches a pattern, set the `DEBUG` environment variable when starting Metro, e.g. for all of Metro's logs:
 
