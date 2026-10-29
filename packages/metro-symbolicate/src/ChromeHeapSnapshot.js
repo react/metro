@@ -601,10 +601,12 @@ class ChromeHeapSnapshotRecordIterator
   next(): IteratorResult<ChromeHeapSnapshotRecordIterator, void> {
     this.protectedTryMoveNext();
     const done = !this.protectedHasNext();
+    // $FlowFixMe[incompatible-type]
     return done ? {done} : {done, value: this};
   }
 
   // JS Iterable protocol
+  // $FlowFixMe[incompatible-type]
   [Symbol.iterator](): ChromeHeapSnapshotRecordIterator {
     return this;
   }
