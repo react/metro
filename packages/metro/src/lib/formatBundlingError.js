@@ -66,6 +66,7 @@ export default function formatBundlingError(
       errors: [
         {
           description: error.message,
+          // $FlowFixMe[prop-missing]
           filename: error.filename,
           lineNumber: error.lineNumber,
         },
