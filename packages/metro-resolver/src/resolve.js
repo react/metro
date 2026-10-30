@@ -12,6 +12,7 @@
 import type {
   FileAndDirCandidates,
   FileCandidates,
+  FileResolution,
   PackageForModule,
   Resolution,
   ResolutionContext,
@@ -262,7 +263,18 @@ export default function resolve(
         platform,
       );
       if (packageExportsResult != null) {
-        return packageExportsResult;
+        if (!context.unstable_applyBrowserSpecAfterExports) {
+          return packageExportsResult;
+        }
+        const result = redirectPackageExportsResolution(
+          context,
+          packageExportsResult,
+          platform,
+        );
+        if (result.type === 'failed') {
+          throw new FailedToResolvePathError(result.candidates);
+        }
+        return result.resolution;
       }
     } catch (e) {
       // NB: Falling back is a departure from the spec, but retained for
@@ -406,7 +418,9 @@ function resolveModuleFromTargetPath(
   platform: string | null,
   targetPath: string,
 ): Resolution | null {
-  const candidate = redirectModulePath(context, targetPath);
+  const candidate = isBrowserSpecAppliedAfterExports(context, targetPath)
+    ? targetPath
+    : redirectModulePath(context, targetPath);
   if (candidate === false) {
     return {type: 'empty'};
   }
@@ -625,7 +639,13 @@ function resolvePackage(
         );
 
         if (packageExportsResult != null) {
-          return resolvedAs(packageExportsResult);
+          return context.unstable_applyBrowserSpecAfterExports
+            ? redirectPackageExportsResolution(
+                context,
+                packageExportsResult,
+                platform,
+              )
+            : resolvedAs(packageExportsResult);
         }
       } catch (e) {
         if (e instanceof PackagePathNotExportedError) {
@@ -646,6 +666,48 @@ function resolvePackage(
   }
 
   return resolveModulePath(context, absoluteCandidatePath, platform);
+}
+
+/**
+ * Whether to resolve a path inside a package against the package's "exports"
+ * field before applying "browser" spec redirections, which are then applied to
+ * the resolved file instead (`unstable_applyBrowserSpecAfterExports`). This
+ * matches webpack and Vite.
+ */
+function isBrowserSpecAppliedAfterExports(
+  context: ResolutionContext,
+  absoluteCandidatePath: string,
+): boolean {
+  return (
+    context.unstable_applyBrowserSpecAfterExports &&
+    context.unstable_enablePackageExports &&
+    context.getPackageForModule(absoluteCandidatePath)?.packageJson.exports !=
+      null
+  );
+}
+
+/**
+ * Apply "browser" spec redirections to a file resolved from "exports". These
+ * match the resolved file (e.g. "./lib/index.node.js"), not the requested
+ * subpath (e.g. "./lib"), and are read from the `package.json` closest to the
+ * file.
+ */
+function redirectPackageExportsResolution(
+  context: ResolutionContext,
+  resolution: FileResolution,
+  platform: string | null,
+): Result<Resolution, FileAndDirCandidates> {
+  if (resolution.type !== 'sourceFile') {
+    return resolvedAs(resolution);
+  }
+  const redirectedPath = redirectModulePath(context, resolution.filePath);
+  if (redirectedPath === false) {
+    return resolvedAs({type: 'empty'});
+  }
+  if (redirectedPath === resolution.filePath) {
+    return resolvedAs(resolution);
+  }
+  return resolveModulePath(context, redirectedPath, platform);
 }
 
 /**

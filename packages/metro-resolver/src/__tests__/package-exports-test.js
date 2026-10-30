@@ -1439,4 +1439,157 @@ describe('with package exports resolution enabled', () => {
       });
     });
   });
+
+  describe('"browser" spec redirections with "exports"', () => {
+    const baseContext = {
+      ...createResolutionContext({
+        [p('/root/src/main.js')]: '',
+        [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
+          name: 'test-pkg',
+          exports: {
+            '.': './index.js',
+            './hash': {
+              browser: './hash-browser.js',
+              default: './hash-node.js',
+            },
+            './server': {
+              browser: './server-browser.js',
+              default: './server-node.js',
+            },
+            './fs': './fs-node.js',
+          },
+          browser: {
+            './index.js': './index-browser.js',
+            // Redirects both the exported subpath and the file it resolves
+            // to, as in multiformats.
+            './hash': './hash-browser.js',
+            './hash-node.js': './hash-browser.js',
+            // Matches the "./server" subpath (as "./server.js"), as in
+            // react-dom.
+            './server.js': './server-browser.js',
+            './fs-node.js': false,
+            './private': './private-browser.js',
+          },
+        }),
+        [p('/root/node_modules/test-pkg/index.js')]: '',
+        [p('/root/node_modules/test-pkg/index-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/hash-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/hash-node.js')]: '',
+        [p('/root/node_modules/test-pkg/server-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/server-node.js')]: '',
+        [p('/root/node_modules/test-pkg/fs-node.js')]: '',
+        [p('/root/node_modules/test-pkg/private-browser.js')]: '',
+      }),
+      mainFields: ['react-native', 'browser', 'main'],
+      originModulePath: p('/root/src/main.js'),
+      unstable_enablePackageExports: true,
+    };
+
+    test('should redirect the requested subpath before "exports" by default', () => {
+      const logWarning = jest.fn();
+      const context = {...baseContext, unstable_logWarning: logWarning};
+
+      expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
+        type: 'sourceFile',
+        filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+      });
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain(
+        'under the requested subpath "./hash-browser.js"',
+      );
+    });
+
+    describe('with unstable_applyBrowserSpecAfterExports', () => {
+      const logWarning = jest.fn();
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: true,
+        unstable_logWarning: logWarning,
+      };
+
+      beforeEach(() => {
+        logWarning.mockClear();
+      });
+
+      afterEach(() => {
+        expect(logWarning).not.toHaveBeenCalled();
+      });
+
+      test('should redirect the file resolved from "exports"', () => {
+        expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+        expect(Resolver.resolve(context, 'test-pkg/hash', 'web')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+      });
+
+      test('should redirect the main entry point resolved from "exports"', () => {
+        expect(Resolver.resolve(context, 'test-pkg', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/index-browser.js'),
+        });
+      });
+
+      test('should not redirect an exported subpath', () => {
+        expect(Resolver.resolve(context, 'test-pkg/server', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/server-node.js'),
+        });
+        expect(Resolver.resolve(context, 'test-pkg/server', 'web')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/server-browser.js'),
+        });
+      });
+
+      test('should resolve to the empty module for a file mapped to `false`', () => {
+        expect(Resolver.resolve(context, 'test-pkg/fs', 'ios')).toEqual({
+          type: 'empty',
+        });
+      });
+
+      test('should not redirect when the field is not in `mainFields`', () => {
+        expect(
+          Resolver.resolve(
+            {...context, mainFields: ['main']},
+            'test-pkg/hash',
+            'ios',
+          ),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-node.js'),
+        });
+      });
+
+      test('should redirect the file resolved from "exports" for a self-reference', () => {
+        expect(
+          Resolver.resolve(
+            {
+              ...context,
+              originModulePath: p('/root/node_modules/test-pkg/index.js'),
+            },
+            'test-pkg/hash',
+            'ios',
+          ),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+      });
+
+      test('[nonstrict] should warn about the requested subpath, then redirect it, when it is not exported', () => {
+        expect(Resolver.resolve(context, 'test-pkg/private', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/private-browser.js'),
+        });
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain(
+          'under the requested subpath "./private"',
+        );
+        logWarning.mockClear();
+      });
+    });
+  });
 });

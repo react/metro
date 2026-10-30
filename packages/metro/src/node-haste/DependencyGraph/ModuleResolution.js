@@ -53,6 +53,7 @@ type Options = Readonly<{
   resolveRequest: ?CustomResolver,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
@@ -119,6 +120,7 @@ export class ModuleResolver {
       resolveRequest,
       schemeResolvers,
       sourceExts,
+      unstable_applyBrowserSpecAfterExports,
       unstable_conditionNames,
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
@@ -152,6 +154,7 @@ export class ModuleResolver {
             resolveRequest,
             schemeResolvers,
             sourceExts,
+            unstable_applyBrowserSpecAfterExports,
             unstable_conditionNames,
             unstable_conditionsByPlatform,
             unstable_enablePackageExports,
