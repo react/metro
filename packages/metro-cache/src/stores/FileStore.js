@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -65,7 +66,19 @@ export default class FileStore<T> {
     } else {
       content = JSON.stringify(value) ?? JSON.stringify(null);
     }
-    await fs.promises.writeFile(filePath, content);
+    // Write to a unique temporary file and rename it into place, so that a
+    // concurrent reader (or writer) of the same key never sees a partially
+    // written entry. Writing in place truncates the file first, and a reader
+    // could then see a run of null bytes, which looks like a binary entry.
+    const suffix = crypto.randomBytes(8).toString('hex');
+    const tempPath = `${filePath}.${process.pid}.${suffix}.tmp`;
+    try {
+      await fs.promises.writeFile(tempPath, content);
+      await fs.promises.rename(tempPath, filePath);
+    } catch (err) {
+      await fs.promises.rm(tempPath, {force: true});
+      throw err;
+    }
   }
 
   clear() {
