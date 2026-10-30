@@ -31,13 +31,17 @@ Package Exports support has been enabled by default in Metro since [0.82](https:
 Like Node.js, Metro asserts either `'import'` or `'require'`, never both, depending on whether your source file loads the dependency with `import` (or `await import()`) or `require()`. Unlike Node.js, Metro allows `import ... from` and `require()` in the same file, so you can change an `import` to `require()` to get a dependency's CommonJS version.
 
 :::info
+
 Metro records the source locations of your `import`s before transforming them to `require`s for bundling, then checks whether each `require` is source mapped to a former `import`. If Metro resolves an `import` as if it were a `require`, a custom Babel transform in your configuration may be dropping its source mapping.
+
 :::
 
 ## Summary of breaking changes
 
 :::info
+
 **Package Exports resolution was introduced as an opt-in in Metro 0.76.1 and opt-out from Metro 0.82.0**. We will provide the option to disable it for several further releases, and have no plans to remove existing non-`"exports"` resolution behaviour.
+
 :::
 
 Package Exports was already live in the npm ecosystem and overlaps with React Native concepts such as [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code), so we designed Metro's implementation with the community ([PR](https://github.com/react-native-community/discussions-and-proposals/pull/534), [final RFC](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0534-metro-package-exports-support.md)). It is spec-compliant (necessitating some breaking changes) but otherwise backwards compatible, so apps can migrate gradually.
@@ -81,7 +85,9 @@ Subpaths matched in `"exports"` (including via [subpath patterns](https://nodejs
 For a package without `"exports"`, `import FooComponent from 'some-pkg/FooComponent'` tries `.[platform].js`, `.native.js`, `.js` (+ TypeScript variants). If `"exports"` lists `"./FooComponent": "./src/FooComponent.js"`, the same import always resolves to `src/FooComponent.js`, even if `src/FooComponent.ios.js` exists.
 
 :::note
+
 We have no plans to drop platform-specific extensions for packages not using `"exports"`, or in app code.
+
 :::
 
 ### Breaking: Import specifiers are matched exactly
@@ -108,7 +114,9 @@ the call site or asking the package maintainer(s) to expose this API.
 To fix the warning, import a subpath the package lists in `"exports"`, or ask its maintainers to export the one you need.
 
 :::note
+
 We plan to implement a strict mode for package encapsulation in the future, to align with Node's default behavior. **We recommend that all developers fix encapsulation warnings in their code**.
+
 :::
 
 ## Migration guide for package maintainers
@@ -126,10 +134,12 @@ The Node.js spec explains how to add `"exports"` without breaking changes, but t
 ### Package subpaths
 
 :::caution
+
 **Please do not rely on [lenient package encapsulation](#package-encapsulation-is-lenient) under Metro.** Metro is lenient for backwards compatibility, but packages should follow `"exports"` as documented in the spec and strictly implemented by other tools.
+
 :::
 
-#### File extensions are important!
+#### File extensions are important
 
 Each subpath is an exact specifier ([see section in RFC](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0534-metro-package-exports-support.md#exact-path-specifiers)). For packages targeting React Native, we recommend continuing to use **extensionless specifiers** for subpaths, or **defining both extensioned and extensionless specifiers**, as users expect.
 
@@ -172,7 +182,9 @@ For packages using `"exports"`, this condition replaces the `"react-native"` roo
 Metro picks the first condition it asserts: `"react-native"` on Android and iOS (React Native's default config), but `"browser"` for `web` (asserted via the default [`resolver.unstable_conditionsByPlatform`](./Configuration.md#unstable_conditionsbyplatform-experimental)), since it comes first.
 
 :::note
+
 We chose not to introduce `"android"` and `"ios"` conditions, due to the prevalence of other existing platform selection methods, and the complexity of how this behavior might work across frameworks. We recommend the [`Platform.select()`](https://reactnative.dev/docs/platform#select) API instead.
+
 :::
 
 ### Replacing platform-specific extensions
@@ -219,7 +231,9 @@ In these cases, **React Native developers** can:
 #### Example: Custom resolver
 
 :::note
+
 Expo users should follow Expo-specific guidance in [this GitHub discussion](https://github.com/expo/expo/discussions/36551#discussion-8271245)
+
 :::
 
 To use the `browser` condition for `some-pkg` and its subpaths:

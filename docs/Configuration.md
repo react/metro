@@ -119,7 +119,9 @@ Your project's root folder. Directories of any files it depends on outside this 
 In React Native, this is the directory passed to `getDefaultConfig` (usually `__dirname`, the directory containing `metro.config.js`).
 
 :::note
+
 In a monorepo with files from multiple packages, you'll generally want `projectRoot` at the repository root, or high enough that all relevant files are reachable without `watchFolders`.
+
 :::
 
 #### `watchFolders`
@@ -178,8 +180,10 @@ Type: `number`
 The number of parallel workers. Also settable with `--max-workers`. Defaults to roughly 75% of [`os.availableParallelism()`](https://nodejs.org/api/os.html#osavailableparallelism) for up to 8 cores, falling to 50% for 48 or more, e.g. 6 workers on 8 cores, 10 on 16 and 32 on 64.
 
 :::note
+
 1. If 1 or lower, worker code runs in the main Metro process instead of concurrently.
 2. Metro's two worker pools (transformation and file map building) are each sized to `maxWorkers`.
+
 :::
 
 #### `fileMapCacheDirectory`
@@ -331,7 +335,7 @@ resolveRequest: (context, moduleName, platform) => {
 
 #### `schemeResolvers`
 
-Type: `{[scheme: string]: `[`CustomResolver`](./Resolution.md#resolverequest-customresolver)`}`
+Type: `{[scheme: string]: CustomResolver}` (see [`CustomResolver`](./Resolution.md#resolverequest-customresolver))
 
 Custom resolvers for import specifiers that start with a URI scheme, such as `my-scheme:foo`. Keys are lowercase scheme names (the prefix before the first `:`, without the colon). Metro's default resolution calls the matching resolver with the full specifier. Defaults to `{}`.
 
@@ -500,7 +504,9 @@ The module providing the `asyncRequire` function, which implements [dynamic `imp
 Using a custom value for bundle splitting, as in older Metro versions, is deprecated in favor of the [`__loadBundleAsync`](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) API.
 
 :::note
+
 The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
+
 :::
 
 #### `dynamicDepsInPackages`
@@ -637,7 +643,9 @@ Type: `string`
 A module that compiles code with Babel, returning an AST and optional metadata. Defaults to `metro-babel-transformer`. To implement a custom one, see the source of [`metro-babel-transformer`](https://github.com/react/metro/blob/main/packages/metro-babel-transformer/src/index.js) and [`@react-native/metro-babel-transformer`](https://github.com/facebook/react-native/blob/main/packages/react-native-babel-transformer/src/index.js).
 
 :::note
+
 When using React Native, `babelTransformerPath` defaults to `@react-native/metro-babel-transformer`.
+
 :::
 
 #### `enableBabelRCLookup`
@@ -657,7 +665,9 @@ When `true`, Metro tells Babel presets that support it, through [caller data](ht
 <div class="label deprecated">Deprecated</div> A string is treated as a version of your project's own `@babel/runtime`, passed to the plugin as its `version`, and helpers are imported from that copy. Use `true` instead.
 
 :::note
+
 Only works under React Native's default settings. May have no effect with a custom [`transformerPath`](#transformerpath), [`babelTransformerPath`](#babeltransformerpath) or [Babel config file](https://babeljs.io/docs/en/config-files).
+
 :::
 
 #### `hermesParser`
@@ -690,7 +700,9 @@ Type: `({platform: ?string}) => $ReadOnlyArray<string>`
 An optional list of polyfills to include in the bundle. Defaults to `[]`.
 
 :::note
+
 When using React Native, `getPolyfills` returns the polyfills from `@react-native/js-polyfills`.
+
 :::
 
 #### `getModulesRunBeforeMainModule`
@@ -749,7 +761,9 @@ Type: `number`
 The port to listen on. Defaults to `8081`.
 
 :::note
+
 When using React Native, you can also set the `RCT_METRO_PORT` environment variable, or pass `--port` to `npx react-native start`.
+
 :::
 
 #### `unstable_serverRoot` <div class="label experimental">Experimental</div>
@@ -865,7 +879,9 @@ Type: `(frame: {file: ?string, lineNumber: ?number, column: ?number, methodName:
 Called for each symbolicated stack frame. The returned properties are merged into the frame, e.g. `{collapse: true}` collapses frames irrelevant to users. Defaults to a no-op.
 
 :::note
+
 When using React Native, `customizeFrame` collapses frames from React Native's own internal modules.
+
 :::
 
 #### `customizeStack`
@@ -910,7 +926,9 @@ Type: `string`
 The name of the temporary file that health checks write into the project. Defaults to `'.metro-health-check'`.
 
 :::note
+
 If you enable health checks, add `.metro-health-check*` to your `.gitignore`.
+
 :::
 
 #### `healthCheck.interval`
@@ -950,7 +968,7 @@ This lets you override and remove defaults such as `platforms` or `getModulesRun
 
 `server.unstable_middleware` and `server.unstable_priorityMiddleware` are combined instead: later configs wrap earlier ones, so their `unstable_middleware` runs last and their `unstable_priorityMiddleware` runs first. An entry already in an earlier config, e.g. copied with a spread, is kept once.
 
-#### Merging Example
+### Merging Example
 
 ```typescript
 // metro.config.ts
