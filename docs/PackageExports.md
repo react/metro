@@ -69,6 +69,7 @@ If a package's `package.json` has an `"exports"` field, Metro consults it first.
 
 - `"exports"` is used instead of any `"react-native"`, `"browser"`, or `"main"` field, and instead of a file on disk at the same subpath (e.g. with `"./utils": "./dist/utils.js"`, `'some-pkg/utils'` resolves to `dist/utils.js` even if the package has a root `utils.js`).
 - **Fallback**: If the requested subpath isn't matched in `"exports"`, Metro tries again using the fields above.
+- An object-valued `"browser"` field (or other object-valued [main field](./Configuration.md#resolvermainfields)) can still redirect the requested subpath before `"exports"` is matched. Enable [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) to apply those redirections to the file that `"exports"` resolves to instead, as webpack and Vite do.
 
 Subpaths matched in `"exports"` (including via [subpath patterns](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns)) resolve to the exact target file the package specifies:
 

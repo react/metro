@@ -84,6 +84,7 @@ export type ResolutionContext = Readonly<{
   resolveRequest?: null | undefined | CustomResolver;
   schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}> | undefined;
   sourceExts: ReadonlyArray<string>;
+  unstable_applyBrowserSpecAfterExports: boolean;
   unstable_conditionNames: ReadonlyArray<string>;
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>;
