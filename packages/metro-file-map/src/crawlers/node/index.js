@@ -11,13 +11,25 @@
 
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
+import H from '../../constants';
 import {RootPathUtils} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
 function find(options: CrawlerOptions): Promise<FileData> {
-  const {console, extensions, ignore, includeSymlinks, rootDir, roots} =
-    options;
+  const {
+    console,
+    extensions,
+    ignore,
+    includeSymlinks,
+    rootDir,
+    roots,
+    subpath,
+  } = options;
+  // A recrawl while watching diffs against the live file system, whose
+  // consumers (e.g. a package.json cache) may hold contents read without a
+  // stat, so it stats every file.
+  const statRegularFiles = subpath != null;
   const result: FileData = new Map();
   const pathUtils = new RootPathUtils(rootDir);
   const exts = new Set(extensions);
@@ -80,6 +92,14 @@ function find(options: CrawlerOptions): Promise<FileData> {
               continue;
             }
 
+            if (!isSymbolicLink && !statRegularFiles) {
+              // Recorded without a stat. Those with a modified time in the
+              // previous state are stat'd once the difference is known (see
+              // `statPreviouslyStatted`).
+              result.set(childNormal, [null, 0, 0, null, 0]);
+              continue;
+            }
+
             activeCalls++;
             fs.lstat(file, (err, stat) => {
               activeCalls--;
@@ -135,7 +155,62 @@ export default async function nodeCrawl(
   const difference = previousState.fileSystem.getDifference(fileData, {
     subpath,
   });
+  await statPreviouslyStatted(options, difference.changedFiles);
 
   perfLogger?.point('nodeCrawl_end');
   return difference;
+}
+
+/**
+ * A regular file crawled without a stat is reported changed only if it had a
+ * modified time before, i.e. it may have data derived from what it held then.
+ * Stat those, and drop any whose modified time matches.
+ */
+async function statPreviouslyStatted(
+  options: CrawlerOptions,
+  changedFiles: FileData,
+): Promise<void> {
+  const {previousState, rootDir} = options;
+  const pathUtils = new RootPathUtils(rootDir);
+  const stats: Array<Promise<void>> = [];
+  for (const [normalPath, metadata] of changedFiles) {
+    if (metadata[H.MTIME] != null || metadata[H.SYMLINK] !== 0) {
+      continue;
+    }
+    const absolutePath = pathUtils.normalToAbsolute(normalPath);
+    // Only a file at this very path - not one reached through what was a
+    // symlink - can have data derived from it here.
+    const previous = previousState.fileSystem.lookup(absolutePath);
+    if (
+      !previous.exists ||
+      previous.type !== 'f' ||
+      previous.realPath !== absolutePath
+    ) {
+      continue;
+    }
+    const modifiedTime =
+      previousState.fileSystem.linkStats(absolutePath)?.modifiedTime;
+    if (modifiedTime == null) {
+      continue;
+    }
+    stats.push(
+      new Promise(resolve => {
+        fs.lstat(absolutePath, (err, stat) => {
+          if (!err && stat) {
+            const mtime = stat.mtime.getTime();
+            if (mtime === modifiedTime) {
+              changedFiles.delete(normalPath);
+            } else {
+              metadata[H.MTIME] = mtime;
+              metadata[H.SIZE] = stat.size;
+            }
+          }
+          // Otherwise deleted since it was crawled, which processing will
+          // discover.
+          resolve();
+        });
+      }),
+    );
+  }
+  await Promise.all(stats);
 }
