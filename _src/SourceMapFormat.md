@@ -8,7 +8,9 @@ Metro produces standard [source maps](https://tc39.es/ecma426/#sec-source-map-fo
 It's for authors of tools that read, generate or transform Metro's source maps, such as debuggers, symbolication services or bundle post-processors. App developers can skip it: their tools consume these fields.
 
 :::note
+
 The content on this page assumes familiarity with the [source map specification](https://tc39.es/ecma426/#sec-source-map-format). Check out [Anatomy of source maps](https://web.archive.org/web/2023/https://www.bugsnag.com/blog/source-maps) for a general introduction to source maps and how they work.
+
 :::
 
 ## `x_facebook_sources`
@@ -22,9 +24,11 @@ In nested (indexed) source maps, `x_facebook_sources` may appear as part of any 
 If present, `x_facebook_sources` may be a different length than `sources` (but usually shouldn't be). If it's shorter, it's interpreted as if padded with `null` values to the length of `sources`.
 
 :::info
-For a tool that processes Metro's source maps to output a valid `x_facebook_sources` field, it mainly needs to ensure that `x_facebook_sources[i]` still corresponds to `sources[i]` in the output - even if it reorders, adds or deletes elements in `sources`. This can be done *without* parsing/decoding the metadata tuples: unless your tool needs the information within them, treat them as opaque blobs of JSON.
+
+For a tool that processes Metro's source maps to output a valid `x_facebook_sources` field, it mainly needs to ensure that `x_facebook_sources[i]` still corresponds to `sources[i]` in the output - even if it reorders, adds or deletes elements in `sources`. This can be done _without_ parsing/decoding the metadata tuples: unless your tool needs the information within them, treat them as opaque blobs of JSON.
 
 If a tool cannot guarantee that the `sources` and `x_facebook_sources` arrays will stay in sync, it should delete the `x_facebook_sources` field from its output.
+
 :::
 
 ### Metadata tuple
@@ -33,16 +37,16 @@ Each metadata tuple is encoded as an array of zero or more entries. Each entry m
 
 The indices in each metadata tuple are assigned as follows:
 
-* Index 0: [Function map](#function-map) or `null`.
-  * In Metro, this is the result of calling [`generateFunctionMap`](https://github.com/react/metro/blob/main/packages/metro-source-map/src/generateFunctionMap.js) on the source AST.
-* Index 1-∞: Reserved for future use.
+- Index 0: [Function map](#function-map) or `null`.
+  - In Metro, this is the result of calling [`generateFunctionMap`](https://github.com/react/metro/blob/main/packages/metro-source-map/src/generateFunctionMap.js) on the source AST.
+- Index 1-∞: Reserved for future use.
 
 #### Function map
 
 A function map records the name of the function that encloses each region of a source file, so that tools can show function names for code locations, e.g. in stack traces. It is encoded as an object with two fields:
 
-* `names`: An array of strings.
-* `mappings`: A string following the [encoding](#function-map-mappings-field-encoding) described below.
+- `names`: An array of strings.
+- `mappings`: A string following the [encoding](#function-map-mappings-field-encoding) described below.
 
 When decoded, `mappings` represents a list of 3-tuples of integers: `(column, nameIndex, line), (column, nameIndex, line), ...`. The list is ordered by `line` and then `column`.
 
@@ -59,31 +63,35 @@ The `mappings` field follows the _Mappings_ production of this grammar:
 5. `VLQ =` _A single Base64-encoded variable-length quantity, as defined in the [source map specification](https://tc39.es/ecma426/#sec-base64-vlq)_.
 
 :::note
+
 The above grammar uses the following BNF-like notation:
 
-| Notation | Meaning |
-|-|-|
-| `[ X ]` | _X_ appears 0 or 1 times. |
-| `{ X }` | _X_ appears 0 or more times. |
-| `"foo"` | The literal characters `foo`. |
+| Notation | Meaning                       |
+| -------- | ----------------------------- |
+| `[ X ]`  | _X_ appears 0 or 1 times.     |
+| `{ X }`  | _X_ appears 0 or more times.  |
+| `"foo"`  | The literal characters `foo`. |
 
 :::
 
 The three VLQs in _FirstColumnMapping_ or _ColumnMapping_ represent, in this order:
+
 1. **Column delta**:
-    * In _FirstColumnMapping_: The column offset from the beginning of the line. (0 = first column)
-    * In _ColumnMapping_: The column offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_.
-2. **Name delta**: The name index offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_. This is *not* reset between lines.
-3. **Line delta**: The line offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_. This is *not* reset between lines.
-    * This MUST be 0 (Base64 VLQ: `A`) if it is part of a _ColumnMapping_.
-    * Implementations SHOULD omit this field from the encoded form of _ColumnMapping_.
+   - In _FirstColumnMapping_: The column offset from the beginning of the line. (0 = first column)
+   - In _ColumnMapping_: The column offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_.
+2. **Name delta**: The name index offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_. This is _not_ reset between lines.
+3. **Line delta**: The line offset from the last-encountered _FirstColumnMapping_ or _ColumnMapping_. This is _not_ reset between lines.
+   - This MUST be 0 (Base64 VLQ: `A`) if it is part of a _ColumnMapping_.
+   - Implementations SHOULD omit this field from the encoded form of _ColumnMapping_.
 
 ### Example
 
 A complete source map for a single source file `file.js` might look like this:
 
 :::note
+
 Comments are for illustrative purposes - the source map format does not allow comments.
+
 :::
 
 ```json
@@ -102,11 +110,7 @@ Comments are for illustrative purposes - the source map format does not allow co
         // b from 1:15
         // (See detailed decoding procedure below.)
         "mappings": "AAA,cC,CC",
-        "names": [
-          "a",
-          "<global>",
-          "b",
-        ]
+        "names": ["a", "<global>", "b"]
       }
     ]
   ]
@@ -115,6 +119,7 @@ Comments are for illustrative purposes - the source map format does not allow co
 
 Decoding the function map in the above example:
 
+<!-- prettier-ignore -->
 ```js
 const decoded = [];
 const names = ['a', '<global>', 'b']; // From the function map

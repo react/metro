@@ -37,10 +37,9 @@ All examples assume `const Metro = require('metro');`.
 
   Metro.loadConfig().then(async config => {
     const connectMiddleware = await Metro.createConnectMiddleware(config);
-    const {server: {port}} = config;
 
     app.use(connectMiddleware.middleware);
-    server.listen(port);
+    server.listen(config.server.port);
     connectMiddleware.attachHmrServer(server);
   });
   ```
