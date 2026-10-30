@@ -50,6 +50,21 @@ function chunkString(str: string, size: number): Array<string> {
 }
 
 /**
+ * Bytes written by `stream` and, when it is stdout or stderr, by both, as they
+ * usually share the terminal (e.g. `console.error()`).
+ */
+function getBytesWritten(stream: tty.WriteStream): number {
+  if (stream !== process.stdout && stream !== process.stderr) {
+    return stream.bytesWritten;
+  }
+
+  return (
+    // $FlowFixMe[prop-missing] `bytesWritten` is missing when redirected to a file
+    (process.stdout.bytesWritten ?? 0) + (process.stderr.bytesWritten ?? 0)
+  );
+}
+
+/**
  * Get the stream as a TTY if it effectively looks like a valid TTY.
  */
 function getTTYStream(stream: UnderlyingStream): ?tty.WriteStream {
@@ -102,6 +117,7 @@ export default class Terminal {
   #isPendingUpdate: boolean;
   #shouldFlush: boolean;
   #writeStatusThrottled: string => void;
+  #bytesWrittenAfterStatus: ?number;
 
   constructor(stream: UnderlyingStream, opts: {ttyPrint?: boolean} = {}) {
     this.#logLines = [];
@@ -132,13 +148,13 @@ export default class Terminal {
     }
 
     this.#isUpdating = true;
-    this.#updatePromise = this.#update().then(async () => {
+    this.#updatePromise = Promise.all(this.#updateSync()).then(async () => {
       while (this.#isPendingUpdate) {
         if (!this.#shouldFlush) {
           await new Promise(resolve => setTimeout(resolve, 33));
         }
         this.#isPendingUpdate = false;
-        await this.#update();
+        await Promise.all(this.#updateSync());
       }
       this.#isUpdating = false;
       this.#shouldFlush = false;
@@ -164,12 +180,10 @@ export default class Terminal {
   }
 
   /**
-   * Clear and write the new status, logging in bulk in-between. Doing this in a
-   * throttled way (in a different tick than the calls to `log()` and
-   * `status()`) prevents us from repeatedly rewriting the status in case
-   * `terminal.log()` is called several times.
+   * Issues the update's writes without awaiting in between, so no other output
+   * can land in the middle of an update. Returns the pending writes.
    */
-  async #update(): Promise<void> {
+  #updateSync(): Array<Promise<unknown>> {
     const ttyStream = this.#ttyStream;
 
     const nextStatusStr = this.#nextStatusStr;
@@ -181,29 +195,43 @@ export default class Terminal {
     this.#logLines = [];
 
     if (statusStr === nextStatusStr && logLines.length === 0) {
-      return;
+      return [];
     }
 
-    if (ttyStream && statusStr.length > 0) {
+    const writes: Array<Promise<unknown>> = [];
+
+    if (
+      ttyStream &&
+      statusStr.length > 0 &&
+      // If anything printed outside of Terminal (like direct console.log),
+      // don't try to clear latest status, and just print a new one instead
+      // or we might delete that external print
+      getBytesWritten(ttyStream) === this.#bytesWrittenAfterStatus
+    ) {
       const statusLinesCount = statusStr.split('\n').length - 1;
       // extra -1 because we print the status with a trailing new line
-      await moveCursor(ttyStream, -ttyStream.columns, -statusLinesCount - 1);
-      await clearScreenDown(ttyStream);
+      writes.push(
+        moveCursor(ttyStream, -ttyStream.columns, -statusLinesCount - 1),
+        clearScreenDown(ttyStream),
+      );
     }
 
     if (logLines.length > 0) {
-      await streamWrite(this.#stream, logLines.join('\n') + '\n');
+      writes.push(streamWrite(this.#stream, logLines.join('\n') + '\n'));
     }
 
     if (ttyStream) {
       if (nextStatusStr.length > 0) {
-        await streamWrite(this.#stream, nextStatusStr + '\n');
+        writes.push(streamWrite(this.#stream, nextStatusStr + '\n'));
       }
+      this.#bytesWrittenAfterStatus = getBytesWritten(ttyStream);
     } else {
       this.#writeStatusThrottled(
         nextStatusStr.length > 0 ? nextStatusStr + '\n' : '',
       );
     }
+
+    return writes;
   }
 
   /**
