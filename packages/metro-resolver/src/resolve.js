@@ -263,18 +263,13 @@ export default function resolve(
         platform,
       );
       if (packageExportsResult != null) {
-        if (!context.unstable_applyBrowserSpecAfterExports) {
-          return packageExportsResult;
-        }
-        const result = redirectPackageExportsResolution(
-          context,
-          packageExportsResult,
-          platform,
-        );
-        if (result.type === 'failed') {
-          throw new FailedToResolvePathError(result.candidates);
-        }
-        return result.resolution;
+        return context.unstable_applyBrowserSpecAfterExports
+          ? redirectPackageExportsResolution(
+              context,
+              packageExportsResult,
+              platform,
+            )
+          : packageExportsResult;
       }
     } catch (e) {
       // NB: Falling back is a departure from the spec, but retained for
@@ -639,13 +634,15 @@ function resolvePackage(
         );
 
         if (packageExportsResult != null) {
-          return context.unstable_applyBrowserSpecAfterExports
-            ? redirectPackageExportsResolution(
-                context,
-                packageExportsResult,
-                platform,
-              )
-            : resolvedAs(packageExportsResult);
+          return resolvedAs(
+            context.unstable_applyBrowserSpecAfterExports
+              ? redirectPackageExportsResolution(
+                  context,
+                  packageExportsResult,
+                  platform,
+                )
+              : packageExportsResult,
+          );
         }
       } catch (e) {
         if (e instanceof PackagePathNotExportedError) {
@@ -690,24 +687,41 @@ function isBrowserSpecAppliedAfterExports(
  * Apply "browser" spec redirections to a file resolved from "exports". These
  * match the resolved file (e.g. "./lib/index.node.js"), not the requested
  * subpath (e.g. "./lib"), and are read from the `package.json` closest to the
- * file.
+ * file. A redirection to a file that does not exist is ignored with a
+ * warning, so that enabling `unstable_applyBrowserSpecAfterExports` cannot
+ * break an import that resolves without it.
  */
 function redirectPackageExportsResolution(
   context: ResolutionContext,
   resolution: FileResolution,
   platform: string | null,
-): Result<Resolution, FileAndDirCandidates> {
+): Resolution {
   if (resolution.type !== 'sourceFile') {
-    return resolvedAs(resolution);
+    return resolution;
   }
   const redirectedPath = redirectModulePath(context, resolution.filePath);
   if (redirectedPath === false) {
-    return resolvedAs({type: 'empty'});
+    return {type: 'empty'};
   }
   if (redirectedPath === resolution.filePath) {
-    return resolvedAs(resolution);
+    return resolution;
   }
-  return resolveModulePath(context, redirectedPath, platform);
+  const result = resolveModulePath(context, redirectedPath, platform);
+  if (result.type === 'resolved') {
+    return result.resolution;
+  }
+  context.unstable_logWarning(
+    new InvalidPackageConfigurationError({
+      packagePath:
+        context.getPackageForModule(resolution.filePath)?.rootPath ??
+        path.dirname(resolution.filePath),
+      reason:
+        `The file "${resolution.filePath}" resolved from "exports" is ` +
+        `redirected to "${redirectedPath}" by the "browser" spec, however ` +
+        'this file does not exist.',
+    }).message + ' Falling back to the file resolved from "exports".',
+  );
+  return resolution;
 }
 
 /**

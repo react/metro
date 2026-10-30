@@ -1457,6 +1457,7 @@ describe('with package exports resolution enabled', () => {
               default: './server-node.js',
             },
             './fs': './fs-node.js',
+            './broken': './broken-node.js',
           },
           browser: {
             './index.js': './index-browser.js',
@@ -1468,6 +1469,7 @@ describe('with package exports resolution enabled', () => {
             // react-dom.
             './server.js': './server-browser.js',
             './fs-node.js': false,
+            './broken-node.js': './does-not-exist.js',
             './private': './private-browser.js',
           },
         }),
@@ -1478,6 +1480,7 @@ describe('with package exports resolution enabled', () => {
         [p('/root/node_modules/test-pkg/server-browser.js')]: '',
         [p('/root/node_modules/test-pkg/server-node.js')]: '',
         [p('/root/node_modules/test-pkg/fs-node.js')]: '',
+        [p('/root/node_modules/test-pkg/broken-node.js')]: '',
         [p('/root/node_modules/test-pkg/private-browser.js')]: '',
       }),
       mainFields: ['react-native', 'browser', 'main'],
@@ -1590,6 +1593,31 @@ describe('with package exports resolution enabled', () => {
         );
         logWarning.mockClear();
       });
+
+      test.each([
+        ['an import', p('/root/src/main.js')],
+        ['a self-reference', p('/root/node_modules/test-pkg/index.js')],
+      ])(
+        '[nonstrict] should warn and keep the "exports" target when it is redirected to a missing file, for %s',
+        (_, originModulePath) => {
+          expect(
+            Resolver.resolve(
+              {...context, originModulePath},
+              'test-pkg/broken',
+              'ios',
+            ),
+          ).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/node_modules/test-pkg/broken-node.js'),
+          });
+          expect(logWarning).toHaveBeenCalledTimes(1);
+          expect(logWarning.mock.calls[0][0]).toBe(
+            `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
+              `Reason: The file "${p('/root/node_modules/test-pkg/broken-node.js')}" resolved from "exports" is redirected to "${p('/root/node_modules/test-pkg/does-not-exist.js')}" by the "browser" spec, however this file does not exist. Falling back to the file resolved from "exports".`,
+          );
+          logWarning.mockClear();
+        },
+      );
     });
   });
 });
