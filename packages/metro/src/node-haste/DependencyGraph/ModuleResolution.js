@@ -48,6 +48,8 @@ type Options = Readonly<{
   ) => ReturnType<FileSystemLookup>,
   getHasteModulePath: (name: string, platform: ?string) => ?string,
   getHastePackagePath: (name: string, platform: ?string) => ?string,
+  // Whether any file can have a Haste name. If not, lookups are not observed.
+  isHasteEnabled: boolean,
   mainFields: ReadonlyArray<string>,
   getPackage: (packageJsonPath: string) => ?PackageJson,
   getPackageForModule: (
@@ -76,8 +78,8 @@ type Options = Readonly<{
 }>;
 
 // Same shape for every record, to keep lookups monomorphic.
-function createObservations(): ResolutionObservations {
-  return {existence: new Set(), content: new Set()};
+function createObservations(): {...ResolutionObservations} {
+  return {existence: new Set(), content: new Set(), haste: null};
 }
 
 export class ModuleResolver {
@@ -210,7 +212,7 @@ export class ModuleResolver {
     allowHaste: boolean,
     platform: string | null,
     resolverOptions: ResolverInputOptions,
-    observations: ?ResolutionObservations,
+    observations: ?{...ResolutionObservations},
   ): Resolution {
     const {
       assetExts,
@@ -232,6 +234,18 @@ export class ModuleResolver {
       unstable_enablePackageExports,
       unstable_incrementalResolution,
     } = this._options;
+    // Most resolutions never consult Haste, so the set is created on demand.
+    const observeHasteName =
+      observations != null && this._options.isHasteEnabled
+        ? (name: string) => {
+            let names = observations.haste;
+            if (names == null) {
+              names = new Set<string>();
+              observations.haste = names;
+            }
+            names.add(name);
+          }
+        : null;
 
     return Resolver.resolve(
       createDefaultContext(
@@ -265,10 +279,15 @@ export class ModuleResolver {
               ? resolveAsset
               : (dirPath, assetName, extension) =>
                   resolveAsset(dirPath, assetName, extension, observations),
-          resolveHasteModule: (name: string) =>
-            this._options.getHasteModulePath(name, platform),
-          resolveHastePackage: (name: string) =>
-            this._options.getHastePackagePath(name, platform),
+          // Recorded by name, found or not: lookups fall back across platforms
+          resolveHasteModule: (name: string) => {
+            observeHasteName?.(name);
+            return this._options.getHasteModulePath(name, platform);
+          },
+          resolveHastePackage: (name: string) => {
+            observeHasteName?.(name);
+            return this._options.getHastePackagePath(name, platform);
+          },
           resolveRequest,
           schemeResolvers,
           sourceExts,
@@ -319,6 +338,7 @@ export class ModuleResolver {
           return emptyModule;
         }
         // The empty module's resolution is cached, so merge in what it observed.
+        // It is resolved without Haste, so has no names to merge.
         const emptyObservations = emptyModule.unstable_observations;
         if (emptyObservations != null) {
           for (const canonicalPath of emptyObservations.existence) {
