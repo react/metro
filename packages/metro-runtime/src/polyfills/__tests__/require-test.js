@@ -100,6 +100,7 @@ describe('require', () => {
     createModuleSystem(moduleSystem, false, '');
     expect(moduleSystem.__r).not.toBeUndefined();
     expect(moduleSystem.__d).not.toBeUndefined();
+    expect(moduleSystem.__e).toBeUndefined();
 
     const mockExports = {foo: 'bar'};
     const mockFactory = jest
@@ -126,6 +127,26 @@ describe('require', () => {
     expect(mockFactory.mock.calls[0][0]).toBe(moduleSystem);
     expect(m).toBe(mockExports);
     expect(mockFactory.mock.calls[0][6]).toEqual([2, 3]);
+  });
+
+  test('exposes metroRequire as __e when runtime owner has already installed __r', () => {
+    const runtimeOwnerRequire = jest.fn();
+    moduleSystem.__r = runtimeOwnerRequire;
+
+    createModuleSystem(moduleSystem, false, '');
+
+    expect(moduleSystem.__r).toBe(runtimeOwnerRequire);
+    expect(moduleSystem.__e).not.toBeUndefined();
+    expect(moduleSystem.__e).not.toBe(runtimeOwnerRequire);
+  });
+
+  test('does not overwrite __r if already provided by the runtime owner', () => {
+    const runtimeOwnerRequire = jest.fn();
+    moduleSystem.__r = runtimeOwnerRequire;
+
+    createModuleSystem(moduleSystem, false, '');
+
+    expect(moduleSystem.__r).toBe(runtimeOwnerRequire);
   });
 
   test('properly prefixes __d with global prefix', () => {
