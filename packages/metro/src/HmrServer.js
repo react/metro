@@ -269,11 +269,10 @@ export default class HmrServer<TClient extends Client> {
     client.revisionIds.forEach(revisionId => {
       const group = this._clientGroups.get(revisionId);
       if (group != null) {
-        if (group.clients.size === 1) {
+        group.clients.delete(client);
+        if (group.clients.size === 0) {
           this._clientGroups.delete(revisionId);
           group.unlisten();
-        } else {
-          group.clients.delete(client);
         }
       }
     });
@@ -367,15 +366,22 @@ export default class HmrServer<TClient extends Client> {
 
       logger?.point('updateGraph_end');
 
-      this._clientGroups.delete(group.revisionId);
+      const previousRevisionId = group.revisionId;
       group.revisionId = revision.id;
       for (const client of group.clients) {
         client.revisionIds = client.revisionIds.filter(
-          revisionId => revisionId !== group.revisionId,
+          revisionId => revisionId !== previousRevisionId,
         );
         client.revisionIds.push(revision.id);
       }
-      this._clientGroups.set(group.revisionId, group);
+      // If the group's last client disconnected while this update was in
+      // progress, the group is no longer listening for changes. Don't make it
+      // discoverable again, and don't disturb any new group that has since
+      // been registered under the previous revision.
+      if (this._clientGroups.get(previousRevisionId) === group) {
+        this._clientGroups.delete(previousRevisionId);
+        this._clientGroups.set(revision.id, group);
+      }
 
       logger?.point('serialize_start');
 
