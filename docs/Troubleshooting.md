@@ -23,6 +23,6 @@ Uh oh, something went wrong? Try these steps in order, checking after each one w
 
 5. **Update Metro** to the [latest version](https://www.npmjs.com/package/metro), in case your issue has been fixed in a newer release.
 
-### Still unresolved?
+## Still unresolved?
 
 See the [Help](/help) pages.

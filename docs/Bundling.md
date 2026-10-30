@@ -3,7 +3,7 @@ id: bundling
 title: Bundling
 ---
 
-*Bundling* turns your app's source files into a *bundle*: the JavaScript your app loads at runtime. A bundle contains every [module](./Concepts.md#module) reachable from the [entry point](./Concepts.md#entry-point), [transformed](./Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](./Concepts.md#serialization).
+_Bundling_ turns your app's source files into a _bundle_: the JavaScript your app loads at runtime. A bundle contains every [module](./Concepts.md#module) reachable from the [entry point](./Concepts.md#entry-point), [transformed](./Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](./Concepts.md#serialization).
 
 ## Building a bundle
 
@@ -26,6 +26,7 @@ To build a bundle, Metro:
 
 Each module's code is wrapped in a function and registered under its numeric ID. For example, an `index.js` that requires `./Button` becomes (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 // index.js: module ID 0, depends on module 1
 __d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMap) {
@@ -45,7 +46,7 @@ Modules refer to each other by numeric IDs assigned at build time, not by path. 
 
 ### Scripts
 
-Metro's runtime and the polyfills from [`serializer.getPolyfills`](./Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](./Configuration.md#polyfillmodulenames) are transformed as *scripts* instead of modules, and placed at the start of the bundle, before the modules. A script:
+Metro's runtime and the polyfills from [`serializer.getPolyfills`](./Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](./Configuration.md#polyfillmodulenames) are transformed as _scripts_ instead of modules, and placed at the start of the bundle, before the modules. A script:
 
 - Is wrapped in a function that runs as soon as the bundle loads, with the global object as its `global` argument, instead of in a `__d` call.
 - Is not registered as a module, so it has no module ID and can't be required.
@@ -74,7 +75,9 @@ You only need the formats below if you work with Metro's output directly, e.g. i
 - [RAM bundle](#ram-bundles): RAM (Random Access Modules) bundles store each module separately, so the app can load a module's code only when it's first required.
 
 :::note
+
 React Native doesn't use RAM bundles with Hermes, its default engine. See [RAM bundles](#ram-bundles).
+
 :::
 
 ### Plain bundle
@@ -83,6 +86,7 @@ The standard format, for environments that expect a single JS file, such as Reac
 
 For example, the `index.js` and `Button.js` [above](#modules) become this bundle (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 var __DEV__ = false, process = globalThis.process || {};
 (function (global) {
@@ -106,13 +110,16 @@ __r(0);
 A RAM bundle stores each module's code separately, either in its own file or at its own offset in a single file. A runtime that parses JavaScript source can then parse only the startup code at launch, and each module when it's first required, instead of the whole bundle. With [inline requires](./Configuration.md#gettransformoptions), a module is required, and so parsed, only when code first uses it, not when a file that imports it loads. This helps when parsing a large bundle slows startup. Metro only writes RAM bundles as build output; the development server doesn't serve them.
 
 :::note
+
 In React Native, RAM bundles were designed for JavaScriptCore, and aren't used with Hermes, React Native's default engine.
+
 :::
 
 Hermes runs bytecode compiled at build time, so there's no source to parse at startup, and it memory-maps the bytecode, loading only the parts that run. A plain bundle compiled to Hermes bytecode already gets the benefit a RAM bundle would give. React Native's legacy architecture is also the only one that can load RAM bundles, and React Native doesn't write them by default: its release builds run its `bundle` command, which writes a [plain bundle](#plain-bundle), unless configured to run a different command (`bundleCommand` in the Android Gradle plugin, `BUNDLE_COMMAND` for iOS's `react-native-xcode.sh`).
 
 For example, as a [file RAM bundle](#file-ram-bundle), the `index.js` and `Button.js` [above](#modules) become these files (simplified, non-dev build):
 
+<!-- prettier-ignore -->
 ```js
 // index.android.bundle: the startup code, run when the bundle loads
 var __DEV__ = false, process = globalThis.process || {};

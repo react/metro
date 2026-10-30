@@ -8,14 +8,14 @@ title: Module Resolution
 ```js
 // src/App.js
 import {View} from 'react-native'; // → typically node_modules/react-native/index.js
-import Button from './Button';     // → e.g. src/Button.ios.js
+import Button from './Button'; // → e.g. src/Button.ios.js
 ```
 
 In short:
 
-* **Relative paths** (`'./Button'`, `'../utils'`) are resolved against the importing file's directory. If no file exists at that exact path, Metro tries [platform](./Concepts.md#platform)-specific and extension variants in order: `Button.ios.js`, `Button.native.js`, `Button.js`, then `.jsx` variants, and so on through [`sourceExts`](#sourceexts-readonlyarraystring). Extensions take priority over platforms: with the default `sourceExts`, `Button.js` wins over `Button.ios.ts`.
-* **Package names** (`'react-native'`, `'lodash/merge'`) are looked up in `node_modules` directories, from the importing file's directory up to the root. Metro uses the package's [`"exports"`](./PackageExports.md) field if present; otherwise it resolves the subpath as a file, finding the entry point via [main fields](#mainfields-readonlyarraystring) (in React Native: `"react-native"`, `"browser"`, then `"main"`).
-* **Other specifiers**, such as [subpath imports](https://nodejs.org/api/packages.html#subpath-imports) (`'#foo'`), [Haste](./Concepts.md#haste) names and URL schemes, are covered in the [algorithm](#resolve).
+- **Relative paths** (`'./Button'`, `'../utils'`) are resolved against the importing file's directory. If no file exists at that exact path, Metro tries [platform](./Concepts.md#platform)-specific and extension variants in order: `Button.ios.js`, `Button.native.js`, `Button.js`, then `.jsx` variants, and so on through [`sourceExts`](#sourceexts-readonlyarraystring). Extensions take priority over platforms: with the default `sourceExts`, `Button.js` wins over `Button.ios.ts`.
+- **Package names** (`'react-native'`, `'lodash/merge'`) are looked up in `node_modules` directories, from the importing file's directory up to the root. Metro uses the package's [`"exports"`](./PackageExports.md) field if present; otherwise it resolves the subpath as a file, finding the entry point via [main fields](#mainfields-readonlyarraystring) (in React Native: `"react-native"`, `"browser"`, then `"main"`).
+- **Other specifiers**, such as [subpath imports](https://nodejs.org/api/packages.html#subpath-imports) (`'#foo'`), [Haste](./Concepts.md#haste) names and URL schemes, are covered in the [algorithm](#resolve).
 
 This is a version of [Node's module resolution algorithm](https://nodejs.org/api/modules.html#loading-from-node_modules-folders). Metro adds [Haste](./Concepts.md#haste) (importing modules by a globally unique name, e.g. `import Foo from 'Foo'`), [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions), asset extensions and image resolutions (so React Native can [pick the best image](https://reactnative.dev/docs/images#static-image-resources) for the device's screen density at runtime), and custom resolvers that can override almost everything ([`resolver.resolveRequest`](./Configuration.md#resolverequest)).
 
@@ -51,80 +51,80 @@ These are the rules Metro's default resolver follows. See [`metro-resolver`'s so
 
 #### RESOLVE
 
-Parameters: (*context*, *moduleName*, *platform*)
+Parameters: (_context_, _moduleName_, _platform_)
 
 1. If a [custom resolver](#resolverequest-customresolver) is defined, then
-    1. Return the result of the custom resolver.
-2. If *moduleName* is an absolute path, or equal to `'.'` or `'..'`, or begins with `'./'` or `'../'`, then
-    1. Let *absoluteModuleName* be *moduleName* if it is an absolute path, otherwise *moduleName* joined to the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)).
-    2. Return [**RESOLVE_MODULE**](#resolve_module)(*context*, *absoluteModuleName*, *platform*), or throw a resolution failure error.
-3. If *moduleName* begins with `'#'` (a [subpath import](https://nodejs.org/api/packages.html#subpath-imports)), then
-    1. Find the closest `package.json` to [`context.originModulePath`](#originmodulepath-string). If there is none, or it has no `"imports"` field, throw an error.
-    2. Resolve *moduleName* against the `"imports"` field, asserting the same condition names as [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports). If resolved, return the result. E.g. `"imports": {"#utils/*": "./src/utils/*.js"}` maps `'#utils/format'` to `<package root>/src/utils/format.js`.
-    3. Otherwise, log a warning and continue from step 5.
-4. If *moduleName* parses as a URL, let *scheme* be its lowercased scheme (the prefix before `':'`), e.g. `node` for `'node:fs'` and `foo` for `'Foo:bar'`, then
-    1. If [`context.schemeResolvers`](#schemeresolvers-readonlyscheme-string-customresolver) has a resolver for *scheme*, return its result for (*context*, *moduleName*, *platform*), with *context.resolveRequest* set to the default resolver for chaining.
-    2. Otherwise, continue, but if no later step resolves *moduleName*, throw a scheme-specific error at step 11 instead of a generic resolution failure. (This deprecated fallback provides backwards compatibility for scheme-like specifiers via Haste or [`extraNodeModules`](#extranodemodules-string-string).) E.g. with no resolver for `node`, `'node:fs'` fails with `No resolver is registered for the 'node:' URI scheme.`
-5. Apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to *moduleName*.
-    1. If this is `false`, return the empty module.
-    2. If the result is a relative path, return [**RESOLVE_MODULE**](#resolve_module) for it relative to the redirecting `package.json`'s directory, or throw a resolution failure error. E.g. `"browser": {"crypto": "./shims/crypto.js"}` in `/app/package.json` maps `'crypto'` from `/app/src/App.js` to `/app/shims/crypto.js`.
-    3. If the result is an absolute path, throw an `InvalidPackageConfigurationError`.
+   1. Return the result of the custom resolver.
+2. If _moduleName_ is an absolute path, or equal to `'.'` or `'..'`, or begins with `'./'` or `'../'`, then
+   1. Let _absoluteModuleName_ be _moduleName_ if it is an absolute path, otherwise _moduleName_ joined to the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)).
+   2. Return [**RESOLVE_MODULE**](#resolve_module)(_context_, _absoluteModuleName_, _platform_), or throw a resolution failure error.
+3. If _moduleName_ begins with `'#'` (a [subpath import](https://nodejs.org/api/packages.html#subpath-imports)), then
+   1. Find the closest `package.json` to [`context.originModulePath`](#originmodulepath-string). If there is none, or it has no `"imports"` field, throw an error.
+   2. Resolve _moduleName_ against the `"imports"` field, asserting the same condition names as [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports). If resolved, return the result. E.g. `"imports": {"#utils/*": "./src/utils/*.js"}` maps `'#utils/format'` to `<package root>/src/utils/format.js`.
+   3. Otherwise, log a warning and continue from step 5.
+4. If _moduleName_ parses as a URL, let _scheme_ be its lowercased scheme (the prefix before `':'`), e.g. `node` for `'node:fs'` and `foo` for `'Foo:bar'`, then
+   1. If [`context.schemeResolvers`](#schemeresolvers-readonlyscheme-string-customresolver) has a resolver for _scheme_, return its result for (_context_, _moduleName_, _platform_), with _context.resolveRequest_ set to the default resolver for chaining.
+   2. Otherwise, continue, but if no later step resolves _moduleName_, throw a scheme-specific error at step 11 instead of a generic resolution failure. (This deprecated fallback provides backwards compatibility for scheme-like specifiers via Haste or [`extraNodeModules`](#extranodemodules-string-string).) E.g. with no resolver for `node`, `'node:fs'` fails with `No resolver is registered for the 'node:' URI scheme.`
+5. Apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to _moduleName_.
+   1. If this is `false`, return the empty module.
+   2. If the result is a relative path, return [**RESOLVE_MODULE**](#resolve_module) for it relative to the redirecting `package.json`'s directory, or throw a resolution failure error. E.g. `"browser": {"crypto": "./shims/crypto.js"}` in `/app/package.json` maps `'crypto'` from `/app/src/App.js` to `/app/shims/crypto.js`.
+   3. If the result is an absolute path, throw an `InvalidPackageConfigurationError`.
 6. If [Haste resolutions are allowed](#allowhaste-boolean), then
-    1. Get the result of [**RESOLVE_HASTE**](#resolve_haste)(*context*, *moduleName*, *platform*).
-    2. If resolved as a Haste package path, then
-        1. Return [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *packageDir* + *relativePath*, *platform*), where *packageDir* is the Haste package's directory and *relativePath* the rest of *moduleName* after the package name. Throw an error if this fails.
-            E.g. if the Haste package path for `'@a/b'` is `foo/package.json`, resolve `'@a/b/c'` as `foo/c`.
+   1. Get the result of [**RESOLVE_HASTE**](#resolve_haste)(_context_, _moduleName_, _platform_).
+   2. If resolved as a Haste package path, then
+      1. Return [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _packageDir_ + _relativePath_, _platform_), where _packageDir_ is the Haste package's directory and _relativePath_ the rest of _moduleName_ after the package name. Throw an error if this fails.
+         E.g. if the Haste package path for `'@a/b'` is `foo/package.json`, resolve `'@a/b/c'` as `foo/c`.
 7. If [`context.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled, then
-    1. Get the result of [**PACKAGE_SELF_RESOLVE**](#package_self_resolve)(*context*, *moduleName*, *platform*).
-    2. If resolved, return result.
+   1. Get the result of [**PACKAGE_SELF_RESOLVE**](#package_self_resolve)(_context_, _moduleName_, _platform_).
+   2. If resolved, return result.
 8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
-    1. Try resolving _moduleName_ under `node_modules` from the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory. E.g. `'lodash/merge'` from `/app/src/screens/Home.js` tries `/app/src/screens/node_modules/lodash/merge`, then `/app/src/node_modules/…`, `/app/node_modules/…` and `/node_modules/…`.
-    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
+   1. Try resolving _moduleName_ under `node_modules` from the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory. E.g. `'lodash/merge'` from `/app/src/screens/Home.js` tries `/app/src/screens/node_modules/lodash/merge`, then `/app/src/node_modules/…`, `/app/node_modules/…` and `/node_modules/…`.
+   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path.
 9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
-    1. Try resolving _moduleName_ under _nodeModulesPath_ as if it were another `node_modules` directory (similar to step 8). E.g. `nodeModulesPaths: ['/monorepo/node_modules']` tries `/monorepo/node_modules/lodash/merge`.
-    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
+   1. Try resolving _moduleName_ under _nodeModulesPath_ as if it were another `node_modules` directory (similar to step 8). E.g. `nodeModulesPaths: ['/monorepo/node_modules']` tries `/monorepo/node_modules/lodash/merge`.
+   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path.
 10. If [`context.extraNodeModules`](#extranodemodules-string-string) is set:
     1. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
     2. Look up the package name in [`context.extraNodeModules`](#extranodemodules-string-string). If found, then
-        1. Let _modulePath_ be _moduleName_ with its package name replaced by the value found. E.g. `extraNodeModules: {'shared': '/monorepo/shared'}` maps `'shared/utils'` to `/monorepo/shared/utils`.
-        2. Return [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*).
+       1. Let _modulePath_ be _moduleName_ with its package name replaced by the value found. E.g. `extraNodeModules: {'shared': '/monorepo/shared'}` maps `'shared/utils'` to `/monorepo/shared/utils`.
+       2. Return [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_).
 11. If no valid resolution has been found, throw a resolution failure error — a scheme-specific error if step 4.2 applied, otherwise a generic one.
 
 #### RESOLVE_MODULE
 
-Parameters: (*context*, *moduleName*, *platform*)
+Parameters: (_context_, _moduleName_, _platform_)
 
 Resolves an absolute path to a file or a directory's entry point. For example, on iOS, `/app/src/Header` resolves to the first that exists of (relative to `/app/src`):
 
-* `Header.ios.js`, `Header.native.js`, `Header.js`, … (step 2)
-* `Header/index.ios.js`, `Header/index.native.js`, … if `Header/` has no `package.json` (step 4)
-* `Header/lib/main.ios.js`, … if `Header/package.json` has `"main": "./lib/main"` (step 5)
+- `Header.ios.js`, `Header.native.js`, `Header.js`, … (step 2)
+- `Header/index.ios.js`, `Header/index.native.js`, … if `Header/` has no `package.json` (step 4)
+- `Header/lib/main.ios.js`, … if `Header/package.json` has `"main": "./lib/main"` (step 5)
 
-1. Let *filePath* be the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to *moduleName* (possibly a replacement subpath from a containing `package.json`).
-    1. If this is `false`, return the empty module.
-2. Unless *filePath* ends with a path separator, return [**RESOLVE_FILE**](#resolve_file)(*context*, *filePath*, *platform*), or continue.
-3. Otherwise, let *dirPath* be *filePath*. If *dirPath* is not an existing directory, throw an error.
-4. If a file *dirPath* + `'/package.json'` does not exist, return [**RESOLVE_FILE**](#resolve_file)(*context*, *dirPath* + `'/index'`, *platform*), or throw an error.
+1. Let _filePath_ be the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to _moduleName_ (possibly a replacement subpath from a containing `package.json`).
+   1. If this is `false`, return the empty module.
+2. Unless _filePath_ ends with a path separator, return [**RESOLVE_FILE**](#resolve_file)(_context_, _filePath_, _platform_), or continue.
+3. Otherwise, let _dirPath_ be _filePath_. If _dirPath_ is not an existing directory, throw an error.
+4. If a file _dirPath_ + `'/package.json'` does not exist, return [**RESOLVE_FILE**](#resolve_file)(_context_, _dirPath_ + `'/index'`, _platform_), or throw an error.
 5. Otherwise, resolve based on the [`browser` field spec](https://github.com/defunctzombie/package-browser-field-spec):
-    1. Let *mainModulePath* be the package's entry path, read using [`context.mainFields`](#mainfields-readonlyarraystring).
-    2. Return [**RESOLVE_FILE**](#resolve_file)(*context*, *mainModulePath*, *platform*), or continue.
-    3. Return [**RESOLVE_FILE**](#resolve_file)(*context*, *mainModulePath* + `'/index'`, *platform*).
-    4. Throw an error if no resolution could be found.
+   1. Let _mainModulePath_ be the package's entry path, read using [`context.mainFields`](#mainfields-readonlyarraystring).
+   2. Return [**RESOLVE_FILE**](#resolve_file)(_context_, _mainModulePath_, _platform_), or continue.
+   3. Return [**RESOLVE_FILE**](#resolve_file)(_context_, _mainModulePath_ + `'/index'`, _platform_).
+   4. Throw an error if no resolution could be found.
 
 #### RESOLVE_PACKAGE
 
-Parameters: (*context*, *moduleName*, *platform*)
+Parameters: (_context_, _moduleName_, _platform_)
 
-Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let *filePath* be *moduleName*, *packagePath* the directory of the closest containing `package.json`, and *exportsField* its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes *filePath* `/app/node_modules/some-pkg/utils`, so *packagePath* is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`.
+Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let _filePath_ be _moduleName_, _packagePath_ the directory of the closest containing `package.json`, and _exportsField_ its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes _filePath_ `/app/node_modules/some-pkg/utils`, so _packagePath_ is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`.
 
-1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*).
-    1. If resolved path exists, return result.
-    2. Else, log either a package configuration or package encapsulation warning.
-2. Return [**RESOLVE_MODULE**](#resolve_module)(*context*, *filePath*, *platform*).
+1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_).
+   1. If resolved path exists, return result.
+   2. Else, log either a package configuration or package encapsulation warning.
+2. Return [**RESOLVE_MODULE**](#resolve_module)(_context_, _filePath_, _platform_).
 
 #### PACKAGE_SELF_RESOLVE
 
-Parameters: (*context*, *moduleName*, *platform*)
+Parameters: (_context_, _moduleName_, _platform_)
 
 Lets code inside a package import that package by its own name via its `"exports"` field, matching [Node's self-referencing behavior](https://nodejs.org/api/packages.html#self-referencing-a-package-using-its-name). E.g. if `my-lib/package.json` has `"name": "my-lib"` and `"exports": {"./utils": "./src/utils.js"}`, then `'my-lib/utils'` from `my-lib/src/index.js` resolves to `my-lib/src/utils.js`, even if `my-lib` is not in any `node_modules` directory.
 
@@ -132,55 +132,55 @@ Lets code inside a package import that package by its own name via its `"exports
 2. If the package does not declare both a `"name"` field and an `"exports"` field, return no resolution.
 3. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
 4. If the package name does not match the current package's `"name"` field, return no resolution.
-5. Get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*) against the current package's `"exports"` field.
-    1. If resolved path exists, return result.
-    2. Else, log either a package configuration or package encapsulation warning, then continue with normal resolution.
+5. Get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_) against the current package's `"exports"` field.
+   1. If resolved path exists, return result.
+   2. Else, log either a package configuration or package encapsulation warning, then continue with normal resolution.
 
 #### RESOLVE_PACKAGE_EXPORTS
 
-Parameters: (*context*, *packagePath*, *filePath*, *exportsField*, *platform*)
+Parameters: (_context_, _packagePath_, _filePath_, _exportsField_, _platform_)
 
 > Resolves a package subpath based on the [Package Entry Points spec](https://nodejs.org/docs/latest-v19.x/api/packages.html#package-entry-points) (the `"exports"` field), when [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled.
 
-1. Let *subpath* be the relative path from *packagePath* to *filePath*, or `'.'`.
-2. If *exportsField* contains an invalid configuration or values, raise an `InvalidPackageConfigurationError`.
-3. If *subpath* is not defined by *exportsField*, raise a `PackagePathNotExportedError`.
-4. Let *target* be the result of matching *subpath* in *exportsField* after applying any [conditional exports](https://nodejs.org/docs/latest-v19.x/api/packages.html#conditional-exports) and/or substituting a [subpath pattern match](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns).
-    1. Condition names will be asserted from the union of `'default'`, `'import'` OR `'require'` according to `context.isESMImport`, [`context.unstable_conditionNames`](#unstable_conditionnames-readonlyarraystring) and [`context.unstable_conditionsByPlatform`](#unstable_conditionsbyplatform-platform-string-readonlyarraystring) for *platform*, in the order defined by *exportsField*. E.g. for an iOS `import` with React Native's default `unstable_conditionNames: ['react-native']`, the asserted conditions are `'default'`, `'import'` and `'react-native'`, so `{"require": "./a.js", "react-native": "./b.js", "import": "./c.js"}` resolves to `./b.js`, the first matching key.
-5. If *target* refers to an [asset](#assetexts-readonlysetstring), then
-    1. Return [**RESOLVE_ASSET**](#resolve_asset)(*context*, *target*, *platform*).
-6. Return *target* as a [source file resolution](#source-file) **without** applying redirections or trying any platform or extension variants.
+1. Let _subpath_ be the relative path from _packagePath_ to _filePath_, or `'.'`.
+2. If _exportsField_ contains an invalid configuration or values, raise an `InvalidPackageConfigurationError`.
+3. If _subpath_ is not defined by _exportsField_, raise a `PackagePathNotExportedError`.
+4. Let _target_ be the result of matching _subpath_ in _exportsField_ after applying any [conditional exports](https://nodejs.org/docs/latest-v19.x/api/packages.html#conditional-exports) and/or substituting a [subpath pattern match](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns).
+   1. Condition names will be asserted from the union of `'default'`, `'import'` OR `'require'` according to `context.isESMImport`, [`context.unstable_conditionNames`](#unstable_conditionnames-readonlyarraystring) and [`context.unstable_conditionsByPlatform`](#unstable_conditionsbyplatform-platform-string-readonlyarraystring) for _platform_, in the order defined by _exportsField_. E.g. for an iOS `import` with React Native's default `unstable_conditionNames: ['react-native']`, the asserted conditions are `'default'`, `'import'` and `'react-native'`, so `{"require": "./a.js", "react-native": "./b.js", "import": "./c.js"}` resolves to `./b.js`, the first matching key.
+5. If _target_ refers to an [asset](#assetexts-readonlysetstring), then
+   1. Return [**RESOLVE_ASSET**](#resolve_asset)(_context_, _target_, _platform_).
+6. Return _target_ as a [source file resolution](#source-file) **without** applying redirections or trying any platform or extension variants.
 
 #### RESOLVE_FILE
 
-Parameters: (*context*, *filePath*, *platform*)
+Parameters: (_context_, _filePath_, _platform_)
 
 Applies [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions) and [`sourceExts`](#sourceexts-readonlyarraystring) to resolve a path to a file.
 
 1. If the path refers to an [asset](#assetexts-readonlysetstring), then
-    1. Return [**RESOLVE_ASSET**](#resolve_asset)(*context*, *filePath*, *platform*).
+   1. Return [**RESOLVE_ASSET**](#resolve_asset)(_context_, _filePath_, _platform_).
 2. Otherwise, if the path [exists](#doesfileexist-string--boolean-deprecated) as a file, return a [source file resolution](#source-file) for it.
 3. Otherwise:
-    1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first that [exists](#doesfileexist-string--boolean-deprecated) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try:
-        1. _moduleName_ + `'.android.js'`
-        2. _moduleName_ + `'.native.js'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
-        3. _moduleName_ + `'.js'`
-        4. _moduleName_ + `'.android.jsx'`
-        5. _moduleName_ + `'.native.jsx'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
-        6. _moduleName_ + `'.jsx'`
+   1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first that [exists](#doesfileexist-string--boolean-deprecated) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try:
+      1. _moduleName_ + `'.android.js'`
+      2. _moduleName_ + `'.native.js'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
+      3. _moduleName_ + `'.js'`
+      4. _moduleName_ + `'.android.jsx'`
+      5. _moduleName_ + `'.native.jsx'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
+      6. _moduleName_ + `'.jsx'`
 
 #### RESOLVE_ASSET
 
-Parameters: (*context*, *filePath*, *platform*)
+Parameters: (_context_, _filePath_, _platform_)
 
 1. Use [`context.resolveAsset`](#resolveasset-dirpath-string-assetname-string-extension-string--readonlyarraystring) to collect all asset variants (e.g. for different screen densities).
 2. Return an [asset resolution](#asset-files) containing the collected asset paths.
 
 #### RESOLVE_HASTE
 
-Parameters: (*context*, *moduleName*, *platform*)
+Parameters: (_context_, _moduleName_, _platform_)
 
-Looks up *moduleName* as a [Haste](./Concepts.md#haste) module or package.
+Looks up _moduleName_ as a [Haste](./Concepts.md#haste) module or package.
 
 1. If _moduleName_ contains no `'/'`, try resolving it as a [Haste module](#resolvehastemodule-string--string).
    If found, then
@@ -190,29 +190,29 @@ Looks up *moduleName* as a [Haste](./Concepts.md#haste) module or package.
 
 #### BROWSER_SPEC_REDIRECTION
 
-Parameters: (*context*, *moduleName*)
+Parameters: (_context_, _moduleName_)
 
 Applies [`browser` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (file to file, or module to empty module via `false`) from the closest `package.json` to the origin or target module. Metro reads them from every field in [`context.mainFields`](#mainfields-readonlyarraystring), not just `"browser"`.
 
-1. Find the closest `package.json` to *moduleName*, if *moduleName* is absolute, or to [`context.originModulePath`](#originmodulepath-string) otherwise, stopping at any `node_modules`. Let *packageScope* be its containing directory.
-2. If none is found, return *moduleName*.
-3. Define *subpath*:
-    1. If *moduleName* begins with `'.'`, consider it relative to [`context.originModulePath`](#originmodulepath-string) and let *subpath* be the same path relative to *packageScope*, prefixed `'./'`.
-    2. Else if *moduleName* is absolute, let *subpath* be *moduleName* relative to *packageScope*, prefixed `'./'`.
-    3. Else let *subpath* be *moduleName*.
-4. Merge the object values of each of [`context.mainFields`](#mainfields-readonlyarraystring) in the `package.json` at *packageScope* into a single map *mainFieldsMap*, with earlier fields taking precedence. Let *expandedSubpath* range over *subpath*, *subpath* + `'.js'` and *subpath* + `'.json'`.
-    1. For each *expandedSubpath*:
-        1. If *mainFieldsMap* has the key *expandedSubpath*, let *redirectedPath* be its value, else continue.
-        2. If *moduleName* is absolute or begins with `'.'`, and *redirectedPath* is a string:
-            1. If *redirectedPath* is an absolute path, return *redirectedPath*.
-            2. Return *packageScope* joined with *redirectedPath*.
-        3. Return *redirectedPath*.
-5. Return *moduleName*.
+1. Find the closest `package.json` to _moduleName_, if _moduleName_ is absolute, or to [`context.originModulePath`](#originmodulepath-string) otherwise, stopping at any `node_modules`. Let _packageScope_ be its containing directory.
+2. If none is found, return _moduleName_.
+3. Define _subpath_:
+   1. If _moduleName_ begins with `'.'`, consider it relative to [`context.originModulePath`](#originmodulepath-string) and let _subpath_ be the same path relative to _packageScope_, prefixed `'./'`.
+   2. Else if _moduleName_ is absolute, let _subpath_ be _moduleName_ relative to _packageScope_, prefixed `'./'`.
+   3. Else let _subpath_ be _moduleName_.
+4. Merge the object values of each of [`context.mainFields`](#mainfields-readonlyarraystring) in the `package.json` at _packageScope_ into a single map _mainFieldsMap_, with earlier fields taking precedence. Let _expandedSubpath_ range over _subpath_, _subpath_ + `'.js'` and _subpath_ + `'.json'`.
+   1. For each _expandedSubpath_:
+      1. If _mainFieldsMap_ has the key _expandedSubpath_, let _redirectedPath_ be its value, else continue.
+      2. If _moduleName_ is absolute or begins with `'.'`, and _redirectedPath_ is a string:
+         1. If _redirectedPath_ is an absolute path, return _redirectedPath_.
+         2. Return _packageScope_ joined with _redirectedPath_.
+      3. Return _redirectedPath_.
+5. Return _moduleName_.
 
 For example, if `/app/node_modules/foo/package.json` has `"browser": {"./lib/server.js": "./lib/client.js", "fs": false}`, then for imports from `/app/node_modules/foo/lib/index.js`:
 
-* `'./server'` has *subpath* `'./lib/server'`, which matches the key `'./lib/server.js'`, so it is redirected to `/app/node_modules/foo/lib/client.js`.
-* `'fs'` has *subpath* `'fs'`, which is mapped to `false` (the empty module).
+- `'./server'` has _subpath_ `'./lib/server'`, which matches the key `'./lib/server.js'`, so it is redirected to `/app/node_modules/foo/lib/client.js`.
+- `'fs'` has _subpath_ `'fs'`, which is mapped to `false` (the empty module).
 
 ### Resolution context
 
@@ -232,7 +232,7 @@ Returns whether the file at the given path exists. The default implementation wr
 
 #### `fileSystemLookup: string => {exists: true, type: 'f'|'d', realPath: string} | {exists: false}`
 
-*Added in v0.81.0*
+_Added in v0.81.0_
 
 Returns information about the given absolute or project-relative path, following symlinks. A file "exists" only if Metro knows about it (see [project root and watch folders](./Concepts.md#project-root-and-watch-folders)), and a directory must be non-empty. The returned `realPath` is real and absolute; e.g. for a directory symlinked by pnpm, `fileSystemLookup('/app/node_modules/foo')` returns `{exists: true, type: 'd', realPath: '/app/node_modules/.pnpm/foo@1.0.0/node_modules/foo'}`. Missing paths return `{exists: false}`.
 
@@ -323,7 +323,7 @@ type Resolution =
   | {type: 'assetFiles', filePaths: $ReadOnlyArray<string>};
 ```
 
-Returned paths (`filePath` and `filePaths`) must be *absolute* and *real*, such as the `realPath` returned by [`fileSystemLookup`](#filesystemlookup-string--exists-true-type-fd-realpath-string--exists-false).
+Returned paths (`filePath` and `filePaths`) must be _absolute_ and _real_, such as the `realPath` returned by [`fileSystemLookup`](#filesystemlookup-string--exists-true-type-fd-realpath-string--exists-false).
 
 If `resolveRequest` is non-null when the default resolver is called, it is treated as a custom resolver that is always called and fully replaces the default logic (see [**RESOLVE**](#resolve) step 1). Inside a custom resolver, `resolveRequest` is the default resolver, for easy chaining. For example, to resolve `lodash` as `lodash-es` and leave everything else to the default resolver:
 
@@ -361,7 +361,7 @@ Whether the `"exports"` field is used for resolution. Defaults to [`resolver.uns
 
 #### `dependency: ?Dependency`
 
-A descriptor of the dependency being resolved. It is for diagnostic purposes *only* and may not be used for semantic purposes (see [Caching](#caching)).
+A descriptor of the dependency being resolved. It is for diagnostic purposes _only_ and may not be used for semantic purposes (see [Caching](#caching)).
 
 ```flow
 type Dependency = {
@@ -390,10 +390,10 @@ type Dependency = {
 Metro caches and reuses resolver results, which matters mainly for [custom resolvers](#resolverequest-customresolver). Results may be cached under these conditions:
 
 1. For given origin module paths _A_ and _B_ and target module name _M_, the resolution for _M_ may be reused if **all** of the following conditions hold:
-    1. _A_ and _B_ are in the same directory.
-    2. The contents of [`dev`](#dev-boolean) and [`customResolverOptions`](#customresolveroptions-string-mixed) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
-    3. The `platform` is the same in both calls.
-    4. [`isESMImport`](#isesmimport-boolean) is the same in both calls.
+   1. _A_ and _B_ are in the same directory.
+   2. The contents of [`dev`](#dev-boolean) and [`customResolverOptions`](#customresolveroptions-string-mixed) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
+   3. The `platform` is the same in both calls.
+   4. [`isESMImport`](#isesmimport-boolean) is the same in both calls.
 2. Any cache of resolutions must be invalidated if any file in the project has changed.
 
 Custom resolvers must adhere to these assumptions, e.g. they must not resolve `'./config'` differently for `src/App.js` and `src/App.test.js` under the same `customResolverOptions`, because Metro may reuse either result for the other.
