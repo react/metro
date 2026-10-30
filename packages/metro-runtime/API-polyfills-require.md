@@ -21,16 +21,32 @@ export type FactoryFn = (
   require: RequireFn,
   metroImportDefault: RequireFn,
   metroImportAll: RequireFn,
-  moduleObject: {exports: {}},
-  exports: {},
+  moduleObject: Module,
+  exports: {[key: string]: unknown},
   dependencyMap: null | undefined | DependencyMap,
 ) => void;
 
+export type HotModuleReloadingCallback = () => void;
+
+export type HotModuleReloadingData = {
+  _acceptCallback: null | undefined | HotModuleReloadingCallback;
+  _disposeCallback: null | undefined | HotModuleReloadingCallback;
+  _didAccept: boolean;
+  accept: (callback?: HotModuleReloadingCallback) => void;
+  dispose: (callback?: HotModuleReloadingCallback) => void;
+};
+
 export type InverseDependencyMap = {[key in ModuleID]: Array<ModuleID>};
 
-export function metroImportAll(moduleId: ModuleID | VerboseModuleNameForDev | number): any | Exports | {[$$Key$$: string]: any};
+export function metroImportAll(moduleId: ModuleID | VerboseModuleNameForDev | number): Exports;
 
-export function metroImportDefault(moduleId: ModuleID | VerboseModuleNameForDev): any | Exports;
+export function metroImportDefault(moduleId: ModuleID | VerboseModuleNameForDev): Exports;
+
+export type Module = {
+  id?: ModuleID | undefined;
+  exports: Exports;
+  hot?: HotModuleReloadingData | undefined;
+};
 
 export type ModuleID = number;
 
