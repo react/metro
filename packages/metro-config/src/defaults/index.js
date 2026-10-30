@@ -47,6 +47,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     resolveRequest: null,
     resolverMainFields: ['browser', 'main'],
     schemeResolvers: {},
+    unstable_applyBrowserSpecAfterExports: false,
     unstable_conditionNames: [],
     unstable_conditionsByPlatform: {
       web: ['browser'],

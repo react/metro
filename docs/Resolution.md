@@ -79,15 +79,15 @@ Parameters: (*context*, *moduleName*, *platform*)
     2. If resolved, return result.
 8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
     1. Try resolving _moduleName_ under `node_modules` from the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory. E.g. `'lodash/merge'` from `/app/src/screens/Home.js` tries `/app/src/screens/node_modules/lodash/merge`, then `/app/src/node_modules/…`, `/app/node_modules/…` and `/node_modules/…`.
-    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
+    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path, where *modulePath* is the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the candidate path (returning the empty module if this is `false`). If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled and the candidate path's closest `package.json` has an `"exports"` field, *modulePath* is the candidate path itself.
 9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
     1. Try resolving _moduleName_ under _nodeModulesPath_ as if it were another `node_modules` directory (similar to step 8). E.g. `nodeModulesPaths: ['/monorepo/node_modules']` tries `/monorepo/node_modules/lodash/merge`.
-    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path.
+    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*) for each candidate path, with *modulePath* as in step 8.2.
 10. If [`context.extraNodeModules`](#extranodemodules-string-string) is set:
     1. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
     2. Look up the package name in [`context.extraNodeModules`](#extranodemodules-string-string). If found, then
         1. Let _modulePath_ be _moduleName_ with its package name replaced by the value found. E.g. `extraNodeModules: {'shared': '/monorepo/shared'}` maps `'shared/utils'` to `/monorepo/shared/utils`.
-        2. Return [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*).
+        2. Return [**RESOLVE_PACKAGE**](#resolve_package)(*context*, *modulePath*, *platform*), with *modulePath* redirected as in step 8.2.
 11. If no valid resolution has been found, throw a resolution failure error — a scheme-specific error if step 4.2 applied, otherwise a generic one.
 
 #### RESOLVE_MODULE
@@ -118,7 +118,9 @@ Parameters: (*context*, *moduleName*, *platform*)
 Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let *filePath* be *moduleName*, *packagePath* the directory of the closest containing `package.json`, and *exportsField* its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes *filePath* `/app/node_modules/some-pkg/utils`, so *packagePath* is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`.
 
 1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(*context*, *packagePath*, *filePath*, *exportsField*, *platform*).
-    1. If resolved path exists, return result.
+    1. If resolved path exists, then
+        1. If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled, apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the resolved path. If this is `false`, return the empty module. If it is a different path, return [**RESOLVE_MODULE**](#resolve_module)(*context*, *redirectedPath*, *platform*). E.g. `"browser": {"./lib/index.node.js": "./lib/index.browser.js"}` redirects `"exports": {".": "./lib/index.node.js"}`.
+        2. Return result.
     2. Else, log either a package configuration or package encapsulation warning.
 2. Return [**RESOLVE_MODULE**](#resolve_module)(*context*, *filePath*, *platform*).
 
@@ -346,6 +348,10 @@ Custom resolvers must follow the [caching](#caching) rules.
 A matching resolver is called with the full specifier (e.g. `my-scheme:foo` for key `'my-scheme'`) and can chain back into default resolution via [`context.resolveRequest`](#resolverequest-customresolver), e.g. to resolve a relative path.
 
 Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never treated as schemes. See [**RESOLVE**](#resolve) step 4, and [`resolver.schemeResolvers`](./Configuration.md#schemeresolvers) for precedence relative to [`resolveRequest`](#resolverequest-customresolver).
+
+#### `unstable_applyBrowserSpecAfterExports: boolean`
+
+Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
 
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 

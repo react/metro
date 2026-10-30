@@ -441,6 +441,26 @@ resolver: {
 },
 ```
 
+#### `unstable_applyBrowserSpecAfterExports` <div class="label experimental">Experimental</div>
+
+Type: `boolean`
+
+When a package has an [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports), apply its [`"browser"` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (from any object-valued field in [`resolverMainFields`](#resolvermainfields)) to the file that `"exports"` resolves to, instead of to the requested subpath before `"exports"` is considered. This matches webpack and Vite. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `false`.
+
+For example, given a package with:
+
+```json
+  "exports": {
+    "./hash": {"browser": "./hash-browser.js", "default": "./hash-node.js"}
+  },
+  "browser": {
+    "./hash": "./hash-browser.js",
+    "./hash-node.js": "./hash-browser.js"
+  }
+```
+
+With this option, `'pkg/hash'` resolves through `"exports"` to `hash-browser.js` for `web` (the `"browser"` condition), and to `hash-node.js` elsewhere, which the `"./hash-node.js"` key then redirects to `hash-browser.js` if `"browser"` is in `resolverMainFields`. Without it, the `"./hash"` key redirects the import to `./hash-browser.js` first, which is not listed in `"exports"`, so Metro logs a warning and falls back to file-based resolution.
+
 #### `unstable_conditionNames` <div class="label experimental">Experimental</div>
 
 Type: `Array<string>`

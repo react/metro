@@ -86,6 +86,7 @@ export function createResolutionContext(
     resolveHastePackage: (name: string) => null,
     schemeResolvers: {},
     sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
+    unstable_applyBrowserSpecAfterExports: false,
     unstable_conditionNames: ['require'],
     unstable_conditionsByPlatform: {
       web: ['browser'],

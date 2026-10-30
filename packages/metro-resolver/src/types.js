@@ -253,6 +253,14 @@ export type ResolutionContext = Readonly<{
   schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}>,
 
   sourceExts: ReadonlyArray<string>,
+
+  /**
+   * When resolving a package with an "exports" field, apply "browser" spec
+   * redirections (from object-valued `mainFields`) to the file that
+   * "exports" resolves to, instead of to the requested subpath before
+   * "exports" is considered. This matches webpack and Vite.
+   */
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
