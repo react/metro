@@ -14,6 +14,7 @@
 import type {ResolverInputOptions} from '../../shared/types';
 import type {TransformResultDependency} from '../types';
 import type {InputConfigT} from 'metro-config';
+import type {CustomResolver, Resolution} from 'metro-resolver';
 
 const {getDefaultConfig, mergeConfig} = require('metro-config');
 const {AmbiguousModuleResolutionError} = require('metro-core');
@@ -3289,6 +3290,143 @@ function dep(name: string): TransformResultDependency {
           expect(resolution.unstable_observations?.haste).toEqual(
             new Set(['aPackage']),
           );
+        });
+      });
+    });
+
+    describe('observations of failed resolutions', () => {
+      // Canonical paths: root-relative, with system separators.
+      const canonical = (...posixPaths: Array<string>) =>
+        new Set(posixPaths.map(posixPath => joinPath(...posixPath.split('/'))));
+
+      function resolveError(
+        from: string,
+        dependency: TransformResultDependency,
+      ) {
+        try {
+          resolver.resolve(from, dependency);
+        } catch (error) {
+          if (error.type === 'UnableToResolveError') {
+            return error;
+          }
+          throw error;
+        }
+        throw new Error('Expected resolution to fail');
+      }
+
+      // Counts resolutions, including replays, by wrapping the default resolver.
+      const countingResolveRequest = () =>
+        jest.fn<Parameters<CustomResolver>, Resolution>(
+          (context, moduleName, platform) =>
+            context.resolveRequest(context, moduleName, platform),
+        );
+
+      test('a failed relative import carries what a replay observed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver({resolver: {resolveRequest}}, 'ios');
+        const error = resolveError(p('/root/index.js'), dep('./missing'));
+        expect(resolveRequest).toHaveBeenCalledTimes(2);
+        expect(error.unstable_observations).toEqual({
+          existence: canonical(
+            // A directory of that name, with no package.json or index
+            'missing',
+            // The closest package to the origin
+            'package.json',
+            // Each source extension, for each platform
+            'missing.ios.js',
+            'missing.native.js',
+            'missing.js',
+            'missing.ios.json',
+            'missing.native.json',
+            'missing.json',
+          ),
+          content: new Set(),
+          haste: null,
+        });
+      });
+
+      test('a failed package import carries what a replay observed', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          node_modules: {other: {'index.js': ''}},
+        });
+        resolver = await createResolver({}, 'ios');
+        expect(
+          resolveError(p('/root/index.js'), dep('missing-pkg'))
+            .unstable_observations,
+        ).toEqual({
+          existence: canonical(
+            // The closest package to the origin
+            'index.js',
+            'package.json',
+            // Each node_modules on the way up, recorded once
+            'node_modules',
+            'node_modules/missing-pkg',
+            // The package scope of the files directly in node_modules
+            'node_modules/package.json',
+            'node_modules/missing-pkg.ios.js',
+            'node_modules/missing-pkg.native.js',
+            'node_modules/missing-pkg.js',
+            'node_modules/missing-pkg.ios.json',
+            'node_modules/missing-pkg.native.json',
+            'node_modules/missing-pkg.json',
+            '../node_modules',
+          ),
+          content: new Set(),
+          haste: null,
+        });
+      });
+
+      test('with unstable_incrementalResolution, the first attempt is not replayed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver(
+          {resolver: {resolveRequest, unstable_incrementalResolution: true}},
+          'ios',
+        );
+        const error = resolveError(p('/root/index.js'), dep('./missing'));
+        expect(resolveRequest).toHaveBeenCalledTimes(1);
+        expect(error.unstable_observations?.existence.size).toBeGreaterThan(0);
+      });
+
+      test('an optional dependency is not replayed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver({resolver: {resolveRequest}}, 'ios');
+        const optional = dep('./missing');
+        const error = resolveError(p('/root/index.js'), {
+          ...optional,
+          data: {...optional.data, isOptional: true},
+        });
+        expect(resolveRequest).toHaveBeenCalledTimes(1);
+        expect(error.unstable_observations).toBeNull();
+      });
+
+      test('a replay that succeeds is reported, and the original failure is thrown', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        let calls = 0;
+        const update = jest.fn();
+        resolver = await createResolver(
+          {
+            reporter: {update},
+            resolver: {
+              // Fails only the first time, like a resolver with hidden state
+              resolveRequest: (context, moduleName, platform) =>
+                context.resolveRequest(
+                  context,
+                  calls++ === 0 ? './missing' : './a',
+                  platform,
+                ),
+            },
+          },
+          'ios',
+        );
+        const error = resolveError(p('/root/index.js'), dep('./a'));
+        expect(error.unstable_observations).toBeNull();
+        expect(update).toHaveBeenCalledWith({
+          type: 'resolver_warning',
+          message: expect.stringContaining('succeeded on a retry'),
         });
       });
     });

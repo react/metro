@@ -82,6 +82,15 @@ function createObservations(): {...ResolutionObservations} {
   return {existence: new Set(), content: new Set(), haste: null};
 }
 
+// The failures `ModuleResolver` reports as `UnableToResolveError`.
+function isResolutionFailure(error: unknown): boolean {
+  return (
+    error instanceof Resolver.FailedToResolvePathError ||
+    error instanceof Resolver.FailedToResolveUnsupportedError ||
+    error instanceof Resolver.FailedToResolveNameError
+  );
+}
+
 export class ModuleResolver {
   _options: Options;
   // A module representing the project root, used as the origin when resolving `emptyModulePath`.
@@ -140,6 +149,16 @@ export class ModuleResolver {
       );
       return this._getFileResolvedModule(result, observations);
     } catch (error) {
+      const failureObservations = isResolutionFailure(error)
+        ? (observations ??
+          this._observeFailedResolution(
+            originModulePath,
+            dependency,
+            allowHaste,
+            platform,
+            resolverOptions,
+          ))
+        : null;
       if (error instanceof Resolver.FailedToResolvePathError) {
         const {candidates} = error;
         throw new UnableToResolveError(
@@ -158,6 +177,7 @@ export class ModuleResolver {
           {
             cause: error,
             dependency,
+            observations: failureObservations,
           },
         );
       } else if (error instanceof Resolver.FailedToResolveUnsupportedError) {
@@ -165,7 +185,7 @@ export class ModuleResolver {
           originModulePath,
           dependency.name,
           error.message,
-          {cause: error, dependency},
+          {cause: error, dependency, observations: failureObservations},
         );
       } else if (error instanceof Resolver.FailedToResolveNameError) {
         const dirPaths = error.dirPaths;
@@ -194,11 +214,48 @@ export class ModuleResolver {
           {
             cause: error,
             dependency,
+            observations: failureObservations,
           },
         );
       }
       throw error;
     }
+  }
+
+  /**
+   * Replays a failed resolution to record what it observes. Resolution is
+   * synchronous, so the replay sees the same state. Null for an optional
+   * dependency, or if the replay succeeds.
+   */
+  _observeFailedResolution(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    allowHaste: boolean,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): ?ResolutionObservations {
+    if (dependency.data.isOptional === true) {
+      return null;
+    }
+    const observations = createObservations();
+    try {
+      this._resolve(
+        originModulePath,
+        dependency,
+        allowHaste,
+        platform,
+        resolverOptions,
+        observations,
+      );
+    } catch {
+      return observations;
+    }
+    this._logWarning(
+      `Resolving ${dependency.name} from ${originModulePath} failed, then ` +
+        'succeeded on a retry. A custom resolver may be reading the file ' +
+        'system outside its resolution context.',
+    );
+    return null;
   }
 
   /**
@@ -409,6 +466,11 @@ export class UnableToResolveError extends Error {
    */
   cause: ?Error;
   /**
+   * What the failed resolution observed. Recorded for an optional dependency
+   * only if `resolver.unstable_incrementalResolution` is enabled.
+   */
+  unstable_observations: ?ResolutionObservations;
+  /**
    * Fixed type field in common with other Metro build errors.
    */
   readonly type: 'UnableToResolveError' = 'UnableToResolveError';
@@ -420,6 +482,7 @@ export class UnableToResolveError extends Error {
     options?: Readonly<{
       dependency?: ?TransformResultDependency,
       cause?: Error,
+      observations?: ?ResolutionObservations,
     }>,
   ) {
     super();
@@ -435,6 +498,7 @@ export class UnableToResolveError extends Error {
       ) + (codeFrameMessage ? '\n' + codeFrameMessage : '');
 
     this.cause = options?.cause;
+    this.unstable_observations = options?.observations;
   }
 
   buildCodeFrameMessage(dependency: ?TransformResultDependency): ?string {
