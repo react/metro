@@ -13,6 +13,8 @@ None of these files exist:
   16 |
   17 | global.x = DoesNotExist as DoesNotExistT;
   18 |
+Import stack:
+    at <dir>/cannot-resolve-require.js:15:22
 `;
 
 exports[`APIs/semantics reports resolution errors with ESM + non-inlined requires 1`] = `
@@ -28,6 +30,8 @@ None of these files exist:
   16 |
   17 | global.x = DoesNotExist as DoesNotExistT;
   18 |
+Import stack:
+    at <dir>/cannot-resolve-import.js:15:1
 `;
 
 exports[`APIs/semantics reports resolution errors with inline requires + CJS 1`] = `
@@ -43,6 +47,8 @@ None of these files exist:
   16 |
   17 | global.x = DoesNotExist as DoesNotExistT;
   18 |
+Import stack:
+    at <dir>/inline-requires-cannot-resolve-require.js:15:22
 `;
 
 exports[`APIs/semantics reports resolution errors with inline requires + ESM 1`] = `
@@ -58,6 +64,8 @@ None of these files exist:
   16 |
   17 | global.x = DoesNotExist as DoesNotExistT;
   18 |
+Import stack:
+    at <dir>/inline-requires-cannot-resolve-import.js:15:1
 `;
 
 exports[`formatting edge cases reports resolution errors with a multi-line loc + specifier containing an escape sequence 1`] = `
@@ -73,6 +81,8 @@ None of these files exist:
   17 |   aaaaaaaaaa,
   18 |   bbbbbbbbbb,
   19 |   cccccccccc,
+Import stack:
+    at <dir>/cannot-resolve-multi-line-import-with-escapes.js:16:1
 `;
 
 exports[`formatting edge cases reports resolution errors with a specifier containing an escape sequence 1`] = `
@@ -88,6 +98,8 @@ None of these files exist:
   18 |
   19 | global.x = DoesNotExist as DoesNotExistT;
   20 |
+Import stack:
+    at <dir>/cannot-resolve-specifier-with-escapes.js:17:1
 `;
 
 exports[`formatting edge cases reports resolution errors with embedded comment after the specifier 1`] = `
@@ -103,6 +115,8 @@ None of these files exist:
   16 |
   17 | global.x = DoesNotExist as DoesNotExistT;
   18 |
+Import stack:
+    at <dir>/cannot-resolve-require-with-embedded-comment.js:15:22
 `;
 
 exports[`formatting edge cases reports resolution errors with multi-line locs 1`] = `
@@ -118,4 +132,28 @@ None of these files exist:
   28 |
   29 | global.x = aaaaaaaaaa as DoesNotExistT;
   30 |
+Import stack:
+    at <dir>/cannot-resolve-multi-line-import.js:16:1
+`;
+
+exports[`reports resolution errors with a long import stack 1`] = `
+Unable to resolve module ./does-not-exist from <dir>/cannot-resolve-import.js: 
+
+None of these files exist:
+  * build-errors/does-not-exist(.web.js|.native.js|.js|.web.jsx|.native.jsx|.jsx|.web.json|.native.json|.json|.web.ts|.native.ts|.ts|.web.tsx|.native.tsx|.tsx)
+  * build-errors/does-not-exist
+  13 |
+  14 | // $FlowExpectedError[cannot-resolve-module]
+> 15 | import DoesNotExist from './does-not-exist';
+     |                           ^
+  16 |
+  17 | global.x = DoesNotExist as DoesNotExistT;
+  18 |
+Import stack:
+    at <dir>/cannot-resolve-import.js:15:1
+    at <dir>/long-import-stack/e.js:11:1
+    at <dir>/long-import-stack/d1.js:11:1
+    at <dir>/long-import-stack/c.js:11:1
+    at <dir>/long-import-stack/b.js:11:1
+    at <dir>/long-import-stack/a.js:11:1
 `;

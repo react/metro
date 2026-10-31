@@ -4100,3 +4100,57 @@ test('when only the order of transformer dependencies changes, the resolved depe
     objectContaining({absolutePath: '/bar'}),
   ]);
 });
+
+describe('diagnostics', () => {
+  test('appends an import stack to resolution error on initial traversal', async () => {
+    Actions.deleteFile('/bar', graph);
+
+    await expect(
+      graph.initialTraverseDependencies(options),
+    ).rejects.toMatchSnapshot();
+  });
+
+  test('appends a partial import stack to resolution error on incremental traversal', async () => {
+    await graph.initialTraverseDependencies(options);
+
+    Actions.deleteFile('/bar', graph);
+
+    await expect(
+      graph.traverseDependencies([...files], options),
+    ).rejects.toMatchSnapshot();
+  });
+
+  test('import stack is available on the error object', async () => {
+    Actions.deleteFile('/bar', graph);
+
+    const error = await flip(graph.initialTraverseDependencies(options));
+
+    // $FlowFixMe[prop-missing] Expando property set by addImportStackToError.
+    expect(error.metroImportStack).toMatchSnapshot();
+  });
+
+  test('entry point is not named in the import stack when there are multiple entry points', async () => {
+    Actions.createFile('/bundle-2');
+    Actions.addDependency('/bundle-2', '/foo');
+    graph = new TestGraph({
+      entryPoints: new Set(['/bundle', '/bundle-2']),
+      transformOptions: options.transformOptions,
+    });
+    await graph.initialTraverseDependencies(options);
+
+    Actions.deleteFile('/bar', graph);
+
+    await expect(
+      graph.traverseDependencies([...files], options),
+    ).rejects.toMatchSnapshot();
+  });
+});
+
+function flip<T>(promise: Promise<T>): Promise<Error> {
+  return promise.then(
+    value => {
+      throw value;
+    },
+    error => error,
+  );
+}

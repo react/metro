@@ -1,5 +1,32 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`diagnostics appends a partial import stack to resolution error on incremental traversal 1`] = `
+[Error: Dependency not found: /foo -> /bar
+Import stack:
+    at /foo
+    (...)
+    at /bundle]
+`;
+
+exports[`diagnostics appends an import stack to resolution error on initial traversal 1`] = `
+[Error: Dependency not found: /foo -> /bar
+Import stack:
+    at /foo
+    at /bundle]
+`;
+
+exports[`diagnostics entry point is not named in the import stack when there are multiple entry points 1`] = `
+[Error: Dependency not found: /foo -> /bar
+Import stack:
+    at /foo
+    (...)]
+`;
+
+exports[`diagnostics import stack is available on the error object 1`] = `
+"    at /foo
+    at /bundle"
+`;
+
 exports[`should do the initial traversal correctly 1`] = `
 TestGraph {
   "dependencies": Map {

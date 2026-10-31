@@ -158,3 +158,15 @@ describe('formatting edge cases', () => {
     await expect(buildPromise).rejects.toMatchSnapshot();
   });
 });
+
+test('reports resolution errors with a long import stack', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+
+  const buildPromise = Metro.runBuild(config, {
+    entry: 'build-errors/long-import-stack/a.js',
+  });
+
+  await expect(buildPromise).rejects.toMatchSnapshot();
+});

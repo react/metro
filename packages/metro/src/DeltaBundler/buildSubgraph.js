@@ -9,6 +9,7 @@
  */
 
 import type {RequireContext} from '../lib/contextModule';
+import type {DependencyStackNode} from './diagnostics';
 import type {
   Dependency,
   ModuleData,
@@ -21,18 +22,24 @@ import type {
 
 import {deriveAbsolutePathFromContext} from '../lib/contextModule';
 import {isResolvedDependency} from '../lib/isResolvedDependency';
+import {addImportStackToError} from './diagnostics';
 import path from 'node:path';
 
 type Parameters<T> = Readonly<{
   resolve: ResolveFn,
   transform: TransformFn<T>,
   shouldTraverse: ResolvedDependency => boolean,
+  // The import stack to report for errors under each entry path.
+  getEntryDependencyStack?: (
+    absolutePath: string,
+  ) => DependencyStackNode | null,
 }>;
 
 function resolveDependencies(
   parentPath: string,
   dependencies: ReadonlyArray<TransformResultDependency>,
   resolve: ResolveFn,
+  dependencyStack: DependencyStackNode | null,
 ): {
   dependencies: Map<string, Dependency>,
   virtualSources: Map<string, VirtualSource>,
@@ -78,6 +85,17 @@ function resolveDependencies(
           data: dep,
         };
       } catch (error) {
+        if (error instanceof Error) {
+          addImportStackToError(
+            {
+              absolutePath: parentPath,
+              dependency: dep,
+              parent: dependencyStack,
+            },
+            error,
+          );
+        }
+
         // Ignore unavailable optional dependencies. They are guarded
         // with a try-catch block and will be handled during runtime.
         if (dep.data.isOptional !== true) {
@@ -106,7 +124,7 @@ function resolveDependencies(
 export async function buildSubgraph<T>(
   entryPaths: ReadonlySet<string>,
   virtualSources: ReadonlyMap<string, ?VirtualSource>,
-  {resolve, transform, shouldTraverse}: Parameters<T>,
+  {resolve, transform, shouldTraverse, getEntryDependencyStack}: Parameters<T>,
 ): Promise<{
   moduleData: Map<string, ModuleData<T>>,
   errors: Map<string, Error>,
@@ -118,6 +136,7 @@ export async function buildSubgraph<T>(
   async function visit(
     absolutePath: string,
     virtualSource: ?VirtualSource,
+    dependencyStack: DependencyStackNode | null,
   ): Promise<void> {
     if (visitedPaths.has(absolutePath)) {
       return;
@@ -131,6 +150,7 @@ export async function buildSubgraph<T>(
       absolutePath,
       transformResult.dependencies,
       resolve,
+      dependencyStack,
     );
 
     moduleData.set(absolutePath, {
@@ -149,6 +169,11 @@ export async function buildSubgraph<T>(
           visit(
             dependency.absolutePath,
             resolutionResult.virtualSources.get(dependency.data.data.key),
+            {
+              absolutePath,
+              dependency: dependency.data,
+              parent: dependencyStack,
+            },
           ).catch(error => {
             errors.set(dependency.absolutePath, error);
           }),
@@ -160,9 +185,11 @@ export async function buildSubgraph<T>(
 
   await Promise.all(
     [...entryPaths].map(absolutePath =>
-      visit(absolutePath, virtualSources.get(absolutePath)).catch(error =>
-        errors.set(absolutePath, error),
-      ),
+      visit(
+        absolutePath,
+        virtualSources.get(absolutePath),
+        getEntryDependencyStack?.(absolutePath) ?? null,
+      ).catch(error => errors.set(absolutePath, error)),
     ),
   );
 
