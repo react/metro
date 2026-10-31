@@ -12,8 +12,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const NULL_BYTE = 0x00;
-const NULL_BYTE_BUFFER = Buffer.from([NULL_BYTE]);
+// A nonzero marker ensures that zero-filled files are treated as cache misses.
+const BINARY_MARKER = 0x01;
+const BINARY_MARKER_BUFFER = Buffer.from([BINARY_MARKER]);
 
 export type Options = Readonly<{
   root: string,
@@ -30,7 +31,7 @@ export default class FileStore<T> {
     try {
       const data = await fs.promises.readFile(this.#getFilePath(key));
 
-      if (data[0] === NULL_BYTE) {
+      if (data[0] === BINARY_MARKER) {
         return data.slice(1) as any;
       }
 
@@ -61,7 +62,7 @@ export default class FileStore<T> {
   async #set(filePath: string, value: T): Promise<void> {
     let content;
     if (value instanceof Buffer) {
-      content = Buffer.concat([NULL_BYTE_BUFFER, value]);
+      content = Buffer.concat([BINARY_MARKER_BUFFER, value]);
     } else {
       content = JSON.stringify(value) ?? JSON.stringify(null);
     }
