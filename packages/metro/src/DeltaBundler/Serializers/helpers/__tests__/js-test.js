@@ -13,6 +13,7 @@ import type {Dependency} from '../../../types';
 
 import {createPathNormalizer} from '../../../__tests__/test-utils';
 import CountingSet from '../../../../lib/CountingSet';
+import parseBundleOptionsFromBundleRequestUrl from '../../../../lib/parseBundleOptionsFromBundleRequestUrl';
 import {inlineModuleIdReferences, wrapModule} from '../js';
 import {wrap as raw} from 'jest-snapshot-serializer-raw';
 import createModuleIdFactory from 'metro-config/private/defaults/createModuleIdFactory';
@@ -152,7 +153,7 @@ describe('wrapModule()', () => {
         }),
       ),
     ).toMatchInlineSnapshot(
-      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/../bar.bundle?param1=true&param2=1234&modulesOnly=true&runModule=false"}});`,
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/../bar.js.bundle?param1=true&param2=1234&modulesOnly=true&runModule=false"}});`,
     );
   });
 
@@ -174,8 +175,40 @@ describe('wrapModule()', () => {
         }),
       ),
     ).toMatchInlineSnapshot(
-      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/bar.bundle?param1=true&param2=1234&modulesOnly=true&runModule=false"}});`,
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/bar.js.bundle?param1=true&param2=1234&modulesOnly=true&runModule=false"}});`,
     );
+  });
+
+  test('async dependency paths keep the resolved file extension', () => {
+    myModule.dependencies.set('bar', {
+      absolutePath: '/root/node_modules/bar/dist/index.cjs',
+      data: {
+        data: {asyncType: 'async', isESMImport: false, locs: [], key: 'bar'},
+        name: 'bar',
+      },
+    });
+    const sourceUrl = 'http://localhost/Main.bundle?platform=ios';
+    const wrapped = wrapModule(myModule, {
+      createModuleId: createModuleIdFactory(),
+      dev: false,
+      includeAsyncPaths: true,
+      projectRoot: '/root',
+      serverRoot: '/root',
+      sourceUrl,
+    });
+    expect(raw(wrapped)).toMatchInlineSnapshot(
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/node_modules/bar/dist/index.cjs.bundle?platform=ios&modulesOnly=true&runModule=false"}});`,
+    );
+
+    // The server must resolve the chunk URL back to the same file, not to a
+    // sibling such as `index.js` found through `sourceExts`.
+    const asyncPath = nullthrows(wrapped.match(/"paths":\{"1":"([^"]+)"/))[1];
+    expect(
+      parseBundleOptionsFromBundleRequestUrl(
+        'http://localhost' + asyncPath,
+        new Set(['ios']),
+      ).entryFile,
+    ).toBe('./node_modules/bar/dist/index.cjs');
   });
 
   test('async bundle paths override modulesOnly and runModule', () => {
@@ -197,7 +230,7 @@ describe('wrapModule()', () => {
         }),
       ),
     ).toMatchInlineSnapshot(
-      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/../bar.bundle?modulesOnly=true&runModule=false"}});`,
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/../bar.js.bundle?modulesOnly=true&runModule=false"}});`,
     );
   });
 
@@ -321,7 +354,7 @@ describe('wrapModule() with inlined module ids', () => {
       `__d(function(g,r,i,a,m,e,${NAME}){r(${'1'.padEnd(
         ref(0).length,
       )});r(${'2'.padEnd(ref(1).length)})},0,` +
-        `{"paths":{"1":"/../bar.bundle?param1=true&modulesOnly=true&runModule=false"}});`,
+        `{"paths":{"1":"/../bar.js.bundle?param1=true&modulesOnly=true&runModule=false"}});`,
     );
   });
 
