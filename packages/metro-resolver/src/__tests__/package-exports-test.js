@@ -904,8 +904,7 @@ describe('with package exports resolution enabled', () => {
       ['invalid', 'invalid-target', 'invalid package.json configuration'],
       ['numeric', 42, 'invalid package.json configuration'],
       ['boolean', false, 'invalid package.json configuration'],
-      ['unsupported empty array', [], 'no match was resolved'],
-      ['unsupported nested array', ['./lib/foo.js'], 'no match was resolved'],
+      ['empty array', [], 'no match was resolved'],
     ])(
       'should not continue parent conditions after a %s target',
       (_, target, warning) => {
@@ -1165,7 +1164,7 @@ describe('with package exports resolution enabled', () => {
     });
   });
 
-  describe('compatibility with non-standard "exports" array formats', () => {
+  describe('compatibility with legacy "exports" array formats', () => {
     // Node.js versions >=13.0.0, <13.7.0 support the `exports` field but not
     // conditional exports. Used by packages such as @babel/runtime.
     // See https://github.com/babel/babel/pull/12877
@@ -1236,7 +1235,7 @@ describe('with package exports resolution enabled', () => {
 
     // Array as order-preserving data structure for other environments.
     // See https://github.com/nodejs/node/issues/37777#issuecomment-804164719
-    describe('[unsupported] exotic nested arrays', () => {
+    describe('invalid targets in nested arrays', () => {
       test('should fall back and log warning for nested array at root', () => {
         const logWarning = jest.fn();
         const context = {
@@ -1264,7 +1263,7 @@ describe('with package exports resolution enabled', () => {
         expect(logWarning).toHaveBeenCalledTimes(1);
         expect(logWarning.mock.calls[0][0]).toBe(
           `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-            'Reason: Could not parse non-standard array value at root of "exports" field. Falling back to file-based resolution.',
+            'Reason: One or more mappings for subpaths defined in "exports" are invalid. All values must begin with "./". Falling back to file-based resolution.',
         );
       });
 
@@ -1297,7 +1296,7 @@ describe('with package exports resolution enabled', () => {
         expect(logWarning).toHaveBeenCalledTimes(1);
         expect(logWarning.mock.calls[0][0]).toBe(
           `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-            'Reason: Could not parse non-standard array value in "exports" field. Falling back to file-based resolution.',
+            'Reason: One or more mappings for subpaths defined in "exports" are invalid. All values must begin with "./". Falling back to file-based resolution.',
         );
       });
     });

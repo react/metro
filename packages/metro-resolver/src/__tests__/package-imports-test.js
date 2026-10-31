@@ -224,8 +224,7 @@ describe('import subpath conditional imports resolution', () => {
     ['invalid', 'invalid-target', 'invalid package.json configuration'],
     ['numeric', 42, 'invalid package.json configuration'],
     ['boolean', false, 'invalid package.json configuration'],
-    ['unsupported empty array', [], 'no match was resolved'],
-    ['unsupported nested array', ['./lib/foo.js'], 'no match was resolved'],
+    ['empty array', [], 'no match was resolved'],
   ])(
     'should not continue parent conditions after a %s target',
     (_, target, warning) => {

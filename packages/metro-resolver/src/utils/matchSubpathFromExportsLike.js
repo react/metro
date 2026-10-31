@@ -9,10 +9,14 @@
  * @oncall react_native
  */
 
-import type {NormalizedExportsLikeMap, ResolutionContext} from '../types';
+import type {
+  ExportsLikeMap,
+  NormalizedExportsLikeMap,
+  ResolutionContext,
+} from '../types';
 
 import {matchSubpathPattern} from './matchSubpathPattern';
-import {reduceExportsLikeMap} from './reduceExportsLikeMap';
+import {reduceConditionalExport} from './reduceConditionalExport';
 
 /**
  * Get the mapped replacement for the given subpath.
@@ -30,6 +34,7 @@ export function matchSubpathFromExportsLike(
   exportsLikeMap: NormalizedExportsLikeMap,
   platform: string | null,
   createConfigError: (reason: string) => Error,
+  validateTarget?: (target: string) => void,
 ): Readonly<{
   target: string | null,
   patternMatch: string | null,
@@ -43,26 +48,20 @@ export function matchSubpathFromExportsLike(
       : []),
   ]);
 
-  const exportsLikeMapAfterConditions = reduceExportsLikeMap(
-    exportsLikeMap,
-    conditionNames,
-    createConfigError,
-  );
-
-  let target = null;
+  let target: Values<ExportsLikeMap> | void = null;
   let patternMatch = null;
 
   // Attempt to match subpath pattern keys only if there is no exact key. An
   // exact key takes precedence even when its target is null. See step 2 of
   // `PACKAGE_IMPORTS_EXPORTS_RESOLVE` in:
   // https://nodejs.org/api/esm.html#resolution-algorithm-specification
-  if (exportsLikeMapAfterConditions.has(subpath)) {
-    target = exportsLikeMapAfterConditions.get(subpath);
+  if (exportsLikeMap.has(subpath)) {
+    target = exportsLikeMap.get(subpath);
   } else {
     // Gather keys which are subpath patterns in descending order of specificity
     // For ordering, see `PATTERN_KEY_COMPARE` in:
     // https://nodejs.org/api/esm.html#resolution-algorithm-specification
-    const expansionKeys = [...exportsLikeMapAfterConditions.keys()]
+    const expansionKeys = [...exportsLikeMap.keys()]
       .map(key => ({key, baseLength: key.indexOf('*')}))
       .filter(data => data.baseLength !== -1)
       .sort((a, b) => {
@@ -75,7 +74,7 @@ export function matchSubpathFromExportsLike(
       });
 
     for (const {key} of expansionKeys) {
-      const value = exportsLikeMapAfterConditions.get(key);
+      const value = exportsLikeMap.get(key);
 
       patternMatch = matchSubpathPattern(key, subpath);
 
@@ -86,5 +85,11 @@ export function matchSubpathFromExportsLike(
     }
   }
 
-  return {target: target ?? null, patternMatch};
+  const resolved = reduceConditionalExport(
+    target ?? null,
+    conditionNames,
+    createConfigError,
+    validateTarget,
+  );
+  return {target: typeof resolved === 'string' ? resolved : null, patternMatch};
 }

@@ -10,9 +10,7 @@
  */
 
 import type {
-  ExportMapWithFallbacks,
   ExportsField,
-  ExportsLikeMap,
   FileResolution,
   NormalizedExportsLikeMap,
   ResolutionContext,
@@ -82,19 +80,19 @@ export function resolvePackageTargetFromExports(
     exportMap,
     platform,
     createConfigError,
+    target => {
+      const invalidSegmentInTarget = findInvalidPathSegment(target.slice(2));
+      if (invalidSegmentInTarget != null) {
+        throw createConfigError(
+          `The target for "${subpath}" defined in "exports" is "${target}", ` +
+            'however this value is an invalid subpath or subpath pattern ' +
+            `because it includes "${invalidSegmentInTarget}".`,
+        );
+      }
+    },
   );
 
   if (target != null) {
-    const invalidSegmentInTarget = findInvalidPathSegment(target.slice(2));
-
-    if (invalidSegmentInTarget != null) {
-      throw createConfigError(
-        `The target for "${subpath}" defined in "exports" is "${target}", ` +
-          'however this value is an invalid subpath or subpath pattern ' +
-          `because it includes "${invalidSegmentInTarget}".`,
-      );
-    }
-
     const filePath = path.join(
       packagePath,
       patternMatch != null ? target.replaceAll('*', patternMatch) : target,
@@ -158,7 +156,7 @@ const _normalizedExportsFields: WeakMap<
 
 /**
  * Normalise an "exports"-like field by parsing string shorthand and conditions
- * shorthand at root, and flattening any legacy Node.js <13.7 array values.
+ * shorthand at root. Array targets are resolved after matching conditions.
  *
  * See https://nodejs.org/docs/latest-v19.x/api/packages.html#exports-sugar.
  */
@@ -166,8 +164,6 @@ function normalizeExportsField(
   exportsField: ExportsField,
   createConfigError: (reason: string) => Error,
 ): NormalizedExportsLikeMap {
-  let rootValue;
-
   if (typeof exportsField === 'string') {
     return new Map([['.', exportsField]]);
   }
@@ -178,38 +174,18 @@ function normalizeExportsField(
   }
 
   if (Array.isArray(exportsField)) {
-    // If an array of strings, use first value with valid specifier (root shorthand)
-    if (exportsField.every(value => typeof value === 'string')) {
-      // $FlowFixMe[incompatible-type] exportsField is refined to `string[]`
-      rootValue = exportsField.find((value: string) => value.startsWith('./'));
-    } else {
-      // Otherwise, should be a condition map and fallback string (Node.js <13.7)
-      rootValue = exportsField[0];
-    }
-  } else {
-    rootValue = exportsField;
-  }
-
-  if (rootValue == null || Array.isArray(rootValue)) {
-    throw createConfigError(
-      'Could not parse non-standard array value at root of "exports" field.',
-    );
-  }
-
-  if (typeof rootValue === 'string') {
-    const result: NormalizedExportsLikeMap = new Map([['.', rootValue]]);
+    const result: NormalizedExportsLikeMap = new Map([['.', exportsField]]);
     _normalizedExportsFields.set(exportsField, result);
     return result;
   }
 
+  const rootValue = exportsField;
   const firstLevelKeys = Object.keys(rootValue);
   const subpathKeys = firstLevelKeys.filter(key => key.startsWith('.'));
   const importKeys = firstLevelKeys.filter(key => key.startsWith('#'));
 
   if (importKeys.length + subpathKeys.length === firstLevelKeys.length) {
-    const result: NormalizedExportsLikeMap = new Map(
-      Object.entries(flattenLegacySubpathValues(rootValue, createConfigError)),
-    );
+    const result: NormalizedExportsLikeMap = new Map(Object.entries(rootValue));
     _normalizedExportsFields.set(exportsField, result);
     return result;
   }
@@ -221,37 +197,9 @@ function normalizeExportsField(
     );
   }
 
-  const result: NormalizedExportsLikeMap = new Map([
-    ['.', flattenLegacySubpathValues(rootValue, createConfigError)],
-  ]);
+  const result: NormalizedExportsLikeMap = new Map([['.', rootValue]]);
   _normalizedExportsFields.set(exportsField, result);
   return result;
-}
-
-/**
- * Flatten legacy Node.js <13.7 array subpath values in an exports mapping.
- */
-function flattenLegacySubpathValues(
-  exportMap: ExportsLikeMap | ExportMapWithFallbacks,
-  createConfigError: (reason: string) => Error,
-): ExportsLikeMap {
-  return Object.entries(exportMap).reduce(
-    (result, [subpath, value]) => {
-      // We do not support empty or nested arrays (non-standard)
-      if (Array.isArray(value)) {
-        if (!value.length || Array.isArray(value[0])) {
-          throw createConfigError(
-            'Could not parse non-standard array value in "exports" field.',
-          );
-        }
-        result[subpath] = value[0];
-      } else {
-        result[subpath] = value;
-      }
-      return result;
-    },
-    {} as {[subpathOrCondition: string]: string | ExportsLikeMap | null},
-  );
 }
 
 function findInvalidPathSegment(subpath: string): ?string {
