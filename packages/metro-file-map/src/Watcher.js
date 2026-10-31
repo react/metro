@@ -304,7 +304,7 @@ export class Watcher extends EventEmitter {
       );
     }
 
-    const createWatcherBackend = (
+    const createWatcherBackend = async (
       root: Path,
       rootClocks: ?Map<string, WatchmanClockSpec>,
     ): Promise<WatcherBackend> => {
@@ -323,45 +323,58 @@ export class Watcher extends EventEmitter {
       };
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
 
-      return new Promise(async (resolve, reject) => {
-        const rejectTimeout = setTimeout(
-          () => reject(new Error('Failed to start watch mode.')),
-          MAX_WAIT_TIME,
-        );
-
-        watcher.onFileEvent(change => {
-          const basename = path.basename(change.relativePath);
-          if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
-            if (change.event === TOUCH_EVENT) {
-              debug(
-                'Observed possible health check cookie: %s in %s',
-                change.relativePath,
-                root,
-              );
-              this.#handleHealthCheckObservation(basename);
-            }
-            return;
-          }
-          // Watchman handles recrawls internally - receiving a recrawl event
-          // when using Watchman would indicate a bug. Log an error and ignore.
-          if (change.event === 'recrawl' && useWatchman) {
-            this.#options.console.error(
-              'metro-file-map: Received unexpected recrawl event while using ' +
-                'Watchman. Watchman recrawls are not implemented.',
+      watcher.onFileEvent(change => {
+        const basename = path.basename(change.relativePath);
+        if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
+          if (change.event === TOUCH_EVENT) {
+            debug(
+              'Observed possible health check cookie: %s in %s',
+              change.relativePath,
+              root,
             );
-            return;
+            this.#handleHealthCheckObservation(basename);
           }
-          const onChange = this.#onChange;
-          if (onChange != null) {
-            onChange(change);
-          } else {
-            this.#bufferedEvents.push(change);
-          }
-        });
-        await watcher.startWatching();
-        clearTimeout(rejectTimeout);
-        resolve(watcher);
+          return;
+        }
+        // Watchman handles recrawls internally - receiving a recrawl event
+        // when using Watchman would indicate a bug. Log an error and ignore.
+        if (change.event === 'recrawl' && useWatchman) {
+          this.#options.console.error(
+            'metro-file-map: Received unexpected recrawl event while using ' +
+              'Watchman. Watchman recrawls are not implemented.',
+          );
+          return;
+        }
+        const onChange = this.#onChange;
+        if (onChange != null) {
+          onChange(change);
+        } else {
+          this.#bufferedEvents.push(change);
+        }
       });
+
+      let rejectTimeout: ?ReturnType<typeof setTimeout>;
+      try {
+        await Promise.race([
+          watcher.startWatching(),
+          new Promise<void>((resolve, reject) => {
+            rejectTimeout = setTimeout(
+              () => reject(new Error('Failed to start watch mode.')),
+              MAX_WAIT_TIME,
+            );
+          }),
+        ]);
+      } catch (error) {
+        // Release whatever the backend acquired before failing, e.g. a
+        // Watchman connection, which would otherwise hold the process open.
+        await watcher.stopWatching();
+        throw error;
+      } finally {
+        if (rejectTimeout != null) {
+          clearTimeout(rejectTimeout);
+        }
+      }
+      return watcher;
     };
 
     // A root added by watchRoot() is watched before it is crawled, so it

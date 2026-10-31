@@ -41,7 +41,9 @@ type MockBackend = {
   emit: (event: WatcherBackendChangeEvent) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
+const mockStoppedRoots: Array<string> = [];
 let mockNativeLiveOnStart = true;
+let mockStartError: ?Error = null;
 function mockBackendClass(kind: MockBackend['kind']) {
   return class {
     #root: string;
@@ -60,7 +62,10 @@ function mockBackendClass(kind: MockBackend['kind']) {
     onFileEvent(listener: (event: WatcherBackendChangeEvent) => void) {
       this.#listener = listener;
     }
-    async startWatching() {
+    async startWatching(): Promise<void> {
+      if (mockStartError != null) {
+        throw mockStartError;
+      }
       mockStartedBackends.push({
         kind,
         root: this.#root,
@@ -68,7 +73,9 @@ function mockBackendClass(kind: MockBackend['kind']) {
         emit: event => this.#listener?.(event),
       });
     }
-    async stopWatching() {}
+    async stopWatching() {
+      mockStoppedRoots.push(this.#root);
+    }
     getPauseReason(): ?string {
       return null;
     }
@@ -141,7 +148,9 @@ function createWatcher(
 
 beforeEach(() => {
   mockStartedBackends.length = 0;
+  mockStoppedRoots.length = 0;
   mockNativeLiveOnStart = true;
+  mockStartError = null;
   mockWatchmanCrawl.mockReset();
   mockNodeCrawl.mockReset();
   jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -279,6 +288,27 @@ describe('Watcher backend choice in watch mode', () => {
     expect(onChange.mock.calls).toEqual([[event]]);
     // No Watchman backend is started - the node crawl has no clock for it.
     expect(mockStartedBackends.map(b => b.kind)).toEqual(['native']);
+  });
+});
+
+describe('Watcher with a backend that fails to start', () => {
+  test('watchRoot() rejects with its error, and the backend is stopped', async () => {
+    mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+    const watcher = createWatcher(false, null, true);
+    await watcher.crawl();
+    await watcher.watch(() => {});
+
+    const addedRoot = path.join(path.sep, 'other');
+    mockStartError = new Error('ENOENT: no such file or directory');
+    await expect(watcher.watchRoot(addedRoot)).rejects.toBe(mockStartError);
+    expect(mockStoppedRoots).toEqual([addedRoot]);
+  });
+
+  test('crawl() rejects with its error when starting backends before the crawl', async () => {
+    mockStartError = new Error('ENOENT: no such file or directory');
+    const watcher = createWatcher(false, null, true);
+    await expect(watcher.crawl()).rejects.toBe(mockStartError);
+    expect(mockNodeCrawl).not.toHaveBeenCalled();
   });
 });
 
