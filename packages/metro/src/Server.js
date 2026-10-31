@@ -1298,6 +1298,55 @@ export default class Server {
         prepend = [];
       }
 
+      // If the project defines a custom serializer, then we should run it to ensure any
+      // mutations to the graph are applied in the sourcemap.
+      if (this._config.serializer.customSerializer) {
+        const bundle = await this._config.serializer.customSerializer(
+          entryFile,
+          prepend,
+          graph,
+          {
+            asyncRequireModulePath: await this._resolveRelativePath(
+              this._config.transformer.asyncRequireModulePath,
+              {
+                relativeTo: 'project',
+                resolverOptions,
+                transformOptions,
+              },
+            ),
+            processModuleFilter: this._config.serializer.processModuleFilter,
+            createModuleId: this._createModuleId,
+            getRunModuleStatement:
+              this._config.serializer.getRunModuleStatement,
+            includeAsyncPaths: graphOptions.lazy,
+            dev: transformOptions.dev,
+            projectRoot: this._config.projectRoot,
+            modulesOnly: serializerOptions.modulesOnly,
+            runBeforeMainModule:
+              this._config.serializer.getModulesRunBeforeMainModule(
+                path.relative(this._config.projectRoot, entryFile),
+              ),
+            runModule: serializerOptions.runModule,
+            sourceMapUrl: serializerOptions.sourceMapUrl,
+            sourceUrl: serializerOptions.sourceUrl,
+            inlineSourceMap: serializerOptions.inlineSourceMap,
+            serverRoot:
+              this._config.server.unstable_serverRoot ??
+              this._config.projectRoot,
+            shouldAddToIgnoreList: (module: Module<>) =>
+              this._shouldAddModuleToIgnoreList(module),
+            getSourceUrl: (module: Module<>) =>
+              this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+          },
+        );
+
+        // If the serializer returned the source map then we can use it here, otherwise
+        // fall back to the default source map generation with the possibly mutated graph.
+        if (typeof bundle !== 'string' && bundle.map) {
+          return bundle.map;
+        }
+      }
+
       return await sourceMapStringNonBlocking(
         [...prepend, ...this._getSortedModules(graph)],
         {
