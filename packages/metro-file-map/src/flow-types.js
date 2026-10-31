@@ -295,7 +295,10 @@ type V8SerializableCollection =
   | ReadonlyMap<string, V8Serializable>
   | Readonly<{[key: string]: V8Serializable}>;
 
-export type V8Serializable = V8SerializablePrimitive | V8SerializableCollection;
+// `v8.serialize` keeps an error's class (for the built-in error types), name
+// and message.
+export type V8Serializable =
+  V8SerializablePrimitive | V8SerializableCollection | Error;
 
 export interface FileMapPlugin<
   in SerializableState extends void | V8Serializable = void | V8Serializable,

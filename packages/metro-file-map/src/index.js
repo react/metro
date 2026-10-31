@@ -166,6 +166,7 @@ export type {
   DependencyExtractor,
   FileDataResult,
   FileMapRoot,
+  Observations,
   WatcherStatus,
 } from './flow-types';
 

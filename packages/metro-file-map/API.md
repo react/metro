@@ -297,6 +297,11 @@ export class NoopCacheManager implements CacheManager {
   write(): Promise<void>;
 }
 
+export interface Observations {
+  readonly content: Set<CanonicalPath>;
+  readonly existence: Set<CanonicalPath>;
+}
+
 export type WatcherStatus =
   | {
       type: 'watchman_slow_command';

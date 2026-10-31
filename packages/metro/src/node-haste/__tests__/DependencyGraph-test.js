@@ -45,6 +45,7 @@ describe('DependencyGraph', () => {
       },
       hasteMap: {},
       dependencyPlugin: null,
+      packageJsonPlugin: {},
     });
 
     const depGraph = new DependencyGraph(config);
