@@ -163,10 +163,13 @@ export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
 // Canonical paths whose addition or removal (`existence`) or modification
-// (`content`) can change a resolution's result.
+// (`content`) can change a resolution's result, and every Haste name it looked
+// up, found or not (`haste`). `haste` is null if there were none, which is
+// always so when no file can have a Haste name.
 export type ResolutionObservations = Readonly<{
   existence: Set<string>,
   content: Set<string>,
+  haste: ?Set<string>,
 }>;
 
 export type BundlerResolution = Readonly<{
