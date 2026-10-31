@@ -80,12 +80,17 @@ jest.mock('../crawlers/node', () => ({
   default: mockNodeCrawler,
 }));
 
+// Absolute path -> inode number, for directories replaced by another.
+let mockReplacedDirs: Map<string, number>;
+
 // A directory exists, as stat sees it, if it holds a mock file.
 function mockDirectoryIdentity(absolutePath: string) {
   const exists = Array.from(mockFiles.keys()).some(file =>
     file.startsWith(absolutePath + path.sep),
   );
-  return exists ? {dev: BigInt(1), ino: BigInt(1)} : null;
+  return exists
+    ? {dev: BigInt(1), ino: BigInt(mockReplacedDirs.get(absolutePath) ?? 1)}
+    : null;
 }
 
 jest.mock('../lib/directoryIdentity', () => ({
@@ -204,6 +209,14 @@ async function until(predicate: () => boolean): Promise<void> {
 const nextChange = (fileMap: FileMapT): Promise<ChangeEvent> =>
   new Promise(resolve => fileMap.once('change', resolve));
 
+const removeFilesUnder = (dir: string) => {
+  for (const file of mockFiles.keys()) {
+    if (file.startsWith(dir + path.sep)) {
+      mockFiles.delete(file);
+    }
+  }
+};
+
 const filePaths = (
   files: Iterable<Readonly<[string, unknown]>>,
 ): Array<string> => Array.from(files, ([file]) => file);
@@ -222,6 +235,7 @@ describe('FileMap.addRoot', () => {
       [path.join(EXTERNAL_DIR, 'other.js'), 1],
     ]);
     mockSymlinks = new Map();
+    mockReplacedDirs = new Map();
     mockPollers = new Map();
     ({default: FileMap} = require('../'));
     fileMap = createFileMap();
@@ -621,6 +635,87 @@ describe('FileMap.addRoot', () => {
         await fileMap.addRoot(MISSING_DIR);
         await fileMap.end();
         expect(mockPollers.get(MISSING_DIR)?.stopped).toBe(true);
+      });
+    });
+
+    describe('when the watch of a root is lost', () => {
+      test.each([
+        ['an added root', [SRC_DIR], true],
+        ['a root given in `roots`', [SRC_DIR, EXTERNAL_DIR], false],
+      ])(
+        'and its directory is gone, %s removes its files and goes pending, then returns',
+        async (_, roots, isAdded) => {
+          fileMap = createFileMap({roots, watch: true});
+          const {fileSystem} = await fileMap.build();
+          if (isAdded) {
+            await fileMap.addRoot(EXTERNAL_DIR);
+          }
+          const backend = mockWatchers.get(EXTERNAL_DIR);
+          const stopWatching = jest.spyOn(backend ?? {}, 'stopWatching');
+
+          removeFilesUnder(EXTERNAL_DIR);
+          const removed = nextChange(fileMap);
+          backend?.emitRootLost();
+          const {changes} = await removed;
+
+          expect(filePaths(changes.removedFiles).sort()).toEqual(
+            [EXTERNAL_FILE, path.join(EXTERNAL_DIR, 'other.js')]
+              .map(file => path.relative(ROOT_DIR, file))
+              .sort(),
+          );
+          expect(fileSystem.exists(EXTERNAL_FILE)).toBe(false);
+          expect(stopWatching).toHaveBeenCalled();
+          await until(() => fileMap.getRoots()[1].status === 'pending');
+          expect(mockPollers.get(EXTERNAL_DIR)).toMatchObject({
+            reportExisting: true,
+          });
+
+          mockFiles.set(EXTERNAL_FILE, 2);
+          const added = nextChange(fileMap);
+          mockPollers.get(EXTERNAL_DIR)?.onDirectory();
+          expect(filePaths((await added).changes.addedFiles)).toEqual([
+            path.relative(ROOT_DIR, EXTERNAL_FILE),
+          ]);
+          expect(mockWatchers.get(EXTERNAL_DIR)).not.toBe(backend);
+          await until(() => fileMap.getRoots()[1].status === 'live');
+        },
+      );
+
+      test('and another directory is in its place, it is watched and crawled again', async () => {
+        const {fileSystem} = await fileMap.build();
+        await fileMap.addRoot(EXTERNAL_DIR);
+        const backend = mockWatchers.get(EXTERNAL_DIR);
+
+        mockReplacedDirs.set(EXTERNAL_DIR, 2);
+        mockFiles.delete(path.join(EXTERNAL_DIR, 'other.js'));
+        mockFiles.set(path.join(EXTERNAL_DIR, 'new.js'), 1);
+        const changed = nextChange(fileMap);
+        backend?.emitRootLost();
+        const {changes} = await changed;
+
+        expect(filePaths(changes.addedFiles)).toEqual([
+          path.relative(ROOT_DIR, path.join(EXTERNAL_DIR, 'new.js')),
+        ]);
+        expect(filePaths(changes.removedFiles)).toEqual([
+          path.relative(ROOT_DIR, path.join(EXTERNAL_DIR, 'other.js')),
+        ]);
+        expect(fileSystem.exists(EXTERNAL_FILE)).toBe(true);
+        expect(mockWatchers.get(EXTERNAL_DIR)).not.toBe(backend);
+        expect(rootStatuses(fileMap)[1]).toEqual([EXTERNAL_DIR, 'live']);
+        expect(mockPollers.size).toBe(0);
+      });
+
+      test('of rootDir, nothing changes', async () => {
+        fileMap = createFileMap({roots: [ROOT_DIR], watch: true});
+        await fileMap.build();
+        const onChange = jest.fn<[ChangeEvent], void>();
+        fileMap.on('change', onChange);
+        removeFilesUnder(ROOT_DIR);
+        mockWatchers.get(ROOT_DIR)?.emitRootLost();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(onChange).not.toHaveBeenCalled();
+        expect(rootStatuses(fileMap)).toEqual([[ROOT_DIR, 'live']]);
+        expect(mockPollers.size).toBe(0);
       });
     });
   });

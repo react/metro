@@ -27,7 +27,7 @@ import watchmanCrawl from './crawlers/watchman';
 import normalizePathSeparatorsToPosix from './lib/normalizePathSeparatorsToPosix';
 import normalizePathSeparatorsToSystem from './lib/normalizePathSeparatorsToSystem';
 import {RootPathUtils} from './lib/RootPathUtils';
-import {TOUCH_EVENT} from './watchers/common';
+import {LOST_EVENT, TOUCH_EVENT} from './watchers/common';
 import FallbackWatcher from './watchers/FallbackWatcher';
 import NativeWatcher from './watchers/NativeWatcher';
 import WatchmanWatcher from './watchers/WatchmanWatcher';
@@ -101,6 +101,8 @@ export class Watcher extends EventEmitter {
   // relied on.
   #confirmWatches: boolean = false;
   readonly #instanceId: number;
+  // Backends that have reported their root lost, and have been stopped.
+  readonly #lostBackends: WeakSet<WatcherBackend> = new WeakSet();
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
   readonly #options: WatcherOptions;
@@ -324,6 +326,12 @@ export class Watcher extends EventEmitter {
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
 
       watcher.onFileEvent(change => {
+        if (change.event === LOST_EVENT) {
+          debug('Lost the watch of %s', root);
+          this.#lostBackends.add(watcher);
+          this.#backends = this.#backends.filter(b => b !== watcher);
+          void watcher.stopWatching();
+        }
         const basename = path.basename(change.relativePath);
         if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
           if (change.event === TOUCH_EVENT) {
@@ -380,17 +388,22 @@ export class Watcher extends EventEmitter {
     // A root added by watchRoot() is watched before it is crawled, so it
     // needs no crawl clock.
     this.#createBackend = root => createWatcherBackend(root, null);
-    this.#backends = await Promise.all(
+    const backends = await Promise.all(
       this.#options.roots.map(root =>
         createWatcherBackend(root, watchmanClocks),
       ),
+    );
+    this.#backends = backends.filter(
+      backend => !this.#lostBackends.has(backend),
     );
     // Confirmed only once every backend has started, because starting one may
     // restart the others' watches (NativeWatchers share one FSEvents stream).
     this.#confirmWatches = !WatcherImpl.isLiveOnStart();
     if (this.#confirmWatches) {
       await Promise.all(
-        this.#options.roots.map(root => this.#waitUntilLive(root)),
+        this.#options.roots.map((root, i) =>
+          this.#waitUntilLive(root, backends[i]),
+        ),
       );
     }
   }
@@ -399,23 +412,21 @@ export class Watcher extends EventEmitter {
    * Check the health of a root's watch until it reports a change, so that
    * changes made from now on aren't missed. Warns if it can't be confirmed.
    */
-  async #waitUntilLive(root: Path): Promise<void> {
+  async #waitUntilLive(root: Path, backend: WatcherBackend): Promise<void> {
+    const isAbandoned = () =>
+      this.#closed ||
+      this.#options.abortSignal.aborted ||
+      this.#lostBackends.has(backend);
     const deadline = Date.now() + MAX_LIVE_WAIT_TIME;
     let result;
     do {
+      if (isAbandoned()) {
+        return;
+      }
       result = await this.#checkHealth(root, LIVE_CHECK_TIMEOUT);
-    } while (
-      result.type === 'timeout' &&
-      Date.now() < deadline &&
-      !this.#closed &&
-      !this.#options.abortSignal.aborted
-    );
+    } while (result.type === 'timeout' && Date.now() < deadline);
     debug('Confirming the watch of %s: %s', root, result.type);
-    if (
-      result.type !== 'success' &&
-      !this.#closed &&
-      !this.#options.abortSignal.aborted
-    ) {
+    if (result.type !== 'success' && !isAbandoned()) {
       this.#options.console.warn(
         `metro-file-map: Could not confirm that ${root} is being watched ` +
           `(${result.type}). Changes made during startup may be missed.`,
@@ -427,6 +438,9 @@ export class Watcher extends EventEmitter {
    * Watch a root in addition to those given at construction, reporting its
    * changes to the `onChange` passed to `watch()`. Does nothing outside watch
    * mode, i.e. before the backends for the initial roots have started.
+   *
+   * A root that is not a directory, or stops being one, is reported to
+   * `onChange` as a 'lost' event, after which it is no longer watched.
    */
   async watchRoot(root: Path): Promise<void> {
     const backend = await this.#createBackend?.(root);
@@ -438,9 +452,13 @@ export class Watcher extends EventEmitter {
       await backend.stopWatching();
       return;
     }
+    // A backend whose root was lost as it started has already been stopped.
+    if (this.#lostBackends.has(backend)) {
+      return;
+    }
     this.#backends.push(backend);
     if (this.#confirmWatches) {
-      await this.#waitUntilLive(root);
+      await this.#waitUntilLive(root, backend);
     }
   }
 

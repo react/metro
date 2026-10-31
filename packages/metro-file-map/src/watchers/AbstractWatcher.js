@@ -14,8 +14,10 @@ import type {
   WatcherBackendOptions,
   WatcherIncludedFiles,
 } from '../flow-types';
+import type {DirectoryIdentity} from '../lib/directoryIdentity';
 
-import {posixPathMatchesPattern} from './common';
+import {getDirectoryIdentity, isSameDirectory} from '../lib/directoryIdentity';
+import {LOST_EVENT, posixPathMatchesPattern} from './common';
 import EventEmitter from 'node:events';
 import * as path from 'node:path';
 
@@ -31,6 +33,8 @@ export class AbstractWatcher implements WatcherBackend {
   readonly doIgnore: (path: string) => boolean;
 
   #emitter: EventEmitter = new EventEmitter();
+  #rootIdentity: ?DirectoryIdentity = null;
+  #rootLost: boolean = false;
 
   /**
    * Whether a watch reports every change made after `startWatching` resolves.
@@ -77,10 +81,45 @@ export class AbstractWatcher implements WatcherBackend {
   }
 
   emitFileEvent(event: Omit<WatcherBackendChangeEvent, 'root'>) {
+    if (this.#rootLost) {
+      return;
+    }
+    if (event.event === LOST_EVENT) {
+      this.#rootLost = true;
+    }
     this.#emitter.emit('fileevent', {
       ...event,
       root: this.root,
     });
+  }
+
+  /**
+   * Record which directory the root is, before watching it. Resolves to false
+   * if it is not a directory, in which case a subclass should report the root
+   * lost instead of watching it.
+   */
+  async recordRootIdentity(): Promise<boolean> {
+    this.#rootIdentity = await getDirectoryIdentity(this.root);
+    return this.#rootIdentity != null;
+  }
+
+  /**
+   * Whether the root is no longer the directory recorded by
+   * `recordRootIdentity`, i.e. it has been deleted, or replaced by another
+   * directory, e.g. one moved into its place.
+   */
+  async isRootLost(): Promise<boolean> {
+    return !isSameDirectory(
+      await getDirectoryIdentity(this.root),
+      this.#rootIdentity,
+    );
+  }
+
+  /**
+   * Report that the root is no longer watched. Nothing is reported after this.
+   */
+  emitRootLost() {
+    this.emitFileEvent({event: LOST_EVENT, relativePath: ''});
   }
 
   emitError(error: Error) {

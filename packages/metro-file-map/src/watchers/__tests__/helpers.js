@@ -9,7 +9,10 @@
  * @oncall react_native
  */
 
-import type {ChangeEventMetadata} from '../../flow-types';
+import type {
+  ChangeEventMetadata,
+  WatcherBackendChangeEvent,
+} from '../../flow-types';
 import type {WatcherOptions} from '../common';
 
 import FallbackWatcher from '../FallbackWatcher';
@@ -101,6 +104,9 @@ export const startWatching = async (
   opts: WatcherOptions,
 ): (Promise<{
   eventHelpers: EventHelpers,
+  onFileEvent: (
+    listener: (event: WatcherBackendChangeEvent) => void,
+  ) => () => void,
   stopWatching: () => Promise<void>,
 }>) => {
   const Watcher = WATCHERS[watcherName];
@@ -220,6 +226,7 @@ export const startWatching = async (
 
   return {
     eventHelpers,
+    onFileEvent: listener => watcherInstance.onFileEvent(listener),
     stopWatching: async () => {
       await watcherInstance.stopWatching();
     },

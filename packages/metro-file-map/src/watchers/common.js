@@ -29,6 +29,7 @@ import path from 'node:path';
 export const DELETE_EVENT = 'delete';
 export const TOUCH_EVENT = 'touch';
 export const RECRAWL_EVENT = 'recrawl';
+export const LOST_EVENT = 'lost';
 export const ALL_EVENT = 'all';
 
 export type WatcherOptions = Readonly<{

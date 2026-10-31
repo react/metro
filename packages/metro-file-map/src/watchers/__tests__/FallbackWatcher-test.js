@@ -15,12 +15,13 @@ import FallbackWatcher from '../FallbackWatcher';
 import {createTempWatchRoot} from './helpers';
 import EventEmitter from 'node:events';
 import fs from 'node:fs';
-import {join, toNamespacedPath} from 'node:path';
+import os from 'node:os';
+import {basename, join, toNamespacedPath} from 'node:path';
 
 jest.useRealTimers();
 jest.setTimeout(10 * 1000);
 
-const {mkdir, rm, writeFile} = fs.promises;
+const {mkdir, rename, rm, writeFile} = fs.promises;
 // Captured before any test replaces `fs.watch`.
 const {watch: unmockedWatch} = fs;
 
@@ -96,7 +97,27 @@ describe('FallbackWatcher', () => {
   afterEach(async () => {
     await watcher?.stopWatching();
     jest.restoreAllMocks();
-    await rm(watchRoot, {recursive: true});
+    // Some tests move the root away.
+    await rm(watchRoot, {force: true, recursive: true});
+    await rm(watchRoot + '-moved', {force: true, recursive: true});
+  });
+
+  test('reports its root lost, without watching it, when it is missing at start', async () => {
+    const missingRoot = join(watchRoot, 'missing');
+    const missingWatcher = new FallbackWatcher(missingRoot, {
+      included: null,
+      ignored: null,
+      watchmanDeferStates: [],
+    });
+    const events: Array<WatcherBackendChangeEvent> = [];
+    missingWatcher.onFileEvent(event => {
+      events.push(event);
+    });
+    await missingWatcher.startWatching();
+    expect(events).toEqual([
+      {event: 'lost', relativePath: '', root: missingRoot},
+    ]);
+    expect(calls).toEqual([]);
   });
 
   // A file written into a directory after it has been listed but before it is
@@ -381,12 +402,63 @@ describe('FallbackWatcher', () => {
       expect(openDirs()).toEqual(rewatched);
     });
 
-    test('closes only its own handle when the root reports its own deletion', () => {
+    test('closes only its own handle when the root reports its own deletion, and reports the root lost', async () => {
       reportOwnDeletion('');
 
       expect(openDirs()).toEqual(
         dirsOf(everyDir.filter(relativeDir => relativeDir !== '')),
       );
+      await waitFor(() => hasEvent('lost', ''));
+    });
+
+    describe('reports the root lost', () => {
+      const rootName = () => basename(watchRoot);
+
+      // inotify reports IN_MOVE_SELF and IN_DELETE_SELF under the root's name.
+      test('when an event named like the root finds it moved away', async () => {
+        await rename(watchRoot, watchRoot + '-moved');
+        listenerOf('')('rename', rootName());
+        await waitFor(() => hasEvent('lost', ''));
+      });
+
+      test('when an event named like the root finds another directory in its place', async () => {
+        await rename(watchRoot, watchRoot + '-moved');
+        await mkdir(watchRoot);
+        listenerOf('')('rename', rootName());
+        await waitFor(() => hasEvent('lost', ''));
+      });
+
+      // A handle on Windows follows a moved directory, reporting the moved
+      // copy's changes as the root's.
+      (os.platform() === 'win32' ? test : test.skip)(
+        "when any event follows the root's move",
+        async () => {
+          await rename(watchRoot, watchRoot + '-moved');
+          listenerOf('')('rename', 'entry.js');
+          await waitFor(() => hasEvent('lost', ''));
+        },
+      );
+
+      test('and nothing after it', async () => {
+        await rename(watchRoot, watchRoot + '-moved');
+        listenerOf('')('rename', rootName());
+        await waitFor(() => hasEvent('lost', ''));
+        events.length = 0;
+        listenerOf('src')('change', 'entry.js');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        expect(events).toEqual([]);
+      });
+    });
+
+    test("handles an event named like the root as a child's while the root is unchanged", async () => {
+      await writeFile(join(watchRoot, `${basename(watchRoot)}.js`), '');
+      await mkdir(join(watchRoot, basename(watchRoot)));
+      await writeFile(join(watchRoot, basename(watchRoot), 'child.js'), '');
+      listenerOf('')('rename', basename(watchRoot));
+      await waitFor(() =>
+        hasEvent('touch', join(basename(watchRoot), 'child.js')),
+      );
+      expect(hasEvent('lost', '')).toBe(false);
     });
 
     test('closes every handle beneath a directory whose deletion its parent reports', async () => {

@@ -56,6 +56,7 @@ export default class FallbackWatcher extends AbstractWatcher {
   } = Object.create(null);
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
+  #rootCheckTimer: ?ReturnType<typeof setTimeout> = null;
 
   // Not live on darwin, though FallbackWatcher isn't currently used there.
   static isLiveOnStart(): boolean {
@@ -63,6 +64,10 @@ export default class FallbackWatcher extends AbstractWatcher {
   }
 
   async startWatching(): Promise<void> {
+    if (!(await this.recordRootIdentity())) {
+      this.emitRootLost();
+      return;
+    }
     this.#watchdir(this.root);
 
     await recReaddir(
@@ -203,6 +208,17 @@ export default class FallbackWatcher extends AbstractWatcher {
           );
           return;
         }
+        // inotify reports the deletion or move of the watched directory itself
+        // under its own basename.
+        if (dir === this.root && filename === path.basename(dir)) {
+          void this.#checkRoot();
+        }
+        // A handle on Windows follows its directory if it is moved, reporting
+        // the moved copy's changes and nothing about the move itself, until
+        // the copy is deleted. Check the root after changes instead.
+        if (platform === 'win32') {
+          this.#scheduleRootCheck();
+        }
         this.#normalizeChange(dir, event, filename);
       });
     } catch (error) {
@@ -268,10 +284,27 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
     if (dir === this.root) {
       await this.#stopWatching(dir);
+      this.emitRootLost();
       return;
     }
     await this.#stopWatchingTree(dir);
     await this.#processChange(path.dirname(dir), 'rename', path.basename(dir));
+  }
+
+  async #checkRoot(): Promise<void> {
+    if (await this.isRootLost()) {
+      this.emitRootLost();
+    }
+  }
+
+  #scheduleRootCheck() {
+    if (this.#rootCheckTimer != null) {
+      return;
+    }
+    this.#rootCheckTimer = setTimeout(() => {
+      this.#rootCheckTimer = null;
+      void this.#checkRoot();
+    }, DEBOUNCE_MS);
   }
 
   /**
@@ -279,6 +312,10 @@ export default class FallbackWatcher extends AbstractWatcher {
    */
   async stopWatching(): Promise<void> {
     await super.stopWatching();
+    if (this.#rootCheckTimer != null) {
+      clearTimeout(this.#rootCheckTimer);
+      this.#rootCheckTimer = null;
+    }
     const promises = Object.keys(this.#watched).map(dir =>
       this.#stopWatching(dir),
     );

@@ -9,16 +9,18 @@
  * @oncall react_native
  */
 
+import type {WatcherBackendChangeEvent} from '../../flow-types';
 import type {WatcherOptions} from '../common';
 import type {EventHelpers, WatcherName} from './helpers';
 
 import NativeWatcher from '../NativeWatcher';
 import {WATCHERS, createTempWatchRoot, startWatching} from './helpers';
+import invariant from 'invariant';
 import {promises as fsPromises} from 'node:fs';
 import os from 'node:os';
 import {join} from 'node:path';
 
-const {mkdir, writeFile, rm, symlink, unlink} = fsPromises;
+const {mkdir, rename, writeFile, rm, symlink, unlink} = fsPromises;
 
 jest.setTimeout(10 * 1000);
 
@@ -359,3 +361,120 @@ describe.each(Object.keys(WATCHERS))(
     );
   },
 );
+
+describe.each(Object.keys(WATCHERS))(
+  'Watcher root loss: %s',
+  (watcherName: WatcherName) => {
+    const Watcher = WATCHERS[watcherName];
+    const maybeTest = Watcher != null ? test : test.skip;
+    const opts: WatcherOptions = {
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: ['cookie-'],
+      },
+      ignored: /\.watchmanconfig/,
+      watchmanDeferStates: [],
+    };
+    let base: string;
+    let root: string;
+    let stopWatching: ?() => Promise<void>;
+
+    beforeEach(async () => {
+      // Without a .watchmanconfig above it, the root is its own Watchman
+      // watch root.
+      base = await createTempWatchRoot(watcherName, false);
+      root = join(base, 'root');
+      await mkdir(root);
+      await writeFile(join(root, 'a.js'), '');
+    });
+
+    afterEach(async () => {
+      await stopWatching?.();
+      stopWatching = null;
+      await rm(base, {force: true, recursive: true});
+    });
+
+    async function watchRoot(): Promise<Array<WatcherBackendChangeEvent>> {
+      const events: Array<WatcherBackendChangeEvent> = [];
+      const watching = await startWatching(watcherName, root, opts);
+      stopWatching = watching.stopWatching;
+      watching.onFileEvent(event => {
+        events.push(event);
+      });
+      return events;
+    }
+
+    const isLost = (events: ReadonlyArray<WatcherBackendChangeEvent>) =>
+      events.some(event => event.event === 'lost');
+
+    maybeTest('is reported when the root is deleted', async () => {
+      const events = await watchRoot();
+      await rm(root, {recursive: true});
+      await waitFor(() => isLost(events));
+      expect(events.at(-1)).toEqual({event: 'lost', relativePath: '', root});
+    });
+
+    // As npm replaces a package: a staged copy is moved into place, and the
+    // old copy, moved aside, is deleted.
+    maybeTest(
+      'is reported when another directory is moved into its place',
+      async () => {
+        const events = await watchRoot();
+        await mkdir(join(base, 'staged'));
+        await writeFile(join(base, 'staged', 'b.js'), '');
+        await rename(root, join(base, 'retired'));
+        await rename(join(base, 'staged'), root);
+        await rm(join(base, 'retired'), {recursive: true});
+        await waitFor(() => isLost(events));
+      },
+    );
+
+    maybeTest('is reported when the root is missing at start', async () => {
+      invariant(Watcher != null, 'Expected a watcher');
+      const missing = new Watcher(join(base, 'missing'), opts);
+      const events: Array<WatcherBackendChangeEvent> = [];
+      missing.onFileEvent(event => {
+        events.push(event);
+      });
+      if (watcherName === 'Watchman') {
+        // `watch-project` fails, so the backend fails to start.
+        await expect(missing.startWatching()).rejects.toThrow();
+      } else {
+        await missing.startWatching();
+        expect(events).toEqual([
+          {event: 'lost', relativePath: '', root: join(base, 'missing')},
+        ]);
+      }
+      await missing.stopWatching();
+    });
+
+    (watcherName === 'Watchman' && Watcher != null ? test : test.skip)(
+      'is not reported for a root watched within a Watchman project, which carries on reporting its changes',
+      async () => {
+        await writeFile(join(base, '.watchmanconfig'), '{}');
+        const events = await watchRoot();
+        await rm(root, {recursive: true});
+        await waitFor(() =>
+          events.some(e => e.event === 'delete' && e.relativePath === 'a.js'),
+        );
+        await mkdir(root);
+        await writeFile(join(root, 'b.js'), '');
+        await waitFor(() =>
+          events.some(e => e.event === 'touch' && e.relativePath === 'b.js'),
+        );
+        expect(isLost(events)).toBe(false);
+      },
+    );
+  },
+);
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error('Timed out waiting for a condition');
+    }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}

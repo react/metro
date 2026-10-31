@@ -44,6 +44,9 @@ declare module 'fb-watchman' {
     subscription: string,
     is_fresh_instance: boolean,
     files: ReadonlyArray<WatchmanFileChange>,
+    // Set on a unilateral event when the watch ends, e.g. when its root is
+    // deleted.
+    canceled?: boolean,
     'state-enter'?: ?string,
     'state-leave'?: ?string,
     clock?: Readonly<{

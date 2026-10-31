@@ -59,17 +59,35 @@ function enoent(): Error {
 // Run every pending promise continuation, including those queued by others.
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+// The root directory as `stat` reports it, i.e. its identity, or an error.
+function directoryStat(ino: number): fs.Stats {
+  // $FlowFixMe[incompatible-type] - only the fields read for a bigint stat
+  return {isDirectory: () => true, dev: BigInt(1), ino: BigInt(ino)};
+}
+
 describe('NativeWatcher', () => {
   let watcher: NativeWatcher;
   let emitFsEvent: (event: string, relativePath: string) => void;
   let pendingStats: Map<string, Deferred<fs.Stats>>;
   let events: Array<WatcherBackendChangeEvent>;
+  let rootStat: fs.Stats | Error;
+  let watchedPaths: Array<string>;
 
   beforeEach(async () => {
     jest.spyOn(os, 'platform').mockReturnValue('darwin');
-    jest.spyOn(fs, 'watch').mockImplementation((_root, _opts, listener) => {
+    watchedPaths = [];
+    jest.spyOn(fs, 'watch').mockImplementation((root, _opts, listener) => {
+      watchedPaths.push(root);
       emitFsEvent = listener;
       return {close: () => {}};
+    });
+    rootStat = directoryStat(1);
+    jest.spyOn(fs.promises, 'stat').mockImplementation(async absolutePath => {
+      expect(absolutePath).toBe(ROOT);
+      if (rootStat instanceof Error) {
+        throw rootStat;
+      }
+      return rootStat;
     });
     pendingStats = new Map();
     jest.spyOn(fs.promises, 'lstat').mockImplementation(absolutePath => {
@@ -163,5 +181,59 @@ describe('NativeWatcher', () => {
     settleStat('first.js', fileStat(1000));
     await flush();
     expect(order).toEqual(['touch:first.js', 'error:EACCES', 'touch:third.js']);
+  });
+
+  describe('reports its root lost', () => {
+    test('when FSEvents reports a change to the root, and it is gone', async () => {
+      rootStat = enoent();
+      emitFsEvent('change', 'project');
+      await flush();
+      expect(events).toEqual([{event: 'lost', relativePath: '', root: ROOT}]);
+
+      // Nothing more is reported.
+      emitFsEvent('change', 'later.js');
+      settleStat('later.js', fileStat(1000));
+      await flush();
+      expect(events).toHaveLength(1);
+    });
+
+    // FSEvents reports nothing when an ancestor of the root is deleted.
+    test('when a periodic check finds it gone', async () => {
+      rootStat = enoent();
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      await flush();
+      expect(events).toEqual([{event: 'lost', relativePath: '', root: ROOT}]);
+    });
+
+    test('when a directory is moved into its place', async () => {
+      rootStat = directoryStat(2);
+      emitFsEvent('rename', 'project');
+      await flush();
+      expect(events).toEqual([{event: 'lost', relativePath: '', root: ROOT}]);
+    });
+
+    test('when it is missing at start, without watching it', async () => {
+      await watcher.stopWatching();
+      watchedPaths = [];
+      rootStat = enoent();
+      watcher = new NativeWatcher(ROOT, {included: null, ignored: null});
+      events = [];
+      watcher.onFileEvent(event => {
+        events.push(event);
+      });
+      await watcher.startWatching();
+      expect(events).toEqual([{event: 'lost', relativePath: '', root: ROOT}]);
+      expect(watchedPaths).toEqual([]);
+    });
+  });
+
+  test("handles an event named like the root as a child's while the root is unchanged", async () => {
+    emitFsEvent('rename', 'project');
+    await flush();
+    settleStat('project', enoent());
+    await flush();
+    expect(events).toEqual([
+      {event: 'delete', relativePath: 'project', root: ROOT},
+    ]);
   });
 });

@@ -242,6 +242,27 @@ describe('WatchmanWatcher', () => {
         metadata: expect.any(Object),
       });
     });
+
+    test('reports its root lost, and nothing more, when Watchman cancels the subscription', () => {
+      const handler = jest.fn();
+      watchmanWatcher.onFileEvent(handler);
+      // As Watchman sends when the watch root is deleted.
+      mockClient.emit('subscription', {
+        root: '/project',
+        subscription: watchmanWatcher.subscriptionName,
+        unilateral: true,
+        canceled: true,
+      });
+      mockClient.emit('subscription', {
+        is_fresh_instance: false,
+        files: [{name: 'Foo.js', type: 'f', exists: false}],
+        clock: 'c:125',
+        subscription: watchmanWatcher.subscriptionName,
+      });
+      expect(handler.mock.calls).toEqual([
+        [{event: 'lost', relativePath: '', root: p('/project/subdir/js')}],
+      ]);
+    });
   });
 
   describe('getPauseReason', () => {

@@ -659,6 +659,15 @@ export type WatcherBackendChangeEvent =
       clock?: ChangeEventClock,
       relativePath: string,
       root: string,
+    }>
+  | Readonly<{
+      // The backend no longer watches its root, i.e. the root was missing when
+      // watching began, has been deleted or replaced, or the watch has ended.
+      // The backend reports nothing after this.
+      event: 'lost',
+      clock?: void,
+      relativePath: '',
+      root: string,
     }>;
 
 export type WatcherBackendOptions = Readonly<{

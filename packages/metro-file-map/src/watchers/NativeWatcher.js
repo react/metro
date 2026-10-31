@@ -15,17 +15,22 @@ import type {
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {isIncluded, typeFromStat} from './common';
+import {LOST_EVENT, isIncluded, typeFromStat} from './common';
 import debugModule from 'debug';
 import {promises as fsPromises, watch} from 'node:fs';
 import {platform} from 'node:os';
 import * as path from 'node:path';
+import {Timeout, clearTimeout, setTimeout} from 'node:timers';
 
 const debug = debugModule('Metro:NativeWatcher');
 
 const TOUCH_EVENT = 'touch';
 const DELETE_EVENT = 'delete';
 const RECRAWL_EVENT = 'recrawl';
+
+// FSEvents reports nothing to a watch whose ancestor directory is deleted, so
+// the root is also checked this often.
+const ROOT_CHECK_INTERVAL = 1000;
 
 /**
  * NativeWatcher uses Node's native fs.watch API with recursive: true.
@@ -49,6 +54,8 @@ const RECRAWL_EVENT = 'recrawl';
  */
 export default class NativeWatcher extends AbstractWatcher {
   #fsWatcher: ?FSWatcher;
+  #rootCheckTimeout: ?Timeout = null;
+  #stopped: boolean = false;
 
   /**
    * Promise chain to emit events in the order they were received.
@@ -81,6 +88,10 @@ export default class NativeWatcher extends AbstractWatcher {
   }
 
   async startWatching(): Promise<void> {
+    if (!(await this.recordRootIdentity())) {
+      this.emitRootLost();
+      return;
+    }
     this.#fsWatcher = watch(
       this.root,
       {
@@ -117,12 +128,33 @@ export default class NativeWatcher extends AbstractWatcher {
     );
 
     debug('Watching %s', this.root);
+    this.#scheduleRootCheck();
+  }
+
+  #scheduleRootCheck() {
+    this.#rootCheckTimeout = setTimeout(() => {
+      void this.isRootLost().then(lost => {
+        if (this.#stopped) {
+          return;
+        }
+        if (lost) {
+          // In order after any events already being handled.
+          this.#emitQueue = this.#emitQueue.then(() => this.emitRootLost());
+        } else {
+          this.#scheduleRootCheck();
+        }
+      });
+    }, ROOT_CHECK_INTERVAL).unref();
   }
 
   /**
    * End watching.
    */
   async stopWatching(): Promise<void> {
+    this.#stopped = true;
+    if (this.#rootCheckTimeout != null) {
+      clearTimeout(this.#rootCheckTimeout);
+    }
     await super.stopWatching();
     if (this.#fsWatcher) {
       this.#fsWatcher.close();
@@ -137,6 +169,15 @@ export default class NativeWatcher extends AbstractWatcher {
     event: string,
     relativePath: string,
   ): Promise<?Omit<WatcherBackendChangeEvent, 'root'>> {
+    // FSEvents reports a change to the watched directory itself, including its
+    // deletion, or a directory moved into its place, under the directory's own
+    // basename, and nothing for the files beneath it.
+    if (
+      relativePath === path.basename(this.root) &&
+      (await this.isRootLost())
+    ) {
+      return {event: LOST_EVENT, relativePath: ''};
+    }
     const absolutePath = path.resolve(this.root, relativePath);
     if (this.doIgnore(relativePath)) {
       debug(

@@ -650,7 +650,11 @@ export default class FileMap extends EventEmitter {
    *
    * The directory need not exist. Until it does, the root is 'pending' (see
    * `getRoots()`), and in watch mode is checked periodically, then crawled and
-   * watched once it appears.
+   * watched once it appears. In watch mode, when the watch of a root other
+   * than `rootDir` is lost, including one given in `roots`, because its
+   * directory is deleted or replaced, the root is crawled again if its
+   * directory exists, and otherwise becomes pending after a 'change' event
+   * removing its files.
    *
    * A root reached through a symlink in the file map is added at the
    * symlink's target. A path through any other symlink should be given as its
@@ -817,6 +821,24 @@ export default class FileMap extends EventEmitter {
     if (adopted) {
       this.#updateRoots();
     }
+  }
+
+  /**
+   * Handle a watcher backend's report that it no longer watches its root.
+   */
+  #onRootLost(absoluteRoot: string): void {
+    const record = Array.from(this.#rootRecords.values()).find(
+      r => r.container == null && path.resolve(r.absolutePath) === absoluteRoot,
+    );
+    if (
+      record == null ||
+      absoluteRoot === path.resolve(this.#options.rootDir)
+    ) {
+      debug('Ignoring the loss of the watch of %s', absoluteRoot);
+      return;
+    }
+    debug('Lost the watch of %s', absoluteRoot);
+    this.#transitionRoot(record);
   }
 
   async #crawlAndWatchRoot(absoluteRoot: string): Promise<void> {
@@ -1228,6 +1250,10 @@ export default class FileMap extends EventEmitter {
     };
 
     const onChange = (change: WatcherBackendChangeEvent) => {
+      if (change.event === 'lost') {
+        this.#onRootLost(change.root);
+        return;
+      }
       // Recrawl events bypass normal filtering - they trigger a full subdirectory scan
       if (
         change.event !== 'recrawl' &&

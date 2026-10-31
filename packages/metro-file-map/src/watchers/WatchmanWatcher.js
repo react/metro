@@ -209,6 +209,13 @@ export default class WatchmanWatcher extends AbstractWatcher {
       'Invalid subscription event.',
     );
 
+    // Watchman ends a subscription when its watch ends, e.g. when the watch
+    // root is deleted.
+    if (resp.canceled === true) {
+      this.emitRootLost();
+      return;
+    }
+
     if (Array.isArray(resp.files)) {
       resp.files.forEach(change => this.#handleFileChange(change, resp.clock));
     }
