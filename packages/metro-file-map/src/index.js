@@ -44,14 +44,17 @@ import type {
   WatcherBackendChangeEvent,
   WatchmanClocks,
 } from './flow-types';
+import type {DirectoryPoller} from './lib/pollForDirectory';
 
 import {DiskCacheManager} from './cache/DiskCacheManager';
 import H from './constants';
 import checkWatchmanCapabilities from './lib/checkWatchmanCapabilities';
+import {getDirectoryIdentity} from './lib/directoryIdentity';
 import {FileProcessor} from './lib/FileProcessor';
 import {FileSystemChangeAggregator} from './lib/FileSystemChangeAggregator';
 import normalizePathSeparatorsToPosix from './lib/normalizePathSeparatorsToPosix';
 import normalizePathSeparatorsToSystem from './lib/normalizePathSeparatorsToSystem';
+import pollForDirectory from './lib/pollForDirectory';
 import {RootPathUtils} from './lib/RootPathUtils';
 import TreeFS from './lib/TreeFS';
 import {Watcher} from './Watcher';
@@ -126,6 +129,22 @@ type IndexedPlugin = Readonly<{
   plugin: FileMapPlugin<any, any>,
   dataIdx: ?number,
 }>;
+type RootRecord = {
+  readonly absolutePath: string,
+  readonly dynamic: boolean,
+  // The root containing this one, if it was within another root when added,
+  // or was pending within a root that went live. A contained root has no watch
+  // of its own, and the status of the root containing it.
+  container: ?RootRecord,
+  pending: boolean,
+  // Checks for a pending root's directory to appear.
+  poller: ?DirectoryPoller,
+  // Settles once the root has been added.
+  added: Promise<void>,
+  // The latest of the root's changes between live and pending, which run one
+  // at a time.
+  transition: Promise<void>,
+};
 type InternalEnqueuedEvent = Readonly<
   | {
       clock: ?ChangeEventClock,
@@ -175,6 +194,9 @@ export type {
 const CACHE_BREAKER = '13';
 
 const CHANGE_INTERVAL = 30;
+
+// How often to check whether a pending root's directory has appeared.
+const ROOT_POLL_INTERVAL = 250;
 
 const NODE_MODULES = path.sep + 'node_modules' + path.sep;
 const VCS_DIRECTORIES = /[/\\]\.(git|hg)[/\\]/.source;
@@ -279,11 +301,12 @@ export default class FileMap extends EventEmitter {
   readonly #fileProcessor: FileProcessor;
   #healthCheckInterval: ?ReturnType<typeof setInterval>;
   readonly #options: InternalOptions;
-  #roots: ReadonlyArray<FileMapRoot>;
+  #roots: ReadonlyArray<FileMapRoot> = [];
   readonly #pathUtils: RootPathUtils;
   readonly #crawler: ?Crawler;
-  // Roots added by `addRoot`, mapped to the completion of each addition.
-  readonly #dynamicRoots: Map<string, Promise<void>> = new Map();
+  // Every root: those given in `roots`, then those added by `addRoot` in the
+  // order added.
+  readonly #rootRecords: Map<string, RootRecord> = new Map();
   #fileSystem: ?TreeFS;
   // Applies and emits watcher events waiting on the change interval. Set in
   // watch mode.
@@ -395,11 +418,18 @@ export default class FileMap extends EventEmitter {
 
     this.#buildPromise = null;
     this.#pathUtils = new RootPathUtils(options.rootDir);
-    this.#roots = this.#options.roots.map(absolutePath => ({
-      absolutePath,
-      rootRelativePath: this.#pathUtils.absoluteToNormal(absolutePath),
-      dynamic: false,
-    }));
+    for (const absolutePath of this.#options.roots) {
+      this.#rootRecords.set(absolutePath, {
+        absolutePath,
+        dynamic: false,
+        container: null,
+        pending: false,
+        poller: null,
+        added: Promise.resolve(),
+        transition: Promise.resolve(),
+      });
+    }
+    this.#updateRoots();
     this.#startupPerfLogger?.point('constructor_end');
     this.#crawlerAbortController = new AbortController();
     this.#changeID = 0;
@@ -591,27 +621,36 @@ export default class FileMap extends EventEmitter {
   /**
    * The directories whose files this file map holds: the `roots` it was
    * constructed with, followed by any added with `addRoot`, in the order they
-   * were added. The same array is returned until the roots change.
+   * were added. The same array is returned until the roots or their statuses
+   * change.
    */
   getRoots(): ReadonlyArray<FileMapRoot> {
     return this.#roots;
   }
 
   #updateRoots(): void {
-    this.#roots = [
-      ...this.#roots.filter(root => !root.dynamic),
-      ...Array.from(this.#dynamicRoots.keys(), absolutePath => ({
-        absolutePath,
-        rootRelativePath: this.#pathUtils.absoluteToNormal(absolutePath),
-        dynamic: true,
-      })),
-    ];
+    this.#roots = Array.from(this.#rootRecords.values(), record => {
+      let owner = record;
+      while (owner.container != null) {
+        owner = owner.container;
+      }
+      return {
+        absolutePath: record.absolutePath,
+        rootRelativePath: this.#pathUtils.absoluteToNormal(record.absolutePath),
+        dynamic: record.dynamic,
+        status: owner.pending ? 'pending' : 'live',
+      };
+    });
   }
 
   /**
    * Add a directory to the file map after `build()`, crawling it and (in
    * watch mode) watching it for the lifetime of this instance. Resolves once
    * its files are available, after a 'change' event for any that are new.
+   *
+   * The directory need not exist. Until it does, the root is 'pending' (see
+   * `getRoots()`), and in watch mode is checked periodically, then crawled and
+   * watched once it appears.
    *
    * A root reached through a symlink in the file map is added at the
    * symlink's target. A path through any other symlink should be given as its
@@ -634,33 +673,150 @@ export default class FileMap extends EventEmitter {
     // The file system holds only real paths. Crawling a root through a
     // symlink would replace that symlink with a copy of its target.
     const absoluteRoot = fileSystem.resolveSymlinks(path.resolve(root));
-    const existing = this.#dynamicRoots.get(absoluteRoot);
-    if (existing != null) {
-      return existing;
+    let container: ?RootRecord = null;
+    for (const existing of this.#rootRecords.values()) {
+      const existingPath = path.resolve(existing.absolutePath);
+      if (existingPath === absoluteRoot) {
+        return existing.added;
+      }
+      if (
+        container == null &&
+        absoluteRoot.startsWith(existingPath + path.sep)
+      ) {
+        container = existing;
+      }
     }
-    if (this.#roots.some(r => path.resolve(r.absolutePath) === absoluteRoot)) {
-      return Promise.resolve();
-    }
+    const record: RootRecord = {
+      absolutePath: absoluteRoot,
+      dynamic: true,
+      container,
+      pending: false,
+      poller: null,
+      added: Promise.resolve(),
+      transition: Promise.resolve(),
+    };
+    this.#rootRecords.set(absoluteRoot, record);
     // A root within an existing one has nothing of its own to crawl or watch,
     // and is ready when that root is.
-    const parent = this.#roots.find(r =>
-      absoluteRoot.startsWith(path.resolve(r.absolutePath) + path.sep),
-    );
-    const ready: Promise<unknown> =
-      parent != null
-        ? (this.#dynamicRoots.get(parent.absolutePath) ?? Promise.resolve())
-        : this.#crawlAndWatchRoot(absoluteRoot);
-    const added = ready.then(
+    const ready =
+      container != null ? container.added : this.#establishRoot(record);
+    record.added = ready.then(
       () => {},
       error => {
-        this.#dynamicRoots.delete(absoluteRoot);
+        record.poller?.stop();
+        this.#rootRecords.delete(absoluteRoot);
         this.#updateRoots();
         throw error;
       },
     );
-    this.#dynamicRoots.set(absoluteRoot, added);
+    record.transition = record.added.catch(() => {});
     this.#updateRoots();
-    return added;
+    return record.added;
+  }
+
+  /**
+   * Crawl and watch a root if its directory exists. Otherwise remove the
+   * files held under it, and in watch mode check for the directory to appear.
+   */
+  async #establishRoot(record: RootRecord): Promise<void> {
+    if ((await getDirectoryIdentity(record.absolutePath)) != null) {
+      try {
+        await this.#crawlAndWatchRoot(record.absolutePath);
+        this.#setPending(record, false);
+        this.#adoptPendingRootsWithin(record);
+        return;
+      } catch (error) {
+        // The directory may have been deleted since it was found.
+        if (
+          this.#crawlerAbortController.signal.aborted ||
+          (await getDirectoryIdentity(record.absolutePath)) != null
+        ) {
+          throw error;
+        }
+      }
+    }
+    await this.#unwatchAndClearRoot(record.absolutePath);
+    this.#setPending(record, true);
+    this.#pollRoot(record, {reportExisting: true});
+  }
+
+  /**
+   * Bring a root in line with its directory in the background, after any
+   * change already under way.
+   */
+  #transitionRoot(record: RootRecord): void {
+    record.transition = record.transition
+      .then(() => this.#buildPromise)
+      .then(async () => {
+        // A root now within a live root is that root's to watch.
+        if (record.container == null) {
+          await this.#establishRoot(record);
+        }
+      })
+      .catch((error: Error) => {
+        if (this.#crawlerAbortController.signal.aborted) {
+          return;
+        }
+        this.#console.error(
+          `metro-file-map: Failed to update root ${record.absolutePath}:\n` +
+            `  ${error.stack}\n`,
+        );
+        // Wait for the directory to be replaced before trying again.
+        void this.#watcher?.unwatchRoot(record.absolutePath);
+        this.#setPending(record, true);
+        this.#pollRoot(record, {reportExisting: false});
+      });
+  }
+
+  #pollRoot(
+    record: RootRecord,
+    {reportExisting}: Readonly<{reportExisting: boolean}>,
+  ): void {
+    record.poller?.stop();
+    record.poller = null;
+    if (!this.#options.watch || this.#crawlerAbortController.signal.aborted) {
+      return;
+    }
+    record.poller = pollForDirectory(record.absolutePath, {
+      interval: ROOT_POLL_INTERVAL,
+      onDirectory: () => {
+        record.poller = null;
+        this.#transitionRoot(record);
+      },
+      reportExisting,
+    });
+  }
+
+  #setPending(record: RootRecord, pending: boolean): void {
+    if (record.pending !== pending) {
+      record.pending = pending;
+      this.#updateRoots();
+    }
+  }
+
+  /**
+   * Pending roots within a root that has gone live are now that root's, and
+   * need no polling of their own.
+   */
+  #adoptPendingRootsWithin(liveRecord: RootRecord): void {
+    const prefix = path.resolve(liveRecord.absolutePath) + path.sep;
+    let adopted = false;
+    for (const record of this.#rootRecords.values()) {
+      if (
+        record.container == null &&
+        record.pending &&
+        path.resolve(record.absolutePath).startsWith(prefix)
+      ) {
+        record.poller?.stop();
+        record.poller = null;
+        record.container = liveRecord;
+        record.pending = false;
+        adopted = true;
+      }
+    }
+    if (adopted) {
+      this.#updateRoots();
+    }
   }
 
   async #crawlAndWatchRoot(absoluteRoot: string): Promise<void> {
@@ -673,22 +829,49 @@ export default class FileMap extends EventEmitter {
     // Watch before crawling, so that a change made during the crawl is still
     // reported.
     await watcher.watchRoot(absoluteRoot);
-
-    const crawled = this.#changeQueue.then(async () => {
-      // Apply pending watcher events first, so that the crawl is compared with
-      // the current file system.
-      this.#flushPendingChanges?.();
-      const crawlResult = await watcher.recrawl(
+    await this.#applyQueuedDelta(fileSystem, () =>
+      watcher.recrawl(
         this.#pathUtils.absoluteToNormal(absoluteRoot),
         fileSystem,
-      );
-      // end() may have been called during the crawl or while applying it.
+      ),
+    );
+  }
+
+  async #unwatchAndClearRoot(absoluteRoot: string): Promise<void> {
+    const watcher = this.#watcher;
+    const fileSystem = this.#fileSystem;
+    invariant(
+      watcher != null && fileSystem != null,
+      'Expected build() to have set #watcher and #fileSystem',
+    );
+    await watcher.unwatchRoot(absoluteRoot);
+    await this.#applyQueuedDelta(fileSystem, async () =>
+      fileSystem.getDifference(new Map(), {
+        subpath: this.#pathUtils.absoluteToNormal(absoluteRoot),
+      }),
+    );
+  }
+
+  /**
+   * Apply a delta to the built file system, serialized with watcher events,
+   * and emit a 'change' event for it.
+   */
+  async #applyQueuedDelta(
+    fileSystem: TreeFS,
+    getDelta: () => Promise<CrawlResult>,
+  ): Promise<void> {
+    const applied = this.#changeQueue.then(async () => {
+      // Apply pending watcher events first, so that the delta is computed
+      // against the current file system.
+      this.#flushPendingChanges?.();
+      const delta = await getDelta();
+      // end() may have been called while computing or applying the delta.
       const abortSignal = this.#crawlerAbortController.signal;
       abortSignal.throwIfAborted();
       const changeAggregator = await this.#applyFileDelta(
         fileSystem,
         this.#plugins,
-        crawlResult,
+        delta,
       );
       abortSignal.throwIfAborted();
       if (changeAggregator.getSize() === 0) {
@@ -701,8 +884,8 @@ export default class FileMap extends EventEmitter {
       };
       this.emit('change', changeEvent);
     });
-    this.#changeQueue = crawled.catch(() => {});
-    await crawled;
+    this.#changeQueue = applied.catch(() => {});
+    await applied;
   }
 
   /**
@@ -1259,6 +1442,10 @@ export default class FileMap extends EventEmitter {
     }
 
     this.#crawlerAbortController.abort();
+    for (const record of this.#rootRecords.values()) {
+      record.poller?.stop();
+      record.poller = null;
+    }
 
     await Promise.all([
       this.#fileProcessor.end(),

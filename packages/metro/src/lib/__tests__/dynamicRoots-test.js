@@ -61,7 +61,7 @@ describe('getDynamicRoots', () => {
     absolutePath: string,
     rootRelativePath: string,
     dynamic: boolean,
-  ) => ({absolutePath, rootRelativePath, dynamic});
+  ) => ({absolutePath, rootRelativePath, dynamic, status: 'live' as const});
 
   test('returns only dynamic roots, with ids of their relative paths', () => {
     expect(

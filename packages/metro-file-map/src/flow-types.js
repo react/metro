@@ -101,6 +101,10 @@ export type FileMapRoot = Readonly<{
   // Whether the root was added after construction, rather than given in
   // `roots`.
   dynamic: boolean,
+  // 'pending' when the root's directory was missing when last checked, i.e.
+  // the file map holds no files under it, and in watch mode checks for the
+  // directory to appear.
+  status: 'live' | 'pending',
 }>;
 
 export type ChangedFileMetadata = Readonly<{
@@ -621,6 +625,8 @@ export type ReadOnlyRawMockMap = Readonly<{
 }>;
 
 export interface WatcherBackend {
+  // The watched directory, resolved to an absolute path.
+  readonly root: string;
   getPauseReason(): ?string;
   onError(listener: (error: Error) => void): () => void;
   onFileEvent(listener: (event: WatcherBackendChangeEvent) => void): () => void;

@@ -166,6 +166,7 @@ export type FileMapRoot = Readonly<{
   absolutePath: string;
   rootRelativePath: string;
   dynamic: boolean;
+  status: 'live' | 'pending';
 }>;
 
 interface FileSystem_2 {

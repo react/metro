@@ -444,6 +444,16 @@ export class Watcher extends EventEmitter {
     }
   }
 
+  /**
+   * Stop watching a root, whether given at construction or to `watchRoot()`.
+   */
+  async unwatchRoot(root: Path): Promise<void> {
+    const absoluteRoot = path.resolve(root);
+    const stopping = this.#backends.filter(b => b.root === absoluteRoot);
+    this.#backends = this.#backends.filter(b => b.root !== absoluteRoot);
+    await Promise.all(stopping.map(backend => backend.stopWatching()));
+  }
+
   #handleHealthCheckObservation(basename: string) {
     const resolveHealthCheck = this.#pendingHealthChecks.get(basename);
     if (!resolveHealthCheck) {

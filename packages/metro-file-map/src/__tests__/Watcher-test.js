@@ -55,7 +55,9 @@ function mockBackendClass(kind: MockBackend['kind']) {
     static isLiveOnStart(): boolean {
       return kind !== 'native' || mockNativeLiveOnStart;
     }
+    readonly root: string;
     constructor(root: string, opts: {clocks?: ?Map<string, string>, ...}) {
+      this.root = root;
       this.#root = root;
       this.#clocks = opts.clocks;
     }

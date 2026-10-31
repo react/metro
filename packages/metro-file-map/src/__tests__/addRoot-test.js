@@ -80,6 +80,49 @@ jest.mock('../crawlers/node', () => ({
   default: mockNodeCrawler,
 }));
 
+// A directory exists, as stat sees it, if it holds a mock file.
+function mockDirectoryIdentity(absolutePath: string) {
+  const exists = Array.from(mockFiles.keys()).some(file =>
+    file.startsWith(absolutePath + path.sep),
+  );
+  return exists ? {dev: BigInt(1), ino: BigInt(1)} : null;
+}
+
+jest.mock('../lib/directoryIdentity', () => ({
+  getDirectoryIdentity: async (absolutePath: string) =>
+    mockDirectoryIdentity(absolutePath),
+  isSameDirectory: () => {
+    throw new Error('Not expected');
+  },
+}));
+
+type MockPoller = {
+  onDirectory: () => void,
+  reportExisting: boolean,
+  stopped: boolean,
+};
+// Absolute path -> the latest poller started for it.
+let mockPollers: Map<string, MockPoller>;
+
+jest.mock('../lib/pollForDirectory', () => ({
+  __esModule: true,
+  default: (
+    absolutePath: string,
+    {
+      onDirectory,
+      reportExisting,
+    }: {onDirectory: () => void, reportExisting: boolean, ...},
+  ) => {
+    const poller = {onDirectory, reportExisting, stopped: false};
+    mockPollers.set(absolutePath, poller);
+    return {
+      stop: () => {
+        poller.stopped = true;
+      },
+    };
+  },
+}));
+
 let mockWatchers: Map<string, MockWatcher>;
 
 class MockWatcher extends AbstractWatcher {
@@ -105,6 +148,7 @@ const ROOT_DIR = path.resolve('/', 'repo', 'project');
 const SRC_DIR = path.join(ROOT_DIR, 'src');
 const EXTERNAL_DIR = path.resolve('/', 'external');
 const EXTERNAL_FILE = path.join(EXTERNAL_DIR, 'lib', 'helper.js');
+const MISSING_DIR = path.resolve('/', 'missing');
 
 function createFileMap(
   opts?: Readonly<{
@@ -144,6 +188,22 @@ function createFileMap(
 const rootPaths = (fileMap: FileMapT) =>
   fileMap.getRoots().map(root => root.absolutePath);
 
+const rootStatuses = (fileMap: FileMapT) =>
+  fileMap.getRoots().map(root => [root.absolutePath, root.status]);
+
+async function until(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error('Timed out');
+    }
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+
+const nextChange = (fileMap: FileMapT): Promise<ChangeEvent> =>
+  new Promise(resolve => fileMap.once('change', resolve));
+
 const filePaths = (
   files: Iterable<Readonly<[string, unknown]>>,
 ): Array<string> => Array.from(files, ([file]) => file);
@@ -162,6 +222,7 @@ describe('FileMap.addRoot', () => {
       [path.join(EXTERNAL_DIR, 'other.js'), 1],
     ]);
     mockSymlinks = new Map();
+    mockPollers = new Map();
     ({default: FileMap} = require('../'));
     fileMap = createFileMap();
   });
@@ -181,7 +242,12 @@ describe('FileMap.addRoot', () => {
     const {fileSystem} = await fileMap.build();
     expect(fileSystem.exists(EXTERNAL_FILE)).toBe(false);
     expect(fileMap.getRoots()).toEqual([
-      {absolutePath: SRC_DIR, rootRelativePath: 'src', dynamic: false},
+      {
+        absolutePath: SRC_DIR,
+        rootRelativePath: 'src',
+        dynamic: false,
+        status: 'live',
+      },
     ]);
 
     const onChange = jest.fn<[ChangeEvent], void>();
@@ -190,11 +256,17 @@ describe('FileMap.addRoot', () => {
 
     expect(fileSystem.exists(EXTERNAL_FILE)).toBe(true);
     expect(fileMap.getRoots()).toEqual([
-      {absolutePath: SRC_DIR, rootRelativePath: 'src', dynamic: false},
+      {
+        absolutePath: SRC_DIR,
+        rootRelativePath: 'src',
+        dynamic: false,
+        status: 'live',
+      },
       {
         absolutePath: EXTERNAL_DIR,
         rootRelativePath: path.relative(ROOT_DIR, EXTERNAL_DIR),
         dynamic: true,
+        status: 'live',
       },
     ]);
     expect(mockNodeCrawler).toHaveBeenCalledTimes(2);
@@ -403,6 +475,21 @@ describe('FileMap.addRoot', () => {
     expect(fileSystem.exists(path.join(SRC_DIR, 'index.js'))).toBe(true);
   });
 
+  test('adds a missing directory as a pending root, without crawling or polling it', async () => {
+    const {fileSystem} = await fileMap.build();
+    const onChange = jest.fn<[ChangeEvent], void>();
+    fileMap.on('change', onChange);
+    await fileMap.addRoot(MISSING_DIR);
+    expect(rootStatuses(fileMap)).toEqual([
+      [SRC_DIR, 'live'],
+      [MISSING_DIR, 'pending'],
+    ]);
+    expect(mockNodeCrawler).toHaveBeenCalledTimes(1);
+    expect(mockPollers.size).toBe(0);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(fileSystem.exists(path.join(MISSING_DIR, 'index.js'))).toBe(false);
+  });
+
   describe('in watch mode', () => {
     beforeEach(() => {
       fileMap = createFileMap({watch: true});
@@ -456,6 +543,85 @@ describe('FileMap.addRoot', () => {
       expect(stopWatching.mock.instances).toContain(
         mockWatchers.get(EXTERNAL_DIR),
       );
+    });
+
+    describe('a pending root', () => {
+      test('is polled, then crawled and watched once its directory appears', async () => {
+        const {fileSystem} = await fileMap.build();
+        await fileMap.addRoot(MISSING_DIR);
+        expect(rootStatuses(fileMap)).toEqual([
+          [SRC_DIR, 'live'],
+          [MISSING_DIR, 'pending'],
+        ]);
+        expect([...mockWatchers.keys()]).toEqual([SRC_DIR]);
+        const poller = mockPollers.get(MISSING_DIR);
+        expect(poller).toMatchObject({reportExisting: true, stopped: false});
+
+        mockFiles.set(path.join(MISSING_DIR, 'index.js'), 1);
+        const changed = nextChange(fileMap);
+        poller?.onDirectory();
+        const {changes} = await changed;
+
+        expect(filePaths(changes.addedFiles)).toEqual([
+          path.relative(ROOT_DIR, path.join(MISSING_DIR, 'index.js')),
+        ]);
+        expect(fileSystem.exists(path.join(MISSING_DIR, 'index.js'))).toBe(
+          true,
+        );
+        expect([...mockWatchers.keys()]).toEqual([SRC_DIR, MISSING_DIR]);
+        await until(() => fileMap.getRoots()[1].status === 'live');
+      });
+
+      test('stays pending, and is polled again, if its directory is gone by the time it is checked', async () => {
+        await fileMap.build();
+        await fileMap.addRoot(MISSING_DIR);
+        const poller = mockPollers.get(MISSING_DIR);
+        poller?.onDirectory();
+        await until(() => mockPollers.get(MISSING_DIR) !== poller);
+        expect(rootStatuses(fileMap)[1]).toEqual([MISSING_DIR, 'pending']);
+        expect([...mockWatchers.keys()]).toEqual([SRC_DIR]);
+      });
+
+      test('has roots within it pending with it, polled once, and live with it', async () => {
+        await fileMap.build();
+        const nested = path.join(MISSING_DIR, 'nested');
+        await fileMap.addRoot(MISSING_DIR);
+        await fileMap.addRoot(nested);
+        expect(rootStatuses(fileMap)).toEqual([
+          [SRC_DIR, 'live'],
+          [MISSING_DIR, 'pending'],
+          [nested, 'pending'],
+        ]);
+        expect([...mockPollers.keys()]).toEqual([MISSING_DIR]);
+
+        mockFiles.set(path.join(nested, 'index.js'), 1);
+        mockPollers.get(MISSING_DIR)?.onDirectory();
+        await until(() => fileMap.getRoots()[2].status === 'live');
+        expect(rootStatuses(fileMap)[1]).toEqual([MISSING_DIR, 'live']);
+      });
+
+      test('within a root that goes live is no longer polled, and is live with it', async () => {
+        await fileMap.build();
+        const nested = path.join(MISSING_DIR, 'nested');
+        await fileMap.addRoot(nested);
+        await fileMap.addRoot(MISSING_DIR);
+        const nestedPoller = mockPollers.get(nested);
+
+        mockFiles.set(path.join(nested, 'index.js'), 1);
+        mockPollers.get(MISSING_DIR)?.onDirectory();
+        await until(() => fileMap.getRoots()[1].status === 'live');
+
+        expect(rootStatuses(fileMap)[2]).toEqual([MISSING_DIR, 'live']);
+        expect(nestedPoller?.stopped).toBe(true);
+        expect([...mockWatchers.keys()]).toEqual([SRC_DIR, MISSING_DIR]);
+      });
+
+      test('stops being polled on end()', async () => {
+        await fileMap.build();
+        await fileMap.addRoot(MISSING_DIR);
+        await fileMap.end();
+        expect(mockPollers.get(MISSING_DIR)?.stopped).toBe(true);
+      });
     });
   });
 });
