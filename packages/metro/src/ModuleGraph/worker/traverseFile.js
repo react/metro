@@ -11,8 +11,7 @@
 import type {IRFile} from './visitDependencyUses';
 import type {TraverseOptions} from '@babel/traverse';
 
-import {File} from '@babel/core';
-import babelTraverse from '@babel/traverse';
+import {File, traverse as babelTraverse} from '@babel/core';
 
 export default function traverseFile<TState>(
   file: IRFile,

@@ -16,7 +16,7 @@ import type {
   JsTransformOptions,
 } from 'metro-transform-worker';
 
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';

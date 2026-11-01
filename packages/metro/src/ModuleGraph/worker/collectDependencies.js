@@ -26,9 +26,9 @@ import type {
   AsyncDependencyType,
 } from 'metro/private/DeltaBundler/types';
 
+import {traverse} from '@babel/core';
 import generate from '@babel/generator';
 import template from '@babel/template';
-import traverse from '@babel/traverse';
 import * as types from '@babel/types';
 import {isImport, isProgram} from '@babel/types';
 import invariant from 'invariant';

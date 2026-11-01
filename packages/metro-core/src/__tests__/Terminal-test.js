@@ -54,12 +54,15 @@ describe.each([false, true])(
           ? require('node:tty').WriteStream.prototype
           : require('node:net').Socket,
       );
+      let bytesWritten = 0;
+      Object.defineProperty(stream, 'bytesWritten', {get: () => bytesWritten});
       Object.assign(stream, {
         cursor: 0,
         buffer: ' '.repeat(columns * lines).split(''),
         columns,
         lines,
         write(str, callback = () => {}) {
+          bytesWritten += str.length;
           for (let i = 0; i < str.length; ++i) {
             if (str[i] === '\n') {
               this.cursor = this.cursor - (this.cursor % columns) + columns;
@@ -179,6 +182,18 @@ describe.each([false, true])(
           'foo       bar       status2   beep      status3',
         );
       }
+    });
+
+    test('keeps output written outside of Terminal', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      await terminal.flush();
+      stream.write('external\n');
+      terminal.status('status2');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        'status    external  status2',
+      );
     });
 
     test('flush- multi-line', async () => {

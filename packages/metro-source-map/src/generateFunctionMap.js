@@ -30,7 +30,7 @@ import type {
 import type {MetroBabelFileMetadata} from 'metro-babel-transformer';
 
 import B64Builder from './B64Builder';
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import * as t from '@babel/types';
 import {
   isAssignmentExpression,
