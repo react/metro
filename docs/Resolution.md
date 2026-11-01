@@ -119,7 +119,7 @@ Resolves an absolute path that may be inside an npm package, e.g. a candidate pa
 
 1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_).
    1. If resolved path exists, then
-      1. If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled, apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the resolved path. If this is `false`, return the empty module. If it is a different path, return [**RESOLVE_MODULE**](#resolve_module)(_context_, _redirectedPath_, _platform_). E.g. `"browser": {"./lib/index.node.js": "./lib/index.browser.js"}` redirects `"exports": {".": "./lib/index.node.js"}`.
+      1. If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled, apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the resolved path. If this is `false`, return the empty module. If it is a different path, return [**RESOLVE_MODULE**](#resolve_module)(_context_, _redirectedPath_, _platform_) if that resolves, otherwise log a package configuration warning and continue. E.g. `"browser": {"./lib/index.node.js": "./lib/index.browser.js"}` redirects `"exports": {".": "./lib/index.node.js"}`.
       2. Return result.
    2. Else, log either a package configuration or package encapsulation warning.
 2. Return [**RESOLVE_MODULE**](#resolve_module)(_context_, _filePath_, _platform_).
@@ -135,7 +135,7 @@ Lets code inside a package import that package by its own name via its `"exports
 3. Split _moduleName_ into a package name (including an optional [scope](https://docs.npmjs.com/cli/v8/using-npm/scope)) and relative path.
 4. If the package name does not match the current package's `"name"` field, return no resolution.
 5. Get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_) against the current package's `"exports"` field.
-   1. If resolved path exists, return result.
+   1. If resolved path exists, perform [**RESOLVE_PACKAGE**](#resolve_package) step 1.1.1 for it, then return result.
    2. Else, log either a package configuration or package encapsulation warning, then continue with normal resolution.
 
 #### RESOLVE_PACKAGE_EXPORTS
