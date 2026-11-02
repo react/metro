@@ -13,6 +13,10 @@ import type {CustomResolver} from 'metro-resolver';
 
 import {getMetroBabelRuntimePackageJsonPath} from './metroBabelRuntime';
 import {getMetroRuntimePackageJsonPath} from './metroRuntime';
+import {
+  INLINE_MODULE_SPECIFIER,
+  resolveInlineModule,
+} from './resolveInlineModule';
 
 const BABEL_RUNTIME_SPECIFIER = 'babel-runtime';
 const BABEL_RUNTIME_PACKAGE = '@babel/runtime';
@@ -21,10 +25,19 @@ const RUNTIME_PACKAGE = 'metro-runtime';
 
 /**
  * Resolver used for Metro's own `metro:` URI scheme, handling
- * metro:babel-runtime, metro:runtime and their subpaths.
+ * metro:babel-runtime, metro:runtime (and their subpaths) and metro:inline
+ * modules.
  */
 export default ((context, specifier, platform) => {
   const {protocol, pathname} = new URL(specifier);
+
+  if (
+    pathname === INLINE_MODULE_SPECIFIER ||
+    pathname.startsWith(INLINE_MODULE_SPECIFIER + ';') ||
+    pathname.startsWith(INLINE_MODULE_SPECIFIER + ',')
+  ) {
+    return resolveInlineModule(context, pathname);
+  }
 
   // Maps `metro:babel-runtime` (and subpaths, e.g.
   // `metro:babel-runtime/helpers/interopRequireDefault`) to metro-runtime's
