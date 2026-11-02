@@ -271,6 +271,25 @@ describe('GraphTraversal', () => {
     );
   });
 
+  test('does not treat a file resolution to a namespaced path as a virtual module', async () => {
+    const modulePath = deriveVirtualModulePath(p('/foo'));
+    transformDeps.set(modulePath, []);
+
+    await buildSubgraph(new Set([p('/bundle')]), new Map(), {
+      ...params,
+      resolve: (): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: modulePath,
+      }),
+    });
+
+    expect(params.transform).toHaveBeenCalledWith(modulePath, undefined);
+    expect(params.transform).not.toHaveBeenCalledWith(
+      p('/foo'),
+      expect.anything(),
+    );
+  });
+
   test('returns errors thrown by the transformer', async () => {
     transformDeps.set(p('/bar'), [makeTransformDep('bad')]);
     const result = await buildSubgraph(

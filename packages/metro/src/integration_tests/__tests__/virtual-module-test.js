@@ -102,3 +102,33 @@ test('builds in production', async () => {
   const {code} = await build({dev: false});
   expect(execBundle(code)).toMatchObject({fromVirtual: 11, fromSibling: 102});
 });
+
+test('a file resolution to a namespaced path fails, even if the file exists at its virtual path', async () => {
+  const resolveToNamespacedPath: CustomResolver = (
+    context,
+    moduleName,
+    platform,
+  ) =>
+    moduleName.startsWith('test:')
+      ? {
+          type: 'sourceFile',
+          filePath:
+            'virtual:' +
+            path.join(path.dirname(context.originModulePath), 'sibling.js'),
+        }
+      : context.resolveRequest(context, moduleName, platform);
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    resolver: {resolveRequest: resolveToNamespacedPath},
+  });
+
+  await expect(
+    Metro.runBuild(config, {
+      entry: 'virtual-module/index.js',
+      dev: true,
+      minify: false,
+    }),
+  ).rejects.toThrow('Failed to get the SHA-1');
+});

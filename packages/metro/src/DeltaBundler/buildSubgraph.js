@@ -145,9 +145,12 @@ export async function buildSubgraph<T>(
       return;
     }
     visitedPaths.add(absolutePath);
-    // A virtual module is transformed as, and resolves its dependencies from,
-    // its virtual path. The identity suffix exists only in the graph.
-    const sourcePath = getModuleSourcePath(absolutePath);
+    // A virtual module, i.e. one with a buffer source, is transformed as, and
+    // resolves its dependencies from, its virtual path.
+    const sourcePath =
+      virtualSource?.type === 'buffer'
+        ? getModuleSourcePath(absolutePath)
+        : absolutePath;
     const transformResult = await transform(sourcePath, virtualSource);
 
     // Get the absolute path of all sub-dependencies (some of them could have been
