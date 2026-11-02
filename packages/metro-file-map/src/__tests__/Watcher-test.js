@@ -20,6 +20,7 @@ import type {
 
 import TreeFS from '../lib/TreeFS';
 import {Watcher} from '../Watcher';
+import EventEmitter from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -39,6 +40,7 @@ type MockBackend = {
   root: string,
   clocks: ?Map<string, string>,
   emit: (event: WatcherBackendChangeEvent) => void,
+  emitError: (error: Error) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
 let mockNativeLiveOnStart = true;
@@ -47,6 +49,7 @@ function mockBackendClass(kind: MockBackend['kind']) {
     #root: string;
     #clocks: ?Map<string, string>;
     #listener: ?(event: WatcherBackendChangeEvent) => void;
+    #emitter: EventEmitter = new EventEmitter();
     static isSupported(): boolean {
       return true;
     }
@@ -60,12 +63,21 @@ function mockBackendClass(kind: MockBackend['kind']) {
     onFileEvent(listener: (event: WatcherBackendChangeEvent) => void) {
       this.#listener = listener;
     }
+    onError(listener: (error: Error) => void): () => void {
+      this.#emitter.on('error', listener);
+      return () => {
+        this.#emitter.removeListener('error', listener);
+      };
+    }
     async startWatching() {
       mockStartedBackends.push({
         kind,
         root: this.#root,
         clocks: this.#clocks,
         emit: event => this.#listener?.(event),
+        emitError: error => {
+          this.#emitter.emit('error', error);
+        },
       });
     }
     async stopWatching() {}
@@ -233,6 +245,32 @@ describe('Watcher backend choice in watch mode', () => {
     root: rootDir,
     metadata: {modifiedTime: 1, size: 1, type: 'f'},
   };
+
+  test.each([false, true])(
+    'reports backend errors without losing later changes (useWatchman=%s)',
+    async useWatchman => {
+      mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+      mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));
+      const reportError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const watcher = createWatcher(useWatchman, null, true);
+      const onChange = jest.fn<[WatcherBackendChangeEvent], void>();
+      await watcher.crawl();
+      await watcher.watch(onChange);
+
+      const backend = mockStartedBackends[0];
+      const error = new Error('Cannot read watched directory');
+      expect(() => backend.emitError(error)).not.toThrow();
+      expect(reportError).toHaveBeenCalledWith(
+        `metro-file-map: ${backend.kind} watcher error in ${rootDir}:`,
+        error,
+      );
+      backend.emit(event);
+      expect(onChange).toHaveBeenCalledWith(event);
+      await watcher.close();
+    },
+  );
 
   test('a successful Watchman crawl starts a Watchman backend only on watch()', async () => {
     mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));

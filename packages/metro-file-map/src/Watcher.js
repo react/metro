@@ -329,6 +329,12 @@ export class Watcher extends EventEmitter {
           MAX_WAIT_TIME,
         );
 
+        watcher.onError(error => {
+          this.#options.console.error(
+            `metro-file-map: ${this.#activeWatcher ?? 'unknown'} watcher error in ${root}:`,
+            error,
+          );
+        });
         watcher.onFileEvent(change => {
           const basename = path.basename(change.relativePath);
           if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
