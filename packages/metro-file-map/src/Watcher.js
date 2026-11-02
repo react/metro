@@ -92,10 +92,12 @@ export type HealthCheckResult =
 export class Watcher extends EventEmitter {
   #activeWatcher: ?string;
   #backends: Array<WatcherBackend> = [];
+  readonly #startingBackends: Set<WatcherBackend> = new Set();
   // Events received by started backends before watch() is called, to be
   // replayed once it is.
   #bufferedEvents: Array<WatcherBackendChangeEvent> = [];
   #closed: boolean = false;
+  readonly #startupAbortControllers: Set<AbortController> = new Set();
   #createBackend: ?(root: Path) => Promise<WatcherBackend>;
   // Whether a started backend's watches need confirming before they are
   // relied on.
@@ -321,57 +323,85 @@ export class Watcher extends EventEmitter {
         watchmanDeferStates: this.#options.watchmanDeferStates,
         clocks: rootClocks,
       };
+      if (this.#closed) {
+        throw new Error('Watcher closed during startup.');
+      }
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
+      this.#startingBackends.add(watcher);
+      const startupAbortController = new AbortController();
+      this.#startupAbortControllers.add(startupAbortController);
 
-      return new Promise(async (resolve, reject) => {
-        const rejectTimeout = setTimeout(
-          () => reject(new Error('Failed to start watch mode.')),
-          MAX_WAIT_TIME,
-        );
-
-        watcher.onFileEvent(change => {
-          const basename = path.basename(change.relativePath);
-          if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
-            if (change.event === TOUCH_EVENT) {
-              debug(
-                'Observed possible health check cookie: %s in %s',
-                change.relativePath,
-                root,
-              );
-              this.#handleHealthCheckObservation(basename);
-            }
-            return;
-          }
-          // Watchman handles recrawls internally - receiving a recrawl event
-          // when using Watchman would indicate a bug. Log an error and ignore.
-          if (change.event === 'recrawl' && useWatchman) {
-            this.#options.console.error(
-              'metro-file-map: Received unexpected recrawl event while using ' +
-                'Watchman. Watchman recrawls are not implemented.',
+      watcher.onFileEvent(change => {
+        if (this.#closed) {
+          return;
+        }
+        const basename = path.basename(change.relativePath);
+        if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
+          if (change.event === TOUCH_EVENT) {
+            debug(
+              'Observed possible health check cookie: %s in %s',
+              change.relativePath,
+              root,
             );
-            return;
+            this.#handleHealthCheckObservation(basename);
           }
-          const onChange = this.#onChange;
-          if (onChange != null) {
-            onChange(change);
-          } else {
-            this.#bufferedEvents.push(change);
-          }
-        });
-        await watcher.startWatching();
-        clearTimeout(rejectTimeout);
-        resolve(watcher);
+          return;
+        }
+        // Watchman handles recrawls internally - receiving a recrawl event
+        // when using Watchman would indicate a bug. Log an error and ignore.
+        if (change.event === 'recrawl' && useWatchman) {
+          this.#options.console.error(
+            'metro-file-map: Received unexpected recrawl event while using ' +
+              'Watchman. Watchman recrawls are not implemented.',
+          );
+          return;
+        }
+        const onChange = this.#onChange;
+        if (onChange != null) {
+          onChange(change);
+        } else {
+          this.#bufferedEvents.push(change);
+        }
       });
+      const starting = startWatcherBackend(
+        watcher,
+        root,
+        startupAbortController.signal,
+        this.#options.console,
+      ).finally(() =>
+        this.#startupAbortControllers.delete(startupAbortController),
+      );
+      // Successful starts stay tracked until their caller adopts them.
+      void starting.catch(() => this.#startingBackends.delete(watcher));
+      return starting;
     };
 
     // A root added by watchRoot() is watched before it is crawled, so it
     // needs no crawl clock.
     this.#createBackend = root => createWatcherBackend(root, null);
-    this.#backends = await Promise.all(
-      this.#options.roots.map(root =>
-        createWatcherBackend(root, watchmanClocks),
-      ),
+    const starting = this.#options.roots.map(root =>
+      createWatcherBackend(root, watchmanClocks),
     );
+    try {
+      this.#backends = await Promise.all(starting);
+      for (const backend of this.#backends) {
+        this.#startingBackends.delete(backend);
+      }
+    } catch (error) {
+      // Cancel pending starts and release roots that finished before a sibling failed.
+      await this.close().catch(cleanupError =>
+        this.#options.console.error(
+          'metro-file-map: Could not stop watchers:',
+          cleanupError,
+        ),
+      );
+      await Promise.allSettled(starting);
+      throw error;
+    }
+    if (this.#closed) {
+      await this.close();
+      throw new Error('Watcher closed during startup.');
+    }
     // Confirmed only once every backend has started, because starting one may
     // restart the others' watches (NativeWatchers share one FSEvents stream).
     this.#confirmWatches = !WatcherImpl.isLiveOnStart();
@@ -420,6 +450,7 @@ export class Watcher extends EventEmitter {
     if (backend == null) {
       return;
     }
+    this.#startingBackends.delete(backend);
     // `close()` may have been called while the backend was starting.
     if (this.#closed) {
       await backend.stopWatching();
@@ -441,7 +472,12 @@ export class Watcher extends EventEmitter {
 
   async close() {
     this.#closed = true;
-    await Promise.all(this.#backends.map(watcher => watcher.stopWatching()));
+    for (const controller of this.#startupAbortControllers) {
+      controller.abort(new Error('Watcher closed during startup.'));
+    }
+    const backends = new Set([...this.#backends, ...this.#startingBackends]);
+    await Promise.all([...backends].map(watcher => watcher.stopWatching()));
+    this.#startingBackends.clear();
     this.#activeWatcher = null;
   }
 
@@ -519,5 +555,56 @@ export class Watcher extends EventEmitter {
     );
     debug('Health check result: %o', result);
     return nullthrows(result);
+  }
+}
+
+/** Start a backend without losing its rejection or abandoning its resources. */
+async function startWatcherBackend(
+  watcher: WatcherBackend,
+  root: Path,
+  signal: AbortSignal,
+  console: Console,
+): Promise<WatcherBackend> {
+  let timeout: ?ReturnType<typeof setTimeout>;
+  let removeAbortListener = () => {};
+  const cancelled = new Promise<empty>((_resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, {once: true});
+    removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+    if (signal.aborted) {
+      onAbort();
+    }
+    timeout = setTimeout(
+      () => reject(new Error('Failed to start watch mode.')),
+      MAX_WAIT_TIME,
+    );
+  });
+  const starting = Promise.resolve().then(() => {
+    signal.throwIfAborted();
+    return watcher.startWatching();
+  });
+  const stop = async () => {
+    try {
+      await watcher.stopWatching();
+    } catch (error) {
+      console.error(
+        `metro-file-map: Could not stop watcher in ${root}:`,
+        error,
+      );
+    }
+  };
+  try {
+    await Promise.race([starting, cancelled]);
+    return watcher;
+  } catch (error) {
+    // Some backends cannot cancel initialization. Release anything they open later too.
+    void starting.then(stop, () => {});
+    await stop();
+    throw error;
+  } finally {
+    if (timeout != null) {
+      clearTimeout(timeout);
+    }
+    removeAbortListener();
   }
 }
