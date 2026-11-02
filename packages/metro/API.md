@@ -302,6 +302,7 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean;
   processModuleFilter: (module: Module) => boolean;
   projectRoot: string;
+  reservedString: string;
   runBeforeMainModule: ReadonlyArray<string>;
   runModule: boolean;
   serverRoot: string;

@@ -58,6 +58,7 @@ import {
   getMetroBabelRuntimePackageJsonPath,
   getMetroBabelRuntimeVersion,
 } from 'metro/private/lib/metroBabelRuntime';
+import {RESERVED_STRING} from 'metro/private/lib/reservedString';
 import collectDependencies from 'metro/private/ModuleGraph/worker/collectDependencies';
 import generateImportNames from 'metro/private/ModuleGraph/worker/generateImportNames';
 import {
@@ -736,10 +737,9 @@ export const transform = async (
     return await transformAsset(file, context);
   }
 
-  // The string `_$$_METRO_` is reserved in all code reaching the bundle, so that
-  // placeholders containing it can be found and replaced in generated code
-  // without parsing it. The contents of an asset do not reach the bundle.
-  const reservedStrings = ['_$$_METRO_'];
+  // The contents of an asset do not reach the bundle, so they cannot conflict
+  // with a placeholder in generated code.
+  const reservedStrings = [RESERVED_STRING];
   if (config.unstable_dependencyMapReservedName != null) {
     reservedStrings.push(config.unstable_dependencyMapReservedName);
   }
@@ -792,6 +792,7 @@ export const getCacheKey = (
     require.resolve('metro/private/ModuleGraph/worker/collectDependencies'),
     require.resolve('metro/private/ModuleGraph/worker/generateImportNames'),
     require.resolve('metro/private/ModuleGraph/worker/JsFileWrapping'),
+    require.resolve('metro/private/lib/reservedString'),
     require.resolve('metro/private/ModuleGraph/worker/importLocationsPlugin'),
     ...metroTransformPlugins.getTransformPluginCacheKeyFiles(),
     // Transform output depends on the installed version of Metro's own

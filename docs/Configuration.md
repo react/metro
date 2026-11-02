@@ -765,6 +765,8 @@ Type: `?(entryPoint: string, preModules: $ReadOnlyArray<Module>, graph: ReadOnly
 
 Replaces Metro's default bundle serializer. Defaults to `null`.
 
+`options.reservedString` is a string that Metro's placeholders in generated code contain and that source and JSON files do not, so a serializer can find and replace them without parsing the code. Use this option rather than assuming its value.
+
 #### `experimentalSerializerHook`
 
 Type: `(graph: ReadOnlyGraph, delta: DeltaResult) => mixed`

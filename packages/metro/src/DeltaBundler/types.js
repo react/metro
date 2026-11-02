@@ -201,6 +201,9 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean,
   processModuleFilter: (module: Module<>) => boolean,
   projectRoot: string,
+  // Generated placeholders contain this string, and source and JSON files do
+  // not, so they can be found and replaced without parsing the code.
+  reservedString: string,
   runBeforeMainModule: ReadonlyArray<string>,
   runModule: boolean,
   serverRoot: string,

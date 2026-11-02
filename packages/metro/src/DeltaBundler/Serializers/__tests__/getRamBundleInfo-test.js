@@ -94,6 +94,7 @@ const baseOptions = {
   platform: null,
   processModuleFilter: (module: Module<>) => true,
   projectRoot: '/root',
+  reservedString: '_$$_METRO_',
   runBeforeMainModule: [],
   runModule: true,
   serverRoot: '/root',
