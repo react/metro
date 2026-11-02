@@ -416,8 +416,7 @@ function resolveModuleFromTargetPath(
   // Look up the package once, for both "browser" spec redirections and
   // "exports". With `unstable_applyBrowserSpecAfterExports`, "exports"
   // resolves the requested subpath first, and `resolvePackage` applies the
-  // redirections to the file it resolves to instead. This matches webpack and
-  // Vite.
+  // redirections to the file it resolves to instead.
   const pkg = context.getPackageForModule(targetPath);
   const candidate =
     pkg == null ||
@@ -706,9 +705,7 @@ function resolvePackage(
  * match the resolved file (e.g. "./lib/index.node.js"), not the requested
  * subpath (e.g. "./lib"), and are read from the `package.json` closest to the
  * file. A redirection that does not resolve (e.g. to a missing file) is
- * ignored with a warning, so that enabling
- * `unstable_applyBrowserSpecAfterExports` cannot break an import that resolves
- * without it.
+ * ignored with a warning, keeping the file resolved from "exports".
  */
 function redirectPackageExportsResolution(
   context: ResolutionContext,

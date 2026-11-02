@@ -455,7 +455,7 @@ resolver: {
 
 Type: `boolean`
 
-When a package has an [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports), apply its [`"browser"` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (from any object-valued field in [`resolverMainFields`](#resolvermainfields)) to the file that `"exports"` resolves to, instead of to the requested subpath before `"exports"` is considered. This matches webpack and Vite, except that assets (see [`assetExts`](#assetexts)) resolved from `"exports"` are not redirected. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `false`.
+When a package has an [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports), apply its [`"browser"` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (from any object-valued field in [`resolverMainFields`](#resolvermainfields)) to the file that `"exports"` resolves to, instead of to the requested subpath before `"exports"` is considered. This matches webpack 5 and Vite 8, except that assets (see [`assetExts`](#assetexts)) resolved from `"exports"` are not redirected. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `false`.
 
 For example, given a package with:
 
