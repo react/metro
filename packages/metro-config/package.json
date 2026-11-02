@@ -26,7 +26,10 @@
     "metro": "0.87.2",
     "metro-cache": "0.87.2",
     "metro-core": "0.87.2",
-    "metro-runtime": "0.87.2"
+    "metro-file-map": "0.87.2",
+    "metro-resolver": "0.87.2",
+    "metro-runtime": "0.87.2",
+    "metro-transform-worker": "0.87.2"
   },
   "devDependencies": {
     "metro-babel-register": "0.87.2",
