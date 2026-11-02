@@ -42,6 +42,8 @@ __r(0);
 
 `__d` registers a module under its ID, and `__r` runs a module by ID. Both are defined by Metro's runtime, included at the start of the bundle. In development builds, each `__d` call also gets the module's path as a last argument, e.g. `"index.js"`.
 
+The string `_$$_METRO_` is reserved for names in generated code. Metro's default transformer fails with an error on any source or JSON file containing it, including in a comment or string.
+
 Modules refer to each other by numeric IDs assigned at build time, not by path. That's why `require()` needs a path known at build time, and dynamic requires such as `require('./images/' + name)` aren't supported (see [`require()`](./ModuleAPI.md#require)).
 
 ### Scripts

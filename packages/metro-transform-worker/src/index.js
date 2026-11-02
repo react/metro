@@ -723,14 +723,23 @@ export const transform = async (
     projectRoot,
   };
   const sourceCode = data.toString('utf8');
+  const isJSON = projectRelativePath.endsWith('.json');
 
-  const reservedStrings = [];
-  if (
-    options.customTransformOptions?.unstable_staticHermesOptimizedRequire ==
-    true
-  ) {
-    reservedStrings.push('_$$_METRO_MODULE_ID');
+  if (options.type === 'asset' && !isJSON) {
+    const file: AssetFile = {
+      code: sourceCode,
+      filename: projectRelativePath,
+      inputFileSize: data.length,
+      type: options.type,
+    };
+
+    return await transformAsset(file, context);
   }
+
+  // The string `_$$_METRO_` is reserved in all code reaching the bundle, so that
+  // placeholders containing it can be found and replaced in generated code
+  // without parsing it. The contents of an asset do not reach the bundle.
+  const reservedStrings = ['_$$_METRO_'];
   if (config.unstable_dependencyMapReservedName != null) {
     reservedStrings.push(config.unstable_dependencyMapReservedName);
   }
@@ -746,7 +755,7 @@ export const transform = async (
     }
   }
 
-  if (projectRelativePath.endsWith('.json')) {
+  if (isJSON) {
     const jsonFile: JSONFile = {
       code: sourceCode,
       filename: projectRelativePath,
@@ -755,17 +764,6 @@ export const transform = async (
     };
 
     return await transformJSON(jsonFile, context);
-  }
-
-  if (options.type === 'asset') {
-    const file: AssetFile = {
-      code: sourceCode,
-      filename: projectRelativePath,
-      inputFileSize: data.length,
-      type: options.type,
-    };
-
-    return await transformAsset(file, context);
   }
 
   const file: JSFile = {
