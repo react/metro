@@ -19,6 +19,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@types/connect": "^3.4.35",
     "connect": "^3.6.5",
     "flow-enums-runtime": "^0.0.6",
     "jest-validate": "^29.7.0",
@@ -28,7 +29,6 @@
     "metro-runtime": "0.87.2"
   },
   "devDependencies": {
-    "@types/connect": "^3.4.35",
     "metro-babel-register": "0.87.2",
     "pretty-format": "^29.7.0"
   },
