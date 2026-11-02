@@ -93,6 +93,8 @@ export default function createModuleResolver({
       ...config.resolver.schemeResolvers,
     },
     sourceExts: config.resolver.sourceExts,
+    unstable_applyBrowserSpecAfterExports:
+      config.resolver.unstable_applyBrowserSpecAfterExports,
     unstable_conditionNames: config.resolver.unstable_conditionNames,
     unstable_conditionsByPlatform:
       config.resolver.unstable_conditionsByPlatform,

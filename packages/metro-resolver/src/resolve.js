@@ -12,6 +12,7 @@
 import type {
   FileAndDirCandidates,
   FileCandidates,
+  FileResolution,
   PackageForModule,
   Resolution,
   ResolutionContext,
@@ -262,7 +263,13 @@ export default function resolve(
         platform,
       );
       if (packageExportsResult != null) {
-        return packageExportsResult;
+        return context.unstable_applyBrowserSpecAfterExports
+          ? redirectPackageExportsResolution(
+              context,
+              packageExportsResult,
+              platform,
+            )
+          : packageExportsResult;
       }
     } catch (e) {
       // NB: Falling back is a departure from the spec, but retained for
@@ -406,14 +413,39 @@ function resolveModuleFromTargetPath(
   platform: string | null,
   targetPath: string,
 ): Resolution | null {
-  const candidate = redirectModulePath(context, targetPath);
+  // Look up the package once, for both "browser" spec redirections and
+  // "exports". With `unstable_applyBrowserSpecAfterExports`, "exports"
+  // resolves the requested subpath first, and `resolvePackage` applies the
+  // redirections to the file it resolves to instead.
+  const pkg = context.getPackageForModule(targetPath);
+  const candidate =
+    pkg == null ||
+    (context.unstable_applyBrowserSpecAfterExports &&
+      context.unstable_enablePackageExports &&
+      pkg.packageJson.exports != null)
+      ? targetPath
+      : redirectPackageSubpath(
+          context,
+          targetPath,
+          pkg,
+          pkg.packageRelativePath,
+        );
   if (candidate === false) {
     return {type: 'empty'};
   }
 
-  // candidate should be absolute here - we assume that redirectModulePath
+  // candidate should be absolute here - we assume that redirectPackageSubpath
   // always returns an absolute path when given an absolute path.
-  const result = resolvePackage(context, candidate, platform);
+  const result = resolvePackage(
+    context,
+    candidate,
+    platform,
+    candidate === targetPath
+      ? pkg
+      : context.unstable_enablePackageExports
+        ? context.getPackageForModule(candidate)
+        : null,
+  );
   if (result.type === 'resolved') {
     return result.resolution;
   }
@@ -557,7 +589,14 @@ function resolveHastePackage(
     return failedFor();
   }
   const potentialModulePath = path.join(packageJsonPath, '..', pathInModule);
-  const result = resolvePackage(context, potentialModulePath, platform);
+  const result = resolvePackage(
+    context,
+    potentialModulePath,
+    platform,
+    context.unstable_enablePackageExports
+      ? context.getPackageForModule(potentialModulePath)
+      : null,
+  );
   if (result.type === 'resolved') {
     return result;
   }
@@ -608,9 +647,14 @@ function resolvePackage(
    */
   absoluteCandidatePath: string,
   platform: string | null,
+  /**
+   * The package containing `absoluteCandidatePath`, from
+   * `context.getPackageForModule`. Only read when package exports are
+   * enabled, so callers may pass `null` otherwise.
+   */
+  pkg: ?PackageForModule,
 ): Result<Resolution, FileAndDirCandidates> {
   if (context.unstable_enablePackageExports) {
-    const pkg = context.getPackageForModule(absoluteCandidatePath);
     const exportsField = pkg?.packageJson.exports;
 
     if (pkg != null && exportsField != null) {
@@ -625,7 +669,15 @@ function resolvePackage(
         );
 
         if (packageExportsResult != null) {
-          return resolvedAs(packageExportsResult);
+          return resolvedAs(
+            context.unstable_applyBrowserSpecAfterExports
+              ? redirectPackageExportsResolution(
+                  context,
+                  packageExportsResult,
+                  platform,
+                )
+              : packageExportsResult,
+          );
         }
       } catch (e) {
         if (e instanceof PackagePathNotExportedError) {
@@ -646,6 +698,57 @@ function resolvePackage(
   }
 
   return resolveModulePath(context, absoluteCandidatePath, platform);
+}
+
+/**
+ * Apply "browser" spec redirections to a file resolved from "exports". These
+ * match the resolved file (e.g. "./lib/index.node.js"), not the requested
+ * subpath (e.g. "./lib"), and are read from the `package.json` closest to the
+ * file. A redirection that does not resolve (e.g. to a missing file) is
+ * ignored with a warning, keeping the file resolved from "exports".
+ */
+function redirectPackageExportsResolution(
+  context: ResolutionContext,
+  resolution: FileResolution,
+  platform: string | null,
+): Resolution {
+  // Asset resolutions are returned as is. They list the files for each scale
+  // (as returned by `context.resolveAsset`) rather than the "exports" target,
+  // so there is no single path to match against "browser" spec keys.
+  if (resolution.type !== 'sourceFile') {
+    return resolution;
+  }
+  const redirectedPath = redirectModulePath(context, resolution.filePath);
+  if (redirectedPath === false) {
+    return {type: 'empty'};
+  }
+  if (redirectedPath === resolution.filePath) {
+    return resolution;
+  }
+  let result: ?Result<Resolution, FileAndDirCandidates> = null;
+  try {
+    result = resolveModulePath(context, redirectedPath, platform);
+  } catch (e) {
+    // e.g. a directory whose package.json has a "main" that does not resolve
+    if (!(e instanceof InvalidPackageError)) {
+      throw e;
+    }
+  }
+  if (result?.type === 'resolved') {
+    return result.resolution;
+  }
+  context.unstable_logWarning(
+    new InvalidPackageConfigurationError({
+      packagePath:
+        context.getPackageForModule(resolution.filePath)?.rootPath ??
+        path.dirname(resolution.filePath),
+      reason:
+        `The file "${resolution.filePath}" resolved from "exports" is ` +
+        `redirected to "${redirectedPath}" by the "browser" spec, however ` +
+        'this could not be resolved.',
+    }).message + ' Falling back to the file resolved from "exports".',
+  );
+  return resolution;
 }
 
 /**

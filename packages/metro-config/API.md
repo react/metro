@@ -152,6 +152,7 @@ export type ResolverConfigT = {
   resolverMainFields: ReadonlyArray<string>;
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>;
   sourceExts: ReadonlyArray<string>;
+  unstable_applyBrowserSpecAfterExports: boolean;
   unstable_conditionNames: ReadonlyArray<string>;
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>;

@@ -1163,6 +1163,33 @@ describe('with package exports resolution enabled', () => {
         '.png',
       );
     });
+
+    test('should not apply "browser" spec redirections to assets with unstable_applyBrowserSpecAfterExports', () => {
+      const context = {
+        ...baseContext,
+        ...createPackageAccessors({
+          [p('/root/node_modules/test-pkg/package.json')]: {
+            main: './index.js',
+            exports: {
+              './icons/metro.png': './assets/icons/metro.png',
+            },
+            browser: {'./assets/icons/metro.png': false},
+          },
+        }),
+        resolveAsset: (dirPath: string, basename: string, extension: string) =>
+          [dirPath + path.sep + basename + extension].filter(candidate =>
+            baseContext.doesFileExist(candidate),
+          ),
+        unstable_applyBrowserSpecAfterExports: true,
+      };
+
+      expect(
+        Resolver.resolve(context, 'test-pkg/icons/metro.png', null),
+      ).toEqual({
+        type: 'assetFiles',
+        filePaths: [p('/root/node_modules/test-pkg/assets/icons/metro.png')],
+      });
+    });
   });
 
   describe('compatibility with non-standard "exports" array formats', () => {
@@ -1437,6 +1464,211 @@ describe('with package exports resolution enabled', () => {
         type: 'sourceFile',
         filePath: p('/root/node_modules/self-pkg/index-main.js'),
       });
+    });
+  });
+
+  describe('"browser" spec redirections with "exports"', () => {
+    const baseContext = {
+      ...createResolutionContext({
+        [p('/root/src/main.js')]: '',
+        [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
+          name: 'test-pkg',
+          exports: {
+            '.': './index.js',
+            './hash': {
+              browser: './hash-browser.js',
+              default: './hash-node.js',
+            },
+            './server': {
+              browser: './server-browser.js',
+              default: './server-node.js',
+            },
+            './fs': './fs-node.js',
+            './broken': './broken-node.js',
+            './dir': './dir-node.js',
+          },
+          browser: {
+            './index.js': './index-browser.js',
+            // Redirects both the exported subpath and the file it resolves
+            // to, as in multiformats.
+            './hash': './hash-browser.js',
+            './hash-node.js': './hash-browser.js',
+            // Matches the "./server" subpath (as "./server.js"), as in
+            // react-dom.
+            './server.js': './server-browser.js',
+            './fs-node.js': false,
+            './broken-node.js': './does-not-exist.js',
+            './dir-node.js': './broken-dir',
+            './private': './private-browser.js',
+          },
+        }),
+        [p('/root/node_modules/test-pkg/index.js')]: '',
+        [p('/root/node_modules/test-pkg/index-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/hash-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/hash-node.js')]: '',
+        [p('/root/node_modules/test-pkg/server-browser.js')]: '',
+        [p('/root/node_modules/test-pkg/server-node.js')]: '',
+        [p('/root/node_modules/test-pkg/fs-node.js')]: '',
+        [p('/root/node_modules/test-pkg/broken-node.js')]: '',
+        [p('/root/node_modules/test-pkg/dir-node.js')]: '',
+        [p('/root/node_modules/test-pkg/broken-dir/package.json')]:
+          JSON.stringify({main: './missing.js'}),
+        [p('/root/node_modules/test-pkg/private-browser.js')]: '',
+      }),
+      mainFields: ['react-native', 'browser', 'main'],
+      originModulePath: p('/root/src/main.js'),
+      unstable_enablePackageExports: true,
+    };
+
+    test('should redirect the requested subpath before "exports" by default', () => {
+      const logWarning = jest.fn();
+      const context = {...baseContext, unstable_logWarning: logWarning};
+
+      expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
+        type: 'sourceFile',
+        filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+      });
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain(
+        'under the requested subpath "./hash-browser.js"',
+      );
+    });
+
+    describe('with unstable_applyBrowserSpecAfterExports', () => {
+      const logWarning = jest.fn();
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: true,
+        unstable_logWarning: logWarning,
+      };
+
+      beforeEach(() => {
+        logWarning.mockClear();
+      });
+
+      afterEach(() => {
+        expect(logWarning).not.toHaveBeenCalled();
+      });
+
+      test('should redirect the file resolved from "exports"', () => {
+        expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+        expect(Resolver.resolve(context, 'test-pkg/hash', 'web')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+      });
+
+      test('should redirect the main entry point resolved from "exports"', () => {
+        expect(Resolver.resolve(context, 'test-pkg', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/index-browser.js'),
+        });
+      });
+
+      test('should not redirect an exported subpath', () => {
+        expect(Resolver.resolve(context, 'test-pkg/server', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/server-node.js'),
+        });
+        expect(Resolver.resolve(context, 'test-pkg/server', 'web')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/server-browser.js'),
+        });
+      });
+
+      test('should resolve to the empty module for a file mapped to `false`', () => {
+        expect(Resolver.resolve(context, 'test-pkg/fs', 'ios')).toEqual({
+          type: 'empty',
+        });
+      });
+
+      test('should not redirect when the field is not in `mainFields`', () => {
+        expect(
+          Resolver.resolve(
+            {...context, mainFields: ['main']},
+            'test-pkg/hash',
+            'ios',
+          ),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-node.js'),
+        });
+      });
+
+      test('should redirect the file resolved from "exports" for a self-reference', () => {
+        expect(
+          Resolver.resolve(
+            {
+              ...context,
+              originModulePath: p('/root/node_modules/test-pkg/index.js'),
+            },
+            'test-pkg/hash',
+            'ios',
+          ),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/hash-browser.js'),
+        });
+      });
+
+      test('[nonstrict] should warn about the requested subpath, then redirect it, when it is not exported', () => {
+        expect(Resolver.resolve(context, 'test-pkg/private', 'ios')).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/private-browser.js'),
+        });
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain(
+          'under the requested subpath "./private"',
+        );
+        logWarning.mockClear();
+      });
+
+      test.each([
+        [
+          'a missing file',
+          'an import',
+          'broken',
+          'does-not-exist.js',
+          p('/root/src/main.js'),
+        ],
+        [
+          'a missing file',
+          'a self-reference',
+          'broken',
+          'does-not-exist.js',
+          p('/root/node_modules/test-pkg/index.js'),
+        ],
+        [
+          'a directory with an invalid "main"',
+          'an import',
+          'dir',
+          'broken-dir',
+          p('/root/src/main.js'),
+        ],
+      ])(
+        '[nonstrict] should warn and keep the "exports" target when it is redirected to %s, for %s',
+        (_, __, subpath, redirectTarget, originModulePath) => {
+          expect(
+            Resolver.resolve(
+              {...context, originModulePath},
+              `test-pkg/${subpath}`,
+              'ios',
+            ),
+          ).toEqual({
+            type: 'sourceFile',
+            filePath: p(`/root/node_modules/test-pkg/${subpath}-node.js`),
+          });
+          expect(logWarning).toHaveBeenCalledTimes(1);
+          expect(logWarning.mock.calls[0][0]).toBe(
+            `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
+              `Reason: The file "${p(`/root/node_modules/test-pkg/${subpath}-node.js`)}" resolved from "exports" is redirected to "${p(`/root/node_modules/test-pkg/${redirectTarget}`)}" by the "browser" spec, however this could not be resolved. Falling back to the file resolved from "exports".`,
+          );
+          logWarning.mockClear();
+        },
+      );
     });
   });
 });
