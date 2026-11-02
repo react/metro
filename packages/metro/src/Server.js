@@ -56,6 +56,12 @@ import {calculateBundleProgressRatio} from './lib/bundleProgressUtils';
 import bundleToString from './lib/bundleToString';
 import formatBundlingError from './lib/formatBundlingError';
 import getGraphId from './lib/getGraphId';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+  isVirtualModuleUrl,
+} from './lib/modulePath';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import parseJsonBody from './lib/parseJsonBody';
 import RootUrlMap from './lib/RootUrlMap';
@@ -712,7 +718,8 @@ export default class Server {
         sourceFilePath =
           this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
       }
-      if (sourceFilePath != null) {
+      // Virtual modules aren't served by URL yet.
+      if (sourceFilePath != null && !isVirtualModuleUrl(urlObj.searchParams)) {
         await this._processSourceRequest(sourceFilePath, res);
       } else {
         next();
@@ -1755,8 +1762,14 @@ export default class Server {
   // eslint-disable-next-line consistent-return
   _getModuleSourceUrl(module: Module<>, mode: SourcePathsMode): string {
     switch (mode) {
-      case SourcePathsMode.ServerUrl:
-        return this._rootUrlMap.urlPathnameOfFilePath(module.path);
+      case SourcePathsMode.ServerUrl: {
+        const pathname = this._rootUrlMap.urlPathnameOfFilePath(
+          getModuleSourcePath(module.path),
+        );
+        return isVirtualModulePath(module.path)
+          ? `${pathname}?${VIRTUAL_MODULE_URL_PARAM}=true`
+          : pathname;
+      }
       case SourcePathsMode.Absolute:
         return module.path;
     }

@@ -18,6 +18,12 @@ import type {
 import type {JsOutput} from 'metro-transform-worker';
 
 import {isResolvedDependency} from '../../../lib/isResolvedDependency';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleDisplayPath,
+  getModuleSourcePath,
+  isVirtualModulePath,
+} from '../../../lib/modulePath';
 import {normalizePathSeparatorsToPosix} from '../../../lib/pathUtils';
 import invariant from 'invariant';
 import * as jscSafeUrl from 'jsc-safe-url';
@@ -78,9 +84,7 @@ export function wrapModule(module: Module<>, options: Options): string {
 function getModuleVerboseName(module: Module<>, options: Options): string {
   // The relative path of the module, to make debugging easier. This is mapped
   // to `module.verboseName` in `require.js`.
-  return normalizePathSeparatorsToPosix(
-    path.relative(options.projectRoot, module.path),
-  );
+  return getModuleDisplayPath(module.path, options.projectRoot);
 }
 
 // Default value stored in the `__d(...)` `paths` object for an async
@@ -104,8 +108,14 @@ function getDefaultAsyncDependencyPath(
   const {searchParams} = new URL(jscSafeUrl.toNormalUrl(options.sourceUrl));
   searchParams.set('modulesOnly', 'true');
   searchParams.set('runModule', 'false');
+  if (isVirtualModulePath(dependency.absolutePath)) {
+    searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
+  }
 
-  const bundlePath = path.relative(options.serverRoot, dependency.absolutePath);
+  const bundlePath = path.relative(
+    options.serverRoot,
+    getModuleSourcePath(dependency.absolutePath),
+  );
   return (
     '/' +
     normalizePathSeparatorsToPosix(
