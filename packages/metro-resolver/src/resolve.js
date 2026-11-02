@@ -413,16 +413,40 @@ function resolveModuleFromTargetPath(
   platform: string | null,
   targetPath: string,
 ): Resolution | null {
-  const candidate = isBrowserSpecAppliedAfterExports(context, targetPath)
-    ? targetPath
-    : redirectModulePath(context, targetPath);
+  // Look up the package once, for both "browser" spec redirections and
+  // "exports". With `unstable_applyBrowserSpecAfterExports`, "exports"
+  // resolves the requested subpath first, and `resolvePackage` applies the
+  // redirections to the file it resolves to instead. This matches webpack and
+  // Vite.
+  const pkg = context.getPackageForModule(targetPath);
+  const candidate =
+    pkg == null ||
+    (context.unstable_applyBrowserSpecAfterExports &&
+      context.unstable_enablePackageExports &&
+      pkg.packageJson.exports != null)
+      ? targetPath
+      : redirectPackageSubpath(
+          context,
+          targetPath,
+          pkg,
+          pkg.packageRelativePath,
+        );
   if (candidate === false) {
     return {type: 'empty'};
   }
 
-  // candidate should be absolute here - we assume that redirectModulePath
+  // candidate should be absolute here - we assume that redirectPackageSubpath
   // always returns an absolute path when given an absolute path.
-  const result = resolvePackage(context, candidate, platform);
+  const result = resolvePackage(
+    context,
+    candidate,
+    platform,
+    candidate === targetPath
+      ? pkg
+      : context.unstable_enablePackageExports
+        ? context.getPackageForModule(candidate)
+        : null,
+  );
   if (result.type === 'resolved') {
     return result.resolution;
   }
@@ -566,7 +590,14 @@ function resolveHastePackage(
     return failedFor();
   }
   const potentialModulePath = path.join(packageJsonPath, '..', pathInModule);
-  const result = resolvePackage(context, potentialModulePath, platform);
+  const result = resolvePackage(
+    context,
+    potentialModulePath,
+    platform,
+    context.unstable_enablePackageExports
+      ? context.getPackageForModule(potentialModulePath)
+      : null,
+  );
   if (result.type === 'resolved') {
     return result;
   }
@@ -617,9 +648,14 @@ function resolvePackage(
    */
   absoluteCandidatePath: string,
   platform: string | null,
+  /**
+   * The package containing `absoluteCandidatePath`, from
+   * `context.getPackageForModule`. Only read when package exports are
+   * enabled, so callers may pass `null` otherwise.
+   */
+  pkg: ?PackageForModule,
 ): Result<Resolution, FileAndDirCandidates> {
   if (context.unstable_enablePackageExports) {
-    const pkg = context.getPackageForModule(absoluteCandidatePath);
     const exportsField = pkg?.packageJson.exports;
 
     if (pkg != null && exportsField != null) {
@@ -663,24 +699,6 @@ function resolvePackage(
   }
 
   return resolveModulePath(context, absoluteCandidatePath, platform);
-}
-
-/**
- * Whether to resolve a path inside a package against the package's "exports"
- * field before applying "browser" spec redirections, which are then applied to
- * the resolved file instead (`unstable_applyBrowserSpecAfterExports`). This
- * matches webpack and Vite.
- */
-function isBrowserSpecAppliedAfterExports(
-  context: ResolutionContext,
-  absoluteCandidatePath: string,
-): boolean {
-  return (
-    context.unstable_applyBrowserSpecAfterExports &&
-    context.unstable_enablePackageExports &&
-    context.getPackageForModule(absoluteCandidatePath)?.packageJson.exports !=
-      null
-  );
 }
 
 /**
