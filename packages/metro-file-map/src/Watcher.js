@@ -322,6 +322,7 @@ export class Watcher extends EventEmitter {
         clocks: rootClocks,
       };
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
+      const reportedResourceLimits = new Set<string>();
 
       return new Promise(async (resolve, reject) => {
         const rejectTimeout = setTimeout(
@@ -330,8 +331,22 @@ export class Watcher extends EventEmitter {
         );
 
         watcher.onError(error => {
+          const code = (error as interface {readonly code?: unknown}).code;
+          let guidance = '';
+          if (code === 'ENOSPC' || code === 'EMFILE') {
+            // A resource limit can fail once per directory in a large crawl.
+            if (reportedResourceLimits.has(code)) {
+              return;
+            }
+            reportedResourceLimits.add(code);
+            guidance =
+              ' Changes in unwatched directories will not be detected. ' +
+              (code === 'ENOSPC'
+                ? 'Increase fs.inotify.max_user_watches on Linux.'
+                : 'Increase the open file limit (ulimit -n).');
+          }
           this.#options.console.error(
-            `metro-file-map: ${this.#activeWatcher ?? 'unknown'} watcher error in ${root}:`,
+            `metro-file-map: ${this.#activeWatcher ?? 'unknown'} watcher error in ${root}:${guidance}`,
             error,
           );
         });

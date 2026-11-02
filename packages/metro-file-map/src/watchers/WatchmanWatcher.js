@@ -37,12 +37,17 @@ const debug = debugModule('Metro:WatchmanWatcher');
 const DELETE_EVENT = common.DELETE_EVENT;
 const TOUCH_EVENT = common.TOUCH_EVENT;
 const SUB_PREFIX = 'metro-file-map';
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
 /**
  * Watches `dir`.
  */
 export default class WatchmanWatcher extends AbstractWatcher {
-  #client: Client;
+  #client: ?Client = null;
+  #closed: boolean = false;
+  #reconnectTimer: ?ReturnType<typeof setTimeout>;
+  #reconnectDelay: number = INITIAL_RECONNECT_DELAY;
   readonly subscriptionName: string;
   #watchProjectInfo: ?Readonly<{
     relativePath: string,
@@ -78,26 +83,55 @@ export default class WatchmanWatcher extends AbstractWatcher {
    * Run the watchman `watch` command on the root and subscribe to changes.
    */
   #init(onReady: () => void, onError: (error: Error) => void) {
+    if (this.#closed) {
+      onError(new Error('Watcher closed during startup.'));
+      return;
+    }
     if (this.#client) {
-      this.#client.removeAllListeners();
+      stopClient(this.#client);
     }
 
     const self = this;
-    this.#client = new watchman.Client();
-    this.#client.on('error', error => {
-      this.emitError(error);
+    const client = new watchman.Client();
+    this.#client = client;
+    let ready = false;
+    let failed = false;
+    const isActive = () => !this.#closed && !failed && this.#client === client;
+    const onFailure = (error: Error) => {
+      if (!isActive()) {
+        return;
+      }
+      failed = true;
+      this.#client = null;
+      stopClient(client);
+      if (ready) {
+        this.emitError(error);
+        this.#scheduleReconnect();
+      } else {
+        onError(error);
+      }
+    };
+    client.on('error', onFailure);
+    client.on('subscription', changeEvent => {
+      if (isActive()) {
+        this.#handleChangeEvent(changeEvent);
+      }
     });
-    this.#client.on('subscription', changeEvent =>
-      this.#handleChangeEvent(changeEvent),
-    );
-    this.#client.on('end', () => {
+    client.on('end', () => {
+      if (!isActive()) {
+        return;
+      }
+      if (!ready) {
+        onFailure(new Error('Watchman connection closed during startup.'));
+        return;
+      }
+      failed = true;
+      this.#client = null;
+      stopClient(client);
       console.warn(
         '[metro-file-map] Warning: Lost connection to Watchman, reconnecting..',
       );
-      self.#init(
-        () => {},
-        error => self.emitError(error),
-      );
+      this.#scheduleReconnect();
     });
 
     this.#watchProjectInfo = null;
@@ -107,8 +141,11 @@ export default class WatchmanWatcher extends AbstractWatcher {
     }
 
     function onWatchProject(error: ?Error, resp: WatchmanWatchResponse) {
+      if (!isActive()) {
+        return;
+      }
       if (error) {
-        onError(error);
+        onFailure(error);
         return;
       }
       debug('Received watch-project response: %s', resp.relative_path);
@@ -134,13 +171,16 @@ export default class WatchmanWatcher extends AbstractWatcher {
       if (sinceClock != null) {
         subscribe(sinceClock);
       } else {
-        self.#client.command(['clock', getWatchRoot()], onClock);
+        client.command(['clock', getWatchRoot()], onClock);
       }
     }
 
     function onClock(error: ?Error, resp: WatchmanClockResponse) {
+      if (!isActive()) {
+        return;
+      }
       if (error) {
-        onError(error);
+        onFailure(error);
         return;
       }
 
@@ -164,15 +204,18 @@ export default class WatchmanWatcher extends AbstractWatcher {
         relative_root: watchProjectInfo.relativePath,
       };
 
-      self.#client.command(
+      client.command(
         ['subscribe', getWatchRoot(), self.subscriptionName, options],
         onSubscribe,
       );
     }
 
     const onSubscribe = (error: ?Error, resp: WatchmanSubscribeResponse) => {
+      if (!isActive()) {
+        return;
+      }
       if (error) {
-        onError(error);
+        onFailure(error);
         return;
       }
       debug('Received subscribe response: %s', resp.subscribe);
@@ -183,10 +226,30 @@ export default class WatchmanWatcher extends AbstractWatcher {
         this.#deferringStates = new Set(resp['asserted-states']);
       }
 
+      ready = true;
+      this.#reconnectDelay = INITIAL_RECONNECT_DELAY;
       onReady();
     };
 
-    self.#client.command(['watch-project', getWatchRoot()], onWatchProject);
+    client.command(['watch-project', getWatchRoot()], onWatchProject);
+  }
+
+  #scheduleReconnect() {
+    if (this.#closed || this.#reconnectTimer != null) {
+      return;
+    }
+    const delay = this.#reconnectDelay;
+    this.#reconnectDelay = Math.min(delay * 2, MAX_RECONNECT_DELAY);
+    this.#reconnectTimer = setTimeout(() => {
+      this.#reconnectTimer = null;
+      this.#init(
+        () => {},
+        error => {
+          this.emitError(error);
+          this.#scheduleReconnect();
+        },
+      );
+    }, delay);
   }
 
   /**
@@ -324,10 +387,16 @@ export default class WatchmanWatcher extends AbstractWatcher {
    * Closes the watcher.
    */
   async stopWatching(): Promise<void> {
+    this.#closed = true;
+    if (this.#reconnectTimer != null) {
+      clearTimeout(this.#reconnectTimer);
+      this.#reconnectTimer = null;
+    }
     await super.stopWatching();
     if (this.#client) {
-      this.#client.removeAllListeners();
-      this.#client.end();
+      const client = this.#client;
+      this.#client = null;
+      stopClient(client);
     }
     this.#deferringStates = null;
   }
@@ -345,6 +414,14 @@ export default class WatchmanWatcher extends AbstractWatcher {
       .map(s => `'${s}'`)
       .join(', ')} and '${states[states.length - 1]}' states.`;
   }
+}
+
+function stopClient(client: Client) {
+  client.removeAllListeners();
+  // Discovery can finish after end(), so also close any late socket.
+  client.on('connect', () => client.end());
+  client.on('error', () => client.end());
+  client.end();
 }
 
 /**
