@@ -111,6 +111,11 @@ export type ChangedFileMetadata = Readonly<{
 export type ChangeEvent = Readonly<{
   logger?: ?RootPerfLogger,
   changes: ReadonlyFileSystemChanges<Readonly<ChangedFileMetadata>>,
+  /**
+   * What each plugin reported about this batch, by name, if anything. Read
+   * entries with `getPluginChanges`.
+   */
+  pluginChanges: ReadonlyMap<string, unknown>,
   rootDir: string,
 }>;
 
@@ -300,19 +305,25 @@ export type V8Serializable = V8SerializablePrimitive | V8SerializableCollection;
 export interface FileMapPlugin<
   in SerializableState extends void | V8Serializable = void | V8Serializable,
   in PerFileData extends void | V8Serializable = void | V8Serializable,
+  out ChangeSummary = void,
 > {
+  // Must be unique among the plugins of a file map.
   readonly name: string;
   initialize(
     initOptions: FileMapPluginInitOptions<SerializableState, PerFileData>,
   ): Promise<void>;
   assertValid(): void;
-  onChanged(changes: ReadonlyFileSystemChanges<?PerFileData>): void;
+  /**
+   * Update the plugin's state for a batch of changes, synchronously before it
+   * is emitted. May return a summary for `ChangeEvent.pluginChanges`.
+   */
+  onChanged(changes: ReadonlyFileSystemChanges<?PerFileData>): ChangeSummary;
   getSerializableSnapshot(): void | V8Serializable;
   getCacheKey(): string;
   getWorker(): ?FileMapPluginWorker;
 }
 
-export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+export type InputFileMapPlugin = FileMapPlugin<empty, empty, unknown>;
 
 export interface MetadataWorker {
   processFile(
