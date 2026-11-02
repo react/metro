@@ -705,9 +705,10 @@ function resolvePackage(
  * Apply "browser" spec redirections to a file resolved from "exports". These
  * match the resolved file (e.g. "./lib/index.node.js"), not the requested
  * subpath (e.g. "./lib"), and are read from the `package.json` closest to the
- * file. A redirection to a file that does not exist is ignored with a
- * warning, so that enabling `unstable_applyBrowserSpecAfterExports` cannot
- * break an import that resolves without it.
+ * file. A redirection that does not resolve (e.g. to a missing file) is
+ * ignored with a warning, so that enabling
+ * `unstable_applyBrowserSpecAfterExports` cannot break an import that resolves
+ * without it.
  */
 function redirectPackageExportsResolution(
   context: ResolutionContext,
@@ -724,8 +725,16 @@ function redirectPackageExportsResolution(
   if (redirectedPath === resolution.filePath) {
     return resolution;
   }
-  const result = resolveModulePath(context, redirectedPath, platform);
-  if (result.type === 'resolved') {
+  let result: ?Result<Resolution, FileAndDirCandidates> = null;
+  try {
+    result = resolveModulePath(context, redirectedPath, platform);
+  } catch (e) {
+    // e.g. a directory whose package.json has a "main" that does not resolve
+    if (!(e instanceof InvalidPackageError)) {
+      throw e;
+    }
+  }
+  if (result?.type === 'resolved') {
     return result.resolution;
   }
   context.unstable_logWarning(
@@ -736,7 +745,7 @@ function redirectPackageExportsResolution(
       reason:
         `The file "${resolution.filePath}" resolved from "exports" is ` +
         `redirected to "${redirectedPath}" by the "browser" spec, however ` +
-        'this file does not exist.',
+        'this could not be resolved.',
     }).message + ' Falling back to the file resolved from "exports".',
   );
   return resolution;

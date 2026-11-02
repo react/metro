@@ -1458,6 +1458,7 @@ describe('with package exports resolution enabled', () => {
             },
             './fs': './fs-node.js',
             './broken': './broken-node.js',
+            './dir': './dir-node.js',
           },
           browser: {
             './index.js': './index-browser.js',
@@ -1470,6 +1471,7 @@ describe('with package exports resolution enabled', () => {
             './server.js': './server-browser.js',
             './fs-node.js': false,
             './broken-node.js': './does-not-exist.js',
+            './dir-node.js': './broken-dir',
             './private': './private-browser.js',
           },
         }),
@@ -1481,6 +1483,9 @@ describe('with package exports resolution enabled', () => {
         [p('/root/node_modules/test-pkg/server-node.js')]: '',
         [p('/root/node_modules/test-pkg/fs-node.js')]: '',
         [p('/root/node_modules/test-pkg/broken-node.js')]: '',
+        [p('/root/node_modules/test-pkg/dir-node.js')]: '',
+        [p('/root/node_modules/test-pkg/broken-dir/package.json')]:
+          JSON.stringify({main: './missing.js'}),
         [p('/root/node_modules/test-pkg/private-browser.js')]: '',
       }),
       mainFields: ['react-native', 'browser', 'main'],
@@ -1595,25 +1600,44 @@ describe('with package exports resolution enabled', () => {
       });
 
       test.each([
-        ['an import', p('/root/src/main.js')],
-        ['a self-reference', p('/root/node_modules/test-pkg/index.js')],
+        [
+          'a missing file',
+          'an import',
+          'broken',
+          'does-not-exist.js',
+          p('/root/src/main.js'),
+        ],
+        [
+          'a missing file',
+          'a self-reference',
+          'broken',
+          'does-not-exist.js',
+          p('/root/node_modules/test-pkg/index.js'),
+        ],
+        [
+          'a directory with an invalid "main"',
+          'an import',
+          'dir',
+          'broken-dir',
+          p('/root/src/main.js'),
+        ],
       ])(
-        '[nonstrict] should warn and keep the "exports" target when it is redirected to a missing file, for %s',
-        (_, originModulePath) => {
+        '[nonstrict] should warn and keep the "exports" target when it is redirected to %s, for %s',
+        (_, __, subpath, redirectTarget, originModulePath) => {
           expect(
             Resolver.resolve(
               {...context, originModulePath},
-              'test-pkg/broken',
+              `test-pkg/${subpath}`,
               'ios',
             ),
           ).toEqual({
             type: 'sourceFile',
-            filePath: p('/root/node_modules/test-pkg/broken-node.js'),
+            filePath: p(`/root/node_modules/test-pkg/${subpath}-node.js`),
           });
           expect(logWarning).toHaveBeenCalledTimes(1);
           expect(logWarning.mock.calls[0][0]).toBe(
             `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-              `Reason: The file "${p('/root/node_modules/test-pkg/broken-node.js')}" resolved from "exports" is redirected to "${p('/root/node_modules/test-pkg/does-not-exist.js')}" by the "browser" spec, however this file does not exist. Falling back to the file resolved from "exports".`,
+              `Reason: The file "${p(`/root/node_modules/test-pkg/${subpath}-node.js`)}" resolved from "exports" is redirected to "${p(`/root/node_modules/test-pkg/${redirectTarget}`)}" by the "browser" spec, however this could not be resolved. Falling back to the file resolved from "exports".`,
           );
           logWarning.mockClear();
         },
