@@ -47,6 +47,12 @@ type Data = Readonly<{
   transformFileEndLogEntry: LogEntry,
 }>;
 
+// jest-worker assigns the ID of the worker to JEST_WORKER_ID in a worker thread,
+// regardless of the `env` it is given. Transform output must not depend on the
+// worker that produced it, and a Babel plugin may inline any environment
+// variable.
+delete process.env.JEST_WORKER_ID;
+
 /**
  * When the `Buffer` is sent over the worker thread it gets serialized into a JSON object.
  * This helper method will deserialize it if needed.
