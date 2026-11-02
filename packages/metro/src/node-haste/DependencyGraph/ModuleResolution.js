@@ -55,6 +55,7 @@ type Options = Readonly<{
   resolveRequest: ?CustomResolver,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
   unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
@@ -247,6 +248,13 @@ export class ModuleResolver {
       case 'empty':
         return this._getEmptyModule();
       case 'virtualModule':
+        if (!this._options.unstable_allowVirtualModules) {
+          throw new Error(
+            'Virtual modules are not enabled. Set ' +
+              '`resolver.unstable_allowVirtualModules` to `true` in your ' +
+              'Metro config to enable them.',
+          );
+        }
         // A module with no base needs its dependencies resolved with a null
         // `originModulePath`, which `ResolutionContext` does not allow yet.
         // Lifting this is a breaking change to the resolver contract.

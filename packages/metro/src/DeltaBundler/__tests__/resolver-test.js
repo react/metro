@@ -2738,7 +2738,9 @@ function dep(name: string): TransformResultDependency {
           source: 'export default 1;',
         });
 
-        resolver = await createResolver({resolver: {resolveRequest}});
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
 
         expect(resolver.resolve(p('/root/index.js'), dep('virtual'))).toEqual({
           type: 'virtualModule',
@@ -2755,7 +2757,9 @@ function dep(name: string): TransformResultDependency {
           virtualPath: p('/root/index.js'),
           source: 'export default 1;',
         });
-        resolver = await createResolver({resolver: {resolveRequest}});
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
         const fromText = resolver.resolve(p('/root/index.js'), dep('virtual'));
 
         resolveRequest.mockReturnValue({
@@ -2763,7 +2767,9 @@ function dep(name: string): TransformResultDependency {
           virtualPath: p('/root/index.js'),
           source: Buffer.from('export default 1;'),
         });
-        resolver = await createResolver({resolver: {resolveRequest}});
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
 
         expect(resolver.resolve(p('/root/index.js'), dep('virtual'))).toEqual(
           fromText,
@@ -2778,13 +2784,30 @@ function dep(name: string): TransformResultDependency {
           source: 'export default 1;',
         });
 
-        resolver = await createResolver({resolver: {resolveRequest}});
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
 
         expect(() =>
           resolver.resolve(p('/root/index.js'), dep('virtual')),
         ).toThrow(
           'Virtual modules without a virtualPath are not yet supported.',
         );
+      });
+
+      test('rejects a virtual module unless virtual modules are allowed', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: p('/root/index.js'),
+          source: 'export default 1;',
+        });
+
+        resolver = await createResolver({resolver: {resolveRequest}});
+
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('virtual')),
+        ).toThrow('`resolver.unstable_allowVirtualModules`');
       });
 
       test('overrides relative paths', async () => {

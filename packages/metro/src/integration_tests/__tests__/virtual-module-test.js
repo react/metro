@@ -62,7 +62,7 @@ async function build({dev}: {dev: boolean}) {
     config: require.resolve('../metro.config.js'),
   });
   const config = MetroConfig.mergeConfig(baseConfig, {
-    resolver: {resolveRequest},
+    resolver: {resolveRequest, unstable_allowVirtualModules: true},
   });
   return Metro.runBuild(config, {
     entry: 'virtual-module/index.js',
