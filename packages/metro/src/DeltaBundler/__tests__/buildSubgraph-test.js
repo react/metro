@@ -9,8 +9,14 @@
  */
 
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
-import type {ResolvedDependency, TransformResultDependency} from '../types';
+import type {
+  BundlerResolution,
+  ResolvedDependency,
+  TransformResultDependency,
+  VirtualSource,
+} from '../types';
 
+import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {buildSubgraph} from '../buildSubgraph';
 import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
@@ -87,7 +93,7 @@ describe('GraphTraversal', () => {
         };
       }),
       shouldTraverse: jest.fn(
-        (dependency: ResolvedDependency) =>
+        (dependency: ResolvedDependency, virtualSource: ?VirtualSource) =>
           dependency.data.data.asyncType !== 'weak',
       ),
     };
@@ -213,6 +219,55 @@ describe('GraphTraversal', () => {
           },
         ],
       ]),
+    );
+  });
+
+  test('transforms a virtual module as its virtual path and resolves its dependencies from there', async () => {
+    const virtualPath = p('/virtual.ts');
+    const source = Buffer.from('export default 1;');
+    const sha1 = 'b'.repeat(40);
+    const modulePath = deriveVirtualModulePath(virtualPath);
+    transformDeps.set(virtualPath, [makeTransformDep('foo')]);
+    const resolveFromVirtual = jest.fn(
+      (from: string, dep: TransformResultDependency): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: p('/foo'),
+      }),
+    );
+    const localParams = {
+      ...params,
+      resolve: (
+        from: string,
+        dep: TransformResultDependency,
+      ): BundlerResolution =>
+        from === p('/bundle')
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath,
+              source,
+              sha1,
+            }
+          : resolveFromVirtual(from, dep),
+    };
+
+    const {moduleData} = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      localParams,
+    );
+
+    // The graph node is the virtual path in the virtual module namespace.
+    expect(moduleData.has(modulePath)).toBe(true);
+    // The transformer and the resolver see the virtual path itself, so that
+    // extension checks and relative resolution behave as for a file there.
+    expect(params.transform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source,
+      sha1,
+    });
+    expect(resolveFromVirtual).toHaveBeenCalledWith(
+      virtualPath,
+      expect.anything(),
     );
   });
 
