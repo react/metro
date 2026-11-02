@@ -20,6 +20,7 @@ import type {
 
 import TreeFS from '../lib/TreeFS';
 import {Watcher} from '../Watcher';
+import EventEmitter from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -39,6 +40,7 @@ type MockBackend = {
   root: string,
   clocks: ?Map<string, string>,
   emit: (event: WatcherBackendChangeEvent) => void,
+  emitError: (error: Error) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
 let mockNativeLiveOnStart = true;
@@ -46,7 +48,8 @@ function mockBackendClass(kind: MockBackend['kind']) {
   return class {
     #root: string;
     #clocks: ?Map<string, string>;
-    #listener: ?(event: WatcherBackendChangeEvent) => void;
+    // Like a real backend, an 'error' with no listener throws.
+    #emitter: EventEmitter = new EventEmitter();
     static isSupported(): boolean {
       return true;
     }
@@ -58,14 +61,22 @@ function mockBackendClass(kind: MockBackend['kind']) {
       this.#clocks = opts.clocks;
     }
     onFileEvent(listener: (event: WatcherBackendChangeEvent) => void) {
-      this.#listener = listener;
+      this.#emitter.on('fileevent', listener);
+    }
+    onError(listener: (error: Error) => void) {
+      this.#emitter.on('error', listener);
     }
     async startWatching() {
       mockStartedBackends.push({
         kind,
         root: this.#root,
         clocks: this.#clocks,
-        emit: event => this.#listener?.(event),
+        emit: event => {
+          this.#emitter.emit('fileevent', event);
+        },
+        emitError: error => {
+          this.#emitter.emit('error', error);
+        },
       });
     }
     async stopWatching() {}
@@ -459,5 +470,52 @@ describe('Watcher crawl option', () => {
       'crawler exploded',
     );
     expect(mockNodeCrawl).not.toHaveBeenCalled();
+  });
+});
+
+describe('Watcher backend errors', () => {
+  const event: WatcherBackendChangeEvent = {
+    event: 'touch',
+    relativePath: 'index.js',
+    root: rootDir,
+    metadata: {modifiedTime: 1, size: 1, type: 'f'},
+  };
+
+  async function startWatching(
+    onChange: (change: WatcherBackendChangeEvent) => void,
+  ): Promise<{watcher: Watcher, backend: MockBackend}> {
+    mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+    const watcher = createWatcher(false, null, true);
+    await watcher.crawl();
+    await watcher.watch(onChange);
+    return {watcher, backend: mockStartedBackends[0]};
+  }
+
+  test('logs an error a backend reports, and keeps reporting changes', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const onChange = jest.fn<[WatcherBackendChangeEvent], void>();
+    const {backend} = await startWatching(onChange);
+
+    backend.emitError(new Error('EACCES: permission denied'));
+    backend.emit(event);
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('EACCES: permission denied'),
+    );
+    expect(onChange.mock.calls).toEqual([[event]]);
+  });
+
+  test('ignores an error a backend reports after close', async () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const {watcher, backend} = await startWatching(() => {});
+
+    await watcher.close();
+    backend.emitError(new Error('late error'));
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

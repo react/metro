@@ -31,6 +31,7 @@ export class AbstractWatcher implements WatcherBackend {
   readonly doIgnore: (path: string) => boolean;
 
   #emitter: EventEmitter = new EventEmitter();
+  #stopped: boolean = false;
 
   /**
    * Whether a watch reports every change made after `startWatching` resolves.
@@ -73,6 +74,7 @@ export class AbstractWatcher implements WatcherBackend {
   }
 
   async stopWatching(): Promise<void> {
+    this.#stopped = true;
     this.#emitter.removeAllListeners();
   }
 
@@ -84,6 +86,11 @@ export class AbstractWatcher implements WatcherBackend {
   }
 
   emitError(error: Error) {
+    // Work still in flight after stopWatching() can report an error, when
+    // nothing listens any more and emitting 'error' would throw.
+    if (this.#stopped) {
+      return;
+    }
     this.#emitter.emit('error', error);
   }
 

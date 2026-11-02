@@ -329,6 +329,7 @@ export class Watcher extends EventEmitter {
           MAX_WAIT_TIME,
         );
 
+        watcher.onError(error => this.#reportBackendError(root, error));
         watcher.onFileEvent(change => {
           const basename = path.basename(change.relativePath);
           if (basename.startsWith(this.#options.healthCheckFilePrefix)) {
@@ -408,6 +409,17 @@ export class Watcher extends EventEmitter {
           `(${result.type}). Changes made during startup may be missed.`,
       );
     }
+  }
+
+  #reportBackendError(root: Path, error: Error): void {
+    if (this.#closed) {
+      debug('Ignoring an error reported after close for %s: %s', root, error);
+      return;
+    }
+    this.#options.console.error(
+      `metro-file-map: The watcher of ${root} reported an error: ` +
+        error.message,
+    );
   }
 
   /**
