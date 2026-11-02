@@ -1163,6 +1163,33 @@ describe('with package exports resolution enabled', () => {
         '.png',
       );
     });
+
+    test('should not apply "browser" spec redirections to assets with unstable_applyBrowserSpecAfterExports', () => {
+      const context = {
+        ...baseContext,
+        ...createPackageAccessors({
+          [p('/root/node_modules/test-pkg/package.json')]: {
+            main: './index.js',
+            exports: {
+              './icons/metro.png': './assets/icons/metro.png',
+            },
+            browser: {'./assets/icons/metro.png': false},
+          },
+        }),
+        resolveAsset: (dirPath: string, basename: string, extension: string) =>
+          [dirPath + path.sep + basename + extension].filter(candidate =>
+            baseContext.doesFileExist(candidate),
+          ),
+        unstable_applyBrowserSpecAfterExports: true,
+      };
+
+      expect(
+        Resolver.resolve(context, 'test-pkg/icons/metro.png', null),
+      ).toEqual({
+        type: 'assetFiles',
+        filePaths: [p('/root/node_modules/test-pkg/assets/icons/metro.png')],
+      });
+    });
   });
 
   describe('compatibility with non-standard "exports" array formats', () => {

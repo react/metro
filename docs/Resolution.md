@@ -79,7 +79,7 @@ Parameters: (_context_, _moduleName_, _platform_)
    2. If resolved, return result.
 8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
    1. Try resolving _moduleName_ under `node_modules` from the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory. E.g. `'lodash/merge'` from `/app/src/screens/Home.js` tries `/app/src/screens/node_modules/lodash/merge`, then `/app/src/node_modules/…`, `/app/node_modules/…` and `/node_modules/…`.
-   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, where _modulePath_ is the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the candidate path (returning the empty module if this is `false`). If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled and the candidate path's closest `package.json` has an `"exports"` field, _modulePath_ is the candidate path itself.
+   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, where _modulePath_ is the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the candidate path (returning the empty module if this is `false`). If both [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) and [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) are enabled and the candidate path's closest `package.json` has an `"exports"` field, _modulePath_ is the candidate path itself.
 9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
    1. Try resolving _moduleName_ under _nodeModulesPath_ as if it were another `node_modules` directory (similar to step 8). E.g. `nodeModulesPaths: ['/monorepo/node_modules']` tries `/monorepo/node_modules/lodash/merge`.
    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, with _modulePath_ as in step 8.2.
@@ -119,7 +119,7 @@ Resolves an absolute path that may be inside an npm package, e.g. a candidate pa
 
 1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_).
    1. If resolved path exists, then
-      1. If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled, apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the resolved path. If this is `false`, return the empty module. If it is a different path, return [**RESOLVE_MODULE**](#resolve_module)(_context_, _redirectedPath_, _platform_) if that resolves, otherwise log a package configuration warning and continue. E.g. `"browser": {"./lib/index.node.js": "./lib/index.browser.js"}` redirects `"exports": {".": "./lib/index.node.js"}`.
+      1. If [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) is enabled and the result is a [source file](#source-file) (not [asset files](#asset-files)), apply [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the resolved path. If this is `false`, return the empty module. If it is a different path, return [**RESOLVE_MODULE**](#resolve_module)(_context_, _redirectedPath_, _platform_) if that resolves, otherwise log a package configuration warning and continue. E.g. `"browser": {"./lib/index.node.js": "./lib/index.browser.js"}` redirects `"exports": {".": "./lib/index.node.js"}`.
       2. Return result.
    2. Else, log either a package configuration or package encapsulation warning.
 2. Return [**RESOLVE_MODULE**](#resolve_module)(_context_, _filePath_, _platform_).
@@ -351,7 +351,7 @@ Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never 
 
 #### `unstable_applyBrowserSpecAfterExports: boolean`
 
-Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
+Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the source file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
 
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 

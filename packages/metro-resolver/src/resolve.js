@@ -715,6 +715,9 @@ function redirectPackageExportsResolution(
   resolution: FileResolution,
   platform: string | null,
 ): Resolution {
+  // Asset resolutions are returned as is. They list the files for each scale
+  // (as returned by `context.resolveAsset`) rather than the "exports" target,
+  // so there is no single path to match against "browser" spec keys.
   if (resolution.type !== 'sourceFile') {
     return resolution;
   }
