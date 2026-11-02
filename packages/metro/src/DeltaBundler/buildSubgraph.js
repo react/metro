@@ -30,16 +30,14 @@ type Parameters<T> = Readonly<{
   shouldTraverse: (ResolvedDependency, ?VirtualSource) => boolean,
 }>;
 
-// The content each virtual module was resolved with so far in one traversal,
-// so that two edges disagreeing about a module's source is an error rather
-// than an order-dependent bundle.
-type VirtualContents = Map<string, {sha1: string, parentPath: string}>;
+// The source hash seen for each virtual module, to catch edges that disagree.
+type VirtualSourceHashes = Map<string, {sha1: string, parentPath: string}>;
 
 function resolveDependencies(
   parentPath: string,
   dependencies: ReadonlyArray<TransformResultDependency>,
   resolve: ResolveFn,
-  virtualContents: VirtualContents,
+  virtualSourceHashes: VirtualSourceHashes,
 ): {
   dependencies: Map<string, Dependency>,
   virtualSources: Map<string, VirtualSource>,
@@ -94,7 +92,7 @@ function resolveDependencies(
       } else {
         if (resolution.type === 'virtualModule') {
           const {filePath, source, sha1} = resolution;
-          const previous = virtualContents.get(filePath);
+          const previous = virtualSourceHashes.get(filePath);
           if (previous != null && previous.sha1 !== sha1) {
             throw new Error(
               `Virtual module '${filePath}' was resolved with different ` +
@@ -103,7 +101,7 @@ function resolveDependencies(
                 'virtual path.',
             );
           }
-          virtualContents.set(filePath, {sha1, parentPath});
+          virtualSourceHashes.set(filePath, {sha1, parentPath});
           // The source travels with the edge that produced it, so it lives
           // exactly as long as the module is reachable.
           virtualSources.set(key, {type: 'buffer', source, sha1});
@@ -137,7 +135,7 @@ export async function buildSubgraph<T>(
   const moduleData: Map<string, ModuleData<T>> = new Map();
   const errors: Map<string, Error> = new Map();
   const visitedPaths: Set<string> = new Set();
-  const virtualContents: VirtualContents = new Map();
+  const virtualSourceHashes: VirtualSourceHashes = new Map();
 
   async function visit(
     absolutePath: string,
@@ -158,7 +156,7 @@ export async function buildSubgraph<T>(
       sourcePath,
       transformResult.dependencies,
       resolve,
-      virtualContents,
+      virtualSourceHashes,
     );
 
     moduleData.set(absolutePath, {
