@@ -211,12 +211,14 @@ function isJpegStartOfFrame(marker: number): boolean {
 function parseKtx(content: Buffer): ?Dimensions {
   if (hasBytes(content, 0, 64) && startsWith(content, KTX1_IDENTIFIER)) {
     const endianness = content.subarray(12, 16);
+    // $FlowFixMe[prop-missing]
     if (endianness.equals(Buffer.from([0x01, 0x02, 0x03, 0x04]))) {
       return {
         width: content.readUInt32LE(36),
         height: content.readUInt32LE(40),
       };
     }
+    // $FlowFixMe[prop-missing]
     if (endianness.equals(Buffer.from([0x04, 0x03, 0x02, 0x01]))) {
       return {
         width: content.readUInt32BE(36),
@@ -298,6 +300,7 @@ const SVG_UNIT_FACTORS: {[string]: number} = {
 function parseSvg(content: Buffer): ?Dimensions {
   const header = content
     .subarray(0, Math.min(content.length, MAX_SVG_HEADER_LENGTH))
+    // $FlowFixMe[extra-arg]
     .toString('utf8');
   const rootStartMatch = /<svg(?:\s|>)/.exec(header);
   if (rootStartMatch == null || rootStartMatch.index == null) {
@@ -567,6 +570,7 @@ function hasBytes(content: Buffer, offset: number, length: number): boolean {
 function startsWith(content: Buffer, prefix: Buffer): boolean {
   return (
     hasBytes(content, 0, prefix.length) &&
+    // $FlowFixMe[prop-missing]
     content.subarray(0, prefix.length).equals(prefix)
   );
 }
