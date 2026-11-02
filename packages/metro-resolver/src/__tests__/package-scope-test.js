@@ -238,7 +238,32 @@ describe('package scope lookups', () => {
     expect(lookedUpPaths()).toEqual([
       p('/root/src/main.js'),
       p('/root/node_modules/pkg/sub'),
+    ]);
+  });
+
+  test('package subpath with package exports, redirected after "exports"', () => {
+    useFileMap({
+      ...fileMap,
+      [p('/root/node_modules/pkg/package.json')]: JSON.stringify({
+        name: 'pkg',
+        exports: {'./sub': './lib/sub.js'},
+      }),
+    });
+    context = {
+      ...context,
+      unstable_applyBrowserSpecAfterExports: true,
+      unstable_enablePackageExports: true,
+    };
+    expect(Resolver.resolve(context, 'pkg/sub', 'ios')).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/pkg/lib/sub.js'),
+    });
+    // The redirections are read from the scope of the file "exports" resolves
+    // to, which may differ from the package's.
+    expect(lookedUpPaths()).toEqual([
+      p('/root/src/main.js'),
       p('/root/node_modules/pkg/sub'),
+      p('/root/node_modules/pkg/lib/sub.js'),
     ]);
   });
 });
