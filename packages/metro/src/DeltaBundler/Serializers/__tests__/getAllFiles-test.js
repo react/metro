@@ -102,6 +102,25 @@ describe('getOrderedDependencyPaths', () => {
     ]);
   });
 
+  test('Should exclude virtual modules, which have no file', async () => {
+    const jsOutput = [
+      {
+        type: 'js/module',
+        data: {code: '//', lineCount: 1, map: [], functionMap: null},
+      },
+    ];
+    const graph = {
+      dependencies: new Map([
+        [1, {path: '/tmp/1.js', output: jsOutput}],
+        [2, {path: 'virtual:/tmp/1.generated.js', output: jsOutput}],
+      ]),
+    };
+
+    expect(
+      await getAllFiles([], graph, {processModuleFilter: () => true}),
+    ).toEqual(['/tmp/1.js']);
+  });
+
   test('Should add assets data dependencies correctly', async () => {
     const graph = {
       dependencies: new Map([
