@@ -3040,6 +3040,7 @@ function dep(name: string): TransformResultDependency {
               'package.json',
             ),
             content: new Set(),
+            haste: null,
           },
         });
       });
@@ -3085,6 +3086,7 @@ function dep(name: string): TransformResultDependency {
               'node_modules/pkg/main.js',
             ),
             content: new Set(),
+            haste: null,
           },
         });
       });
@@ -3107,6 +3109,7 @@ function dep(name: string): TransformResultDependency {
             ),
             // Retargeting the link changes what every path through it means
             content: canonical('link'),
+            haste: null,
           },
         });
       });
@@ -3132,6 +3135,7 @@ function dep(name: string): TransformResultDependency {
             'package.json',
           ),
           content: new Set(),
+          haste: null,
         });
       });
 
@@ -3171,6 +3175,7 @@ function dep(name: string): TransformResultDependency {
               'package.json',
             ),
             content: new Set(),
+            haste: null,
           },
         });
       });
@@ -3182,6 +3187,109 @@ function dep(name: string): TransformResultDependency {
         const second = resolver.resolve(p('/root/other.js'), dep('./a'));
         expect(second).toBe(first);
         expect(second.unstable_observations?.existence.size).toBeGreaterThan(0);
+      });
+      describe('Haste names', () => {
+        const withHaste: InputConfigT = {
+          resolver: {
+            hasteImplModulePath: path.join(
+              __dirname,
+              '../__fixtures__/hasteImpl.js',
+            ),
+            unstable_incrementalResolution: true,
+          },
+        };
+
+        test('are not observed when no file can be given one', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {'index.js': ''}},
+          });
+          resolver = await createResolver(incremental, 'ios');
+          // Bare specifiers go to the Haste map, which stays empty
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg'))
+              .unstable_observations?.haste,
+          ).toBe(null);
+        });
+
+        test('records a name that is found', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            'hasteModule.js': '@providesModule hasteModule',
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          const resolution = resolver.resolve(
+            p('/root/index.js'),
+            dep('hasteModule'),
+          );
+          expect(resolution.filePath).toBe(p('/root/hasteModule.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['hasteModule']),
+          );
+        });
+
+        test('records a name that is not found, since it may appear later', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {'index.js': ''}},
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          const resolution = resolver.resolve(p('/root/index.js'), dep('pkg'));
+          expect(resolution.filePath).toBe(
+            p('/root/node_modules/pkg/index.js'),
+          );
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['pkg']),
+          );
+        });
+
+        test('records only the package name of a deep import', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {lib: {'thing.js': ''}}},
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg/lib/thing'))
+              .unstable_observations?.haste,
+          ).toEqual(new Set(['pkg']));
+        });
+
+        test('records nothing for a relative import, which does not consult Haste', async () => {
+          setMockFileSystem({'index.js': '', 'a.js': ''});
+          resolver = await createResolver(withHaste, 'ios');
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('./a'))
+              .unstable_observations?.haste,
+          ).toBe(null);
+        });
+
+        test('records a global package name', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            aPackage: {
+              'package.json': JSON.stringify({name: 'aPackage'}),
+              'index.js': '',
+            },
+          });
+          resolver = await createResolver(
+            {
+              resolver: {
+                enableGlobalPackages: true,
+                unstable_incrementalResolution: true,
+              },
+            },
+            'ios',
+          );
+          const resolution = resolver.resolve(
+            p('/root/index.js'),
+            dep('aPackage'),
+          );
+          expect(resolution.filePath).toBe(p('/root/aPackage/index.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['aPackage']),
+          );
+        });
       });
     });
 
