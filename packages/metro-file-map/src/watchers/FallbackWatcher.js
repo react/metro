@@ -48,6 +48,7 @@ const DEBOUNCE_MS = 100;
 const CRAWL_CONCURRENCY = 32;
 
 export default class FallbackWatcher extends AbstractWatcher {
+  #closed: boolean = false;
   readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
   readonly #dirRegistry: {
@@ -78,9 +79,10 @@ export default class FallbackWatcher extends AbstractWatcher {
       },
       this.#checkedEmitError,
       this.ignored,
+      () => this.#closed,
     );
 
-    if (platform === 'win32') {
+    if (platform === 'win32' && !this.#closed) {
       // Inherited from sane: win32 needs a settling period after the watches
       // are registered before events can be relied on.
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -102,6 +104,9 @@ export default class FallbackWatcher extends AbstractWatcher {
    *  Return false if ignored or already registered.
    */
   #register(filepath: string, type: ChangeEventMetadata['type']): boolean {
+    if (this.#closed) {
+      return false;
+    }
     const dir = path.dirname(filepath);
     const filename = path.basename(filepath);
     if (this.#dirRegistry[dir] && this.#dirRegistry[dir][filename]) {
@@ -176,7 +181,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    * Emit "error" event if it's not an ignorable event
    */
   #checkedEmitError: (error: Error) => void = error => {
-    if (!isIgnorableFileError(error)) {
+    if (!this.#closed && !isIgnorableFileError(error)) {
       this.emitError(error);
     }
   };
@@ -185,7 +190,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    * Watch a directory.
    */
   #watchdir: (dir: string) => boolean = (dir: string) => {
-    if (this.#watched[dir]) {
+    if (this.#closed || this.#watched[dir]) {
       return false;
     }
     let watcher: FSWatcher;
@@ -278,6 +283,11 @@ export default class FallbackWatcher extends AbstractWatcher {
    * End watching.
    */
   async stopWatching(): Promise<void> {
+    this.#closed = true;
+    for (const timer of this.#changeTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.#changeTimers.clear();
     await super.stopWatching();
     const promises = Object.keys(this.#watched).map(dir =>
       this.#stopWatching(dir),
@@ -289,6 +299,9 @@ export default class FallbackWatcher extends AbstractWatcher {
    * Normalize fs events and pass it on to be processed.
    */
   #normalizeChange(dir: string, event: string, file: string) {
+    if (this.#closed) {
+      return;
+    }
     if (!file) {
       this.#processUnnamedChange(dir).catch(error => this.emitError(error));
     } else {
@@ -319,6 +332,7 @@ export default class FallbackWatcher extends AbstractWatcher {
       },
       this.#checkedEmitError,
       this.ignored,
+      () => this.#closed,
     );
     // Then have the file map reconcile everything under `dir`.
     this.#emitEvent({
@@ -393,6 +407,7 @@ export default class FallbackWatcher extends AbstractWatcher {
           },
           this.#checkedEmitError,
           this.ignored,
+          () => this.#closed,
         );
         // A directory we already knew about has been replaced, so entries we
         // registered under it may since have changed or been removed. Have the
@@ -455,6 +470,9 @@ export default class FallbackWatcher extends AbstractWatcher {
    * See also note above for DEBOUNCE_MS.
    */
   #emitEvent(change: Omit<WatcherBackendChangeEvent, 'root'>) {
+    if (this.#closed) {
+      return;
+    }
     const {event, relativePath} = change;
     const key = event + '-' + relativePath;
     const existingTimer = this.#changeTimers.get(key);
@@ -504,14 +522,21 @@ async function recReaddir(
   symlinkCallback: (string, Stats) => void,
   errorCallback: Error => void,
   ignored: ?RegExp,
+  shouldStop: () => boolean,
 ): Promise<void> {
   const pending = [root];
 
   const visit = async (entry: string) => {
+    if (shouldStop()) {
+      return;
+    }
     let stats;
     let names;
     try {
       stats = await fsPromises.lstat(entry);
+      if (shouldStop()) {
+        return;
+      }
       if (!stats.isDirectory()) {
         if (stats.isSymbolicLink()) {
           symlinkCallback(entry, stats);
@@ -532,6 +557,9 @@ async function recReaddir(
       return;
     }
     for (const name of names) {
+      if (shouldStop()) {
+        return;
+      }
       pending.push(path.join(entry, name));
     }
   };
@@ -539,6 +567,9 @@ async function recReaddir(
   await new Promise((resolve, reject) => {
     let active = 0;
     const pump = () => {
+      if (shouldStop()) {
+        pending.length = 0;
+      }
       while (active < CRAWL_CONCURRENCY) {
         const entry = pending.pop();
         if (entry == null) {
