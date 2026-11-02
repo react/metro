@@ -58,7 +58,7 @@ jobs:
         node-version: [
           '22.13.0', # minimum supported
           'lts/*',   # latest lts
-          'latest'   # latest node version
+          '*'        # latest stable node version ('latest' includes prereleases)
         ]
     uses: ./.github/workflows/test.yml
     with:
