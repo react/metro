@@ -451,6 +451,12 @@ resolver: {
 },
 ```
 
+#### `unstable_allowVirtualModules` <div class="label experimental">Experimental</div>
+
+Type: `boolean`
+
+Allows a [`resolveRequest`](#resolverequest) function or scheme resolver to resolve a module to a `virtualModule`, whose source comes from the resolver rather than from a file. The module's path is `virtual:<absolute path>` wherever a module's path is exposed, such as to [`createModuleIdFactory`](#createmoduleidfactory) and custom serializers, so code that expects a file path needs to handle this form. When this is `false`, a `virtualModule` resolution is an error. Defaults to `false`.
+
 #### `unstable_applyBrowserSpecAfterExports` <div class="label experimental">Experimental</div>
 
 Type: `boolean`
