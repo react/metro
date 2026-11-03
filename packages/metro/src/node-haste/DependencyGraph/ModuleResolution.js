@@ -63,6 +63,7 @@ type Options = Readonly<{
   }>,
   unstable_enablePackageExports: boolean,
   unstable_incrementalResolution: boolean,
+  unstable_resolveExportsFromPackageRoot: boolean,
 }>;
 
 export class ModuleResolver {
@@ -127,6 +128,7 @@ export class ModuleResolver {
       unstable_conditionNames,
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
+      unstable_resolveExportsFromPackageRoot,
       unstable_incrementalResolution,
     } = this._options;
 
@@ -161,6 +163,7 @@ export class ModuleResolver {
             unstable_conditionNames,
             unstable_conditionsByPlatform,
             unstable_enablePackageExports,
+            unstable_resolveExportsFromPackageRoot,
             unstable_incrementalResolution,
             unstable_logWarning: this._logWarning,
           },
