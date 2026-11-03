@@ -45,10 +45,6 @@ export type ExtraTransformOptions = Readonly<{
 
 export type GetTransformOptionsOpts = {
   dev: boolean,
-  /**
-   * @deprecated Always true
-   */
-  hot: true,
   platform: ?string,
 };
 
