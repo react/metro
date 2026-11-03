@@ -196,6 +196,20 @@ describe.each([false, true])(
       );
     });
 
+    test('keeps logs in order with output written outside of Terminal', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      terminal.log('foo');
+      stream.write('external\n');
+      terminal.log('bar');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        ttyPrint
+          ? 'foo       external  bar       status'
+          : 'status    foo       external  bar',
+      );
+    });
+
     test('flush- multi-line', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.log('foo');
