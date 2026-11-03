@@ -1702,11 +1702,22 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     }),
     [p('/root/node_modules/no-exports/sub/main.js')]: '',
     [p('/root/node_modules/no-exports/sub/from-exports.js')]: '',
-    // Without a manifest at the root, the closest manifest applies.
+    // Without a manifest at the root, a nested manifest's "exports" don't apply.
     [p('/root/node_modules/no-root/sub/package.json')]: JSON.stringify({
+      main: './main.js',
       exports: './from-exports.js',
     }),
+    [p('/root/node_modules/no-root/sub/main.js')]: '',
     [p('/root/node_modules/no-root/sub/from-exports.js')]: '',
+    // Its "browser" field still does.
+    [p('/root/node_modules/no-root-browser/sub/package.json')]: JSON.stringify({
+      main: './main.js',
+      browser: {'./main.js': './browser.js'},
+      exports: './from-exports.js',
+    }),
+    [p('/root/node_modules/no-root-browser/sub/main.js')]: '',
+    [p('/root/node_modules/no-root-browser/sub/browser.js')]: '',
+    [p('/root/node_modules/no-root-browser/sub/from-exports.js')]: '',
     // A closest manifest with "browser" still applies to the resolved file.
     [p('/root/node_modules/nested-browser/package.json')]: JSON.stringify({
       exports: {'./lib': './lib/node.js'},
@@ -1773,16 +1784,12 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     ['test-pkg/typed', '/root/node_modules/test-pkg/dist/typed.js'],
     ['@scope/pkg/shim', '/root/node_modules/@scope/pkg/dist/shim.js'],
     ['nested-map/lib/a.js', '/root/node_modules/nested-map/dist/a.js'],
-    ['test-pkg/./shim', '/root/node_modules/test-pkg/dist/shim.js'],
-    ['test-pkg/internal/../shim', '/root/node_modules/test-pkg/dist/shim.js'],
-    ['test-pkg/shim/', '/root/node_modules/test-pkg/dist/shim.js'],
-    [
-      'leaves-root/node_modules/dep/index.js',
-      '/root/node_modules/leaves-root/node_modules/dep/dist/main.js',
-    ],
-    ['test-pkg/../other/main.js', '/root/node_modules/other/dist/main.js'],
     ['no-exports/sub', '/root/node_modules/no-exports/sub/main.js'],
-    ['no-root/sub', '/root/node_modules/no-root/sub/from-exports.js'],
+    ['no-root/sub', '/root/node_modules/no-root/sub/main.js'],
+    [
+      'no-root-browser/sub',
+      '/root/node_modules/no-root-browser/sub/browser.js',
+    ],
     ['nested-browser/lib', '/root/node_modules/nested-browser/lib/browser.js'],
   ])('resolves %s', (specifier, expected) => {
     expect(Resolver.resolve(baseContext, specifier, null)).toEqual({
@@ -1801,6 +1808,39 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     expect(logWarning).toHaveBeenCalledTimes(1);
     expect(logWarning.mock.calls[0][0]).toContain('"./internal"');
   });
+
+  test.each([
+    ['test-pkg/./shim', pkg + '/shim/legacy.js', '"././shim"'],
+    [
+      'test-pkg/internal/../shim',
+      pkg + '/shim/legacy.js',
+      '"./internal/../shim"',
+    ],
+    ['test-pkg/shim/', pkg + '/shim/legacy.js', '"./shim/"'],
+    ['test-pkg//shim', pkg + '/shim/legacy.js', '".//shim"'],
+    [
+      'test-pkg/../other/main.js',
+      '/root/node_modules/other/main.js',
+      '"./../other/main.js"',
+    ],
+    [
+      'leaves-root/node_modules/dep/index.js',
+      '/root/node_modules/leaves-root/node_modules/dep/index.js',
+      '"./node_modules/dep/index.js"',
+    ],
+  ])(
+    '[nonstrict] treats %s as not exported, without normalizing it',
+    (specifier, expected, subpath) => {
+      const logWarning = jest.fn();
+      const context = {...baseContext, unstable_logWarning: logWarning};
+      expect(Resolver.resolve(context, specifier, null)).toEqual({
+        type: 'sourceFile',
+        filePath: p(expected),
+      });
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain(subpath);
+    },
+  );
 
   test('uses the root package of an `extraNodeModules` mapping', () => {
     const context = {...baseContext, extraNodeModules: {alias: pkg + path.sep}};
@@ -1823,6 +1863,14 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     });
     expect(logWarning).toHaveBeenCalledTimes(1);
     expect(logWarning.mock.calls[0][0]).toContain('"./dist/shim"');
+  });
+
+  test('uses the closest package of an `extraNodeModules` path outside the mapping', () => {
+    const context = {...baseContext, extraNodeModules: {alias: pkg}};
+    expect(Resolver.resolve(context, 'alias/../other/main.js', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/other/dist/main.js'),
+    });
   });
 
   test('uses the root package of a Haste package', () => {
@@ -1875,6 +1923,10 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     expect(Resolver.resolve(context, 'no-exports/sub', null)).toEqual({
       type: 'sourceFile',
       filePath: p('/root/node_modules/no-exports/sub/from-exports.js'),
+    });
+    expect(Resolver.resolve(context, 'no-root/sub', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/no-root/sub/from-exports.js'),
     });
   });
 });

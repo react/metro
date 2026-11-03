@@ -281,6 +281,44 @@ describe('package scope lookups', () => {
     expect(lookedUpPaths()).toEqual(expected);
   });
 
+  test('package missing from a node_modules directory makes no more lookups from the package root', () => {
+    useFileMap({
+      ...fileMap,
+      [p('/root/src/node_modules/unrelated/index.js')]: '',
+    });
+    context = {...context, unstable_enablePackageExports: true};
+    Resolver.resolve(context, 'pkg', 'ios');
+    const expected = lookedUpPaths();
+    expect(expected).toContain(p('/root/src/node_modules/pkg'));
+
+    getPackageForModule.mockClear();
+    context = {...context, unstable_resolveExportsFromPackageRoot: true};
+    Resolver.resolve(context, 'pkg', 'ios');
+    expect(lookedUpPaths()).toEqual(expected);
+  });
+
+  test('package subpath makes no more lookups if package exports are disabled', () => {
+    context = {...context, unstable_enablePackageExports: false};
+    Resolver.resolve(context, 'pkg/lib/sub', 'ios');
+    const expected = lookedUpPaths();
+
+    getPackageForModule.mockClear();
+    useFileMap({
+      ...fileMap,
+      // A nested package, so that the root package is not the closest
+      [p('/root/node_modules/pkg/lib/package.json')]: JSON.stringify({}),
+    });
+    context = {...context, unstable_enablePackageExports: false};
+    Resolver.resolve(context, 'pkg/lib/sub', 'ios');
+    const nested = lookedUpPaths();
+    expect(nested).toEqual(expected);
+
+    getPackageForModule.mockClear();
+    context = {...context, unstable_resolveExportsFromPackageRoot: true};
+    Resolver.resolve(context, 'pkg/lib/sub', 'ios');
+    expect(lookedUpPaths()).toEqual(expected);
+  });
+
   test('package subpath with package exports from the package root', () => {
     useFileMap({
       ...fileMap,
@@ -301,7 +339,7 @@ describe('package scope lookups', () => {
     });
     expect(lookedUpPaths()).toEqual([
       p('/root/src/main.js'),
-      p('/root/node_modules/pkg'),
+      p('/root/node_modules/pkg/sub'),
       p('/root/node_modules/pkg/lib/sub.js'),
     ]);
   });

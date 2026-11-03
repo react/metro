@@ -115,7 +115,7 @@ Resolves an absolute path to a file or a directory's entry point. For example, o
 
 Parameters: (_context_, _moduleName_, _platform_)
 
-Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let _filePath_ be _moduleName_, _packagePath_ the directory of the closest containing `package.json`, and _exportsField_ its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes _filePath_ `/app/node_modules/some-pkg/utils`, so _packagePath_ is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`. If [`context.unstable_resolveExportsFromPackageRoot`](#unstable_resolveexportsfrompackageroot-boolean) is enabled, _packagePath_ and _exportsField_ instead come from the root of the package named by a bare specifier, if it has a `package.json` and _filePath_ is within it and not under a nested `node_modules`.
+Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let _filePath_ be _moduleName_, _packagePath_ the directory of the closest containing `package.json`, and _exportsField_ its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes _filePath_ `/app/node_modules/some-pkg/utils`, so _packagePath_ is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`. If [`context.unstable_resolveExportsFromPackageRoot`](#unstable_resolveexportsfrompackageroot-boolean) is enabled, _packagePath_ and _exportsField_ instead come from the root of the package named by a bare specifier. As in Node.js, for a package in `node_modules`, the `"exports"` subpath is the literal text following the package name, and there's no _exportsField_ if the root has no `package.json`.
 
 1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_).
    1. If resolved path exists, then
@@ -355,7 +355,7 @@ Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to 
 
 #### `unstable_resolveExportsFromPackageRoot: boolean`
 
-Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, or the candidate path is outside it or under a nested `node_modules`, the closest is used. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
+Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, a package in `node_modules` has no `"exports"`, and the closest is used for an [`extraNodeModules`](#extranodemodules-string-string) mapping. A target of a `"browser"` spec redirection uses the root only if it's inside the root's directory and not under a nested `node_modules`. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
 
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 

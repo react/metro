@@ -359,8 +359,9 @@ export default function resolve(
     const resolution = resolveModuleFromTargetPath(
       context,
       platform,
-      path.normalize(newPackageName),
+      path.normalize(newPackageName + path.sep).slice(0, -1),
       extraNodeModulePath,
+      false,
     );
     if (resolution != null) {
       return resolution;
@@ -407,6 +408,7 @@ function resolveFromNodeModulesPath(
     nodeModulesPath +
       path.sep +
       posixToSystemPath(parsedSpecifier.normalizedSpecifier),
+    true,
   );
 }
 
@@ -419,23 +421,33 @@ function resolveModuleFromTargetPath(
    */
   packagePath: string,
   targetPath: string,
+  isInNodeModules: boolean,
 ): Resolution | null {
-  const rootPkg = getRootPackageForExports(context, packagePath, targetPath);
-  const pkg = rootPkg ?? context.getPackageForModule(targetPath);
+  const closestToTarget = context.getPackageForModule(targetPath);
+  const rootPkg = getRootPackageForExports(
+    context,
+    packagePath,
+    targetPath,
+    closestToTarget,
+  );
+  // As in Node.js, a package in `node_modules` with no `package.json` at its
+  // root has no "exports" field.
+  const pkg =
+    rootPkg ??
+    (isInNodeModules && isResolvingExportsFromPackageRoot(context)
+      ? null
+      : closestToTarget);
   // "browser" spec redirections use the closest package to the target, which
-  // is `pkg` unless the root package applies to a subpath of it. With
+  // may differ from `pkg`, the package whose "exports" field applies. With
   // `unstable_applyBrowserSpecAfterExports`, "exports" resolves the requested
   // subpath first, and `resolvePackage` applies the redirections to the file
   // it resolves to instead.
   const closestPkg =
-    pkg == null ||
-    (context.unstable_applyBrowserSpecAfterExports &&
-      context.unstable_enablePackageExports &&
-      pkg.packageJson.exports != null)
+    context.unstable_applyBrowserSpecAfterExports &&
+    context.unstable_enablePackageExports &&
+    pkg?.packageJson.exports != null
       ? null
-      : rootPkg != null && rootPkg.packageRelativePath !== ''
-        ? context.getPackageForModule(targetPath)
-        : pkg;
+      : closestToTarget;
   const candidate =
     closestPkg == null
       ? targetPath
@@ -604,17 +616,22 @@ function resolveHastePackage(
     return failedFor();
   }
   const potentialModulePath = path.join(packageJsonPath, '..', pathInModule);
+  let packageForModule = null;
+  if (context.unstable_enablePackageExports) {
+    const closestToModule = context.getPackageForModule(potentialModulePath);
+    packageForModule =
+      getRootPackageForExports(
+        context,
+        path.dirname(packageJsonPath),
+        potentialModulePath,
+        closestToModule,
+      ) ?? closestToModule;
+  }
   const result = resolvePackage(
     context,
     potentialModulePath,
     platform,
-    context.unstable_enablePackageExports
-      ? (getRootPackageForExports(
-          context,
-          path.dirname(packageJsonPath),
-          potentialModulePath,
-        ) ?? context.getPackageForModule(potentialModulePath))
-      : null,
+    packageForModule,
   );
   if (result.type === 'resolved') {
     return result;
@@ -723,59 +740,72 @@ function resolvePackage(
  * Get the package at the root of a bare specifier, whose "exports" field
  * applies to `modulePath` per Node.js PACKAGE_RESOLVE. Returns `null` unless
  * `unstable_resolveExportsFromPackageRoot` is enabled, `packagePath` has a
- * `package.json` and `modulePath` belongs to that package.
+ * `package.json` and `modulePath` is below it. Reuses `closestPkg`, the closest
+ * package to `modulePath`, if that is the package at the root.
  */
 function getRootPackageForExports(
   context: ResolutionContext,
   packagePath: string,
   modulePath: string,
+  closestPkg: ?PackageForModule,
 ): ?PackageForModule {
+  if (!isResolvingExportsFromPackageRoot(context)) {
+    return null;
+  }
+  // As in Node.js, the subpath in `modulePath` is not normalized for a package
+  // in `node_modules`.
   if (
-    !context.unstable_enablePackageExports ||
-    !context.unstable_resolveExportsFromPackageRoot
+    modulePath !== packagePath &&
+    !modulePath.startsWith(packagePath + path.sep)
   ) {
+    return null;
+  }
+  const packageRelativePath = modulePath.slice(packagePath.length + 1);
+  if (closestPkg?.packageRelativePath === packageRelativePath) {
+    return closestPkg;
+  }
+  // `closestPkg` is the result for `packagePath` itself, and is not its root.
+  if (packageRelativePath === '') {
     return null;
   }
   const pkg = context.getPackageForModule(packagePath);
   return pkg == null || pkg.packageRelativePath !== ''
     ? null
-    : getPackageForPathInRoot(pkg, packagePath, modulePath);
+    : {...pkg, packageRelativePath};
+}
+
+function isResolvingExportsFromPackageRoot(
+  context: ResolutionContext,
+): boolean {
+  return (
+    context.unstable_enablePackageExports &&
+    context.unstable_resolveExportsFromPackageRoot
+  );
 }
 
 /**
  * Get the package whose "exports" field applies to the target of a "browser"
- * spec redirection. This is the root package if the target belongs to it, and
- * otherwise the closest package to the target.
+ * spec redirection. This is the root package if the target is inside its
+ * directory and not under a nested `node_modules`, which holds other packages,
+ * and otherwise the closest package to the target.
  */
 function getPackageForRedirectedPath(
   context: ResolutionContext,
   rootPkg: ?PackageForModule,
   redirectedPath: string,
 ): ?PackageForModule {
-  return (
-    (rootPkg != null
-      ? getPackageForPathInRoot(rootPkg, rootPkg.rootPath, redirectedPath)
-      : null) ?? context.getPackageForModule(redirectedPath)
-  );
-}
-
-/**
- * Get `rootPkg` with `modulePath` as its package-relative path. Returns `null`
- * if `modulePath` is outside `rootDir`, the package's directory, or under a
- * nested `node_modules`, which holds other packages.
- */
-function getPackageForPathInRoot(
-  rootPkg: PackageForModule,
-  rootDir: string,
-  modulePath: string,
-): ?PackageForModule {
-  const packageRelativePath = path.relative(rootDir, modulePath);
-  const segments = packageRelativePath.split(path.sep);
-  return segments[0] === '..' ||
-    segments.includes('node_modules') ||
-    path.isAbsolute(packageRelativePath)
-    ? null
-    : {...rootPkg, packageRelativePath};
+  if (rootPkg != null) {
+    const packageRelativePath = path.relative(rootPkg.rootPath, redirectedPath);
+    const segments = packageRelativePath.split(path.sep);
+    if (
+      segments[0] !== '..' &&
+      !segments.includes('node_modules') &&
+      !path.isAbsolute(packageRelativePath)
+    ) {
+      return {...rootPkg, packageRelativePath};
+    }
+  }
+  return context.getPackageForModule(redirectedPath);
 }
 
 /**
