@@ -211,7 +211,9 @@ export default class Terminal {
       writtenStatus.length === 0 ||
       // If output printed outside of Terminal (like direct console.log) is
       // detected, the status can't be erased without erasing that output too,
-      // so it is ignored and left to drift with the scrollbar
+      // so it is ignored and left to drift with the scrollbar.
+      // Detection compares bytes written, as the number of lines printed can't
+      // be known without overriding the stdout/stderr globals
       getBytesWritten(ttyStream) !== this.#bytesWrittenAfterStatus
     ) {
       return Promise.resolve();
