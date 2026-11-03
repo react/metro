@@ -602,11 +602,7 @@ async function transformJSWithBabel(
   const jsFile: JSFile = {
     ...file,
     ast: transformResult.ast,
-    functionMap:
-      transformResult.metadata?.metro?.functionMap ??
-      // Fallback to deprecated explicitly-generated `functionMap`
-      transformResult.functionMap ??
-      null,
+    functionMap: transformResult.metadata?.metro?.functionMap ?? null,
     unstable_importDeclarationLocs:
       transformResult.metadata?.metro?.unstable_importDeclarationLocs,
   };
