@@ -105,7 +105,7 @@ async function calcTransformerOptions(
 
   const {transform} = await config.transformer.getTransformOptions(
     entryFiles,
-    {dev: options.dev, hot: true, platform: options.platform},
+    {dev: options.dev, platform: options.platform},
     getDependencies,
   );
 

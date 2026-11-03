@@ -58,7 +58,6 @@ export type GetTransformOptions = (
 
 export type GetTransformOptionsOpts = {
   dev: boolean;
-  hot: true;
   platform: null | undefined | string;
 };
 
