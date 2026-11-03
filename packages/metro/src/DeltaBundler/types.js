@@ -201,8 +201,9 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean,
   processModuleFilter: (module: Module<>) => boolean,
   projectRoot: string,
-  // Generated placeholders contain this string, and source and JSON files do
-  // not, so they can be found and replaced without parsing the code.
+  // The string reserved for identifiers that Metro generates. The default
+  // transformer rejects it in source and JSON files, which prevents accidental
+  // collisions.
   reservedString: string,
   runBeforeMainModule: ReadonlyArray<string>,
   runModule: boolean,

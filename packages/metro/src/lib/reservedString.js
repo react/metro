@@ -10,9 +10,11 @@
  */
 
 /**
- * A string that the default transformer rejects in source and JSON files, so
- * that placeholders containing it can be found and replaced in generated code
- * without parsing it. Serializers receive it as `options.reservedString`, and
- * should not assume its value.
+ * The string reserved for identifiers that Metro generates for a serializer to
+ * find without parsing the code. The default transformer rejects it in source
+ * and JSON files, which prevents accidental collisions. Custom transforms
+ * should not generate it unless they expect Metro to process it. Serializers
+ * receive this string as `options.reservedString`, and should not assume its
+ * value.
  */
 export const RESERVED_STRING = '_$$_METRO_';

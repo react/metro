@@ -765,7 +765,7 @@ Type: `?(entryPoint: string, preModules: $ReadOnlyArray<Module>, graph: ReadOnly
 
 Replaces Metro's default bundle serializer. Defaults to `null`.
 
-`options.reservedString` is a string that Metro's placeholders in generated code contain and that source and JSON files do not, so a serializer can find and replace them without parsing the code. Use this option rather than assuming its value.
+`options.reservedString` is the string [reserved for identifiers that Metro generates](./Bundling.md#modules), e.g. `${options.reservedString}MODULE_ID`. Use this option rather than assuming its value. The default transformer rejects this string in source and JSON files, which prevents accidental collisions.
 
 #### `experimentalSerializerHook`
 
