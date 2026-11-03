@@ -30,14 +30,41 @@ export type AssetResolution = Readonly<{
 export type FileResolution = AssetResolution | SourceFileResolution;
 
 /**
- * A JS module whose contents are provided out-of-band rather than read from a file
- * on disk.
+ * A JS module whose contents are provided by the resolver rather than read from
+ * a file on disk.
  *
- * NOTE: Resolving to a virtual module is not yet implemented. This is a reservation.
+ * A virtual path names exactly one module, as a file path does. A change in
+ * `source` at the same virtual path is a modification of that module, as an
+ * edit to a file is, and the transform cache key is content-addressed, so
+ * nothing about a virtual module can go stale.
+ *
+ * A resolver must produce the same `source` for the same virtual path wherever
+ * it is resolved from. Metro throws when two resolutions in one traversal
+ * disagree.
  */
 export type VirtualResolution = Readonly<{
   type: 'virtualModule',
-  ...
+  /**
+   * The path the module notionally lives at. It should not be the path of a
+   * real file, and need not exist on disk. Relative and package imports inside
+   * the virtual module resolve from this path's directory, and path-based
+   * transform configuration (Babel overrides, `inlineRequires` block lists, and
+   * so on) sees this path.
+   *
+   * Metro keeps virtual modules in their own namespace, so a virtual path can
+   * never be confused with a real module, but two distinct virtual modules
+   * need two distinct virtual paths. A resolver deriving several modules from
+   * one file should name them beside it, for example `App.generated-1.tsx`.
+   *
+   * `null` declares a module with no base, as a `data:` URL has, whose identity
+   * is its source alone and inside which relative imports are errors.
+   * Resolving the dependencies of such a module needs a `ResolutionContext`
+   * with no `originModulePath`, which is a breaking change to the resolver
+   * contract, so Metro does not accept `null` yet.
+   */
+  virtualPath: ?string,
+  /** The complete source of the module, as text or UTF-8 bytes. */
+  source: string | Buffer,
 }>;
 
 export type FileAndDirCandidates = {
