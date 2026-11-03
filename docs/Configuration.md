@@ -483,7 +483,7 @@ Type: `boolean`
 
 Read a package's [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) from the `package.json` at the root of the package named by a bare specifier, as Node.js, webpack 5 and Vite 8 do, instead of the `package.json` closest to the requested subpath. A nested `package.json`, such as a legacy shim or one declaring only `"type"`, doesn't hide the root `"exports"`, and a nested `"exports"` isn't used if the root has a `package.json`. A path under a nested `node_modules` belongs to the package there. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true`. Defaults to `false`.
 
-Packages may rely on a nested `package.json` with a string-valued `"browser"` field to reach a build that works on native, which this bypasses. For example, `@mswjs/interceptors/fetch` in version 0.41 resolves to a Node.js build on iOS and Android, which requires `node:zlib`.
+Packages may rely on a nested `package.json` to reach a build that works on native, which this bypasses. For example, `@mswjs/interceptors/fetch` in version 0.41 resolves to a Node.js build on iOS and Android, which requires `node:zlib`. If the nested `"browser"` field is an object, also enable [`unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-experimental) to apply it to the file resolved from `"exports"`. Otherwise, `nanoid/async` in version 3 resolves to a build that requires `crypto`.
 
 #### `unstable_conditionNames` <div class="label experimental">Experimental</div>
 

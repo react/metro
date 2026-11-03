@@ -1716,6 +1716,26 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     }),
     [p('/root/node_modules/nested-browser/lib/node.js')]: '',
     [p('/root/node_modules/nested-browser/lib/browser.js')]: '',
+    // A scoped package with a nested manifest.
+    [p('/root/node_modules/@scope/pkg/package.json')]: JSON.stringify({
+      exports: {'./shim': './dist/shim.js'},
+    }),
+    [p('/root/node_modules/@scope/pkg/shim/package.json')]: JSON.stringify({
+      main: './legacy.js',
+    }),
+    [p('/root/node_modules/@scope/pkg/shim/legacy.js')]: '',
+    [p('/root/node_modules/@scope/pkg/dist/shim.js')]: '',
+    // A nested "browser" map with a target exported by the root.
+    [p('/root/node_modules/nested-map/package.json')]: JSON.stringify({
+      exports: {'./lib/a.js': './dist/a.js', './lib/b.js': './dist/b.js'},
+    }),
+    [p('/root/node_modules/nested-map/lib/package.json')]: JSON.stringify({
+      browser: {'./a.js': './b.js'},
+    }),
+    [p('/root/node_modules/nested-map/lib/a.js')]: '',
+    [p('/root/node_modules/nested-map/lib/b.js')]: '',
+    [p('/root/node_modules/nested-map/dist/a.js')]: '',
+    [p('/root/node_modules/nested-map/dist/b.js')]: '',
     // A redirection before "exports" may leave the root package.
     [p('/root/node_modules/leaves-root/package.json')]: JSON.stringify({
       browser: {
@@ -1751,6 +1771,8 @@ describe('"exports" of the package at the root of a bare specifier', () => {
   test.each([
     ['test-pkg/shim', '/root/node_modules/test-pkg/dist/shim.js'],
     ['test-pkg/typed', '/root/node_modules/test-pkg/dist/typed.js'],
+    ['@scope/pkg/shim', '/root/node_modules/@scope/pkg/dist/shim.js'],
+    ['nested-map/lib/a.js', '/root/node_modules/nested-map/dist/a.js'],
     ['test-pkg/./shim', '/root/node_modules/test-pkg/dist/shim.js'],
     ['test-pkg/internal/../shim', '/root/node_modules/test-pkg/dist/shim.js'],
     ['test-pkg/shim/', '/root/node_modules/test-pkg/dist/shim.js'],
@@ -1788,6 +1810,21 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     });
   });
 
+  test('uses the closest package of an `extraNodeModules` mapping into a package', () => {
+    const logWarning = jest.fn();
+    const context = {
+      ...baseContext,
+      extraNodeModules: {alias: pkg + path.sep + 'dist'},
+      unstable_logWarning: logWarning,
+    };
+    expect(Resolver.resolve(context, 'alias/shim', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(pkg + '/dist/shim.js'),
+    });
+    expect(logWarning).toHaveBeenCalledTimes(1);
+    expect(logWarning.mock.calls[0][0]).toContain('"./dist/shim"');
+  });
+
   test('uses the root package of a Haste package', () => {
     const context = {
       ...baseContext,
@@ -1803,6 +1840,7 @@ describe('"exports" of the package at the root of a bare specifier', () => {
 
   test.each([
     ['leaves-root/inner.js', '/root/node_modules/leaves-root/dist/inner.js'],
+    ['nested-map/lib/a.js', '/root/node_modules/nested-map/dist/b.js'],
     ['leaves-root/sub.js', '/root/node_modules/other/dist/main.js'],
     [
       'leaves-root/nested.js',
