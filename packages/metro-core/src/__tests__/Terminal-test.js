@@ -210,6 +210,28 @@ describe.each([false, true])(
       );
     });
 
+    test('prints consecutive logs before later external output', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.log('foo');
+      terminal.log('bar');
+      stream.write('external\n');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        'foo       bar       external',
+      );
+    });
+
+    test('persistStatus does not leave the status drawn', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      await terminal.flush();
+      terminal.persistStatus();
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        ttyPrint ? 'status' : 'status    status',
+      );
+    });
+
     test('flush- multi-line', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.log('foo');
@@ -222,3 +244,29 @@ describe.each([false, true])(
     });
   },
 );
+
+test('keeps logs in order with output written to stderr', async () => {
+  const order = [];
+  const makeStream = name => {
+    const stream = Object.create(require('node:tty').WriteStream.prototype);
+    let bytesWritten = 0;
+    Object.defineProperty(stream, 'bytesWritten', {get: () => bytesWritten});
+    Object.assign(stream, {
+      columns: 10,
+      write(str, callback = () => {}) {
+        order.push(name + ':' + str);
+        bytesWritten += str.length;
+        setTimeout(callback, 33);
+      },
+    });
+    return stream;
+  };
+  const stdout = makeStream('stdout');
+  const stderr = makeStream('stderr');
+  const terminal = new Terminal(stdout);
+  terminal.log('foo');
+  terminal.log('bar');
+  stderr.write('external\n');
+  await terminal.flush();
+  expect(order).toEqual(['stdout:foo\n', 'stdout:bar\n', 'stderr:external\n']);
+});

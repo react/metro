@@ -19,6 +19,9 @@ import util from 'node:util';
 
 type UnderlyingStream = Socket | Writable;
 
+const STATUS_UPDATE_DELAY_MS = 33;
+const NON_TTY_STATUS_THROTTLE_MS = 3500;
+
 /**
  * Cut a string into an array of strings of the specified maximum size. A newline
  * ends a chunk immediately (it's not included in the "." RegExp operator), and
@@ -114,7 +117,7 @@ export default class Terminal {
     this.#isFlushRequested = false;
     this.#writeNonTTYStatusThrottled = throttle(
       status => this.#stream.write(status),
-      3500,
+      NON_TTY_STATUS_THROTTLE_MS,
     );
   }
 
@@ -134,7 +137,9 @@ export default class Terminal {
     this.#updatePromise = this.#writeStatus().then(async () => {
       while (this.#hasPendingUpdate) {
         if (!this.#isFlushRequested) {
-          await new Promise(resolve => setTimeout(resolve, 33));
+          await new Promise(resolve =>
+            setTimeout(resolve, STATUS_UPDATE_DELAY_MS),
+          );
         }
         this.#hasPendingUpdate = false;
         await this.#writeStatus();
