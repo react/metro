@@ -73,6 +73,10 @@ type JestMockFn<TArguments extends ReadonlyArray<any>, TReturn> = {
    */
   getMockImplementation(): void | ((...args: TArguments) => TReturn),
   /**
+   * Returns the name of the mock, set with mockName().
+   */
+  getMockName(): string,
+  /**
    * Accepts a function that should be used as the implementation of the mock.
    * The mock itself will still record all calls that go into and instances
    * that come from itself -- the only difference is that the implementation
@@ -89,6 +93,16 @@ type JestMockFn<TArguments extends ReadonlyArray<any>, TReturn> = {
   mockImplementationOnce(
     fn: (...args: TArguments) => TReturn,
   ): JestMockFn<TArguments, TReturn>,
+  /**
+   * Accepts a function that will be used as an implementation of the mock
+   * for the duration of the callback, then restores the previous
+   * implementation.
+   */
+  withImplementation: ((
+    fn: (...args: TArguments) => TReturn,
+    callback: () => Promise<unknown>,
+  ) => Promise<void>) &
+    ((fn: (...args: TArguments) => TReturn, callback: () => void) => void),
   /**
    * Accepts a string to use in test result output in place of "jest.fn()" to
    * indicate which mock function is being referenced.
