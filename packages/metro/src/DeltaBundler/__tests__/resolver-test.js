@@ -1392,6 +1392,49 @@ function dep(name: string): TransformResultDependency {
       // separately. Platform-specific keys are only matched per candidate
       // extension.
       describe('package scope of files reached through a symlink', () => {
+        test.each([
+          [true, '/root/store/pkg/dist/sub.js'],
+          [false, '/root/store/pkg/sub/legacy.js'],
+        ])(
+          'a symlinked package with a nested package.json, with unstable_resolveExportsFromPackageRoot: %s',
+          async (unstable_resolveExportsFromPackageRoot, expected) => {
+            setMockFileSystem({
+              'index.js': '',
+              node_modules: {},
+              store: {
+                pkg: {
+                  'package.json': JSON.stringify({
+                    name: 'pkg',
+                    exports: {'./sub': './dist/sub.js'},
+                  }),
+                  dist: {'sub.js': ''},
+                  sub: {
+                    'package.json': JSON.stringify({main: './legacy.js'}),
+                    'legacy.js': '',
+                  },
+                },
+              },
+            });
+            fs.symlinkSync(p('/root/store/pkg'), p('/root/node_modules/pkg'));
+
+            resolver = await createResolver(
+              {
+                resolver: {
+                  unstable_enablePackageExports: true,
+                  unstable_resolveExportsFromPackageRoot,
+                },
+              },
+              'ios',
+            );
+            expect(
+              resolver.resolve(p('/root/index.js'), dep('pkg/sub')),
+            ).toEqual({
+              type: 'sourceFile',
+              filePath: p(expected),
+            });
+          },
+        );
+
         test('a node_modules symlink to a package root', async () => {
           setMockFileSystem({
             'index.js': '',

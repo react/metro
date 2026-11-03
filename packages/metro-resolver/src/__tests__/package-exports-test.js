@@ -1718,7 +1718,11 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     [p('/root/node_modules/nested-browser/lib/browser.js')]: '',
     // A redirection before "exports" may leave the root package.
     [p('/root/node_modules/leaves-root/package.json')]: JSON.stringify({
-      browser: {'./sub.js': '../other/main.js', './inner.js': './lib/inner.js'},
+      browser: {
+        './sub.js': '../other/main.js',
+        './inner.js': './lib/inner.js',
+        './nested.js': './node_modules/dep/index.js',
+      },
       exports: {'./lib/inner.js': './dist/inner.js'},
     }),
     [p('/root/node_modules/leaves-root/sub.js')]: '',
@@ -1729,6 +1733,11 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     }),
     [p('/root/node_modules/other/main.js')]: '',
     [p('/root/node_modules/other/dist/main.js')]: '',
+    [p('/root/node_modules/leaves-root/nested.js')]: '',
+    [p('/root/node_modules/leaves-root/node_modules/dep/package.json')]:
+      JSON.stringify({exports: {'./index.js': './dist/main.js'}}),
+    [p('/root/node_modules/leaves-root/node_modules/dep/index.js')]: '',
+    [p('/root/node_modules/leaves-root/node_modules/dep/dist/main.js')]: '',
   };
   const baseContext = {
     ...createResolutionContext(files),
@@ -1742,6 +1751,14 @@ describe('"exports" of the package at the root of a bare specifier', () => {
   test.each([
     ['test-pkg/shim', '/root/node_modules/test-pkg/dist/shim.js'],
     ['test-pkg/typed', '/root/node_modules/test-pkg/dist/typed.js'],
+    ['test-pkg/./shim', '/root/node_modules/test-pkg/dist/shim.js'],
+    ['test-pkg/internal/../shim', '/root/node_modules/test-pkg/dist/shim.js'],
+    ['test-pkg/shim/', '/root/node_modules/test-pkg/dist/shim.js'],
+    [
+      'leaves-root/node_modules/dep/index.js',
+      '/root/node_modules/leaves-root/node_modules/dep/dist/main.js',
+    ],
+    ['test-pkg/../other/main.js', '/root/node_modules/other/dist/main.js'],
     ['no-exports/sub', '/root/node_modules/no-exports/sub/main.js'],
     ['no-root/sub', '/root/node_modules/no-root/sub/from-exports.js'],
     ['nested-browser/lib', '/root/node_modules/nested-browser/lib/browser.js'],
@@ -1787,17 +1804,24 @@ describe('"exports" of the package at the root of a bare specifier', () => {
   test.each([
     ['leaves-root/inner.js', '/root/node_modules/leaves-root/dist/inner.js'],
     ['leaves-root/sub.js', '/root/node_modules/other/dist/main.js'],
+    [
+      'leaves-root/nested.js',
+      '/root/node_modules/leaves-root/node_modules/dep/dist/main.js',
+    ],
   ])(
     'applies "exports" to the target of a redirection for %s',
     (specifier, expected) => {
+      const logWarning = jest.fn();
       const context = {
         ...baseContext,
         unstable_applyBrowserSpecAfterExports: false,
+        unstable_logWarning: logWarning,
       };
       expect(Resolver.resolve(context, specifier, null)).toEqual({
         type: 'sourceFile',
         filePath: p(expected),
       });
+      expect(logWarning).not.toHaveBeenCalled();
     },
   );
 
