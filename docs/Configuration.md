@@ -477,6 +477,14 @@ For example, given a package with:
 
 With this option, `'pkg/hash'` resolves through `"exports"` to `hash-browser.js` for `web` (the `"browser"` condition), and to `hash-node.js` elsewhere, which the `"./hash-node.js"` key then redirects to `hash-browser.js` if `"browser"` is in `resolverMainFields`. Without it, the `"./hash"` key redirects the import to `./hash-browser.js` first, which is not listed in `"exports"`, so Metro logs a warning and falls back to file-based resolution.
 
+#### `unstable_resolveExportsFromPackageRoot` <div class="label experimental">Experimental</div>
+
+Type: `boolean`
+
+Read a package's [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) from the `package.json` at the root of the package named by a bare specifier, as Node.js, webpack 5 and Vite 8 do, instead of the `package.json` closest to the requested subpath. A nested `package.json`, such as a legacy shim or one declaring only `"type"`, doesn't hide the root `"exports"`, and a nested `"exports"` isn't used. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true`. Defaults to `false`.
+
+Packages may rely on a nested `"browser"` field to reach a build that works on native, which this bypasses. For example, `@mswjs/interceptors/fetch` resolves to a Node.js build on iOS and Android, which requires `node:zlib`.
+
 #### `unstable_conditionNames` <div class="label experimental">Experimental</div>
 
 Type: `Array<string>`

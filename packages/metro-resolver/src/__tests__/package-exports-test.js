@@ -1672,3 +1672,147 @@ describe('with package exports resolution enabled', () => {
     });
   });
 });
+
+describe('"exports" of the package at the root of a bare specifier', () => {
+  const pkg = p('/root/node_modules/test-pkg');
+  const files = {
+    [p('/root/src/main.js')]: '',
+    [p(pkg + '/package.json')]: JSON.stringify({
+      name: 'test-pkg',
+      exports: {
+        './shim': './dist/shim.js',
+        './typed': './dist/typed.js',
+      },
+    }),
+    // A legacy shim for tools without "exports" support.
+    [p(pkg + '/shim/package.json')]: JSON.stringify({main: './legacy.js'}),
+    [p(pkg + '/shim/legacy.js')]: '',
+    [p(pkg + '/dist/shim.js')]: '',
+    // A manifest that only sets the module type of a directory.
+    [p(pkg + '/typed/package.json')]: JSON.stringify({type: 'commonjs'}),
+    [p(pkg + '/typed/index.js')]: '',
+    [p(pkg + '/dist/typed.js')]: '',
+    [p(pkg + '/internal/package.json')]: JSON.stringify({main: './main.js'}),
+    [p(pkg + '/internal/main.js')]: '',
+    // Without "exports" at the root, those of a nested manifest do not apply.
+    [p('/root/node_modules/no-exports/package.json')]: JSON.stringify({}),
+    [p('/root/node_modules/no-exports/sub/package.json')]: JSON.stringify({
+      main: './main.js',
+      exports: './from-exports.js',
+    }),
+    [p('/root/node_modules/no-exports/sub/main.js')]: '',
+    [p('/root/node_modules/no-exports/sub/from-exports.js')]: '',
+    // Without a manifest at the root, the closest manifest applies.
+    [p('/root/node_modules/no-root/sub/package.json')]: JSON.stringify({
+      exports: './from-exports.js',
+    }),
+    [p('/root/node_modules/no-root/sub/from-exports.js')]: '',
+    // A closest manifest with "browser" still applies to the resolved file.
+    [p('/root/node_modules/nested-browser/package.json')]: JSON.stringify({
+      exports: {'./lib': './lib/node.js'},
+    }),
+    [p('/root/node_modules/nested-browser/lib/package.json')]: JSON.stringify({
+      browser: {'./node.js': './browser.js'},
+    }),
+    [p('/root/node_modules/nested-browser/lib/node.js')]: '',
+    [p('/root/node_modules/nested-browser/lib/browser.js')]: '',
+    // A redirection before "exports" may leave the root package.
+    [p('/root/node_modules/leaves-root/package.json')]: JSON.stringify({
+      browser: {'./sub.js': '../other/main.js', './inner.js': './lib/inner.js'},
+      exports: {'./lib/inner.js': './dist/inner.js'},
+    }),
+    [p('/root/node_modules/leaves-root/sub.js')]: '',
+    [p('/root/node_modules/leaves-root/inner.js')]: '',
+    [p('/root/node_modules/leaves-root/dist/inner.js')]: '',
+    [p('/root/node_modules/other/package.json')]: JSON.stringify({
+      exports: {'./main.js': './dist/main.js'},
+    }),
+    [p('/root/node_modules/other/main.js')]: '',
+    [p('/root/node_modules/other/dist/main.js')]: '',
+  };
+  const baseContext = {
+    ...createResolutionContext(files),
+    mainFields: ['browser', 'main'],
+    originModulePath: p('/root/src/main.js'),
+    unstable_applyBrowserSpecAfterExports: true,
+    unstable_enablePackageExports: true,
+    unstable_resolveExportsFromPackageRoot: true,
+  };
+
+  test.each([
+    ['test-pkg/shim', '/root/node_modules/test-pkg/dist/shim.js'],
+    ['test-pkg/typed', '/root/node_modules/test-pkg/dist/typed.js'],
+    ['no-exports/sub', '/root/node_modules/no-exports/sub/main.js'],
+    ['no-root/sub', '/root/node_modules/no-root/sub/from-exports.js'],
+    ['nested-browser/lib', '/root/node_modules/nested-browser/lib/browser.js'],
+  ])('resolves %s', (specifier, expected) => {
+    expect(Resolver.resolve(baseContext, specifier, null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(expected),
+    });
+  });
+
+  test('[nonstrict] warns and uses the nested manifest for a subpath not exported', () => {
+    const logWarning = jest.fn();
+    const context = {...baseContext, unstable_logWarning: logWarning};
+    expect(Resolver.resolve(context, 'test-pkg/internal', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(pkg + '/internal/main.js'),
+    });
+    expect(logWarning).toHaveBeenCalledTimes(1);
+    expect(logWarning.mock.calls[0][0]).toContain('"./internal"');
+  });
+
+  test('uses the root package of an `extraNodeModules` mapping', () => {
+    const context = {...baseContext, extraNodeModules: {alias: pkg + path.sep}};
+    expect(Resolver.resolve(context, 'alias/shim', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(pkg + '/dist/shim.js'),
+    });
+  });
+
+  test('uses the root package of a Haste package', () => {
+    const context = {
+      ...baseContext,
+      allowHaste: true,
+      resolveHastePackage: (name: string) =>
+        name === 'haste-pkg' ? p(pkg + '/package.json') : null,
+    };
+    expect(Resolver.resolve(context, 'haste-pkg/shim', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(pkg + '/dist/shim.js'),
+    });
+  });
+
+  test.each([
+    ['leaves-root/inner.js', '/root/node_modules/leaves-root/dist/inner.js'],
+    ['leaves-root/sub.js', '/root/node_modules/other/dist/main.js'],
+  ])(
+    'applies "exports" to the target of a redirection for %s',
+    (specifier, expected) => {
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: false,
+      };
+      expect(Resolver.resolve(context, specifier, null)).toEqual({
+        type: 'sourceFile',
+        filePath: p(expected),
+      });
+    },
+  );
+
+  test('uses the closest package when disabled', () => {
+    const context = {
+      ...baseContext,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
+    expect(Resolver.resolve(context, 'test-pkg/shim', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(pkg + '/shim/legacy.js'),
+    });
+    expect(Resolver.resolve(context, 'no-exports/sub', null)).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/no-exports/sub/from-exports.js'),
+    });
+  });
+});
