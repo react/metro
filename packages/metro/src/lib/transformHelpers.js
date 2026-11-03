@@ -155,7 +155,9 @@ export async function getTransformFn(
   return async (modulePath: string, virtualSource: ?VirtualSource) => {
     let fileBuffer: ?Buffer;
 
-    if (virtualSource?.type === 'requireContext') {
+    if (virtualSource?.type === 'buffer') {
+      fileBuffer = virtualSource.source;
+    } else if (virtualSource?.type === 'requireContext') {
       const {requireContext} = virtualSource;
       const graph = await bundler.getDependencyGraph();
 

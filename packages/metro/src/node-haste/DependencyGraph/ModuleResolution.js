@@ -25,10 +25,12 @@ import type {
 } from 'metro-resolver';
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
+import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
 import createDefaultContext from 'metro-resolver/private/createDefaultContext';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
@@ -53,6 +55,7 @@ type Options = Readonly<{
   resolveRequest: ?CustomResolver,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
   unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
@@ -245,8 +248,31 @@ export class ModuleResolver {
       case 'empty':
         return this._getEmptyModule();
       case 'virtualModule':
-        // Reserved for future implementation.
-        throw new Error('Virtual modules are not yet implemented.');
+        if (!this._options.unstable_allowVirtualModules) {
+          throw new Error(
+            'Virtual modules are not enabled. Set ' +
+              '`resolver.unstable_allowVirtualModules` to `true` in your ' +
+              'Metro config to enable them.',
+          );
+        }
+        // A module with no base needs its dependencies resolved with a null
+        // `originModulePath`, which `ResolutionContext` does not allow yet.
+        // Lifting this is a breaking change to the resolver contract.
+        const {virtualPath} = resolution;
+        invariant(
+          virtualPath != null,
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+        const source =
+          typeof resolution.source === 'string'
+            ? Buffer.from(resolution.source, 'utf8')
+            : resolution.source;
+        return {
+          type: 'virtualModule',
+          filePath: deriveVirtualModulePath(virtualPath),
+          source,
+          sha1: crypto.createHash('sha1').update(source).digest('hex'),
+        };
       default:
         resolution.type as empty;
         throw new Error('invalid type');
