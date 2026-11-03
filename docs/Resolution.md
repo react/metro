@@ -353,6 +353,10 @@ Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never 
 
 Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the source file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
 
+#### `unstable_resolveExportsFromPackageRoot: boolean`
+
+Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, the closest is used. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
+
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 
 Additional condition names asserted when resolving the `"exports"` and `"imports"` fields. Defaults to [`resolver.unstable_conditionNames`](./Configuration.md#unstable_conditionnames-experimental).

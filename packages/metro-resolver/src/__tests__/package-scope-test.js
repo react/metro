@@ -266,4 +266,43 @@ describe('package scope lookups', () => {
       p('/root/node_modules/pkg/lib/sub.js'),
     ]);
   });
+
+  test('package entry point makes no more lookups from the package root', () => {
+    context = {...context, unstable_enablePackageExports: true};
+    Resolver.resolve(context, 'pkg', 'ios');
+    const expected = lookedUpPaths();
+
+    getPackageForModule.mockClear();
+    context = {...context, unstable_resolveExportsFromPackageRoot: true};
+    expect(Resolver.resolve(context, 'pkg', 'ios')).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/pkg/lib/index.js'),
+    });
+    expect(lookedUpPaths()).toEqual(expected);
+  });
+
+  test('package subpath with package exports from the package root', () => {
+    useFileMap({
+      ...fileMap,
+      [p('/root/node_modules/pkg/package.json')]: JSON.stringify({
+        name: 'pkg',
+        exports: {'./sub': './lib/sub.js'},
+      }),
+    });
+    context = {
+      ...context,
+      unstable_applyBrowserSpecAfterExports: true,
+      unstable_enablePackageExports: true,
+      unstable_resolveExportsFromPackageRoot: true,
+    };
+    expect(Resolver.resolve(context, 'pkg/sub', 'ios')).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/pkg/lib/sub.js'),
+    });
+    expect(lookedUpPaths()).toEqual([
+      p('/root/src/main.js'),
+      p('/root/node_modules/pkg'),
+      p('/root/node_modules/pkg/lib/sub.js'),
+    ]);
+  });
 });

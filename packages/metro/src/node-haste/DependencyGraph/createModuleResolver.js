@@ -101,6 +101,8 @@ export default function createModuleResolver({
       config.resolver.unstable_conditionsByPlatform,
     unstable_enablePackageExports:
       config.resolver.unstable_enablePackageExports,
+    unstable_resolveExportsFromPackageRoot:
+      config.resolver.unstable_resolveExportsFromPackageRoot,
     unstable_incrementalResolution:
       config.resolver.unstable_incrementalResolution,
   });

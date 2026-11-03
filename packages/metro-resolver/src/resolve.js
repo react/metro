@@ -359,6 +359,8 @@ export default function resolve(
     const resolution = resolveModuleFromTargetPath(
       context,
       platform,
+      path.normalize(newPackageName),
+      parsedSpecifier.posixSubpath,
       extraNodeModulePath,
     );
     if (resolution != null) {
@@ -402,6 +404,8 @@ function resolveFromNodeModulesPath(
   return resolveModuleFromTargetPath(
     context,
     platform,
+    nodeModulesPath + path.sep + posixToSystemPath(parsedSpecifier.packageName),
+    parsedSpecifier.posixSubpath,
     nodeModulesPath +
       path.sep +
       posixToSystemPath(parsedSpecifier.normalizedSpecifier),
@@ -411,24 +415,41 @@ function resolveFromNodeModulesPath(
 function resolveModuleFromTargetPath(
   context: ResolutionContext,
   platform: string | null,
+  /**
+   * The directory of the package named by the specifier, which may be a
+   * symlink.
+   */
+  packagePath: string,
+  /**
+   * The requested subpath of the package, as "." or "./subpath".
+   */
+  posixSubpath: string,
   targetPath: string,
 ): Resolution | null {
-  // Look up the package once, for both "browser" spec redirections and
-  // "exports". With `unstable_applyBrowserSpecAfterExports`, "exports"
-  // resolves the requested subpath first, and `resolvePackage` applies the
-  // redirections to the file it resolves to instead.
-  const pkg = context.getPackageForModule(targetPath);
-  const candidate =
+  const rootPkg = getRootPackageForExports(context, packagePath, posixSubpath);
+  const pkg = rootPkg ?? context.getPackageForModule(targetPath);
+  // "browser" spec redirections use the closest package to the target, which
+  // is `pkg` unless the root package applies to a subpath. With
+  // `unstable_applyBrowserSpecAfterExports`, "exports" resolves the requested
+  // subpath first, and `resolvePackage` applies the redirections to the file
+  // it resolves to instead.
+  const closestPkg =
     pkg == null ||
     (context.unstable_applyBrowserSpecAfterExports &&
       context.unstable_enablePackageExports &&
       pkg.packageJson.exports != null)
+      ? null
+      : rootPkg != null && posixSubpath !== '.'
+        ? context.getPackageForModule(targetPath)
+        : pkg;
+  const candidate =
+    closestPkg == null
       ? targetPath
       : redirectPackageSubpath(
           context,
           targetPath,
-          pkg,
-          pkg.packageRelativePath,
+          closestPkg,
+          closestPkg.packageRelativePath,
         );
   if (candidate === false) {
     return {type: 'empty'};
@@ -443,7 +464,7 @@ function resolveModuleFromTargetPath(
     candidate === targetPath
       ? pkg
       : context.unstable_enablePackageExports
-        ? context.getPackageForModule(candidate)
+        ? getPackageForRedirectedPath(context, rootPkg, candidate)
         : null,
   );
   if (result.type === 'resolved') {
@@ -594,7 +615,11 @@ function resolveHastePackage(
     potentialModulePath,
     platform,
     context.unstable_enablePackageExports
-      ? context.getPackageForModule(potentialModulePath)
+      ? (getRootPackageForExports(
+          context,
+          path.dirname(packageJsonPath),
+          pathInModule,
+        ) ?? context.getPackageForModule(potentialModulePath))
       : null,
   );
   if (result.type === 'resolved') {
@@ -698,6 +723,58 @@ function resolvePackage(
   }
 
   return resolveModulePath(context, absoluteCandidatePath, platform);
+}
+
+/**
+ * Get the package at the root of a bare specifier, whose "exports" field
+ * applies per Node.js PACKAGE_RESOLVE. Returns `null` unless
+ * `unstable_resolveExportsFromPackageRoot` is enabled and `packagePath` has a
+ * `package.json`.
+ */
+function getRootPackageForExports(
+  context: ResolutionContext,
+  packagePath: string,
+  /**
+   * The requested subpath of the package, as "." or "./subpath".
+   */
+  posixSubpath: string,
+): ?PackageForModule {
+  if (
+    !context.unstable_enablePackageExports ||
+    !context.unstable_resolveExportsFromPackageRoot
+  ) {
+    return null;
+  }
+  const pkg = context.getPackageForModule(packagePath);
+  if (pkg == null || pkg.packageRelativePath !== '') {
+    return null;
+  }
+  return posixSubpath === '.'
+    ? pkg
+    : {...pkg, packageRelativePath: posixToSystemPath(posixSubpath.slice(2))};
+}
+
+/**
+ * Get the package whose "exports" field applies to the target of a "browser"
+ * spec redirection. This is the root package if the target is within it, and
+ * otherwise the closest package to the target.
+ */
+function getPackageForRedirectedPath(
+  context: ResolutionContext,
+  rootPkg: ?PackageForModule,
+  redirectedPath: string,
+): ?PackageForModule {
+  if (rootPkg != null) {
+    const packageRelativePath = path.relative(rootPkg.rootPath, redirectedPath);
+    if (
+      packageRelativePath !== '..' &&
+      !packageRelativePath.startsWith('..' + path.sep) &&
+      !path.isAbsolute(packageRelativePath)
+    ) {
+      return {...rootPkg, packageRelativePath};
+    }
+  }
+  return context.getPackageForModule(redirectedPath);
 }
 
 /**

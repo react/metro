@@ -55,6 +55,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     },
     unstable_enablePackageExports: true,
     unstable_incrementalResolution: false,
+    unstable_resolveExportsFromPackageRoot: false,
     useWatchman: true,
     requireCycleIgnorePatterns: [/(^|\/|\\)node_modules($|\/|\\)/],
     unstable_forceFullRefreshPatterns: [],
