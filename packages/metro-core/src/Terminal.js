@@ -181,16 +181,16 @@ export default class Terminal {
       return;
     }
 
-    const discarded = this.#discardWrittenStatus(ttyStream);
-    const written =
+    const discardPromise = this.#discardWrittenStatus(ttyStream);
+    const writePromise =
       status.length > 0
         ? new Promise(resolve =>
             this.#stream.write(status + '\n', () => resolve()),
           )
-        : discarded;
+        : discardPromise;
     this.#writtenStatus = status;
     this.#bytesWrittenAfterStatus = getBytesWritten(ttyStream);
-    await written;
+    await writePromise;
   }
 
   /**
