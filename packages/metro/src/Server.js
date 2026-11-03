@@ -1458,16 +1458,7 @@ export default class Server {
       );
       debug('Start symbolication');
 
-      let parsedBody;
-      if ('rawBody' in req) {
-        // TODO: Remove this branch once we are no longer targeting React Native
-        // < 0.80 and Expo SDK < 53
-        // $FlowFixMe[prop-missing] - rawBody assigned by legacy CLI integrations
-        const body = await req.rawBody;
-        parsedBody = JSON.parse(body) as JsonData;
-      } else {
-        parsedBody = await parseJsonBody(req, {strict: false});
-      }
+      const parsedBody = await parseJsonBody(req, {strict: false});
 
       let validatedBody: {
         stack: ReadonlyArray<JsonData>,
