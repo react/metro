@@ -10,8 +10,10 @@
 
 'use strict';
 
+import {parse as flowParse} from 'flow-parser';
 import {promises as fsPromises} from 'node:fs';
 import path from 'node:path';
+import * as ts from 'typescript';
 
 // jest-mock internals, intentionally not typed in flow-typed/jest.js.
 const IGNORED_MOCK_INSTANCE_MEMBERS = new Set([
@@ -19,35 +21,43 @@ const IGNORED_MOCK_INSTANCE_MEMBERS = new Set([
   '_protoImpl',
 ]);
 
-function extractBlock(source, startPattern) {
-  const start = source.search(startPattern);
-  if (start === -1) {
-    throw new Error('Block not found: ' + startPattern);
-  }
-  const open = source.indexOf('{', start);
-  let depth = 0;
-  for (let i = open; i < source.length; i++) {
-    if (source[i] === '{') {
-      depth++;
-    } else if (source[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        return source.slice(open + 1, i);
-      }
+function getMockInstanceMembers(source) {
+  const sourceFile = ts.createSourceFile(
+    'index.d.ts',
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+  );
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isInterfaceDeclaration(statement) &&
+      statement.name.text === 'MockInstance'
+    ) {
+      return statement.members.map(member => member.name.getText());
     }
   }
-  throw new Error('Unbalanced braces in block: ' + startPattern);
+  throw new Error('MockInstance interface not found in jest-mock types');
 }
 
-function extractMemberNames(block) {
-  const names = new Set();
-  for (const line of block.split('\n')) {
-    const match = /^\s*(\w+)\s*[(:]/.exec(line);
-    if (match != null) {
-      names.add(match[1]);
+function getJestMockFnMembers(source) {
+  const {errors, body} = flowParse(source, {all: true});
+  if (errors.length > 0) {
+    throw new Error(
+      'Failed to parse flow-typed/jest.js: ' + JSON.stringify(errors),
+    );
+  }
+  for (const statement of body) {
+    if (statement.type === 'TypeAlias' && statement.id.name === 'JestMockFn') {
+      const names = [];
+      for (const property of statement.right.properties) {
+        if (property.type === 'ObjectTypeProperty' && property.key != null) {
+          names.push(property.key.name);
+        }
+      }
+      return names;
     }
   }
-  return names;
+  throw new Error('JestMockFn type not found in flow-typed/jest.js');
 }
 
 test('flow-typed/jest.js covers the jest-mock MockInstance API', async () => {
@@ -60,25 +70,10 @@ test('flow-typed/jest.js covers the jest-mock MockInstance API', async () => {
     'utf8',
   );
 
-  const mockInstanceBlock = extractBlock(
-    jestMockTypes,
-    /export declare interface MockInstance/,
+  const declared = new Set(getJestMockFnMembers(jestLibdef));
+  const missing = getMockInstanceMembers(jestMockTypes).filter(
+    member =>
+      !IGNORED_MOCK_INSTANCE_MEMBERS.has(member) && !declared.has(member),
   );
-  const jestMockFnBlock = extractBlock(jestLibdef, /type JestMockFn</);
-
-  const missing = [];
-  for (const member of extractMemberNames(mockInstanceBlock)) {
-    if (IGNORED_MOCK_INSTANCE_MEMBERS.has(member)) {
-      continue;
-    }
-    // Methods are declared as `name(` and function-typed properties as `name:`.
-    if (
-      !new RegExp('(^|[^A-Za-z0-9_])' + member + '\\s*[(:]').test(
-        jestMockFnBlock,
-      )
-    ) {
-      missing.push(member);
-    }
-  }
   expect(missing).toEqual([]);
 });
