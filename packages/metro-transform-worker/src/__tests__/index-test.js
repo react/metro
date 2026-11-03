@@ -13,13 +13,19 @@
 
 jest
   .mock('../utils/getMinifier', () => {
+    const {decode} = jest.requireActual<MockSourcemapCodec>(
+      '@jridgewell/sourcemap-codec',
+    );
     const minifier = jest.fn(({code, map, config}) => {
       const trimmed = config.output.comments
         ? code
         : code.replace('/*#__PURE__*/', '');
       return {
         code: trimmed.replace('arbitrary(code)', 'minified(code)'),
-        map,
+        decodedMap:
+          map == null
+            ? null
+            : {mappings: decode(map.mappings), names: map.names},
       };
     });
     return () => minifier;
@@ -33,6 +39,7 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
+import typeof * as MockSourcemapCodec from '@jridgewell/sourcemap-codec';
 import type {
   BabelTransformer,
   BabelTransformerArgs,
@@ -563,18 +570,11 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
   }
 });
 
-test("uses the minifier's decoded map, if it has one, without reading `map`", async () => {
+test("encodes the minifier's decoded map as the module's map", async () => {
   const decodedMap = {mappings: [[[0, 0, 0, 0, 0]]], names: ['arbitrary']};
   jest
     .requireMock('../utils/getMinifier')()
-    .mockImplementationOnce(() => ({
-      code: 'minified(code);',
-      decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
-      get map() {
-        throw new Error('Expected the decoded map to be used');
-      },
-    }));
+    .mockImplementationOnce(() => ({code: 'minified(code);', decodedMap}));
 
   const result = await Transformer.transform(
     baseConfig,
@@ -588,6 +588,49 @@ test("uses the minifier's decoded map, if it has one, without reading `map`", as
     vlqMapFromBabelDecodedMap(decodedMap, [1, 'minified(code);'.length]),
   );
 });
+
+test('throws if a minifier returns only an encoded map', async () => {
+  jest
+    .requireMock('../utils/getMinifier')()
+    .mockImplementationOnce(() => ({
+      code: 'minified(code);',
+      map: {version: 3, sources: [], names: [], mappings: ''},
+    }));
+
+  await expect(
+    Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code);', 'utf8'),
+      {...baseTransformOptions, dev: false, minify: true},
+    ),
+  ).rejects.toThrow('Return it as `decodedMap` instead');
+});
+
+test.each([[''], [null], [undefined]])(
+  'stores an empty map if a minifier returns no decoded map and `map` is %j',
+  async map => {
+    jest
+      .requireMock('../utils/getMinifier')()
+      .mockImplementationOnce(() => ({code: 'minified(code);', map}));
+
+    const result = await Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code);', 'utf8'),
+      {...baseTransformOptions, dev: false, minify: true},
+    );
+
+    expect(result.output[0].data.map).toEqual(
+      vlqMapFromBabelDecodedMap({mappings: [], names: []}, [
+        1,
+        'minified(code);'.length,
+      ]),
+    );
+  },
+);
 
 test('throws if the reserved dependency map name appears in the input', async () => {
   await expect(
