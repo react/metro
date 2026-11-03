@@ -153,6 +153,7 @@ export default class Terminal {
 
   async waitForUpdates(): Promise<void> {
     await (this.#updatePromise || Promise.resolve());
+    await this.#lastWritePromise;
   }
 
   /**

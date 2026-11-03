@@ -232,21 +232,24 @@ describe.each([false, true])(
       );
     });
 
-    test('flush waits for log writes to complete', async () => {
-      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
-      const write = stream.write;
-      let pendingWrites = 0;
-      stream.write = (str, callback = () => {}) => {
-        ++pendingWrites;
-        write.call(stream, str, () => {
-          --pendingWrites;
-          callback();
-        });
-      };
-      terminal.log('foo');
-      await terminal.flush();
-      expect(pendingWrites).toBe(0);
-    });
+    test.each(['flush', 'waitForUpdates'])(
+      '%s waits for log writes to complete',
+      async method => {
+        const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+        const write = stream.write;
+        let pendingWrites = 0;
+        stream.write = (str, callback = () => {}) => {
+          ++pendingWrites;
+          write.call(stream, str, () => {
+            --pendingWrites;
+            callback();
+          });
+        };
+        terminal.log('foo');
+        await terminal[method]();
+        expect(pendingWrites).toBe(0);
+      },
+    );
 
     test('flush- multi-line', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
