@@ -9,7 +9,6 @@
  * @oncall react_native
  */
 
-import type {BabelDecodedMap, BasicSourceMap} from 'metro-source-map';
 import type {MinifierOptions, MinifierResult} from 'metro-transform-worker';
 
 import terser from 'terser';
@@ -18,32 +17,26 @@ export default async function minifier(
   options: MinifierOptions,
 ): Promise<MinifierResult> {
   const result = await minify(options);
-  const {getMap} = result;
-
-  if (!options.map || getMap == null) {
+  if (!options.map || result.decodedMap == null) {
     return {code: result.code};
   }
-
-  let map: ?BasicSourceMap;
-
-  return {
-    code: result.code,
-    // Terser encodes its map only when `result.map` is read.
-    // flowlint-next-line unsafe-getters-setters:off
-    get map(): BasicSourceMap {
-      if (map == null) {
-        map = {...JSON.parse(getMap()), sources: [options.filename]};
-      }
-      return map;
-    },
-    decodedMap: result.decodedMap,
-  };
+  const {mappings, names} = result.decodedMap;
+  return {code: result.code, decodedMap: {mappings, names}};
 }
 
 async function minify({code, map, reserved, config}: MinifierOptions): Promise<{
   code: string,
-  getMap: ?() => string,
-  decodedMap: ?BabelDecodedMap,
+  decodedMap: ?{
+    mappings: Array<
+      Array<
+        | [number]
+        | [number, number, number, number]
+        | [number, number, number, number, number],
+      >,
+    >,
+    names: Array<string>,
+    ...
+  },
 }> {
   const options = {
     ...config,
@@ -76,7 +69,6 @@ async function minify({code, map, reserved, config}: MinifierOptions): Promise<{
 
   return {
     code: result.code,
-    getMap: options.sourceMap ? () => result.map : null,
     decodedMap: result.decoded_map,
   };
 }
