@@ -42,6 +42,12 @@ export default function parseJsonBody(
       }
     }
 
+    // A stream that has already ended will never emit `end` again.
+    if (req.readableEnded) {
+      reject(new Error('Request body was already read by a middleware'));
+      return;
+    }
+
     let size = 0;
     let data = '';
 
