@@ -149,9 +149,9 @@ export default class Terminal {
   }
 
   /**
-   * Useful for calling console/stdout directly after terminal status updates
-   * Otherwise, you could end up with mangled output when the queued
-   * update starts writing to stream after a delay.
+   * Writes the pending status without waiting for the update delay, and
+   * resolves once it is written. Useful before writing to the stream directly
+   * or exiting, so the latest status shows before that output.
    */
   async flush(): Promise<void> {
     if (this.#isUpdating) {
