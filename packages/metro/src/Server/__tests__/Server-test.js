@@ -804,8 +804,7 @@ describe('processRequest', () => {
   });
 
   test('marks the url-server source path of a virtual module', async () => {
-    // $FlowFixMe[prop-missing] Missing from the flow-typed Jest definitions.
-    const buildGraphImpl = buildGraph.getMockImplementation();
+    const buildGraphImpl = nullthrows(buildGraph.getMockImplementation());
     buildGraph.mockImplementationOnce(async (...args) => {
       const graph = await buildGraphImpl(...args);
       // A virtual module at the path of a real one.
