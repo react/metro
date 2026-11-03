@@ -100,6 +100,7 @@ export default class Terminal {
   #stream: UnderlyingStream;
   #ttyStream: ?tty.WriteStream;
   #updatePromise: Promise<void> | null;
+  #lastWritePromise: Promise<void>;
   #isUpdating: boolean;
   #hasPendingUpdate: boolean;
   #isFlushRequested: boolean;
@@ -112,11 +113,12 @@ export default class Terminal {
     this.#stream = stream;
     this.#ttyStream = (opts.ttyPrint ?? true) ? getTTYStream(stream) : null;
     this.#updatePromise = null;
+    this.#lastWritePromise = Promise.resolve();
     this.#isUpdating = false;
     this.#hasPendingUpdate = false;
     this.#isFlushRequested = false;
     this.#writeNonTTYStatusThrottled = throttle(
-      status => this.#stream.write(status),
+      status => this.#write(status),
       NON_TTY_STATUS_THROTTLE_MS,
     );
   }
@@ -154,9 +156,9 @@ export default class Terminal {
   }
 
   /**
-   * Writes the pending status without waiting for the update delay, and
-   * resolves once it is written. Useful before writing to the stream directly
-   * or exiting, so the latest status shows before that output.
+   * Writes the pending status without starting another update delay, and
+   * resolves once all writes are done. Useful before writing to the stream
+   * directly or exiting, so the latest status shows before that output.
    */
   async flush(): Promise<void> {
     if (this.#isUpdating) {
@@ -165,12 +167,22 @@ export default class Terminal {
     await this.waitForUpdates();
     // $FlowFixMe[prop-missing]
     this.#writeNonTTYStatusThrottled.flush();
+    await this.#lastWritePromise;
+  }
+
+  /**
+   * Writes to the stream, tracking the write's completion. Writes to a stream
+   * complete in order, so the last write's completion covers all of them.
+   */
+  #write(chunk: string): void {
+    this.#lastWritePromise = new Promise(resolve =>
+      this.#stream.write(chunk, () => resolve()),
+    );
   }
 
   /**
    * Issues the update's writes without awaiting in between, so no other output
-   * can land in the middle of an update. Resolves when the last write is done,
-   * as writes to a stream complete in order.
+   * can land in the middle of an update. Resolves when the writes are done.
    */
   async #writeStatus(): Promise<void> {
     const ttyStream = this.#ttyStream;
@@ -186,16 +198,13 @@ export default class Terminal {
       return;
     }
 
-    const discardPromise = this.#discardWrittenStatus(ttyStream);
-    const writePromise =
-      status.length > 0
-        ? new Promise(resolve =>
-            this.#stream.write(status + '\n', () => resolve()),
-          )
-        : discardPromise;
+    this.#discardWrittenStatus(ttyStream);
+    if (status.length > 0) {
+      this.#write(status + '\n');
+    }
     this.#writtenStatus = status;
     this.#bytesWrittenAfterStatus = getBytesWritten(ttyStream);
-    await writePromise;
+    await this.#lastWritePromise;
   }
 
   /**
@@ -203,7 +212,7 @@ export default class Terminal {
    * can't be reliably erased, by ignoring it and letting it drift with the
    * scrollbar.
    */
-  #discardWrittenStatus(ttyStream: tty.WriteStream): Promise<void> {
+  #discardWrittenStatus(ttyStream: tty.WriteStream): void {
     const writtenStatus = this.#writtenStatus;
     this.#writtenStatus = '';
 
@@ -216,13 +225,15 @@ export default class Terminal {
       // be known without overriding the stdout/stderr globals
       getBytesWritten(ttyStream) !== this.#bytesWrittenAfterStatus
     ) {
-      return Promise.resolve();
+      return;
     }
 
     const statusLinesCount = writtenStatus.split('\n').length - 1;
     // extra -1 because we print the status with a trailing new line
     readline.moveCursor(ttyStream, -ttyStream.columns, -statusLinesCount - 1);
-    return new Promise(resolve => readline.clearScreenDown(ttyStream, resolve));
+    this.#lastWritePromise = new Promise(resolve =>
+      readline.clearScreenDown(ttyStream, () => resolve()),
+    );
   }
 
   /**
@@ -253,9 +264,9 @@ export default class Terminal {
    */
   log(format: string, ...args: Array<unknown>): void {
     if (this.#ttyStream) {
-      void this.#discardWrittenStatus(this.#ttyStream);
+      this.#discardWrittenStatus(this.#ttyStream);
     }
-    this.#stream.write(util.format(format, ...args) + '\n');
+    this.#write(util.format(format, ...args) + '\n');
 
     this.#scheduleStatusUpdate();
   }
