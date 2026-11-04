@@ -22,3 +22,11 @@ export function findInvalidPathSegment(subpath: string): ?string {
 
   return null;
 }
+
+/**
+ * Whether the part of a subpath matched by a pattern includes a segment that
+ * Node.js PACKAGE_TARGET_RESOLVE rejects. Node.js allows empty segments here.
+ */
+export function hasInvalidPatternMatchSegment(patternMatch: string): boolean {
+  return /(?:^|[\\/])(?:\.\.?|node_modules)(?:[\\/]|$)/i.test(patternMatch);
+}

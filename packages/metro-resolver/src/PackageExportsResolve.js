@@ -19,7 +19,10 @@ import type {
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import PackagePathNotExportedError from './errors/PackagePathNotExportedError';
 import resolveAsset from './resolveAsset';
-import {findInvalidPathSegment} from './utils/findInvalidPathSegment';
+import {
+  findInvalidPathSegment,
+  hasInvalidPatternMatchSegment,
+} from './utils/findInvalidPathSegment';
 import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
@@ -103,7 +106,7 @@ export function resolvePackageTargetFromExports(
     if (
       patternMatch != null &&
       context.unstable_resolveExportsFromPackageRoot &&
-      INVALID_PATTERN_MATCH_SEGMENT.test(patternMatch)
+      hasInvalidPatternMatchSegment(patternMatch)
     ) {
       throw new PackagePathNotExportedError(
         `Attempted to import the module "${modulePath}" which is not listed ` +
@@ -223,10 +226,3 @@ function normalizeExportsField(
   _normalizedExportsFields.set(exportsField, result);
   return result;
 }
-
-/**
- * Matches a segment that Node.js PACKAGE_TARGET_RESOLVE rejects in the part of
- * a subpath matched by a pattern. Node.js allows empty segments here.
- */
-const INVALID_PATTERN_MATCH_SEGMENT =
-  /(?:^|[\\/])(?:\.\.?|node_modules)(?:[\\/]|$)/i;

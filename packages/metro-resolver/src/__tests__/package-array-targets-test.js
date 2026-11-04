@@ -154,6 +154,38 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
 
     if (kind === 'imports') {
       test.each([
+        ['#pattern/../selected.js'],
+        ['#pattern/./file.js'],
+        ['#pattern/node_modules/x.js'],
+        ['#pattern/NODE_MODULES/x.js'],
+        ['#array/../selected.js'],
+        ['#pattern/..\\selected.js'],
+      ])('rejects invalid segments in pattern match %s', specifier => {
+        const logWarning = jest.fn();
+        const context = {
+          ...createResolutionContext({
+            [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
+              imports: {
+                '#pattern/*': './lib/*',
+                '#array/*': ['./lib/*', './selected.js'],
+              },
+            }),
+            [p('/root/node_modules/test-pkg/selected.js')]: '',
+            [p('/root/node_modules/test-pkg/lib/file.js')]: '',
+            [p('/root/node_modules/test-pkg/lib/node_modules/x.js')]: '',
+            [p('/root/node_modules/test-pkg/main.js')]: '',
+          }),
+          originModulePath: p('/root/node_modules/test-pkg/main.js'),
+          unstable_enablePackageExports: true,
+          unstable_conditionNames: [],
+          unstable_logWarning: logWarning,
+        };
+        expect(() => Resolver.resolve(context, specifier, null)).toThrow();
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain('invalid path segment');
+      });
+
+      test.each([
         ['a package', ['dep', './selected.js']],
         ['a package in a condition', [{require: 'dep'}, './selected.js']],
         ['a package in a nested array', [['dep'], './selected.js']],

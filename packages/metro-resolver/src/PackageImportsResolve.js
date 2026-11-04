@@ -14,7 +14,10 @@ import type {ExportsLikeMap, FileResolution, ResolutionContext} from './types';
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import PackageImportNotResolvedError from './errors/PackageImportNotResolvedError';
 import resolveAsset from './resolveAsset';
-import {findInvalidPathSegment} from './utils/findInvalidPathSegment';
+import {
+  findInvalidPathSegment,
+  hasInvalidPatternMatchSegment,
+} from './utils/findInvalidPathSegment';
 import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
@@ -106,6 +109,15 @@ export function resolvePackageTargetFromImports(
       `The target for "${importPath}" defined in "imports" is "${target}", ` +
         'however targets which are packages are not supported.',
     );
+  }
+
+  if (patternMatch != null && hasInvalidPatternMatchSegment(patternMatch)) {
+    throw new PackageImportNotResolvedError({
+      importSpecifier: importPath,
+      reason:
+        `"${importPath}" matches a subpath pattern in "imports" of ` +
+        `${packagePath}, however it includes an invalid path segment.`,
+    });
   }
 
   const filePath = path.join(
