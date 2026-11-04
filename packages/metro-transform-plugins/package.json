@@ -23,6 +23,9 @@
     "@babel/generator": "^7.29.1",
     "@babel/template": "^7.28.6",
     "@babel/traverse": "^7.29.10",
+    "@babel/types": "^7.29.8",
+    "@types/babel__core": "^7.1.14",
+    "@types/babel__traverse": "^7.0.6",
     "flow-enums-runtime": "^0.0.6",
     "nullthrows": "^1.1.1"
   },
@@ -31,7 +34,6 @@
     "@babel/plugin-syntax-nullish-coalescing-operator": "^7.8.3",
     "@babel/plugin-transform-flow-strip-types": "^7.25.2",
     "@babel/plugin-transform-modules-commonjs": "^7.24.8",
-    "@babel/types": "^7.29.8",
     "babel-plugin-tester": "^6.0.1",
     "metro": "0.87.2"
   },

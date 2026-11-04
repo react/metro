@@ -20,6 +20,7 @@
   "dependencies": {
     "flow-enums-runtime": "^0.0.6",
     "lodash.throttle": "^4.1.1",
+    "metro-file-map": "0.87.2",
     "metro-resolver": "0.87.2"
   },
   "license": "MIT",
