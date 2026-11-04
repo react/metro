@@ -19,6 +19,7 @@ import type {
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import PackagePathNotExportedError from './errors/PackagePathNotExportedError';
 import resolveAsset from './resolveAsset';
+import {findInvalidPathSegment} from './utils/findInvalidPathSegment';
 import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
@@ -226,13 +227,3 @@ function normalizeExportsField(
  */
 const INVALID_PATTERN_MATCH_SEGMENT =
   /(?:^|[\\/])(?:\.\.?|node_modules)(?:[\\/]|$)/i;
-
-function findInvalidPathSegment(subpath: string): ?string {
-  for (const segment of subpath.split(/[\\/]/)) {
-    if (segment === '.' || segment === '..' || segment === 'node_modules') {
-      return segment;
-    }
-  }
-
-  return null;
-}

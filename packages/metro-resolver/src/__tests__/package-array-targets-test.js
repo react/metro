@@ -118,33 +118,39 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
       expect(logWarning.mock.calls[0][0]).toContain('this file does not exist');
     });
 
-    if (kind !== 'imports') {
-      test.each(['./../invalid.js', './node_modules/invalid.js'])(
-        'skips invalid export path %s before selecting a fallback',
-        invalidTarget => {
-          const {run, logWarning} = resolve([invalidTarget, './selected.js']);
-          expect(run()).toEqual({
-            type: 'sourceFile',
-            filePath: p('/root/node_modules/test-pkg/selected.js'),
-          });
-          expect(logWarning).not.toHaveBeenCalled();
-        },
-      );
-    }
-
-    if (kind !== 'imports') {
-      test.each([
-        ['a string', './lib//file.js'],
-        ['an array', ['./lib//file.js', './selected.js']],
-      ])('selects a target with an empty segment in %s', (_, target) => {
-        const {run, logWarning} = resolve(target);
-        expect(run()).toEqual({
-          type: 'sourceFile',
-          filePath: p('/root/node_modules/test-pkg/lib/file.js'),
-        });
-        expect(logWarning).not.toHaveBeenCalled();
+    test.each([
+      './../invalid.js',
+      './lib/../selected.js',
+      './lib/./file.js',
+      './node_modules/invalid.js',
+      './..\\invalid.js',
+    ])('skips invalid path %s before selecting a fallback', invalidTarget => {
+      const {run, logWarning} = resolve([invalidTarget, './selected.js']);
+      expect(run()).toEqual({
+        type: 'sourceFile',
+        filePath: p('/root/node_modules/test-pkg/selected.js'),
       });
-    }
+      expect(logWarning).not.toHaveBeenCalled();
+    });
+
+    test('does not resolve a target with a trailing slash to a directory', () => {
+      const {run, logWarning} = resolve(['./lib/', './selected.js']);
+      expect(run).toThrow();
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain('does not exist');
+    });
+
+    test.each([
+      ['a string', './lib//file.js'],
+      ['an array', ['./lib//file.js', './selected.js']],
+    ])('selects a target with an empty segment in %s', (_, target) => {
+      const {run, logWarning} = resolve(target);
+      expect(run()).toEqual({
+        type: 'sourceFile',
+        filePath: p('/root/node_modules/test-pkg/lib/file.js'),
+      });
+      expect(logWarning).not.toHaveBeenCalled();
+    });
 
     if (kind === 'imports') {
       test.each([

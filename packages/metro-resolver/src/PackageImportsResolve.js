@@ -14,6 +14,7 @@ import type {ExportsLikeMap, FileResolution, ResolutionContext} from './types';
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import PackageImportNotResolvedError from './errors/PackageImportNotResolvedError';
 import resolveAsset from './resolveAsset';
+import {findInvalidPathSegment} from './utils/findInvalidPathSegment';
 import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
@@ -77,7 +78,9 @@ export function resolvePackageTargetFromImports(
       if (
         target.startsWith('../') ||
         target.startsWith('/') ||
-        URL.canParse(target)
+        URL.canParse(target) ||
+        (target.startsWith('./') &&
+          findInvalidPathSegment(target.slice(2)) != null)
       ) {
         throw createConfigError(
           `The target for "${importPath}" defined in "imports" is "${target}", ` +
