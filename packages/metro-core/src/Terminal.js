@@ -12,15 +12,15 @@
 import type {Socket} from 'node:net';
 import type {Writable} from 'node:stream';
 
-import throttle from 'lodash.throttle';
-import readline from 'node:readline';
+import {clearTimeout, setTimeout} from 'node:timers';
 import tty from 'node:tty';
 import util from 'node:util';
 
 type UnderlyingStream = Socket | Writable;
 
 const STATUS_UPDATE_DELAY_MS = 33;
-const NON_TTY_STATUS_THROTTLE_MS = 3500;
+const NON_TTY_STATUS_UPDATE_DELAY_MS = 3500;
+const EXTERNAL_WRITES_QUIET_MS = 333;
 
 /**
  * Cut a string into an array of strings of the specified maximum size. A newline
@@ -35,21 +35,6 @@ function chunkString(str: string, size: number): Array<string> {
   const ANSI_COLOR = '\x1B\\[([0-9]{1,2}(;[0-9]{1,2})?)?m';
   const SKIP_ANSI = `(?:${ANSI_COLOR})*`;
   return str.match(new RegExp(`(?:${SKIP_ANSI}.){1,${size}}`, 'g')) || [];
-}
-
-/**
- * Bytes written by `stream` and, when it is stdout or stderr, by both, as they
- * usually share the terminal (e.g. `console.error()`).
- */
-function getBytesWritten(stream: tty.WriteStream): number {
-  if (stream !== process.stdout && stream !== process.stderr) {
-    return stream.bytesWritten;
-  }
-
-  return (
-    // $FlowFixMe[prop-missing] `bytesWritten` is missing when redirected to a file
-    (process.stdout.bytesWritten ?? 0) + (process.stderr.bytesWritten ?? 0)
-  );
 }
 
 /**
@@ -101,11 +86,10 @@ export default class Terminal {
   #ttyStream: ?tty.WriteStream;
   #updatePromise: Promise<void> | null;
   #lastWritePromise: Promise<void>;
-  #isUpdating: boolean;
-  #hasPendingUpdate: boolean;
   #isFlushRequested: boolean;
-  #writeNonTTYStatusThrottled: (status: string) => void;
-  #bytesWrittenAfterStatus: ?number;
+  #statusDelay: {promise: Promise<void>, endEarly: () => void} | null;
+  #bytesWrittenAfterLastWrite: number;
+  #flushBeforeExit: () => void;
 
   constructor(stream: UnderlyingStream, opts: {ttyPrint?: boolean} = {}) {
     this.#status = '';
@@ -114,41 +98,53 @@ export default class Terminal {
     this.#ttyStream = (opts.ttyPrint ?? true) ? getTTYStream(stream) : null;
     this.#updatePromise = null;
     this.#lastWritePromise = Promise.resolve();
-    this.#isUpdating = false;
-    this.#hasPendingUpdate = false;
     this.#isFlushRequested = false;
-    this.#writeNonTTYStatusThrottled = throttle(
-      status => this.#write(status),
-      NON_TTY_STATUS_THROTTLE_MS,
-    );
+    this.#statusDelay = null;
+    this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
+    this.#flushBeforeExit = () => {
+      void this.flush();
+    };
   }
 
   /**
-   * Schedule an update of the status.
-   * If there's an ongoing update, schedule another one after the current one.
-   * If there are two updates scheduled, do nothing, as the second update will
-   * take care of the latest status.
+   * Starts an update of the status, unless one is ongoing. An update keeps
+   * writing the status until the latest one is written. Status delays don't
+   * keep the process alive, so an ongoing update is flushed before the process
+   * exits.
    */
   #scheduleStatusUpdate() {
-    if (this.#isUpdating) {
-      this.#hasPendingUpdate = true;
+    if (this.#updatePromise != null) {
       return;
     }
 
-    this.#isUpdating = true;
+    process.on('beforeExit', this.#flushBeforeExit);
     this.#updatePromise = this.#writeStatus().then(async () => {
-      while (this.#hasPendingUpdate) {
-        if (!this.#isFlushRequested) {
-          await new Promise(resolve =>
-            setTimeout(resolve, STATUS_UPDATE_DELAY_MS),
-          );
-        }
-        this.#hasPendingUpdate = false;
+      while (this.#writtenStatus !== this.#status) {
         await this.#writeStatus();
       }
-      this.#isUpdating = false;
+      process.off('beforeExit', this.#flushBeforeExit);
+      this.#updatePromise = null;
       this.#isFlushRequested = false;
     });
+  }
+
+  /**
+   * Makes status writes wait `ms`, or until `#statusDelay.endEarly()` is called.
+   * Returns the delay's promise.
+   */
+  #delayStatus(ms: number): Promise<void> {
+    if (this.#isFlushRequested) {
+      return Promise.resolve();
+    }
+    const {promise, resolve} = Promise.withResolvers<void>();
+    const endEarly = () => {
+      clearTimeout(timeout);
+      this.#statusDelay = null;
+      resolve();
+    };
+    const timeout = setTimeout(endEarly, ms).unref();
+    this.#statusDelay = {promise, endEarly};
+    return promise;
   }
 
   async waitForUpdates(): Promise<void> {
@@ -157,28 +153,28 @@ export default class Terminal {
   }
 
   /**
-   * Writes the pending status without starting another update delay, and
+   * Writes the pending status without waiting for the status delay, and
    * resolves once all writes are done. Useful before writing to the stream
    * directly or exiting, so the latest status shows before that output.
    */
   async flush(): Promise<void> {
-    if (this.#isUpdating) {
+    if (this.#updatePromise != null) {
       this.#isFlushRequested = true;
+      this.#statusDelay?.endEarly();
     }
     await this.waitForUpdates();
-    // $FlowFixMe[prop-missing]
-    this.#writeNonTTYStatusThrottled.flush();
-    await this.#lastWritePromise;
   }
 
   /**
-   * Writes to the stream, tracking the write's completion. Writes to a stream
-   * complete in order, so the last write's completion covers all of them.
+   * Writes to the stream, tracking the write's completion and the bytes written
+   * after it. Writes to a stream complete in order, so the last write's
+   * completion covers all of them.
    */
   #write(chunk: string): void {
     this.#lastWritePromise = new Promise(resolve =>
       this.#stream.write(chunk, () => resolve()),
     );
+    this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
   }
 
   /**
@@ -186,63 +182,101 @@ export default class Terminal {
    * can land in the middle of an update. Resolves when the writes are done.
    */
   async #writeStatus(): Promise<void> {
-    const ttyStream = this.#ttyStream;
+    if (this.#writtenStatus === this.#status) {
+      return;
+    }
+
+    if (this.#statusDelay != null) {
+      await this.#statusDelay.promise;
+    }
+    const externalWritesStop = this.#waitForExternalWritesToStop();
+    if (externalWritesStop != null) {
+      await externalWritesStop;
+    }
+    this.#eraseWrittenStatusMaybe();
     const status = this.#status;
-
-    if (this.#writtenStatus === status) {
-      return;
-    }
-
-    if (!ttyStream) {
-      this.#writeNonTTYStatusThrottled(status.length > 0 ? status + '\n' : '');
-      this.#writtenStatus = status;
-      return;
-    }
-
-    this.#discardWrittenStatus(ttyStream);
     if (status.length > 0) {
       this.#write(status + '\n');
     }
     this.#writtenStatus = status;
-    this.#bytesWrittenAfterStatus = getBytesWritten(ttyStream);
+    void this.#delayStatus(
+      this.#ttyStream ? STATUS_UPDATE_DELAY_MS : NON_TTY_STATUS_UPDATE_DELAY_MS,
+    );
     await this.#lastWritePromise;
   }
 
   /**
-   * Discards the written status by erasing it from the screen or, when it
-   * can't be reliably erased, by ignoring it and letting it drift with the
-   * scrollbar.
+   * Waits until no output is written outside of Terminal for
+   * EXTERNAL_WRITES_QUIET_MS, so the status isn't written in the middle of a
+   * burst of such output. Returns nothing without such output, so the status
+   * can be written synchronously.
    */
-  #discardWrittenStatus(ttyStream: tty.WriteStream): void {
+  #waitForExternalWritesToStop(
+    bytesWritten: number = this.#bytesWrittenAfterLastWrite,
+  ): Promise<void> | void {
+    const currentBytesWritten = this.#getBytesWritten();
+    if (this.#isFlushRequested || currentBytesWritten === bytesWritten) {
+      return undefined;
+    }
+
+    return this.#delayStatus(EXTERNAL_WRITES_QUIET_MS).then(() =>
+      this.#waitForExternalWritesToStop(currentBytesWritten),
+    );
+  }
+
+  /**
+   * Bytes written by the stream and, when it is stdout or stderr, by both, as
+   * they usually share the terminal (e.g. `console.error()`). 0 when the stream
+   * doesn't count them.
+   */
+  #getBytesWritten(): number {
+    const stream = this.#stream;
+    if (stream !== process.stdout && stream !== process.stderr) {
+      // $FlowFixMe[prop-missing] `bytesWritten` is missing on generic streams
+      return stream.bytesWritten ?? 0;
+    }
+
+    return (
+      // $FlowFixMe[prop-missing] `bytesWritten` is missing when redirected to a file
+      (process.stdout.bytesWritten ?? 0) + (process.stderr.bytesWritten ?? 0)
+    );
+  }
+
+  /**
+   * Erases the written status from the screen, unless it can't be reliably
+   * erased, in which case it is left to drift with the scrollbar. In
+   * non-interactive terminals, the written status stays.
+   */
+  #eraseWrittenStatusMaybe(): void {
+    if (!this.#ttyStream) {
+      return;
+    }
+
     const writtenStatus = this.#writtenStatus;
     this.#writtenStatus = '';
 
     if (
       writtenStatus.length === 0 ||
       // If output printed outside of Terminal (like direct console.log) is
-      // detected, the status can't be erased without erasing that output too,
-      // so it is ignored and left to drift with the scrollbar.
+      // detected, the status can't be erased without erasing that output too.
       // Detection compares bytes written, as the number of lines printed can't
       // be known without overriding the stdout/stderr globals
-      getBytesWritten(ttyStream) !== this.#bytesWrittenAfterStatus
+      this.#getBytesWritten() !== this.#bytesWrittenAfterLastWrite
     ) {
       return;
     }
 
-    const statusLinesCount = writtenStatus.split('\n').length - 1;
-    // extra -1 because we print the status with a trailing new line
-    readline.moveCursor(ttyStream, -ttyStream.columns, -statusLinesCount - 1);
-    this.#lastWritePromise = new Promise(resolve =>
-      readline.clearScreenDown(ttyStream, () => resolve()),
-    );
+    const statusLinesCount = writtenStatus.split('\n').length;
+    // Moves to the start of the line, up over the status lines, and clears below
+    this.#write(`\r\x1B[${statusLinesCount}A\x1B[J`);
   }
 
   /**
    * Shows some text that is meant to be overridden later. Return the previous
    * status that was shown and is no more. Calling `status()` with no argument
-   * removes the status altogether. The status is never shown in a
-   * non-interactive terminal: for example, if the output is redirected to a
-   * file, then we don't care too much about having a progress bar.
+   * removes the status altogether. In a non-interactive terminal, for example
+   * if the output is redirected to a file, the status is written as lines, at
+   * most every NON_TTY_STATUS_UPDATE_DELAY_MS.
    */
   status(format: string, ...args: Array<unknown>): string {
     const previousStatus = this.#status;
@@ -264,9 +298,7 @@ export default class Terminal {
    * relative to other output.
    */
   log(format: string, ...args: Array<unknown>): void {
-    if (this.#ttyStream) {
-      this.#discardWrittenStatus(this.#ttyStream);
-    }
+    this.#eraseWrittenStatusMaybe();
     this.#write(util.format(format, ...args) + '\n');
 
     this.#scheduleStatusUpdate();
