@@ -911,26 +911,6 @@ function createModuleNameLiteral(dependency: InternalDependency) {
   return types.stringLiteral(getDebugName(dependency.name));
 }
 
-/**
- * Given an import qualifier, return a key used to register the dependency.
- * Attributes can be appended to distinguish various combinations that would
- * otherwise be considered the same dependency edge.
- *
- * For example, the following dependencies would collapse into a single edge
- * if they simply utilized the `name` property:
- *
- * ```
- * require('./foo');
- * import foo from './foo'
- * await import('./foo')
- * require.context('./foo');
- * require.context('./foo', true, /something/);
- * require.context('./foo', false, /something/);
- * require.context('./foo', false, /something/, 'lazy');
- * ```
- *
- * This method should be utilized by `registerDependency`.
- */
 const INLINE_MODULE_PREFIX = 'metro:inline';
 
 /**
@@ -951,6 +931,26 @@ function getDebugName(name: string): string {
   return name;
 }
 
+/**
+ * Given an import qualifier, return a key used to register the dependency.
+ * Attributes can be appended to distinguish various combinations that would
+ * otherwise be considered the same dependency edge.
+ *
+ * For example, the following dependencies would collapse into a single edge
+ * if they simply utilized the `name` property:
+ *
+ * ```
+ * require('./foo');
+ * import foo from './foo'
+ * await import('./foo')
+ * require.context('./foo');
+ * require.context('./foo', true, /something/);
+ * require.context('./foo', false, /something/);
+ * require.context('./foo', false, /something/, 'lazy');
+ * ```
+ *
+ * This method should be utilized by `registerDependency`.
+ */
 function getKeyForDependency(qualifier: ImportQualifier): string {
   const {asyncType, contextParams, isESMImport, name} = qualifier;
 
