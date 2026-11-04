@@ -117,7 +117,10 @@ export function resolvePackageTargetFromExports(
       patternMatch != null ? target.replaceAll('*', patternMatch) : target,
     );
 
-    if (isAssetFile(filePath, context.assetExts)) {
+    if (
+      !filePath.endsWith(path.sep) &&
+      isAssetFile(filePath, context.assetExts)
+    ) {
       const assetResult = resolveAsset(context, filePath);
 
       if (assetResult != null) {

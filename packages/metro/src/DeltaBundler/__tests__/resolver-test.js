@@ -1435,6 +1435,43 @@ function dep(name: string): TransformResultDependency {
           },
         );
 
+        test.each([
+          [
+            '"exports"',
+            {exports: {'./sub': './image.png/'}},
+            'pkg/sub',
+            'node_modules/pkg/index.js',
+          ],
+          [
+            '"imports"',
+            {imports: {'#sub': './image.png/'}},
+            '#sub',
+            'node_modules/pkg/index.js',
+          ],
+        ])(
+          'an asset target with a trailing slash in %s',
+          async (_, manifest, specifier, origin) => {
+            setMockFileSystem({
+              'index.js': '',
+              node_modules: {
+                pkg: {
+                  'package.json': JSON.stringify({name: 'pkg', ...manifest}),
+                  'index.js': '',
+                  'image.png': '',
+                },
+              },
+            });
+
+            resolver = await createResolver(
+              {resolver: {unstable_enablePackageExports: true}},
+              'ios',
+            );
+            expect(() =>
+              resolver.resolve(p('/root/' + origin), dep(specifier)),
+            ).toThrow();
+          },
+        );
+
         test('a "browser" spec redirection in a symlinked package with no root package.json', async () => {
           setMockFileSystem({
             'index.js': '',
