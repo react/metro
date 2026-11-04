@@ -9,7 +9,9 @@
  * @oncall react_native
  */
 
+import PackagePathNotExportedError from '../errors/PackagePathNotExportedError';
 import * as Resolver from '../index';
+import {resolvePackageTargetFromExports} from '../PackageExportsResolve';
 import {
   createPackageAccessors,
   createResolutionContext,
@@ -1769,6 +1771,52 @@ describe('"exports" of the package at the root of a bare specifier', () => {
       JSON.stringify({exports: {'./index.js': './dist/main.js'}}),
     [p('/root/node_modules/leaves-root/node_modules/dep/index.js')]: '',
     [p('/root/node_modules/leaves-root/node_modules/dep/dist/main.js')]: '',
+    // Subpath patterns that may match invalid segments.
+    [p('/root/node_modules/patterns/package.json')]: JSON.stringify({
+      name: 'patterns',
+      exports: {'./*': './dist/*'},
+    }),
+    [p('/root/node_modules/patterns/secret.js')]: '',
+    [p('/root/node_modules/patterns/sub.js')]: '',
+    [p('/root/node_modules/patterns/dist/sub.js')]: '',
+    [p('/root/node_modules/patterns/dist/nested/sub.js')]: '',
+    [p('/root/node_modules/patterns/dist/node_modules/dep/index.js')]: '',
+    [p('/root/node_modules/patterns/node_modules/dep/index.js')]: '',
+    [p('/root/node_modules/other-patterns/main.js')]: '',
+    // A "browser" redirection from the root into a nested manifest.
+    [p('/root/node_modules/redirect-nested/package.json')]: JSON.stringify({
+      browser: {'./a.js': './lib/b.js'},
+      exports: {'./lib/b.js': './dist/b.js', './a.js': './a.js'},
+    }),
+    [p('/root/node_modules/redirect-nested/lib/package.json')]: JSON.stringify({
+      exports: {'./b.js': './from-nested.js'},
+    }),
+    [p('/root/node_modules/redirect-nested/a.js')]: '',
+    [p('/root/node_modules/redirect-nested/lib/b.js')]: '',
+    [p('/root/node_modules/redirect-nested/lib/from-nested.js')]: '',
+    [p('/root/node_modules/redirect-nested/dist/b.js')]: '',
+    // A "browser" redirection below a package with no manifest at its root.
+    [p('/root/node_modules/no-root-map/sub/package.json')]: JSON.stringify({
+      browser: {
+        './a.js': './b.js',
+        './dep.js': '../node_modules/dep/index.js',
+        './outside.js': '../../other/main.js',
+      },
+      exports: {
+        './b.js': './from-exports.js',
+        './dep.js': './from-exports.js',
+        './outside.js': './from-exports.js',
+      },
+    }),
+    [p('/root/node_modules/no-root-map/sub/a.js')]: '',
+    [p('/root/node_modules/no-root-map/sub/b.js')]: '',
+    [p('/root/node_modules/no-root-map/sub/dep.js')]: '',
+    [p('/root/node_modules/no-root-map/sub/outside.js')]: '',
+    [p('/root/node_modules/no-root-map/sub/from-exports.js')]: '',
+    [p('/root/node_modules/no-root-map/node_modules/dep/package.json')]:
+      JSON.stringify({exports: {'./index.js': './dist/main.js'}}),
+    [p('/root/node_modules/no-root-map/node_modules/dep/index.js')]: '',
+    [p('/root/node_modules/no-root-map/node_modules/dep/dist/main.js')]: '',
   };
   const baseContext = {
     ...createResolutionContext(files),
@@ -1839,6 +1887,146 @@ describe('"exports" of the package at the root of a bare specifier', () => {
       });
       expect(logWarning).toHaveBeenCalledTimes(1);
       expect(logWarning.mock.calls[0][0]).toContain(subpath);
+    },
+  );
+
+  test.each([
+    ['patterns/../secret.js', null, '"./../secret.js"'],
+    [
+      'patterns/../other-patterns/main.js',
+      '/root/node_modules/other-patterns/main.js',
+      '"./../other-patterns/main.js"',
+    ],
+    ['patterns/./sub.js', '/root/node_modules/patterns/sub.js', '"././sub.js"'],
+    [
+      'patterns/nested/../sub.js',
+      '/root/node_modules/patterns/sub.js',
+      '"./nested/../sub.js"',
+    ],
+    [
+      'patterns/node_modules/dep/index.js',
+      '/root/node_modules/patterns/node_modules/dep/index.js',
+      '"./node_modules/dep/index.js"',
+    ],
+    [
+      'patterns/NODE_MODULES/dep/index.js',
+      null,
+      '"./NODE_MODULES/dep/index.js"',
+    ],
+  ])(
+    '[nonstrict] treats %s as not exported by a subpath pattern',
+    (specifier, expected, subpath) => {
+      const logWarning = jest.fn();
+      const context = {...baseContext, unstable_logWarning: logWarning};
+      if (expected == null) {
+        expect(() => Resolver.resolve(context, specifier, null)).toThrow();
+      } else {
+        expect(Resolver.resolve(context, specifier, null)).toEqual({
+          type: 'sourceFile',
+          filePath: p(expected),
+        });
+      }
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain(subpath);
+    },
+  );
+
+  test.each([
+    ['patterns/sub.js', '/root/node_modules/patterns/dist/sub.js'],
+    ['patterns//sub.js', '/root/node_modules/patterns/dist/sub.js'],
+    [
+      'patterns/nested//sub.js',
+      '/root/node_modules/patterns/dist/nested/sub.js',
+    ],
+  ])('matches %s against a subpath pattern', (specifier, expected) => {
+    const logWarning = jest.fn();
+    const context = {...baseContext, unstable_logWarning: logWarning};
+    expect(Resolver.resolve(context, specifier, null)).toEqual({
+      type: 'sourceFile',
+      filePath: p(expected),
+    });
+    expect(logWarning).not.toHaveBeenCalled();
+  });
+
+  test('rejects a backslash-separated invalid segment in a subpath pattern match', () => {
+    expect(() =>
+      resolvePackageTargetFromExports(
+        baseContext,
+        p('/root/node_modules/patterns'),
+        p('/root/node_modules/patterns/nested/../sub.js'),
+        'nested\\..\\sub.js',
+        {'./*': './dist/*'},
+        null,
+      ),
+    ).toThrow(PackagePathNotExportedError);
+  });
+
+  test('[nonstrict] treats a self-reference with an invalid segment as not exported by a subpath pattern', () => {
+    const logWarning = jest.fn();
+    const context = {
+      ...baseContext,
+      originModulePath: p('/root/node_modules/patterns/sub.js'),
+      unstable_logWarning: logWarning,
+    };
+    expect(() =>
+      Resolver.resolve(context, 'patterns/nested/../sub.js', null),
+    ).not.toThrow();
+    expect(logWarning.mock.calls[0][0]).toContain('invalid path segment');
+  });
+
+  test('matches a `node_modules` segment of a self-reference against a subpath pattern when disabled', () => {
+    const logWarning = jest.fn();
+    const context = {
+      ...baseContext,
+      originModulePath: p('/root/node_modules/patterns/sub.js'),
+      unstable_logWarning: logWarning,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
+    expect(
+      Resolver.resolve(context, 'patterns/node_modules/dep/index.js', null),
+    ).toEqual({
+      type: 'sourceFile',
+      filePath: p('/root/node_modules/patterns/dist/node_modules/dep/index.js'),
+    });
+    expect(logWarning).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['no-root-map/sub/a.js', '/root/node_modules/no-root-map/sub/b.js'],
+    [
+      'no-root-map/sub/dep.js',
+      '/root/node_modules/no-root-map/node_modules/dep/dist/main.js',
+    ],
+    ['no-root-map/sub/outside.js', '/root/node_modules/other/dist/main.js'],
+  ])(
+    'applies "browser" spec redirections of %s with no manifest at the root',
+    (specifier, expected) => {
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: false,
+      };
+      expect(Resolver.resolve(context, specifier, null)).toEqual({
+        type: 'sourceFile',
+        filePath: p(expected),
+      });
+    },
+  );
+
+  test.each([
+    [true, '/root/node_modules/redirect-nested/dist/b.js'],
+    [false, '/root/node_modules/redirect-nested/lib/from-nested.js'],
+  ])(
+    'resolves a "browser" spec redirection into a nested manifest, with unstable_resolveExportsFromPackageRoot: %s',
+    (unstable_resolveExportsFromPackageRoot, expected) => {
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: false,
+        unstable_resolveExportsFromPackageRoot,
+      };
+      expect(Resolver.resolve(context, 'redirect-nested/a.js', null)).toEqual({
+        type: 'sourceFile',
+        filePath: p(expected),
+      });
     },
   );
 

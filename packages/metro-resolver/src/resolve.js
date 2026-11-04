@@ -470,7 +470,13 @@ function resolveModuleFromTargetPath(
     candidate === targetPath
       ? pkg
       : context.unstable_enablePackageExports
-        ? getPackageForRedirectedPath(context, rootPkg, candidate)
+        ? getPackageForRedirectedPath(
+            context,
+            packagePath,
+            pkg,
+            rootPkg,
+            candidate,
+          )
         : null,
   );
   if (result.type === 'resolved') {
@@ -785,24 +791,33 @@ function isResolvingExportsFromPackageRoot(
 
 /**
  * Get the package whose "exports" field applies to the target of a "browser"
- * spec redirection. This is the root package if the target is inside its
- * directory and not under a nested `node_modules`, which holds other packages,
- * and otherwise the closest package to the target.
+ * spec redirection. A target inside the root package's directory and not under
+ * a nested `node_modules`, which holds other packages, uses `rootPkg`. It uses
+ * nothing if `pkg` is null, because the root has no `package.json`. Any other
+ * target uses the closest package to it.
  */
 function getPackageForRedirectedPath(
   context: ResolutionContext,
+  packagePath: string,
+  pkg: ?PackageForModule,
   rootPkg: ?PackageForModule,
   redirectedPath: string,
 ): ?PackageForModule {
-  if (rootPkg != null) {
-    const packageRelativePath = path.relative(rootPkg.rootPath, redirectedPath);
+  let rootPath: ?string = rootPkg?.rootPath;
+  if (pkg == null) {
+    // Redirected paths are real paths, and `packagePath` may be a symlink.
+    const lookupResult = context.fileSystemLookup(packagePath);
+    rootPath = lookupResult.exists ? lookupResult.realPath : null;
+  }
+  if (rootPath != null) {
+    const packageRelativePath = path.relative(rootPath, redirectedPath);
     const segments = packageRelativePath.split(path.sep);
     if (
       segments[0] !== '..' &&
       !segments.includes('node_modules') &&
       !path.isAbsolute(packageRelativePath)
     ) {
-      return {...rootPkg, packageRelativePath};
+      return rootPkg == null ? null : {...rootPkg, packageRelativePath};
     }
   }
   return context.getPackageForModule(redirectedPath);

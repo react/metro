@@ -1435,6 +1435,43 @@ function dep(name: string): TransformResultDependency {
           },
         );
 
+        test('a "browser" spec redirection in a symlinked package with no root package.json', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {},
+            store: {
+              pkg: {
+                sub: {
+                  'package.json': JSON.stringify({
+                    browser: {'./a.js': './b.js'},
+                    exports: {'./b.js': './from-exports.js'},
+                  }),
+                  'a.js': '',
+                  'b.js': '',
+                  'from-exports.js': '',
+                },
+              },
+            },
+          });
+          fs.symlinkSync(p('/root/store/pkg'), p('/root/node_modules/pkg'));
+
+          resolver = await createResolver(
+            {
+              resolver: {
+                unstable_enablePackageExports: true,
+                unstable_resolveExportsFromPackageRoot: true,
+              },
+            },
+            'ios',
+          );
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg/sub/a.js')),
+          ).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/store/pkg/sub/b.js'),
+          });
+        });
+
         test('a node_modules symlink to a package root', async () => {
           setMockFileSystem({
             'index.js': '',
