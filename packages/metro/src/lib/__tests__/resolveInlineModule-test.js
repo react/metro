@@ -97,3 +97,33 @@ test('rejects a specifier with no payload separator', () => {
     'Malformed inline module specifier',
   );
 });
+
+test.each([
+  ['an unencoded ?', 'metro:inline,module.exports = true ? 1 : 2;'],
+  ['an encodeURI payload', 'metro:inline,' + encodeURI('true ? 1 : 2')],
+  ['an unencoded #', 'metro:inline,a#b'],
+  ['an unencoded newline', 'metro:inline,// c\nmodule.exports = 5;'],
+  ['an unencoded tab', 'metro:inline,a\tb'],
+  ['an unencoded space', 'metro:inline,a b'],
+  ['a trailing space', 'metro:inline,a '],
+  ['whitespace in a base64 payload', 'metro:inline;base64,MQ==\n'],
+  ['whitespace in the parameters', 'metro:inline; base64,MQ=='],
+  ['a character outside the base64 alphabet', 'metro:inline;base64,M*=='],
+  ['the URL-safe base64 alphabet', 'metro:inline;base64,_-=='],
+  ['misplaced base64 padding', 'metro:inline;base64,M=Q='],
+  ['a stray %', 'metro:inline,100%'],
+  ['a stray % in a base64 payload', 'metro:inline;base64,MQ%'],
+])('rejects %s', (_description, specifier) => {
+  expect(() => resolve(specifier)).toThrow('Malformed inline module specifier');
+});
+
+test('percent-decodes a base64 payload', () => {
+  expect(resolve('metro:inline;base64,MQ%3D%3D')).toMatchObject({source: '1'});
+});
+
+test('accepts any source once it is percent-encoded', () => {
+  const source = '// c\nmodule.exports = true ? "#" : "100%"; ';
+  expect(resolve('metro:inline,' + encodeURIComponent(source))).toMatchObject({
+    source,
+  });
+});

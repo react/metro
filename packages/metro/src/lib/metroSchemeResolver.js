@@ -36,7 +36,7 @@ export default ((context, specifier, platform) => {
     pathname.startsWith(INLINE_MODULE_SPECIFIER + ';') ||
     pathname.startsWith(INLINE_MODULE_SPECIFIER + ',')
   ) {
-    return resolveInlineModule(context, pathname);
+    return resolveInlineModule(context, specifier);
   }
 
   // Maps `metro:babel-runtime` (and subpaths, e.g.

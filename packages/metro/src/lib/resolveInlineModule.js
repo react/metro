@@ -21,18 +21,23 @@ export const INLINE_MODULE_SPECIFIER = 'inline';
 // reports as an error rather than bundling either.
 const INLINE_MODULE_HASH_LENGTH = 16;
 
+// A URL parser moves or removes these, which leaves different but often still
+// valid source, so they are rejected rather than read from a parsed URL.
+const UNENCODED_CHARACTERS = /[?#\s]/;
+const BASE64_PAYLOAD = /^[A-Za-z0-9+/]*={0,2}$/;
+
 /**
  * Resolves the `inline` pathname of Metro's own URI scheme, so that a transform
  * may emit a module inline in its importer:
  *
  *   require('metro:inline;base64,ZXhwb3J0IGRlZmF1bHQgMQ==')
  *
- * The payload is the module's source, encoded as in a `data:` URL. Unlike a
- * `data:` URL, an inline module belongs to its importer: the same payload in
- * two modules is two modules, and imports inside it resolve exactly as they
- * would from the importer. That is what makes it usable for modules a
- * transform derives from the importing file, which is not what `data:`
- * promises, so it is deliberately not spelled `data:`.
+ * The payload is the module's source, percent-encoded or base64-encoded as in
+ * a `data:` URL. Unlike a `data:` URL, an inline module belongs to its importer:
+ * the same payload in two modules is two modules, and imports inside it resolve
+ * exactly as they would from the importer. That is what makes it usable for
+ * modules a transform derives from the importing file, which is not what
+ * `data:` promises, so it is deliberately not spelled `data:`.
  *
  * Its virtual path sits beside the importer, with the importer's extension and
  * a hash of the source in its name: `App.tsx` imports `App.inline-<hash>.tsx`.
@@ -45,30 +50,42 @@ const INLINE_MODULE_HASH_LENGTH = 16;
  */
 export function resolveInlineModule(
   context: ResolutionContext,
-  pathname: string,
+  specifier: string,
 ): VirtualResolution {
-  const commaIndex = pathname.indexOf(',');
-  if (commaIndex === -1) {
-    throw new Error(`Malformed inline module specifier: metro:${pathname}`);
+  const commaIndex = specifier.indexOf(',');
+  if (commaIndex === -1 || UNENCODED_CHARACTERS.test(specifier)) {
+    throw malformedSpecifierError(specifier);
   }
-  const parameters = pathname
-    .slice(INLINE_MODULE_SPECIFIER.length, commaIndex)
+  const parameters = specifier
+    .slice(
+      specifier.indexOf(':') + 1 + INLINE_MODULE_SPECIFIER.length,
+      commaIndex,
+    )
     .split(';')
-    .map(part => part.trim().toLowerCase())
+    .map(part => part.toLowerCase())
     .filter(part => part !== '');
-  const payload = pathname.slice(commaIndex + 1);
+  let payload;
+  try {
+    payload = decodeURIComponent(specifier.slice(commaIndex + 1));
+  } catch {
+    throw malformedSpecifierError(specifier);
+  }
 
   for (const parameter of parameters) {
     if (parameter !== 'base64') {
       throw new Error(
-        `Unsupported parameter '${parameter}' in inline module specifier: metro:${pathname}`,
+        `Unsupported parameter '${parameter}' in inline module specifier: ${specifier}`,
       );
     }
   }
 
-  const source = parameters.includes('base64')
-    ? Buffer.from(payload, 'base64').toString('utf8')
-    : decodeURIComponent(payload);
+  let source = payload;
+  if (parameters.includes('base64')) {
+    if (!BASE64_PAYLOAD.test(payload)) {
+      throw malformedSpecifierError(specifier);
+    }
+    source = Buffer.from(payload, 'base64').toString('utf8');
+  }
 
   const {dir, name, ext} = path.parse(context.originModulePath);
   const hash = crypto
@@ -81,4 +98,10 @@ export function resolveInlineModule(
     virtualPath: path.join(dir, `${name}.inline-${hash}${ext}`),
     source,
   };
+}
+
+function malformedSpecifierError(specifier: string): Error {
+  return new Error(
+    `Malformed inline module specifier, expected metro:inline,<percent-encoded source> or metro:inline;base64,<base64 source>: ${specifier}`,
+  );
 }
