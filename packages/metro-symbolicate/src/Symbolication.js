@@ -298,8 +298,8 @@ class SymbolicationContext<ModuleIdsT> {
 
       if (entry.funcVirtAddr != null && entry.offset != null) {
         // Without debug information.
-        const funcVirtAddr = parseInt(entry.funcVirtAddr, 10);
-        const offsetInFunction = parseInt(entry.offset, 10);
+        const funcVirtAddr = parseInt(String(entry.funcVirtAddr), 10);
+        const offsetInFunction = parseInt(String(entry.offset), 10);
         // Main bundle always use hard-coded line value 1.
         // TODO: support multiple bundle/module.
         line = this.options.inputLineStart;
