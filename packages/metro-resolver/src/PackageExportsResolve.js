@@ -229,12 +229,7 @@ const INVALID_PATTERN_MATCH_SEGMENT =
 
 function findInvalidPathSegment(subpath: string): ?string {
   for (const segment of subpath.split(/[\\/]/)) {
-    if (
-      segment === '' ||
-      segment === '.' ||
-      segment === '..' ||
-      segment === 'node_modules'
-    ) {
+    if (segment === '.' || segment === '..' || segment === 'node_modules') {
       return segment;
     }
   }

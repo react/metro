@@ -32,6 +32,7 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
             JSON.stringify(packageJson),
           [p('/root/node_modules/test-pkg/selected.js')]: '',
           [p('/root/node_modules/test-pkg/other.js')]: '',
+          [p('/root/node_modules/test-pkg/lib/file.js')]: '',
           [p('/root/src/main.js')]: '',
         }),
         originModulePath: p(
@@ -118,7 +119,7 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
     });
 
     if (kind !== 'imports') {
-      test.each(['./../invalid.js', './node_modules/invalid.js', './a//b.js'])(
+      test.each(['./../invalid.js', './node_modules/invalid.js'])(
         'skips invalid export path %s before selecting a fallback',
         invalidTarget => {
           const {run, logWarning} = resolve([invalidTarget, './selected.js']);
@@ -129,6 +130,20 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
           expect(logWarning).not.toHaveBeenCalled();
         },
       );
+    }
+
+    if (kind !== 'imports') {
+      test.each([
+        ['a string', './lib//file.js'],
+        ['an array', ['./lib//file.js', './selected.js']],
+      ])('selects a target with an empty segment in %s', (_, target) => {
+        const {run, logWarning} = resolve(target);
+        expect(run()).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/lib/file.js'),
+        });
+        expect(logWarning).not.toHaveBeenCalled();
+      });
     }
 
     if (kind === 'imports') {
