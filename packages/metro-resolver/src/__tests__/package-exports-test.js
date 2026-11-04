@@ -1738,6 +1738,13 @@ describe('"exports" of the package at the root of a bare specifier', () => {
     }),
     [p('/root/node_modules/@scope/pkg/shim/legacy.js')]: '',
     [p('/root/node_modules/@scope/pkg/dist/shim.js')]: '',
+    // A package whose root is requested directly.
+    [p('/root/node_modules/root-entry/package.json')]: JSON.stringify({
+      main: './main.js',
+      exports: {'.': './dist/index.js'},
+    }),
+    [p('/root/node_modules/root-entry/main.js')]: '',
+    [p('/root/node_modules/root-entry/dist/index.js')]: '',
     // A nested "browser" map with a target exported by the root.
     [p('/root/node_modules/nested-map/package.json')]: JSON.stringify({
       exports: {'./lib/a.js': './dist/a.js', './lib/b.js': './dist/b.js'},
@@ -1828,6 +1835,7 @@ describe('"exports" of the package at the root of a bare specifier', () => {
   };
 
   test.each([
+    ['root-entry', '/root/node_modules/root-entry/dist/index.js'],
     ['test-pkg/shim', '/root/node_modules/test-pkg/dist/shim.js'],
     ['test-pkg/typed', '/root/node_modules/test-pkg/dist/typed.js'],
     ['@scope/pkg/shim', '/root/node_modules/@scope/pkg/dist/shim.js'],
