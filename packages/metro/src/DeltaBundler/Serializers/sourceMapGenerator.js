@@ -24,7 +24,7 @@ export type SourceMapGeneratorOptions = Readonly<{
 
 function getSourceMapInfosImpl(
   isBlocking: boolean,
-  onDone: (ReadonlyArray<ReturnType<typeof getSourceMapInfo>>) => void,
+  onDone: (v: ReadonlyArray<ReturnType<typeof getSourceMapInfo>>) => void,
   modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): void {

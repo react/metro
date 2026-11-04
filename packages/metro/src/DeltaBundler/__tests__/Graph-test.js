@@ -469,7 +469,7 @@ Generate the initial dependency graph:
 Paths are given as posix and mapped through `p`, so that tests exercising
 path-sensitive logic can use system paths.
 */
-function setUpInitialGraph(p: string => string) {
+function setUpInitialGraph(p: (v: string) => string) {
   mockedDependencies = new Set();
   mockedDependencyTree = new Map();
 

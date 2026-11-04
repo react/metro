@@ -22,7 +22,7 @@ export default function getSourceMapInfo(
   module: Module<>,
   options: {
     readonly excludeSource: boolean,
-    readonly shouldAddToIgnoreList: (Module<>) => boolean,
+    readonly shouldAddToIgnoreList: (v: Module<>) => boolean,
     getSourceUrl: ?(module: Module<>) => string,
   },
 ): {

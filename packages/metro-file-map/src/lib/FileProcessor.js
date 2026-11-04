@@ -41,7 +41,7 @@ type ProcessFileRequest = Readonly<{
 }>;
 
 interface AsyncWorker {
-  readonly processFile: WorkerMessage => Promise<WorkerMetadata>;
+  readonly processFile: (v: WorkerMessage) => Promise<WorkerMetadata>;
   readonly end: () => Promise<void>;
 }
 
@@ -237,7 +237,7 @@ export class FileProcessor {
     debug('Creating worker farm of %d worker threads', numWorkers);
     this.#perfLogger?.point('initWorkers_start');
     const jestWorker = new JestWorker<{
-      processFile: WorkerMessage => Promise<WorkerMetadata>,
+      processFile: (v: WorkerMessage) => Promise<WorkerMetadata>,
     }>(workerPath, {
       exposedMethods: ['processFile'],
       maxRetries: 3,

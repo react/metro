@@ -31,7 +31,7 @@ import {addParamsToDefineCall} from 'metro-transform-plugins';
 import path from 'node:path';
 
 export type Options = Readonly<{
-  createModuleId: string => number | string,
+  createModuleId: (v: string) => number | string,
   dev: boolean,
   includeAsyncPaths: boolean,
   projectRoot: string,
