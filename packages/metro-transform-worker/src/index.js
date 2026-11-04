@@ -42,7 +42,6 @@ import {transformFromAstSync, traverse} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
-// $FlowFixMe[cannot-resolve-module] - No typings at Meta (OSS uses a libdef)
 import {decode as decodeMappings} from '@jridgewell/sourcemap-codec';
 import {stableHash} from 'metro-cache';
 import {getCacheKey as metroGetCacheKey} from 'metro-cache-key';
