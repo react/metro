@@ -19,9 +19,12 @@ function run(command, args, options) {
   }
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(' ')} failed (${result.signal ?? result.status})`,
+      `${command} ${args.join(' ')} failed (${result.signal ?? result.status})` +
+        // Output captured with stdio 'pipe'
+        (result.stderr != null ? `:\n${String(result.stderr)}` : ''),
     );
   }
+  return result;
 }
 
 module.exports = run;
