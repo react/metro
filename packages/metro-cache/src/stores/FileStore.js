@@ -12,7 +12,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// A nonzero marker ensures that zero-filled files are treated as cache misses.
+// Any byte that cannot begin a JSON document, i.e. not whitespace
+// or any of `{["-tfn` or a digit. Nonzero ensures that zero-filled
+// files (e.g. write errors) are treated as cache misses.
 const BINARY_MARKER = 0x01;
 const BINARY_MARKER_BUFFER = Buffer.from([BINARY_MARKER]);
 
