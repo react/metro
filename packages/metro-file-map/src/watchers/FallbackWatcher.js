@@ -499,10 +499,10 @@ function isIgnorableFileError(error: Error | {code: string}) {
  */
 async function recReaddir(
   root: string,
-  dirCallback: (string, Stats) => void,
-  fileCallback: (string, Stats) => void,
-  symlinkCallback: (string, Stats) => void,
-  errorCallback: Error => void,
+  dirCallback: (dirPath: string, stats: Stats) => void,
+  fileCallback: (filePath: string, stats: Stats) => void,
+  symlinkCallback: (symlinkPath: string, stats: Stats) => void,
+  errorCallback: (error: Error) => void,
   ignored: ?RegExp,
 ): Promise<void> {
   const pending = [root];

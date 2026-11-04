@@ -198,10 +198,10 @@ const moduleSystemCode = (() => {
 // instead of `__ReactRefresh.performFullRefresh`.
 const createModuleSystem: (
   this: any,
-  RuntimeGlobal,
-  boolean,
-  string,
-  void,
+  global: RuntimeGlobal,
+  __DEV__: boolean,
+  __METRO_GLOBAL_PREFIX__: string,
+  window: void,
 ) => unknown =
   // eslint-disable-next-line no-new-func
   new Function(

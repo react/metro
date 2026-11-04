@@ -29,7 +29,7 @@ const mockWorkerFn = jest.fn().mockReturnValue({});
 
 // Convenience function to write paths with posix separators but convert them
 // to system separators
-const p: string => string = filePath =>
+const p: (filePath: string) => string = filePath =>
   process.platform === 'win32'
     ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
     : filePath;
@@ -54,7 +54,7 @@ describe('processBatch', () => {
       setup: () => {},
       processFile: mockWorkerFn,
       Worker: class {
-        processFile: WorkerMessage => WorkerMetadata = mockWorkerFn;
+        processFile: (message: WorkerMessage) => WorkerMetadata = mockWorkerFn;
       },
     }));
     FileProcessor = require('../FileProcessor').FileProcessor;

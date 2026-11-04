@@ -839,8 +839,8 @@ if (__DEV__) {
 
   const topologicalSort = function <T>(
     roots: Array<T>,
-    getEdges: T => Array<T>,
-    earlyStop: T => boolean,
+    getEdges: (node: T) => Array<T>,
+    earlyStop: (node: T) => boolean,
   ): Array<T> {
     const result = [];
     const visited = new Set<unknown>();

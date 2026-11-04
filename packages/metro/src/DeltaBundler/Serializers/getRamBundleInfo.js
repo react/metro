@@ -30,7 +30,7 @@ type Options = Readonly<{
 }>;
 
 export type RamBundleInfo = {
-  getDependencies: string => Set<string>,
+  getDependencies: (filePath: string) => Set<string>,
   startupModules: ReadonlyArray<ModuleTransportLike>,
   lazyModules: ReadonlyArray<ModuleTransportLike>,
   groups: Map<number, Set<number>>,
@@ -139,7 +139,7 @@ async function _getRamOptions(
     platform: ?string,
     ...
   },
-  getDependencies: string => Iterable<string>,
+  getDependencies: (filePath: string) => Iterable<string>,
   getTransformOptions: ?GetTransformOptions,
 ): Promise<
   Readonly<{

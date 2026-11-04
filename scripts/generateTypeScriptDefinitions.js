@@ -419,7 +419,7 @@ function removeDeclareConstAtLine(
 function findBlockStart(
   lines: ReadonlyArray<string>,
   lineIndex: number,
-  predicate: string => boolean,
+  predicate: (line: string) => boolean,
 ): ?number {
   for (let i = lineIndex; i >= 0; i--) {
     if (predicate(lines[i])) {

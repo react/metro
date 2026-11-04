@@ -10,7 +10,7 @@
 
 import * as path from 'node:path';
 
-export const normalizePathSeparatorsToPosix: string => string =
+export const normalizePathSeparatorsToPosix: (filePath: string) => string =
   path.sep === '/'
     ? filePath => filePath
     : filePath => filePath.replaceAll('\\', '/');

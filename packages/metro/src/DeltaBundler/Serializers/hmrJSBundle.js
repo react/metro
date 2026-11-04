@@ -27,7 +27,7 @@ const debug = debugModule('Metro:HMR');
 
 type Options = Readonly<{
   clientUrl: URL,
-  createModuleId: string => number,
+  createModuleId: (absolutePath: string) => number,
   includeAsyncPaths: boolean,
   projectRoot: string,
   serverRoot: string,

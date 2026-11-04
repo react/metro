@@ -18,14 +18,14 @@ export default function debounceAsyncQueue<T>(
   let timeout;
   let waiting = false;
   let executing = false;
-  let callbacks: Array<(T) => void> = [];
+  let callbacks: Array<(result: T) => void> = [];
 
   async function execute(): Promise<void> {
     const currentCallbacks = callbacks;
     callbacks = [];
     executing = true;
     const res = await fn();
-    currentCallbacks.forEach((c: T => void) => c(res));
+    currentCallbacks.forEach((c: (result: T) => void) => c(res));
     executing = false;
     if (callbacks.length > 0) {
       await execute();
@@ -33,19 +33,21 @@ export default function debounceAsyncQueue<T>(
   }
 
   return () =>
-    new Promise((resolve: T => void, reject: unknown => void) => {
-      callbacks.push(resolve);
+    new Promise(
+      (resolve: (result: T) => void, reject: (reason: unknown) => void) => {
+        callbacks.push(resolve);
 
-      if (!executing) {
-        if (waiting) {
-          clearTimeout(timeout);
-        } else {
-          waiting = true;
+        if (!executing) {
+          if (waiting) {
+            clearTimeout(timeout);
+          } else {
+            waiting = true;
+          }
+          timeout = setTimeout(async () => {
+            waiting = false;
+            await execute();
+          }, delay);
         }
-        timeout = setTimeout(async () => {
-          waiting = false;
-          await execute();
-        }, delay);
-      }
-    });
+      },
+    );
 }

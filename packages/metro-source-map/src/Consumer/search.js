@@ -12,7 +12,7 @@
 export function greatestLowerBound<T, U>(
   elements: ReadonlyArray<T>,
   target: U,
-  comparator: (U, T) => number,
+  comparator: (target: U, element: T) => number,
 ): ?number {
   let first = 0;
   let it = 0;

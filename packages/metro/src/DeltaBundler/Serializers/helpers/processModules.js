@@ -29,7 +29,7 @@ export default function processModules(
     unstable_getAsyncDependencyPath,
   }: Readonly<{
     filter?: (module: Module<>) => boolean,
-    createModuleId: string => number,
+    createModuleId: (absolutePath: string) => number,
     dev: boolean,
     includeAsyncPaths: boolean,
     projectRoot: string,

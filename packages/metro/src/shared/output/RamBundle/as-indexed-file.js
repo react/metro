@@ -96,11 +96,13 @@ function writeBuffers(
   buffers: Array<Buffer>,
 ): Promise<void> {
   buffers.forEach((buffer: Buffer) => stream.write(buffer));
-  return new Promise((resolve: () => void, reject: unknown => unknown) => {
-    stream.on('error', reject);
-    stream.on('finish', () => resolve());
-    stream.end();
-  });
+  return new Promise(
+    (resolve: () => void, reject: (reason: unknown) => unknown) => {
+      stream.on('error', reject);
+      stream.on('finish', () => resolve());
+      stream.end();
+    },
+  );
 }
 
 function nullTerminatedBuffer(

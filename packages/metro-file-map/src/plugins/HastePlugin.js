@@ -61,7 +61,7 @@ export default class HastePlugin
   readonly #duplicates: DuplicatesIndex = new Map();
   readonly #enableHastePackages: boolean;
   readonly #failValidationOnConflicts: boolean;
-  #getModuleNameByPath: string => ?string;
+  #getModuleNameByPath: (mixedPath: string) => ?string;
   readonly #hasteImplModulePath: ?string;
   readonly #map: Map<string, HasteMapItem> = new Map();
   readonly #pathUtils: RootPathUtils;
