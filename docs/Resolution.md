@@ -79,7 +79,7 @@ Parameters: (_context_, _moduleName_, _platform_)
    2. If resolved, return result.
 8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
    1. Try resolving _moduleName_ under `node_modules` from the current directory (the parent of [`context.originModulePath`](#originmodulepath-string)) up to the root directory. E.g. `'lodash/merge'` from `/app/src/screens/Home.js` tries `/app/src/screens/node_modules/lodash/merge`, then `/app/src/node_modules/…`, `/app/node_modules/…` and `/node_modules/…`.
-   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, where _modulePath_ is the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the candidate path (returning the empty module if this is `false`). If both [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) and [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) are enabled and the candidate path's closest `package.json` has an `"exports"` field, _modulePath_ is the candidate path itself.
+   2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, where _modulePath_ is the result of applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) to the candidate path (returning the empty module if this is `false`). If both [`context.unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-boolean) and [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) are enabled and the `package.json` that [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from has an `"exports"` field, _modulePath_ is the candidate path itself.
 9. For each element _nodeModulesPath_ of [`context.nodeModulesPaths`](#nodemodulespaths-readonlyarraystring):
    1. Try resolving _moduleName_ under _nodeModulesPath_ as if it were another `node_modules` directory (similar to step 8). E.g. `nodeModulesPaths: ['/monorepo/node_modules']` tries `/monorepo/node_modules/lodash/merge`.
    2. Perform [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _modulePath_, _platform_) for each candidate path, with _modulePath_ as in step 8.2.
@@ -115,7 +115,7 @@ Resolves an absolute path to a file or a directory's entry point. For example, o
 
 Parameters: (_context_, _moduleName_, _platform_)
 
-Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let _filePath_ be _moduleName_, _packagePath_ the directory of the closest containing `package.json`, and _exportsField_ its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes _filePath_ `/app/node_modules/some-pkg/utils`, so _packagePath_ is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`.
+Resolves an absolute path that may be inside an npm package, e.g. a candidate path under `node_modules`. Let _filePath_ be _moduleName_, _packagePath_ the directory of the closest containing `package.json`, and _exportsField_ its `"exports"` field. E.g. for `'some-pkg/utils'` from `/app/src/App.js`, [**RESOLVE**](#resolve) step 8 passes _filePath_ `/app/node_modules/some-pkg/utils`, so _packagePath_ is `/app/node_modules/some-pkg` and the `"exports"` subpath is `'./utils'`. If [`context.unstable_resolveExportsFromPackageRoot`](#unstable_resolveexportsfrompackageroot-boolean) is enabled, _packagePath_ and _exportsField_ instead come from the root of the package named by a bare specifier. As in Node.js, for a package in `node_modules`, the `"exports"` subpath is the literal text following the package name, a subpath pattern doesn't match a `.`, `..` or `node_modules` segment of it, and there's no _exportsField_ if the root has no `package.json`.
 
 1. If [`context.unstable_enablePackageExports`](#unstable_enablepackageexports-boolean) is enabled and a containing `package.json` has an `"exports"` field, get the result of [**RESOLVE_PACKAGE_EXPORTS**](#resolve_package_exports)(_context_, _packagePath_, _filePath_, _exportsField_, _platform_).
    1. If resolved path exists, then
@@ -352,6 +352,10 @@ Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never 
 #### `unstable_applyBrowserSpecAfterExports: boolean`
 
 Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the source file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
+
+#### `unstable_resolveExportsFromPackageRoot: boolean`
+
+Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, a package in `node_modules` has no `"exports"`, and the closest is used for an [`extraNodeModules`](#extranodemodules-string-string) mapping. A target of a `"browser"` spec redirection uses the root only if it's inside the root's directory and not under a nested `node_modules`. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
 
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 

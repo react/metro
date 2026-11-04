@@ -359,7 +359,9 @@ export default function resolve(
     const resolution = resolveModuleFromTargetPath(
       context,
       platform,
+      path.normalize(newPackageName + path.sep).slice(0, -1),
       extraNodeModulePath,
+      false,
     );
     if (resolution != null) {
       return resolution;
@@ -402,33 +404,58 @@ function resolveFromNodeModulesPath(
   return resolveModuleFromTargetPath(
     context,
     platform,
+    nodeModulesPath + path.sep + posixToSystemPath(parsedSpecifier.packageName),
     nodeModulesPath +
       path.sep +
       posixToSystemPath(parsedSpecifier.normalizedSpecifier),
+    true,
   );
 }
 
 function resolveModuleFromTargetPath(
   context: ResolutionContext,
   platform: string | null,
+  /**
+   * The directory of the package named by the specifier, which may be a
+   * symlink.
+   */
+  packagePath: string,
   targetPath: string,
+  isInNodeModules: boolean,
 ): Resolution | null {
-  // Look up the package once, for both "browser" spec redirections and
-  // "exports". With `unstable_applyBrowserSpecAfterExports`, "exports"
-  // resolves the requested subpath first, and `resolvePackage` applies the
-  // redirections to the file it resolves to instead.
-  const pkg = context.getPackageForModule(targetPath);
+  const closestToTarget = context.getPackageForModule(targetPath);
+  const rootPkg = getRootPackageForExports(
+    context,
+    packagePath,
+    targetPath,
+    closestToTarget,
+  );
+  // As in Node.js, a package in `node_modules` with no `package.json` at its
+  // root has no "exports" field.
+  const pkg =
+    rootPkg ??
+    (isInNodeModules && isResolvingExportsFromPackageRoot(context)
+      ? null
+      : closestToTarget);
+  // "browser" spec redirections use the closest package to the target, which
+  // may differ from `pkg`, the package whose "exports" field applies. With
+  // `unstable_applyBrowserSpecAfterExports`, "exports" resolves the requested
+  // subpath first, and `resolvePackage` applies the redirections to the file
+  // it resolves to instead.
+  const closestPkg =
+    context.unstable_applyBrowserSpecAfterExports &&
+    context.unstable_enablePackageExports &&
+    pkg?.packageJson.exports != null
+      ? null
+      : closestToTarget;
   const candidate =
-    pkg == null ||
-    (context.unstable_applyBrowserSpecAfterExports &&
-      context.unstable_enablePackageExports &&
-      pkg.packageJson.exports != null)
+    closestPkg == null
       ? targetPath
       : redirectPackageSubpath(
           context,
           targetPath,
-          pkg,
-          pkg.packageRelativePath,
+          closestPkg,
+          closestPkg.packageRelativePath,
         );
   if (candidate === false) {
     return {type: 'empty'};
@@ -443,7 +470,13 @@ function resolveModuleFromTargetPath(
     candidate === targetPath
       ? pkg
       : context.unstable_enablePackageExports
-        ? context.getPackageForModule(candidate)
+        ? getPackageForRedirectedPath(
+            context,
+            packagePath,
+            pkg,
+            rootPkg,
+            candidate,
+          )
         : null,
   );
   if (result.type === 'resolved') {
@@ -589,13 +622,22 @@ function resolveHastePackage(
     return failedFor();
   }
   const potentialModulePath = path.join(packageJsonPath, '..', pathInModule);
+  let packageForModule = null;
+  if (context.unstable_enablePackageExports) {
+    const closestToModule = context.getPackageForModule(potentialModulePath);
+    packageForModule =
+      getRootPackageForExports(
+        context,
+        path.dirname(packageJsonPath),
+        potentialModulePath,
+        closestToModule,
+      ) ?? closestToModule;
+  }
   const result = resolvePackage(
     context,
     potentialModulePath,
     platform,
-    context.unstable_enablePackageExports
-      ? context.getPackageForModule(potentialModulePath)
-      : null,
+    packageForModule,
   );
   if (result.type === 'resolved') {
     return result;
@@ -648,7 +690,7 @@ function resolvePackage(
   absoluteCandidatePath: string,
   platform: string | null,
   /**
-   * The package containing `absoluteCandidatePath`, from
+   * The package whose "exports" field applies to `absoluteCandidatePath`, from
    * `context.getPackageForModule`. Only read when package exports are
    * enabled, so callers may pass `null` otherwise.
    */
@@ -698,6 +740,87 @@ function resolvePackage(
   }
 
   return resolveModulePath(context, absoluteCandidatePath, platform);
+}
+
+/**
+ * Get the package at the root of a bare specifier, whose "exports" field
+ * applies to `modulePath` per Node.js PACKAGE_RESOLVE. Returns `null` unless
+ * `unstable_resolveExportsFromPackageRoot` is enabled, `packagePath` has a
+ * `package.json` and `modulePath` is below it. Reuses `closestPkg`, the closest
+ * package to `modulePath`, if that is the package at the root.
+ */
+function getRootPackageForExports(
+  context: ResolutionContext,
+  packagePath: string,
+  modulePath: string,
+  closestPkg: ?PackageForModule,
+): ?PackageForModule {
+  if (!isResolvingExportsFromPackageRoot(context)) {
+    return null;
+  }
+  // As in Node.js, the subpath in `modulePath` is not normalized for a package
+  // in `node_modules`.
+  if (
+    modulePath !== packagePath &&
+    !modulePath.startsWith(packagePath + path.sep)
+  ) {
+    return null;
+  }
+  const packageRelativePath = modulePath.slice(packagePath.length + 1);
+  if (closestPkg?.packageRelativePath === packageRelativePath) {
+    return closestPkg;
+  }
+  // `closestPkg` is the result for `packagePath` itself, and is not its root.
+  if (packageRelativePath === '') {
+    return null;
+  }
+  const pkg = context.getPackageForModule(packagePath);
+  return pkg == null || pkg.packageRelativePath !== ''
+    ? null
+    : {...pkg, packageRelativePath};
+}
+
+function isResolvingExportsFromPackageRoot(
+  context: ResolutionContext,
+): boolean {
+  return (
+    context.unstable_enablePackageExports &&
+    context.unstable_resolveExportsFromPackageRoot
+  );
+}
+
+/**
+ * Get the package whose "exports" field applies to the target of a "browser"
+ * spec redirection. A target inside the root package's directory and not under
+ * a nested `node_modules`, which holds other packages, uses `rootPkg`. It uses
+ * nothing if `pkg` is null, because the root has no `package.json`. Any other
+ * target uses the closest package to it.
+ */
+function getPackageForRedirectedPath(
+  context: ResolutionContext,
+  packagePath: string,
+  pkg: ?PackageForModule,
+  rootPkg: ?PackageForModule,
+  redirectedPath: string,
+): ?PackageForModule {
+  let rootPath: ?string = rootPkg?.rootPath;
+  if (pkg == null) {
+    // Redirected paths are real paths, and `packagePath` may be a symlink.
+    const lookupResult = context.fileSystemLookup(packagePath);
+    rootPath = lookupResult.exists ? lookupResult.realPath : null;
+  }
+  if (rootPath != null) {
+    const packageRelativePath = path.relative(rootPath, redirectedPath);
+    const segments = packageRelativePath.split(path.sep);
+    if (
+      segments[0] !== '..' &&
+      !segments.includes('node_modules') &&
+      !path.isAbsolute(packageRelativePath)
+    ) {
+      return rootPkg == null ? null : {...rootPkg, packageRelativePath};
+    }
+  }
+  return context.getPackageForModule(redirectedPath);
 }
 
 /**
