@@ -152,7 +152,45 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
       expect(logWarning).not.toHaveBeenCalled();
     });
 
+    if (kind === 'exports root') {
+      test.each([
+        ['an unmatched subpath key', [{'.': './other.js'}, './selected.js']],
+        [
+          'a map of subpaths',
+          [{'./sub': './other.js'}, {default: './selected.js'}],
+        ],
+      ])('treats %s as an unmatched condition', (_, target) => {
+        const {run, logWarning} = resolve(target);
+        expect(run()).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/selected.js'),
+        });
+        expect(logWarning).not.toHaveBeenCalled();
+      });
+
+      test('does not read subpaths from an array', () => {
+        const {run, logWarning} = resolve([
+          {'.': './selected.js', './sub': './other.js'},
+        ]);
+        expect(run).toThrow();
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain('no match was resolved');
+      });
+    }
+
     if (kind === 'imports') {
+      test.each([
+        './../invalid.js',
+        './lib/../selected.js',
+        './lib/./file.js',
+        './node_modules/invalid.js',
+      ])('warns and fails for invalid target %s outside an array', target => {
+        const {run, logWarning} = resolve(target);
+        expect(run).toThrow();
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain('is invalid');
+      });
+
       test.each([
         ['#pattern/../selected.js'],
         ['#pattern/./file.js'],
