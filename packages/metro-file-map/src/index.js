@@ -1215,6 +1215,7 @@ export default class FileMap extends EventEmitter {
         })
         .catch((error: Error) => {
           this.#console.error(
+            // $FlowFixMe[incompatible-type]
             `metro-file-map: watch error:\n  ${error.stack}\n`,
           );
         });
