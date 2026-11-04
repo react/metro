@@ -457,6 +457,28 @@ Type: `boolean`
 
 Allows a [`resolveRequest`](#resolverequest) function or scheme resolver to resolve a module to a `virtualModule`, whose source comes from the resolver rather than from a file. The module's path is `virtual:<absolute path>` wherever a module's path is exposed, such as to [`createModuleIdFactory`](#createmoduleidfactory) and custom serializers, so code that expects a file path needs to handle this form. When this is `false`, a `virtualModule` resolution is an error. Defaults to `false`.
 
+`metro:inline` is currently the only virtual module Metro implements itself. It lets a transform emit a module derived from the file it's transforming. A Babel plugin or custom transformer encodes the module's source into a specifier, then emits a `require` of that specifier as a string literal:
+
+```js
+const source = "export {increment} from './counter';";
+const specifier =
+  'metro:inline;base64,' + Buffer.from(source).toString('base64');
+// Or: 'metro:inline,' + encodeURIComponent(source)
+
+// In the transformed file:
+// const generated = require('metro:inline;base64,<payload>');
+```
+
+The payload must be standard base64 or percent-encoded, otherwise the build fails with an error. `encodeURI` isn't enough, because it leaves `?` and `#` unencoded.
+
+An inline module behaves much like a real file beside its importer:
+
+- Importing `metro:inline` from `App.tsx` adds a module named `App.inline-<hash>.tsx`, where `<hash>` comes from the decoded source. It's transformed as the importer's kind of file.
+- Imports inside it resolve as they would from `App.tsx`.
+- The same source imported from two files is two modules, each with its own state. Within one file, it's one module.
+
+Metro can't yet serve source maps, lazy bundles or source text by URL for virtual modules.
+
 When `true`, Metro tells Babel plugins and presets that support it, through [caller data](https://babeljs.io/docs/options#caller), that `metro:inline` specifiers will resolve (`supportsInlineModules: true`). They should fall back unless the value is `true`, which also covers older versions of Metro. A custom [`babelTransformerPath`](#babeltransformerpath) that sets its own caller data needs to forward the `supportsInlineModules` option it receives, and a custom [`transformerPath`](#transformerpath) that builds its own Babel transformer options needs to set that option from `unstable_supportsInlineModules` in its config.
 
 #### `unstable_applyBrowserSpecAfterExports` <div class="label experimental">Experimental</div>
