@@ -94,27 +94,12 @@ export type ExportsLikeMap = Readonly<{
     string | ExportsLikeMap | ExportValueWithFallback | null,
 }>;
 
-/** "exports" mapping where values may be arrays of fallback targets. */
-export type ExportMapWithFallbacks = Readonly<{
-  [subpath: string]: Values<ExportsLikeMap> | ExportValueWithFallback,
-}>;
-
 /** An ordered list of package target fallbacks. */
 export type ExportValueWithFallback = ReadonlyArray<
   ExportsLikeMap | string | null | ExportValueWithFallback,
 >;
 
-export type ExportsField =
-  | string
-  | ReadonlyArray<string>
-  | ExportValueWithFallback
-  | ExportsLikeMap
-  | ExportMapWithFallbacks;
-
-export type FlattenedExportMap = ReadonlyMap<
-  string /* subpath */,
-  string | null,
->;
+export type ExportsField = string | ExportValueWithFallback | ExportsLikeMap;
 
 export type NormalizedExportsLikeMap = Map<
   string /* subpath */,
