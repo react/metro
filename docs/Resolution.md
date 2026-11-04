@@ -145,10 +145,12 @@ Parameters: (_context_, _packagePath_, _filePath_, _exportsField_, _platform_)
 > Resolves a package subpath based on the [Package Entry Points spec](https://nodejs.org/docs/latest-v19.x/api/packages.html#package-entry-points) (the `"exports"` field), when [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled.
 
 1. Let _subpath_ be the relative path from _packagePath_ to _filePath_, or `'.'`.
-2. If _exportsField_ contains an invalid configuration or values, raise an `InvalidPackageConfigurationError`.
+2. If _exportsField_ contains an invalid configuration, raise an `InvalidPackageConfigurationError`.
 3. If _subpath_ is not defined by _exportsField_, raise a `PackagePathNotExportedError`.
 4. Let _target_ be the result of matching _subpath_ in _exportsField_ after applying any [conditional exports](https://nodejs.org/docs/latest-v19.x/api/packages.html#conditional-exports) and/or substituting a [subpath pattern match](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns).
    1. Condition names will be asserted from the union of `'default'`, `'import'` OR `'require'` according to `context.isESMImport`, [`context.unstable_conditionNames`](#unstable_conditionnames-readonlyarraystring) and [`context.unstable_conditionsByPlatform`](#unstable_conditionsbyplatform-platform-string-readonlyarraystring) for _platform_, in the order defined by _exportsField_. E.g. for an iOS `import` with React Native's default `unstable_conditionNames: ['react-native']`, the asserted conditions are `'default'`, `'import'` and `'react-native'`, so `{"require": "./a.js", "react-native": "./b.js", "import": "./c.js"}` resolves to `./b.js`, the first matching key.
+   2. If the matched value is an array, _target_ is its first element that yields a valid target. Later elements aren't tried if the file at that target doesn't exist.
+   3. If there's no valid target, raise an `InvalidPackageConfigurationError`.
 5. If _target_ refers to an [asset](#assetexts-readonlysetstring), then
    1. Return [**RESOLVE_ASSET**](#resolve_asset)(_context_, _target_, _platform_).
 6. Return _target_ as a [source file resolution](#source-file) **without** applying redirections or trying any platform or extension variants.
