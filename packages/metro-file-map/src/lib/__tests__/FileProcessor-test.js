@@ -306,6 +306,7 @@ describe('processBatch', () => {
           filePath: p('/root/node_modules/pkg/index.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          recordStats: false,
         });
       },
     );
@@ -364,6 +365,7 @@ describe('processBatch', () => {
         filePath: p('/root/node_modules/pkg/package.json'),
         maybeReturnContent: false,
         pluginsToRun: [],
+        recordStats: false,
       });
     });
   });
@@ -399,6 +401,7 @@ describe('processBatch', () => {
         filePath: absolutePath,
         maybeReturnContent: false,
         pluginsToRun: [1],
+        recordStats: false,
       });
       expect(MockJestWorker).not.toHaveBeenCalled();
       // Only this plugin's slot is written. In particular the file is not
@@ -550,6 +553,7 @@ describe('processBatch', () => {
 describe('processRegularFile', () => {
   let FileProcessor;
   const mockReadFileSync = jest.fn();
+  const mockStatSync = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
@@ -557,6 +561,7 @@ describe('processRegularFile', () => {
     jest.unmock('../../worker.js');
     jest.mock('node:fs', () => ({
       readFileSync: mockReadFileSync,
+      statSync: mockStatSync,
     }));
     FileProcessor = require('../FileProcessor').FileProcessor;
   });
@@ -584,6 +589,29 @@ describe('processRegularFile', () => {
     });
 
     expect(metadata[H.SHA1]).toMatch(/^[a-f0-9]{40}$/);
+    // A known modified time is kept
+    expect(mockStatSync).not.toHaveBeenCalled();
+    expect(metadata[H.MTIME]).toBe(123);
+  });
+
+  test('records the stats of a file crawled without them', () => {
+    const processor = new FileProcessor(defaultOptions);
+    const metadata: FileMetadata = [null, 0, 0, null, 0, null];
+
+    mockReadFileSync.mockReturnValue(Buffer.from('hello world'));
+    mockStatSync.mockReturnValue({mtime: new Date(1700000000000), size: 11});
+
+    processor.processRegularFile('file.js', metadata, {
+      computeSha1: true,
+      maybeReturnContent: false,
+    });
+
+    expect(mockStatSync).toHaveBeenCalledWith(
+      path.resolve(defaultOptions.rootDir, 'file.js'),
+    );
+    expect(metadata[H.SHA1]).toMatch(/^[a-f0-9]{40}$/);
+    expect(metadata[H.MTIME]).toBe(1700000000000);
+    expect(metadata[H.SIZE]).toBe(11);
   });
 });
 

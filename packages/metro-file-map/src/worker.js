@@ -50,6 +50,13 @@ class Worker {
 
     const {computeSha1, filePath, pluginsToRun} = data;
 
+    // Stat a file that has no stats before deriving anything from it, so that
+    // the recorded modified time is never newer than the content the data was
+    // derived from.
+    const stat = data.recordStats === true ? fs.statSync(filePath) : null;
+    const stats =
+      stat != null ? {mtime: stat.mtime.getTime(), size: stat.size} : null;
+
     const getContent = () /*: Buffer */ => {
       if (content == null) {
         content = fs.readFileSync(filePath);
@@ -69,8 +76,8 @@ class Worker {
     }
 
     return content && data.maybeReturnContent
-      ? {content, pluginData, sha1}
-      : {pluginData, sha1};
+      ? {content, pluginData, sha1, ...stats}
+      : {pluginData, sha1, ...stats};
   }
 }
 
