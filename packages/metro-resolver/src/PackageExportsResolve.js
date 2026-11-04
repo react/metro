@@ -81,6 +81,12 @@ export function resolvePackageTargetFromExports(
     platform,
     createConfigError,
     target => {
+      if (!target.startsWith('./')) {
+        throw createConfigError(
+          'One or more mappings for subpaths defined in "exports" are invalid. ' +
+            'All values must begin with "./".',
+        );
+      }
       const invalidSegmentInTarget = findInvalidPathSegment(target.slice(2));
       if (invalidSegmentInTarget != null) {
         throw createConfigError(

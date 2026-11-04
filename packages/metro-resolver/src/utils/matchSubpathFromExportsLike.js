@@ -34,7 +34,7 @@ export function matchSubpathFromExportsLike(
   exportsLikeMap: NormalizedExportsLikeMap,
   platform: string | null,
   createConfigError: (reason: string) => Error,
-  validateTarget?: (target: string) => void,
+  validateTarget: (target: string) => void,
 ): Readonly<{
   target: string | null,
   patternMatch: string | null,

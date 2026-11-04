@@ -71,6 +71,20 @@ export function resolvePackageTargetFromImports(
     normalizedMap,
     platform,
     createConfigError,
+    target => {
+      // Per Node.js PACKAGE_TARGET_RESOLVE, these are neither a path within the
+      // package nor the name of a package.
+      if (
+        target.startsWith('../') ||
+        target.startsWith('/') ||
+        URL.canParse(target)
+      ) {
+        throw createConfigError(
+          `The target for "${importPath}" defined in "imports" is "${target}", ` +
+            'however this value is invalid.',
+        );
+      }
+    },
   );
 
   if (target == null) {
@@ -80,6 +94,15 @@ export function resolvePackageTargetFromImports(
         `"${importPath}" which matches a subpath "imports" in ${packagePath}` +
         `however no match was resolved for this request (platform = ${platform ?? 'null'}).`,
     });
+  }
+
+  // As in Node.js, a target naming a package is selected, ending any search of
+  // an array of fallback targets. Metro does not support resolving it.
+  if (!target.startsWith('./')) {
+    throw createConfigError(
+      `The target for "${importPath}" defined in "imports" is "${target}", ` +
+        'however targets which are packages are not supported.',
+    );
   }
 
   const filePath = path.join(

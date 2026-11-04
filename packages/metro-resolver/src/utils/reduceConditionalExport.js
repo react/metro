@@ -28,19 +28,13 @@ export function reduceConditionalExport(
   subpathValue: Values<ExportsLikeMap>,
   conditionNames: ReadonlySet<string>,
   createConfigError: (reason: string) => Error,
-  validateTarget?: (target: string) => void,
+  validateTarget: (target: string) => void,
 ): string | null | symbol {
   if (subpathValue == null) {
     return null;
   }
   if (typeof subpathValue === 'string') {
-    if (!subpathValue.startsWith('./')) {
-      throw createConfigError(
-        'One or more mappings for subpaths defined in "exports" are invalid. ' +
-          'All values must begin with "./".',
-      );
-    }
-    validateTarget?.(subpathValue);
+    validateTarget(subpathValue);
     return subpathValue;
   }
   if (typeof subpathValue !== 'object') {

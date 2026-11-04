@@ -131,6 +131,33 @@ describe.each(['exports root', 'exports subpath', 'imports'])(
       );
     }
 
+    if (kind === 'imports') {
+      test.each([
+        ['a package', ['dep', './selected.js']],
+        ['a package in a condition', [{require: 'dep'}, './selected.js']],
+        ['a package in a nested array', [['dep'], './selected.js']],
+      ])('does not try later targets after %s', (_, target) => {
+        const {run, logWarning} = resolve(target);
+        expect(run).toThrow();
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toContain(
+          'targets which are packages are not supported',
+        );
+      });
+
+      test.each(['/invalid.js', 'https://example.com/invalid.js'])(
+        'skips invalid import target %s before selecting a fallback',
+        invalidTarget => {
+          const {run, logWarning} = resolve([invalidTarget, './selected.js']);
+          expect(run()).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/node_modules/test-pkg/selected.js'),
+          });
+          expect(logWarning).not.toHaveBeenCalled();
+        },
+      );
+    }
+
     if (kind !== 'exports root') {
       test('does not resolve an unrelated mapping', () => {
         const {run, logWarning} = resolve(['./selected.js'], {
