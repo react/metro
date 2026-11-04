@@ -222,7 +222,7 @@ class MemoryFs {
     offset: number,
     length: number,
     position: ?number,
-    callback: (v0: ?Error, v1: ?number) => unknown,
+    callback: (error: ?Error, bytesRead: ?number) => unknown,
   ) => void;
   readFile: (
     filePath: FilePath,
@@ -233,20 +233,22 @@ class MemoryFs {
           ...
         }
       | Encoding
-      | ((v0: ?Error, v1: ?Buffer | string) => unknown),
-    callback?: (v0: ?Error, v1: ?Buffer | string) => unknown,
+      | ((error: ?Error, data: ?Buffer | string) => unknown),
+    callback?: (error: ?Error, data: ?Buffer | string) => unknown,
   ) => void;
   realpath: (
     filePath: FilePath,
-    callback: (v0: ?Error, v1: ?string) => unknown,
+    callback: (error: ?Error, resolvedPath: ?string) => unknown,
   ) => void;
   write: (
     fd: number,
     bufferOrString: Buffer | string,
-    offsetOrPosition?: number | ((v0: ?Error, v1: number) => unknown),
-    lengthOrEncoding?: number | string | ((v0: ?Error, v1: number) => unknown),
-    position?: number | ((v0: ?Error, v1: number) => unknown),
-    callback?: (v0: ?Error, v1: number) => unknown,
+    offsetOrPosition?:
+      number | ((error: ?Error, bytesWritten: number) => unknown),
+    lengthOrEncoding?:
+      number | string | ((error: ?Error, bytesWritten: number) => unknown),
+    position?: number | ((error: ?Error, bytesWritten: number) => unknown),
+    callback?: (error: ?Error, bytesWritten: number) => unknown,
   ) => void;
   writeFile: (
     filePath: FilePath,
@@ -259,8 +261,8 @@ class MemoryFs {
           ...
         }
       | Encoding
-      | ((v: ?Error) => unknown),
-    callback?: (v: ?Error) => unknown,
+      | ((error: ?Error) => unknown),
+    callback?: (error: ?Error) => unknown,
   ) => void;
 
   constructor(options?: ?Options) {

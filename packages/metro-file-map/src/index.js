@@ -1325,8 +1325,8 @@ const toPublicMetadata = (
 
 // TODO: Replace with it.map() from Node 22+
 const mapIterable: <T, S>(
-  v0: Iterable<T>,
-  v1: (v: T) => S,
+  it: Iterable<T>,
+  fn: (item: T) => S,
 ) => IteratorObject<S> = (it, fn) =>
   (function* mapped() {
     for (const item of it) {

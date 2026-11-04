@@ -160,7 +160,7 @@ export function createPackageAccessors(
   };
 }
 
-export const posixToSystemPath: (v: string) => string =
+export const posixToSystemPath: (filePath: string) => string =
   process.platform === 'win32'
     ? filePath => filePath.replaceAll('/', '\\').replace(/^\\/, 'C:\\')
     : filePath => filePath;

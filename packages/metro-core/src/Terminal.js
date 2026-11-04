@@ -104,7 +104,7 @@ export default class Terminal {
   #isUpdating: boolean;
   #hasPendingUpdate: boolean;
   #isFlushRequested: boolean;
-  #writeNonTTYStatusThrottled: (v: string) => void;
+  #writeNonTTYStatusThrottled: (status: string) => void;
   #bytesWrittenAfterStatus: ?number;
 
   constructor(stream: UnderlyingStream, opts: {ttyPrint?: boolean} = {}) {

@@ -28,7 +28,7 @@ import path from 'node:path';
 const debug = debugModule('Metro:Transformer');
 
 type GetOrComputeSha1Fn = (
-  v: string,
+  filePath: string,
 ) => Promise<Readonly<{content?: Buffer, sha1: string}>>;
 
 export default class Transformer {

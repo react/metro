@@ -277,7 +277,7 @@ export type FileMapPluginWorker = Readonly<{
    * This applies to files under node_modules too, which a plugin may reject
    * using `isNodeModules`.
    */
-  filter: (v: {normalPath: string, isNodeModules: boolean}) => boolean,
+  filter: (file: {normalPath: string, isNodeModules: boolean}) => boolean,
   /**
    * If true, the worker is not run on files as they are crawled or changed,
    * and `filter` is not consulted. It runs only on the files the plugin asks
@@ -316,8 +316,8 @@ export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
 
 export interface MetadataWorker {
   processFile(
-    v0: WorkerMessage,
-    v1: Readonly<{getContent: () => Buffer}>,
+    data: WorkerMessage,
+    utils: Readonly<{getContent: () => Buffer}>,
   ): V8Serializable;
 }
 

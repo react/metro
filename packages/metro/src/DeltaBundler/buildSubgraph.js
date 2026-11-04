@@ -27,7 +27,10 @@ import path from 'node:path';
 type Parameters<T> = Readonly<{
   resolve: ResolveFn,
   transform: TransformFn<T>,
-  shouldTraverse: (v0: ResolvedDependency, v1: ?VirtualSource) => boolean,
+  shouldTraverse: (
+    dependency: ResolvedDependency,
+    virtualSource: ?VirtualSource,
+  ) => boolean,
 }>;
 
 // The source hash seen for each virtual module, to catch edges that disagree.
