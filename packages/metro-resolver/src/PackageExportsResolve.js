@@ -93,6 +93,18 @@ export function resolvePackageTargetFromExports(
   );
 
   if (target != null) {
+    if (
+      patternMatch != null &&
+      context.unstable_resolveExportsFromPackageRoot &&
+      INVALID_PATTERN_MATCH_SEGMENT.test(patternMatch)
+    ) {
+      throw new PackagePathNotExportedError(
+        `Attempted to import the module "${modulePath}" which is not listed ` +
+          `in the "exports" of "${packagePath}" under the requested subpath ` +
+          `"${subpath}", because it includes an invalid path segment.`,
+      );
+    }
+
     const filePath = path.join(
       packagePath,
       patternMatch != null ? target.replaceAll('*', patternMatch) : target,
@@ -201,6 +213,13 @@ function normalizeExportsField(
   _normalizedExportsFields.set(exportsField, result);
   return result;
 }
+
+/**
+ * Matches a segment that Node.js PACKAGE_TARGET_RESOLVE rejects in the part of
+ * a subpath matched by a pattern. Node.js allows empty segments here.
+ */
+const INVALID_PATTERN_MATCH_SEGMENT =
+  /(?:^|[\\/])(?:\.\.?|node_modules)(?:[\\/]|$)/i;
 
 function findInvalidPathSegment(subpath: string): ?string {
   for (const segment of subpath.split(/[\\/]/)) {

@@ -34,8 +34,12 @@ export default function getSourceMapInfo(
   readonly lineCount: number,
   readonly isIgnored: boolean,
 } {
+  const {code, functionMap, lineCount, map} = getJsOutput(module).data;
   return {
-    ...getJsOutput(module).data,
+    code,
+    functionMap,
+    lineCount,
+    map,
     isIgnored: options.shouldAddToIgnoreList(module),
     path: options?.getSourceUrl?.(module) ?? module.path,
     source: options.excludeSource ? '' : getModuleSource(module),

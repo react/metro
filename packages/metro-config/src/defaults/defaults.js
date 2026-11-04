@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {ConfigT, PerfLogger, RootPerfLogger} from '../types';
+import type {PerfLogger, RootPerfLogger} from '../types';
 
 export {default as defaultCreateModuleIdFactory} from './createModuleIdFactory';
 
@@ -62,10 +62,6 @@ export const moduleSystem: string =
 export const platforms: Array<string> = ['ios', 'android', 'windows', 'web'];
 
 export const DEFAULT_METRO_MINIFIER_PATH = 'metro-minify-terser';
-
-// Metro warns about `server.enhanceMiddleware` unless it is this function.
-export const defaultEnhanceMiddleware: ConfigT['server']['enhanceMiddleware'] =
-  (middleware, _server) => middleware;
 
 export const noopPerfLoggerFactory = (): RootPerfLogger => {
   class Logger {

@@ -536,11 +536,22 @@ export default class FileMap extends EventEmitter {
 
         // The cache key does not include roots added by `addRoot`, so the
         // cache may hold files from an earlier instance's added roots. Drop
-        // them, including from plugins.
+        // them, including from plugins. Watchman lists a symlinked root's
+        // files under its real path. A custom crawler's files may not be on
+        // disk.
         if (initialData != null) {
-          for (const canonicalPath of fileSystem.pathsOutsideRoots(
-            this.#options.roots,
-          )) {
+          const realRoots =
+            this.#crawler == null
+              ? await Promise.all(
+                  this.#options.roots.map(root =>
+                    fsPromises.realpath(root).catch(() => root),
+                  ),
+                )
+              : [];
+          for (const canonicalPath of fileSystem.pathsOutsideRoots([
+            ...this.#options.roots,
+            ...realRoots,
+          ])) {
             fileDelta.removedFiles.add(canonicalPath);
           }
         }

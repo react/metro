@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {SourcePosition} from './Consumer/types';
+import type {Mapping, SourcePosition} from './Consumer/types';
 import type {
   FBSourcesArray,
   HermesFunctionOffsets,
@@ -64,7 +64,7 @@ export default function composeSourceMaps(
   let sorted = true;
 
   const earlierConsumers = consumers.slice(1);
-  consumers[0].eachMapping(mapping => {
+  const addMapping = (mapping: Mapping): void => {
     let originalLine: ?number = null;
     let originalColumn: ?number = null;
     let source: ?string = null;
@@ -149,7 +149,25 @@ export default function composeSourceMaps(
     } else {
       mappingNames.push(-1);
     }
+  };
+
+  // Of several mappings at one generated position, only the last covers any
+  // code, e.g. `hermesc` emits a function's declaration, then its first
+  // instruction.
+  let pending: ?Mapping = null;
+  consumers[0].eachMapping(mapping => {
+    if (
+      pending != null &&
+      (pending.generatedLine !== mapping.generatedLine ||
+        pending.generatedColumn !== mapping.generatedColumn)
+    ) {
+      addMapping(pending);
+    }
+    pending = mapping;
   });
+  if (pending != null) {
+    addMapping(pending);
+  }
 
   // Orders two composed mappings by generated position, then source,
   // original position and name.

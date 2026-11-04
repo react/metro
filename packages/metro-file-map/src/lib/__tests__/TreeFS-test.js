@@ -467,15 +467,32 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
-    test('with empty subpath behaves like no subdirectory specified', () => {
+    test('with empty subpath only considers files under the root', () => {
       const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([
-        [p('foo/another.js'), [123, 0, 0, null, 0, null]],
+        [p('foo/another.js'), [123, 2, 0, null, 0, 'another']],
+        [p('foo/owndir'), [0, 0, 0, null, 'foo', null]],
+        [p('foo/link-to-bar.js'), [0, 0, 0, null, 'bar.js', null]],
+        [p('foo/link-to-another.js'), [0, 0, 0, null, 'foo/another.js', null]],
+        [p('link-to-foo'), [456, 0, 0, null, 'foo', null]],
+        [p('abs-link-out'), [456, 0, 0, null, '../outside', null]],
+        [p('root'), [0, 0, 0, null, '..', null]],
+        [p('link-to-nowhere'), [123, 0, 0, null, 'nowhere', null]],
+        [p('link-to-self'), [123, 0, 0, null, 'link-to-self', null]],
+        [p('link-cycle-1'), [123, 0, 0, null, 'link-cycle-2', null]],
+        [p('link-cycle-2'), [123, 0, 0, null, 'link-cycle-1', null]],
+        [p('node_modules/pkg/a.js'), [123, 0, 0, null, 0, 'a']],
+        [p('node_modules/pkg/package.json'), [123, 0, 0, null, 0, 'pkg']],
       ]);
 
-      const withEmpty = tfs.getDifference(newFiles, {subpath: ''});
-      const withUndefined = tfs.getDifference(newFiles);
+      // Files outside the root (under '..') are not in a crawl of the root
+      expect(tfs.getDifference(newFiles, {subpath: ''}).removedFiles).toEqual(
+        new Set([p('bar.js')]),
+      );
 
-      expect(withEmpty).toEqual(withUndefined);
+      // Without a subpath, the whole tree is compared
+      expect(tfs.getDifference(newFiles).removedFiles).toEqual(
+        new Set([p('../outside/external.js'), p('bar.js')]),
+      );
     });
   });
 
@@ -590,6 +607,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
               [p('a/b/c/d/link-to-C'), [0, 0, 0, null, '', null]],
               [p('a/b/c/d/link-to-B'), [0, 0, 0, null, '..', null]],
               [p('a/b/c/d/link-to-A'), [0, 0, 0, null, '../..', null]],
+              [p('link-to-B'), [0, 0, 0, null, '..', null]],
               [
                 p('n_m/workspace/link-to-pkg'),
                 [0, 0, 0, null, '../workspace-pkg', null],
@@ -759,6 +777,14 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         'B/C/foo.js',
         ['/A/B/C/foo.js', '/A/B/C/package.json', '/A/B/package.json'],
         ['/A/B/C/a/b/c/d/link-to-A'],
+      ],
+      // A symlink in the root to an ancestor of the root
+      [
+        '/A/B/C/link-to-B/foo.js',
+        '/A/package.json',
+        'B/foo.js',
+        ['/A/B/foo.js', '/A/B/package.json'],
+        ['/A/B/C/link-to-B'],
       ],
       [
         '/A/B/C/a/1/foo.js',

@@ -49,7 +49,6 @@ import {
   mergeConfig,
   resolveConfig,
 } from 'metro-config';
-import {defaultEnhanceMiddleware} from 'metro-config/private/defaults/defaults';
 import {Terminal} from 'metro-core';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -249,14 +248,6 @@ export const createConnectMiddleware = async function (
 
   // Enhance the resulting middleware using the config options
   if (config.server.enhanceMiddleware) {
-    if (config.server.enhanceMiddleware !== defaultEnhanceMiddleware) {
-      logDeprecationWarning(
-        'The `server.enhanceMiddleware` config option is deprecated and will be ' +
-          'removed in a later release. Please use `server.unstable_middleware` ' +
-          'or `server.unstable_priorityMiddleware` instead, and ' +
-          '`server.unstable_onServerCreated` to access the Metro server instance.',
-      );
-    }
     enhancedMiddleware = config.server.enhanceMiddleware(
       enhancedMiddleware,
       metroServer,

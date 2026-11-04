@@ -115,7 +115,19 @@ export class DiskCacheManager implements CacheManager {
           }
           const data = getSnapshot();
           this.#hasUnwrittenChanges = false;
-          await fsPromises.writeFile(this.#cachePath, serialize(data));
+          const serialized = serialize(data);
+          try {
+            await fsPromises.writeFile(this.#cachePath, serialized);
+          } catch (e) {
+            if (e?.code !== 'ENOENT') {
+              throw e;
+            }
+            // The cache directory doesn't exist yet - create it and retry.
+            await fsPromises.mkdir(path.dirname(this.#cachePath), {
+              recursive: true,
+            });
+            await fsPromises.writeFile(this.#cachePath, serialized);
+          }
           debug('Written cache to %s', this.#cachePath);
         })
         .catch(onWriteError);

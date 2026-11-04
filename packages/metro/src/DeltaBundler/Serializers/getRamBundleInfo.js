@@ -161,8 +161,10 @@ async function _getRamOptions(
   );
 
   return {
-    // $FlowFixMe[sketchy-null-bool]
-    preloadedModules: preloadedModules || {},
+    preloadedModules:
+      preloadedModules != null && preloadedModules !== false
+        ? preloadedModules
+        : {},
     ramGroups: ramGroups || [],
   };
 }

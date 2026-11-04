@@ -18,6 +18,7 @@ import type {
   TransformProfile,
 } from 'metro-babel-transformer';
 import type {
+  BabelDecodedMap,
   BasicSourceMap,
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
@@ -37,18 +38,15 @@ import type {
 
 import * as assetTransformer from './utils/assetTransformer';
 import getMinifier from './utils/getMinifier';
-import {transformFromAstSync} from '@babel/core';
+import {transformFromAstSync, traverse} from '@babel/core';
 import generate from '@babel/generator';
 import * as babylon from '@babel/parser';
 import * as types from '@babel/types';
+import {decode as decodeMappings} from '@jridgewell/sourcemap-codec';
 import {stableHash} from 'metro-cache';
 import {getCacheKey as metroGetCacheKey} from 'metro-cache-key';
 import {
-  fromRawMappings,
   functionMapBabelPlugin,
-  toBabelSegments,
-  toSegmentTuple,
-  tuplesFromBabelDecodedMap,
   vlqMapFromBabelDecodedMap,
   vlqMapFromTuples,
 } from 'metro-source-map';
@@ -83,7 +81,13 @@ export type MinifierOptions = {
 
 export type MinifierResult = {
   code: string,
+  /**
+   * @deprecated Return `decodedMap` instead. Only read if `decodedMap` is
+   * missing, and will be removed.
+   */
   map?: BasicSourceMap,
+  // The minified code's source map, decoded, composed with the input `map`.
+  decodedMap?: ?BabelDecodedMap,
   ...
 };
 
@@ -112,6 +116,8 @@ export type JsTransformerConfig = Readonly<{
   unstable_disableModuleWrapping: boolean,
   unstable_disableNormalizePseudoGlobals: boolean,
   unstable_compactOutput: boolean,
+  /** Skip cloning the AST before the main Babel pass. */
+  unstable_disableInputAstCloning?: boolean,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
   /** With inlineRequires, enable a module-scope memo var and inline as (v || v=require('foo')) */
@@ -180,6 +186,9 @@ export type JsOutput = Readonly<{
     lineCount: number,
     map: VlqMap,
     functionMap: ?FBSourceFunctionMap,
+    // Assets only: the URL path the code was generated with. A temporary
+    // migration helper, to be removed.
+    unstable_assetUrlPath?: string,
   }>,
   type: JSFileType,
 }>;
@@ -209,30 +218,16 @@ function getDynamicDepsBehavior(
 
 const minifyCode = async (
   config: JsTransformerConfig,
-  projectRoot: string,
   filename: string,
   code: string,
-  source: string,
-  map: Array<MetroSourceMapSegmentTuple>,
+  map: ?BasicSourceMap,
   reserved?: ReadonlyArray<string> = [],
 ): Promise<{
   code: string,
-  map: Array<MetroSourceMapSegmentTuple>,
+  lineCount: number,
+  map: VlqMap,
   ...
 }> => {
-  const sourceMap = fromRawMappings([
-    {
-      code,
-      // functionMap is overridden by the serializer
-      functionMap: null,
-      // isIgnored is overridden by the serializer
-      isIgnored: false,
-      map,
-      path: filename,
-      source,
-    },
-  ]).toMap(undefined, {});
-
   const minify = getMinifier(config.minifierPath);
 
   try {
@@ -240,15 +235,18 @@ const minifyCode = async (
       code,
       config: config.minifierConfig,
       filename,
-      map: sourceMap,
+      map,
       reserved,
     });
 
+    const {lineCount, lastLineColumn} = countLines(minified.code);
     return {
       code: minified.code,
-      map: minified.map
-        ? toBabelSegments(minified.map).map(toSegmentTuple)
-        : [],
+      lineCount,
+      map: vlqMapFromBabelDecodedMap(
+        getDecodedMap(minified) ?? {mappings: [], names: []},
+        [lineCount, lastLineColumn],
+      ),
     };
   } catch (error) {
     if (error.constructor.name === 'JS_Parse_Error') {
@@ -260,6 +258,18 @@ const minifyCode = async (
     throw error;
   }
 };
+
+// A minifier may return its map already decoded, which saves decoding it here.
+function getDecodedMap(minified: MinifierResult): ?BabelDecodedMap {
+  if (minified.decodedMap != null) {
+    return minified.decodedMap;
+  }
+  const {map} = minified;
+  if (map != null) {
+    return {mappings: decodeMappings(map.mappings), names: map.names};
+  }
+  return null;
+}
 
 const disabledDependencyTransformer: DependencyTransformer = {
   transformIllegalDynamicRequire: () => void 0,
@@ -352,7 +362,7 @@ async function transformJS(
       // However, switching the flag to false caused issues with ES Modules if `experimentalImportSupport` isn't used https://github.com/react/metro/issues/641
       // either because one of the plugins is doing something funky or Babel messes up some caches.
       // Make sure to test the above mentioned case before flipping the flag back to false.
-      cloneInputAst: true,
+      cloneInputAst: config.unstable_disableInputAstCloning !== true,
       code: false,
       comments: true,
       configFile: false,
@@ -366,6 +376,12 @@ async function transformJS(
     // Run the constant folding plugin in its own pass, avoiding race conditions
     // with other plugins that have exit() visitors on Program (e.g. the ESM
     // transform).
+    if (config.unstable_disableInputAstCloning === true) {
+      // Babel reuses scopes cached by earlier passes over the same uncloned
+      // AST, so constant folding would strip functions those passes started
+      // using (https://github.com/react/metro/issues/641).
+      traverse.cache.clearScope();
+    }
     ast = nullthrows(
       transformFromAstSync(ast, '', {
         ast: true,
@@ -482,25 +498,13 @@ async function transformJS(
   let lineCount: number;
 
   if (minify) {
-    // The minifier returns its own map (not Babel's `decodedMap`), so we derive
-    // tuples from Babel's eagerly-computed decoded map, hand them to the
-    // minifier, then re-encode the resulting tuples to a compact VLQ map.
-    let tuples = result.decodedMap
-      ? tuplesFromBabelDecodedMap(result.decodedMap)
-      : [];
-
-    ({map: tuples, code} = await minifyCode(
+    ({code, lineCount, map} = await minifyCode(
       config,
-      projectRoot,
       file.filename,
       result.code,
-      file.code,
-      tuples,
+      result.map,
       reserved,
     ));
-
-    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, tuples));
-    map = vlqMapFromTuples(tuples);
   } else {
     // Dominant path (e.g. Hermes, which doesn't minify): encode the compact VLQ
     // map straight from Babel's eagerly-computed decoded map, never
@@ -539,12 +543,13 @@ async function transformAsset(
   context: TransformationContext,
 ): Promise<TransformResponse> {
   const {assetRegistryPath, assetPlugins} = context.config;
+  const urlPath = context.assetUrlPath ?? file.filename;
 
   const result = await assetTransformer.transform(
     getBabelTransformArgs(file, context),
     assetRegistryPath,
     assetPlugins,
-    context.assetUrlPath ?? undefined,
+    urlPath,
   );
 
   const jsFile = {
@@ -554,7 +559,14 @@ async function transformAsset(
     type: 'js/module/asset' as const,
   };
 
-  return transformJS(jsFile, context);
+  const response = await transformJS(jsFile, context);
+  return {
+    ...response,
+    output: response.output.map(output => ({
+      ...output,
+      data: {...output.data, unstable_assetUrlPath: urlPath},
+    })),
+  };
 }
 
 /**
@@ -610,7 +622,8 @@ async function transformJSON(
               ?.unstable_staticHermesOptimizedRequire,
           ),
         );
-  let map: Array<MetroSourceMapSegmentTuple> = [];
+  let map: VlqMap;
+  let lineCount: number;
 
   // TODO: When we can reuse transformJS for JSON, we should not derive `minify` separately.
   const minify =
@@ -619,14 +632,19 @@ async function transformJSON(
     options.unstable_transformProfile !== 'hermes-stable';
 
   if (minify) {
-    ({map, code} = await minifyCode(
-      config,
-      projectRoot,
-      file.filename,
-      code,
-      file.code,
-      map,
-    ));
+    // The wrapped JSON has no mappings of its own, so the minified code maps
+    // to nothing.
+    ({map, code, lineCount} = await minifyCode(config, file.filename, code, {
+      version: 3,
+      sources: [file.filename],
+      sourcesContent: [file.code],
+      names: [],
+      mappings: '',
+    }));
+  } else {
+    let tuples: Array<MetroSourceMapSegmentTuple>;
+    ({lineCount, map: tuples} = countLinesAndTerminateMap(code, []));
+    map = vlqMapFromTuples(tuples);
   }
 
   let jsType: JSFileType;
@@ -639,14 +657,9 @@ async function transformJSON(
     jsType = 'js/module';
   }
 
-  let lineCount;
-  ({lineCount, map} = countLinesAndTerminateMap(code, map));
-  // The JSON path builds tuples directly (no Babel `decodedMap`), so re-encode
-  // the finished tuples to a compact VLQ map.
-  const outputMap = vlqMapFromTuples(map);
   const output: Array<JsOutput> = [
     {
-      data: {code, functionMap: null, lineCount, map: outputMap},
+      data: {code, functionMap: null, lineCount, map},
       type: jsType,
     },
   ];
@@ -772,8 +785,10 @@ export const getCacheKey = (
     require.resolve(minifierPath),
     require.resolve('./utils/getMinifier'),
     require.resolve('./utils/assetTransformer'),
+    require.resolve('metro/private/ModuleGraph/worker/collectDependencies'),
     require.resolve('metro/private/ModuleGraph/worker/generateImportNames'),
     require.resolve('metro/private/ModuleGraph/worker/JsFileWrapping'),
+    require.resolve('metro/private/ModuleGraph/worker/importLocationsPlugin'),
     ...metroTransformPlugins.getTransformPluginCacheKeyFiles(),
     // Transform output depends on the installed version of Metro's own
     // `@babel/runtime`, which is read from its `package.json`.

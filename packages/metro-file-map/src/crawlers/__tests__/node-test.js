@@ -373,6 +373,28 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
     );
   });
 
+  test.each([
+    ['a trailing separator', '/project/fruits/'],
+    ["'..' segments", '/project/vegetables/../fruits'],
+  ])('crawls a root with %s by its normal path', async (_, root) => {
+    nodeCrawl = require('../node').default;
+    const ignore = jest.fn(pearMatcher);
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js'],
+      ignore,
+      rootDir,
+      roots: [p(root)],
+    });
+
+    expect([...changedFiles.keys()].sort()).toEqual(
+      ['fruits/directory/strawberry.js', 'fruits/tomato.js'].map(p),
+    );
+    expect(ignore).toHaveBeenCalledWith(p('/project/fruits/directory'));
+  });
+
   test('crawls from a filesystem root without doubling separators', async () => {
     const fs = require('node:fs');
     nodeCrawl = require('../node').default;

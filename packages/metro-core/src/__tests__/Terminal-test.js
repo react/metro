@@ -54,12 +54,15 @@ describe.each([false, true])(
           ? require('node:tty').WriteStream.prototype
           : require('node:net').Socket,
       );
+      let bytesWritten = 0;
+      Object.defineProperty(stream, 'bytesWritten', {get: () => bytesWritten});
       Object.assign(stream, {
         cursor: 0,
         buffer: ' '.repeat(columns * lines).split(''),
         columns,
         lines,
         write(str, callback = () => {}) {
+          bytesWritten += str.length;
           for (let i = 0; i < str.length; ++i) {
             if (str[i] === '\n') {
               this.cursor = this.cursor - (this.cursor % columns) + columns;
@@ -181,6 +184,73 @@ describe.each([false, true])(
       }
     });
 
+    test('keeps output written outside of Terminal', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      await terminal.flush();
+      stream.write('external\n');
+      terminal.status('status2');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        'status    external  status2',
+      );
+    });
+
+    test('keeps logs in order with output written outside of Terminal', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      terminal.log('foo');
+      stream.write('external\n');
+      terminal.log('bar');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        ttyPrint
+          ? 'foo       external  bar       status'
+          : 'status    foo       external  bar',
+      );
+    });
+
+    test('prints consecutive logs before later external output', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.log('foo');
+      terminal.log('bar');
+      stream.write('external\n');
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        'foo       bar       external',
+      );
+    });
+
+    test('persistStatus does not leave the status drawn', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      await terminal.flush();
+      terminal.persistStatus();
+      await terminal.flush();
+      expect(stream.buffer.join('').trim()).toEqual(
+        ttyPrint ? 'status' : 'status    status',
+      );
+    });
+
+    test.each(['flush', 'waitForUpdates'])(
+      '%s waits for log writes to complete',
+      async method => {
+        const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+        const write = stream.write;
+        let pendingWrites = 0;
+        stream.write = (str, callback = () => {}) => {
+          ++pendingWrites;
+          write.call(stream, str, () => {
+            --pendingWrites;
+            callback();
+          });
+        };
+        terminal.log('foo');
+        await terminal[method]();
+        expect(pendingWrites).toBe(0);
+      },
+    );
+
     test('flush- multi-line', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.log('foo');
@@ -193,3 +263,29 @@ describe.each([false, true])(
     });
   },
 );
+
+test('keeps logs in order with output written to stderr', async () => {
+  const order = [];
+  const makeStream = name => {
+    const stream = Object.create(require('node:tty').WriteStream.prototype);
+    let bytesWritten = 0;
+    Object.defineProperty(stream, 'bytesWritten', {get: () => bytesWritten});
+    Object.assign(stream, {
+      columns: 10,
+      write(str, callback = () => {}) {
+        order.push(name + ':' + str);
+        bytesWritten += str.length;
+        setTimeout(callback, 33);
+      },
+    });
+    return stream;
+  };
+  const stdout = makeStream('stdout');
+  const stderr = makeStream('stderr');
+  const terminal = new Terminal(stdout);
+  terminal.log('foo');
+  terminal.log('bar');
+  stderr.write('external\n');
+  await terminal.flush();
+  expect(order).toEqual(['stdout:foo\n', 'stdout:bar\n', 'stderr:external\n']);
+});

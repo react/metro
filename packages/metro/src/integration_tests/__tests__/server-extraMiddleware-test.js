@@ -155,24 +155,16 @@ describe('runServer custom middleware', () => {
     expect(events).toEqual([['config', true], ['runServer', true], 'ready']);
   });
 
-  test('does not warn for the default server.enhanceMiddleware', async () => {
+  test('applies server.enhanceMiddleware without warning', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    await startServer(await loadConfig());
+    const enhanceMiddleware = jest.fn(middleware => middleware);
+    await startServer(await loadConfig({enhanceMiddleware}));
 
+    expect(enhanceMiddleware).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(MetroServer),
+    );
     expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  test('warns when server.enhanceMiddleware is set', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    await startServer(
-      await loadConfig({enhanceMiddleware: middleware => middleware}),
-    );
-
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('DEPRECATED'),
-      expect.stringContaining('`server.enhanceMiddleware`'),
-    );
     expect((await request(BUNDLE_PATH)).status).toBe(200);
     warn.mockRestore();
   });

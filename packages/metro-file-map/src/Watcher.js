@@ -42,6 +42,11 @@ const debug = debugModule('Metro:Watcher');
 
 const MAX_WAIT_TIME = 240000;
 
+// For a backend that isn't live as soon as it starts, how long to wait for each
+// health check that confirms a watch, and for the watch overall.
+const LIVE_CHECK_TIMEOUT = 200;
+const MAX_LIVE_WAIT_TIME = 10000;
+
 type InternalCrawlOptions = Readonly<{
   previousState: CrawlerOptions['previousState'],
   roots: ReadonlyArray<string>,
@@ -92,6 +97,9 @@ export class Watcher extends EventEmitter {
   #bufferedEvents: Array<WatcherBackendChangeEvent> = [];
   #closed: boolean = false;
   #createBackend: ?(root: Path) => Promise<WatcherBackend>;
+  // Whether a started backend's watches need confirming before they are
+  // relied on.
+  #confirmWatches: boolean = false;
   readonly #instanceId: number;
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
@@ -364,6 +372,42 @@ export class Watcher extends EventEmitter {
         createWatcherBackend(root, watchmanClocks),
       ),
     );
+    // Confirmed only once every backend has started, because starting one may
+    // restart the others' watches (NativeWatchers share one FSEvents stream).
+    this.#confirmWatches = !WatcherImpl.isLiveOnStart();
+    if (this.#confirmWatches) {
+      await Promise.all(
+        this.#options.roots.map(root => this.#waitUntilLive(root)),
+      );
+    }
+  }
+
+  /**
+   * Check the health of a root's watch until it reports a change, so that
+   * changes made from now on aren't missed. Warns if it can't be confirmed.
+   */
+  async #waitUntilLive(root: Path): Promise<void> {
+    const deadline = Date.now() + MAX_LIVE_WAIT_TIME;
+    let result;
+    do {
+      result = await this.#checkHealth(root, LIVE_CHECK_TIMEOUT);
+    } while (
+      result.type === 'timeout' &&
+      Date.now() < deadline &&
+      !this.#closed &&
+      !this.#options.abortSignal.aborted
+    );
+    debug('Confirming the watch of %s: %s', root, result.type);
+    if (
+      result.type !== 'success' &&
+      !this.#closed &&
+      !this.#options.abortSignal.aborted
+    ) {
+      this.#options.console.warn(
+        `metro-file-map: Could not confirm that ${root} is being watched ` +
+          `(${result.type}). Changes made during startup may be missed.`,
+      );
+    }
   }
 
   /**
@@ -379,8 +423,11 @@ export class Watcher extends EventEmitter {
     // `close()` may have been called while the backend was starting.
     if (this.#closed) {
       await backend.stopWatching();
-    } else {
-      this.#backends.push(backend);
+      return;
+    }
+    this.#backends.push(backend);
+    if (this.#confirmWatches) {
+      await this.#waitUntilLive(root);
     }
   }
 
@@ -399,6 +446,13 @@ export class Watcher extends EventEmitter {
   }
 
   async checkHealth(timeout: number): Promise<HealthCheckResult> {
+    return this.#checkHealth(this.#options.rootDir, timeout);
+  }
+
+  /**
+   * Write a health check file into `dir`, and wait for a backend to report it.
+   */
+  async #checkHealth(dir: Path, timeout: number): Promise<HealthCheckResult> {
     const healthCheckId = this.#nextHealthCheckId++;
     if (healthCheckId === Number.MAX_SAFE_INTEGER) {
       this.#nextHealthCheckId = 0;
@@ -412,7 +466,7 @@ export class Watcher extends EventEmitter {
       this.#instanceId +
       '-' +
       healthCheckId;
-    const healthCheckPath = path.join(this.#options.rootDir, basename);
+    const healthCheckPath = path.join(dir, basename);
     let result: ?HealthCheckResult;
     const timeoutPromise = new Promise(resolve =>
       setTimeout(resolve, timeout),

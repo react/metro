@@ -12,6 +12,11 @@
 import type {DeltaResult, Module, ReadOnlyGraph} from '../types';
 import type {HmrModule} from 'metro-runtime/src/modules/types';
 
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+} from '../../lib/modulePath';
 import {isJsModule, wrapModule} from './helpers/js';
 import debugModule from 'debug';
 import * as jscSafeUrl from 'jsc-safe-url';
@@ -38,14 +43,15 @@ function generateModules(
 
   for (const module of sourceModules) {
     if (isJsModule(module)) {
+      const sourcePath = getModuleSourcePath(module.path);
       const getPathname = (extension: 'bundle' | 'map') => {
         return (
           path
             .relative(
               options.serverRoot ?? options.projectRoot,
               path.join(
-                path.dirname(module.path),
-                path.basename(module.path, path.extname(module.path)) +
+                path.dirname(sourcePath),
+                path.basename(sourcePath, path.extname(sourcePath)) +
                   '.' +
                   extension,
               ),
@@ -59,6 +65,9 @@ function generateModules(
 
       const clientUrl = new URL(options.clientUrl);
       clientUrl.searchParams.delete('excludeSource');
+      if (isVirtualModulePath(module.path)) {
+        clientUrl.searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
+      }
 
       clientUrl.pathname = getPathname('map');
       const sourceMappingURL = clientUrl.toString();

@@ -27,6 +27,7 @@ import {posixToSystemPath as p} from 'metro-resolver/private/__tests__/utils';
 import MockRequest from 'mock-req';
 // $FlowFixMe[untyped-import]
 import MockResponse from 'mock-res';
+import nullthrows from 'nullthrows';
 
 const {
   getDefaultConfig: {getDefaultValues},
@@ -802,6 +803,31 @@ describe('processRequest', () => {
     });
   });
 
+  test('marks the url-server source path of a virtual module', async () => {
+    const buildGraphImpl = nullthrows(buildGraph.getMockImplementation());
+    buildGraph.mockImplementationOnce(async (...args) => {
+      const graph = await buildGraphImpl(...args);
+      // A virtual module at the path of a real one.
+      dependencies.set('virtual:' + p('/root/foo.js'), {
+        ...nullthrows(dependencies.get(p('/root/foo.js'))),
+        path: 'virtual:' + p('/root/foo.js'),
+        getSource: () => Buffer.from('code-virtual'),
+      });
+      return graph;
+    });
+
+    const response = await makeRequest('mybundle.map?sourcePaths=url-server');
+
+    expect(
+      response._getJSON().sections.map(section => section.map.sources),
+    ).toEqual([
+      ['/require-js'],
+      ['/[metro-project]/mybundle.js'],
+      ['/[metro-project]/foo.js'],
+      ['/[metro-project]/foo.js?virtual=true'],
+    ]);
+  });
+
   test('passes in the unstable_transformProfile param', async () => {
     await makeRequest('index.bundle?unstable_transformProfile=hermes-stable');
 
@@ -1096,6 +1122,13 @@ describe('processRequest', () => {
       const response = await makeRequest('/[metro-project]/logo.png');
 
       expect(response.getHeader('content-type')).toBe('image/png');
+    });
+
+    test('does not serve a file for a virtual module at its path', async () => {
+      // The request is passed on to the next handler, with no error.
+      await expect(
+        makeRequest('/[metro-project]/foo.js?virtual=true'),
+      ).rejects.toBeUndefined();
     });
   });
 
@@ -1640,7 +1673,6 @@ describe('processRequest', () => {
         expect.anything(),
         expect.objectContaining({
           projectRoot: p('/root'),
-          watchFolders: [p('/root')],
         }),
       );
     });
