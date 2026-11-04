@@ -120,6 +120,8 @@ export type JsTransformerConfig = Readonly<{
   unstable_memoizeInlineRequires?: boolean,
   /** With inlineRequires, do not memoize these module specifiers */
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string>,
+  /** Set by Metro from `resolver.unstable_allowVirtualModules`, overriding any configured value. */
+  unstable_supportsInlineModules?: boolean,
 }>;
 
 export type {CustomTransformOptions} from 'metro-babel-transformer';
@@ -692,6 +694,7 @@ function getBabelTransformArgs(
             babelRuntimeVersion: getMetroBabelRuntimeVersion(),
           }
         : null),
+      supportsInlineModules: config.unstable_supportsInlineModules === true,
       enableBabelRCLookup: config.enableBabelRCLookup,
       enableBabelRuntime: config.enableBabelRuntime,
       globalPrefix: config.globalPrefix,

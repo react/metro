@@ -457,6 +457,8 @@ Type: `boolean`
 
 Allows a [`resolveRequest`](#resolverequest) function or scheme resolver to resolve a module to a `virtualModule`, whose source comes from the resolver rather than from a file. The module's path is `virtual:<absolute path>` wherever a module's path is exposed, such as to [`createModuleIdFactory`](#createmoduleidfactory) and custom serializers, so code that expects a file path needs to handle this form. When this is `false`, a `virtualModule` resolution is an error. Defaults to `false`.
 
+When `true`, Metro tells Babel plugins and presets that support it, through [caller data](https://babeljs.io/docs/options#caller), that `metro:inline` specifiers will resolve (`supportsInlineModules: true`). They should fall back unless the value is `true`, which also covers older versions of Metro. A custom [`babelTransformerPath`](#babeltransformerpath) that sets its own caller data needs to forward the `supportsInlineModules` option it receives, and a custom [`transformerPath`](#transformerpath) that builds its own Babel transformer options needs to set that option from `unstable_supportsInlineModules` in its config.
+
 #### `unstable_applyBrowserSpecAfterExports` <div class="label experimental">Experimental</div>
 
 Type: `boolean`

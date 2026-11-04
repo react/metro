@@ -59,13 +59,18 @@ export default class Transformer {
     const {
       getTransformOptions: _getTransformOptions,
       transformVariants: _transformVariants,
+      unstable_supportsInlineModules: _supportsInlineModules,
       unstable_workerThreads: _workerThreads,
       ...transformerConfig
     } = this._config.transformer;
 
     const transformerOptions: TransformerConfig = {
       transformerPath: this._config.transformerPath,
-      transformerConfig,
+      // Babel plugins can emit different code for this, so it must be part of
+      // the transform cache key.
+      transformerConfig: this._config.resolver.unstable_allowVirtualModules
+        ? {...transformerConfig, unstable_supportsInlineModules: true}
+        : transformerConfig,
     };
 
     const globalCacheKey = this._cache.isDisabled

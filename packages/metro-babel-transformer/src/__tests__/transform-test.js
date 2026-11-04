@@ -116,3 +116,38 @@ test('omits the Babel runtime from the caller when not provided', () => {
   });
   expect(callerKeys).toEqual([]);
 });
+
+test.each([
+  [true, true],
+  [false, false],
+  [undefined, false],
+])(
+  'with supportsInlineModules: %s, exposes it on the caller: %s',
+  (supportsInlineModules, expected) => {
+    let callerValue;
+    transform({
+      filename: 'foo.js',
+      src: 'console.log("foo");',
+      plugins: [
+        babel => {
+          callerValue = babel.caller(
+            caller => caller?.supportsInlineModules === true,
+          );
+          return {visitor: {}};
+        },
+      ],
+      options: {
+        dev: true,
+        enableBabelRuntime: false,
+        enableBabelRCLookup: false,
+        globalPrefix: '__metro__',
+        minify: false,
+        platform: null,
+        publicPath: 'test',
+        projectRoot: PROJECT_ROOT,
+        supportsInlineModules,
+      },
+    });
+    expect(callerValue).toBe(expected);
+  },
+);

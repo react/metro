@@ -14,6 +14,7 @@
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 const MetroConfig = require('metro-config');
+const path = require('node:path');
 
 jest.setTimeout(30 * 1000);
 
@@ -63,6 +64,39 @@ test('development output abbreviates inline module specifiers in require names',
   expect(code).toContain('"metro:inline;base64,..."');
   expect(code).not.toContain('"metro:inline;base64,aW1wb3J0');
 });
+
+test.each([[true], [false]])(
+  'tells Babel whether inline modules are supported when unstable_allowVirtualModules is %s',
+  async unstable_allowVirtualModules => {
+    const baseConfig = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+    // Build with Metro's own Babel transformer, which leaves Babel to discover
+    // the fixture's `babel.config.js` from the project root.
+    const {code} = await Metro.runBuild(
+      {
+        ...baseConfig,
+        projectRoot: path.resolve(
+          __dirname,
+          '../basic_bundle/inline-module-caller',
+        ),
+        resolver: {...baseConfig.resolver, unstable_allowVirtualModules},
+        transformer: {
+          ...baseConfig.transformer,
+          babelTransformerPath: require.resolve('metro-babel-transformer'),
+          getTransformOptions: async () => ({
+            transform: {
+              experimentalImportSupport: false,
+              inlineRequires: false,
+            },
+          }),
+        },
+      },
+      {entry: 'index.js', dev: true, minify: false},
+    );
+    expect(execBundle(code)).toBe(unstable_allowVirtualModules);
+  },
+);
 
 test('builds in production', async () => {
   const {code} = await build({dev: false});

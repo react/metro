@@ -384,6 +384,29 @@ test.each([false, '7.25.0'])(
   },
 );
 
+test.each([
+  [true, true],
+  [false, false],
+  [undefined, false],
+])(
+  'with unstable_supportsInlineModules: %s, passes supportsInlineModules: %s to the Babel transformer',
+  async (unstable_supportsInlineModules, expected) => {
+    const babelTransform = mockBabelTransformer();
+
+    await Transformer.transform(
+      {...baseConfig, unstable_supportsInlineModules},
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code)', 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(babelTransform.mock.calls[0][0].options.supportsInlineModules).toBe(
+      expected,
+    );
+  },
+);
+
 test('preserves require() calls when module wrapping is disabled', async () => {
   const contents = ['require("./c");'].join('\n');
 

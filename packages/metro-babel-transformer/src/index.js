@@ -47,6 +47,7 @@ type BabelTransformerOptions = Readonly<{
   platform: ?string,
   projectRoot: string,
   publicPath: string,
+  supportsInlineModules?: boolean,
   unstable_transformProfile?: TransformProfile,
   globalPrefix: string,
   inlineRequires?: void,
@@ -123,6 +124,8 @@ function transform(
               enableBabelRuntime: options.babelRuntimeVersion,
             }
           : null),
+        // Whether `metro:inline` specifiers will resolve.
+        supportsInlineModules: options.supportsInlineModules,
       },
       // NOTE(EvanBacon): We split the parse/transform steps up to accommodate
       // Hermes parsing, but this defaults to cloning the AST which increases
