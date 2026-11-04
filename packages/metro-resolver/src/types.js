@@ -90,35 +90,20 @@ export type FileCandidates =
     };
 
 export type ExportsLikeMap = Readonly<{
-  [subpathOrCondition: string]: string | ExportsLikeMap | null,
+  [subpathOrCondition: string]:
+    string | ExportsLikeMap | ExportValueWithFallback | null,
 }>;
 
-/** "exports" mapping where values may be legacy Node.js <13.7 array format. */
-export type ExportMapWithFallbacks = Readonly<{
-  [subpath: string]: Values<ExportsLikeMap> | ExportValueWithFallback,
-}>;
-
-/** "exports" subpath value when in legacy Node.js <13.7 array format. */
-export type ExportValueWithFallback =
-  | ReadonlyArray<ExportsLikeMap | string>
-  // JSON can also contain exotic nested array structure, which will not be parsed
-  | ReadonlyArray<ReadonlyArray<unknown>>;
-
-export type ExportsField =
-  | string
-  | ReadonlyArray<string>
-  | ExportValueWithFallback
-  | ExportsLikeMap
-  | ExportMapWithFallbacks;
-
-export type FlattenedExportMap = ReadonlyMap<
-  string /* subpath */,
-  string | null,
+/** An ordered list of package target fallbacks. */
+export type ExportValueWithFallback = ReadonlyArray<
+  ExportsLikeMap | string | null | ExportValueWithFallback,
 >;
+
+export type ExportsField = string | ExportValueWithFallback | ExportsLikeMap;
 
 export type NormalizedExportsLikeMap = Map<
   string /* subpath */,
-  null | string | ExportsLikeMap,
+  null | string | ExportsLikeMap | ExportValueWithFallback,
 >;
 
 export type PackageJson = Readonly<{
@@ -293,6 +278,13 @@ export type ResolutionContext = Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
+
+  /**
+   * Read a package's "exports" field from the `package.json` at the root of
+   * the package named by a bare specifier, instead of the `package.json`
+   * closest to the requested subpath.
+   */
+  unstable_resolveExportsFromPackageRoot: boolean,
   unstable_incrementalResolution: boolean,
   unstable_logWarning: (message: string) => void,
 }>;

@@ -94,6 +94,7 @@ export function createResolutionContext(
     unstable_enablePackageExports: false,
     unstable_incrementalResolution: false,
     unstable_logWarning: () => {},
+    unstable_resolveExportsFromPackageRoot: false,
     ...createPackageAccessors(fileMap),
   };
 }

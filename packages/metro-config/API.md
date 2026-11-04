@@ -160,6 +160,7 @@ export type ResolverConfigT = {
   }>;
   unstable_enablePackageExports: boolean;
   unstable_incrementalResolution: boolean;
+  unstable_resolveExportsFromPackageRoot: boolean;
   useWatchman: boolean;
   requireCycleIgnorePatterns: ReadonlyArray<RegExp>;
   unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>;
