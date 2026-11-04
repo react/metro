@@ -209,7 +209,7 @@ describe('with package exports resolution enabled', () => {
       expect(logWarning).toHaveBeenCalledTimes(1);
       expect(logWarning.mock.calls[0][0]).toBe(
         `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-          'Reason: One or more mappings for subpaths defined in "exports" are invalid. All values must begin with "./". Falling back to file-based resolution.',
+          'Reason: The target for "." defined in "exports" is "index.js", however this value is invalid because it does not begin with "./". Falling back to file-based resolution.',
       );
     });
 
@@ -1198,7 +1198,7 @@ describe('with package exports resolution enabled', () => {
     // conditional exports. Used by packages such as @babel/runtime.
     // See https://github.com/babel/babel/pull/12877
     describe('early Node.js 13 versions', () => {
-      test('should use first value when subpath is an array including a condition mapping', () => {
+      test('should use the first resolved value when subpath is an array including a condition mapping', () => {
         const context = {
           ...createResolutionContext({
             [p('/root/src/main.js')]: '',
@@ -1237,7 +1237,7 @@ describe('with package exports resolution enabled', () => {
         });
       });
 
-      test('should use first value when subpath (root shorthand) is an array including a condition mapping', () => {
+      test('should use the first resolved value when subpath (root shorthand) is an array including a condition mapping', () => {
         const context = {
           ...createResolutionContext({
             [p('/root/src/main.js')]: '',
@@ -1292,7 +1292,7 @@ describe('with package exports resolution enabled', () => {
         expect(logWarning).toHaveBeenCalledTimes(1);
         expect(logWarning.mock.calls[0][0]).toBe(
           `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-            'Reason: One or more mappings for subpaths defined in "exports" are invalid. All values must begin with "./". Falling back to file-based resolution.',
+            'Reason: The target for "." defined in "exports" is "index.cjs", however this value is invalid because it does not begin with "./". Falling back to file-based resolution.',
         );
       });
 
@@ -1325,7 +1325,7 @@ describe('with package exports resolution enabled', () => {
         expect(logWarning).toHaveBeenCalledTimes(1);
         expect(logWarning.mock.calls[0][0]).toBe(
           `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).\n` +
-            'Reason: One or more mappings for subpaths defined in "exports" are invalid. All values must begin with "./". Falling back to file-based resolution.',
+            'Reason: The target for "." defined in "exports" is "index.cjs", however this value is invalid because it does not begin with "./". Falling back to file-based resolution.',
         );
       });
     });
