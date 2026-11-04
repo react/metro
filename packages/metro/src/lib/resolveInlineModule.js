@@ -24,7 +24,7 @@ const INLINE_MODULE_HASH_LENGTH = 16;
 // A URL parser moves or removes these, which leaves different but often still
 // valid source, so they are rejected rather than read from a parsed URL.
 const UNENCODED_CHARACTERS = /[?#\s]/;
-const BASE64_PAYLOAD = /^[A-Za-z0-9+/]*={0,2}$/;
+const BASE64_CHARACTERS = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /**
  * Resolves the `inline` pathname of Metro's own URI scheme, so that a transform
@@ -81,7 +81,7 @@ export function resolveInlineModule(
 
   let source = payload;
   if (parameters.includes('base64')) {
-    if (!BASE64_PAYLOAD.test(payload)) {
+    if (!isBase64(payload)) {
       throw malformedSpecifierError(specifier);
     }
     source = Buffer.from(payload, 'base64').toString('utf8');
@@ -98,6 +98,17 @@ export function resolveInlineModule(
     virtualPath: path.join(dir, `${name}.inline-${hash}${ext}`),
     source,
   };
+}
+
+// `Buffer.from` ignores invalid characters and an impossible trailing character,
+// so a payload must be well formed before it is decoded. Padding is optional,
+// but must be complete if present.
+function isBase64(payload: string): boolean {
+  return (
+    BASE64_CHARACTERS.test(payload) &&
+    payload.length % 4 !== 1 &&
+    (!payload.endsWith('=') || payload.length % 4 === 0)
+  );
 }
 
 function malformedSpecifierError(specifier: string): Error {

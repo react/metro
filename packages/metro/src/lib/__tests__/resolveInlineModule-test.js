@@ -111,10 +111,24 @@ test.each([
   ['a character outside the base64 alphabet', 'metro:inline;base64,M*=='],
   ['the URL-safe base64 alphabet', 'metro:inline;base64,_-=='],
   ['misplaced base64 padding', 'metro:inline;base64,M=Q='],
+  ['a base64 payload of an impossible length', 'metro:inline;base64,QUJDR'],
+  ['a single base64 character', 'metro:inline;base64,Q'],
+  ['incomplete base64 padding', 'metro:inline;base64,MQ='],
   ['a stray %', 'metro:inline,100%'],
   ['a stray % in a base64 payload', 'metro:inline;base64,MQ%'],
 ])('rejects %s', (_description, specifier) => {
   expect(() => resolve(specifier)).toThrow('Malformed inline module specifier');
+});
+
+test('accepts a large base64 payload', () => {
+  const source = '// ' + 'x'.repeat(5 * 1024 * 1024);
+  expect(
+    resolve('metro:inline;base64,' + Buffer.from(source).toString('base64')),
+  ).toMatchObject({source});
+});
+
+test('accepts unpadded base64', () => {
+  expect(resolve('metro:inline;base64,MQ')).toMatchObject({source: '1'});
 });
 
 test('percent-decodes a base64 payload', () => {
