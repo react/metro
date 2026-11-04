@@ -222,7 +222,7 @@ describe('package scope lookups', () => {
     ]);
   });
 
-  test('package subpath with package exports', () => {
+  test('package subpath with package exports, redirected before "exports"', () => {
     useFileMap({
       ...fileMap,
       [p('/root/node_modules/pkg/package.json')]: JSON.stringify({
@@ -230,7 +230,11 @@ describe('package scope lookups', () => {
         exports: {'./sub': './lib/sub.js'},
       }),
     });
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_applyBrowserSpecAfterExports: false,
+      unstable_enablePackageExports: true,
+    };
     expect(Resolver.resolve(context, 'pkg/sub', 'ios')).toEqual({
       type: 'sourceFile',
       filePath: p('/root/node_modules/pkg/lib/sub.js'),

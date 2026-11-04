@@ -1521,9 +1521,13 @@ describe('with package exports resolution enabled', () => {
       unstable_enablePackageExports: true,
     };
 
-    test('should redirect the requested subpath before "exports" by default', () => {
+    test('should redirect the requested subpath before "exports" with unstable_applyBrowserSpecAfterExports: false', () => {
       const logWarning = jest.fn();
-      const context = {...baseContext, unstable_logWarning: logWarning};
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: false,
+        unstable_logWarning: logWarning,
+      };
 
       expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
         type: 'sourceFile',
