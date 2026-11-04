@@ -169,7 +169,7 @@ describe('HmrServer', () => {
 
     connect = async (
       relativeUrl: string,
-      sendFn?: string => void,
+      sendFn?: (v: string) => void,
       {baseUrl = 'ws://localhost'}: {baseUrl?: string} = {},
     ) => {
       const absoluteUrl = baseUrl + relativeUrl;
@@ -191,7 +191,7 @@ describe('HmrServer', () => {
     message = async (
       client: Client,
       message: HmrClientMessage,
-      sendFn?: string => void,
+      sendFn?: (v: string) => void,
     ) => {
       await hmrServer.onClientMessage(
         client,

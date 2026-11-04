@@ -19,7 +19,7 @@ let mockPathModule;
 jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
-  const p: string => string = filePath =>
+  const p: (v: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;

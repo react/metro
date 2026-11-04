@@ -124,7 +124,7 @@ export function createRamBundleGroups<T extends ModuleTransportLike>(
 
 function* filter<A extends number, B extends number>(
   iterator: ArrayMap<A, B>,
-  predicate: ([A, Array<B>]) => boolean,
+  predicate: (v: [A, Array<B>]) => boolean,
 ): Generator<[A, Array<B>], void, void> {
   for (const value of iterator) {
     if (predicate(value)) {

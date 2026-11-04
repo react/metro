@@ -96,7 +96,7 @@ function writeBuffers(
   buffers: Array<Buffer>,
 ): Promise<void> {
   buffers.forEach((buffer: Buffer) => stream.write(buffer));
-  return new Promise((resolve: () => void, reject: unknown => unknown) => {
+  return new Promise((resolve: () => void, reject: (v: unknown) => unknown) => {
     stream.on('error', reject);
     stream.on('finish', () => resolve());
     stream.end();

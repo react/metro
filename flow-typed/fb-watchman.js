@@ -235,11 +235,14 @@ declare module 'fb-watchman' {
     ): void;
     end(): void;
 
-    on('connect', () => void): void;
-    on('end', () => void): void;
-    on('error', (error: Error) => void): void;
-    on('subscription', (event: WatchmanSubscriptionEvent) => void): void;
-    on('log', (event: WatchmanLogEvent) => void): void;
+    on(v0: 'connect', v1: () => void): void;
+    on(v0: 'end', v1: () => void): void;
+    on(v0: 'error', v1: (error: Error) => void): void;
+    on(
+      v0: 'subscription',
+      v1: (event: WatchmanSubscriptionEvent) => void,
+    ): void;
+    on(v0: 'log', v1: (event: WatchmanLogEvent) => void): void;
     removeAllListeners: (eventName?: string) => void;
   }
 

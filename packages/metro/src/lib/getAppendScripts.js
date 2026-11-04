@@ -20,17 +20,17 @@ import nullthrows from 'nullthrows';
 
 type Options<T extends number | string> = Readonly<{
   asyncRequireModulePath: string,
-  createModuleId: string => T,
+  createModuleId: (v: string) => T,
   getRunModuleStatement: (moduleId: T, globalPrefix: string) => string,
   globalPrefix: string,
   inlineSourceMap: ?boolean,
   processModuleFilter: (module: Module<>) => boolean,
   runBeforeMainModule: ReadonlyArray<string>,
   runModule: boolean,
-  shouldAddToIgnoreList: (Module<>) => boolean,
+  shouldAddToIgnoreList: (v: Module<>) => boolean,
   sourceMapUrl: ?string,
   sourceUrl: ?string,
-  getSourceUrl: ?(Module<>) => string,
+  getSourceUrl: ?(v: Module<>) => string,
   ...
 }>;
 

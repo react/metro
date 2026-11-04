@@ -31,7 +31,7 @@ const cmdCallback = <T>(err: ?Error, result: Partial<T>): void => {
 // Convenience function to write paths with posix separators but convert them
 // to system separators, and prepend a mock drive letter to absolute paths on
 // Windows.
-const p: string => string = filePath =>
+const p: (v: string) => string = filePath =>
   process.platform === 'win32'
     ? filePath.replaceAll('/', '\\').replace(/^\\/, 'C:\\')
     : filePath;
@@ -39,7 +39,7 @@ const p: string => string = filePath =>
 // Format a posix path as a Watchman-native path on the current platform, i.e.,
 // on Windows, drive letters on absolute paths, but posix-style separators.
 // This should be used for mocking Watchman *output*.
-const wp: string => string = filePath =>
+const wp: (v: string) => string = filePath =>
   process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
 
 jest.mock('fb-watchman', () => ({

@@ -54,7 +54,7 @@ declare var expect: {
   extend(matchers: {[name: string]: JestMatcher, ...}): void,
   assertions(expectedAssertions: number): void,
   any(value: unknown): JestAsymmetricEqualityType,
-  oneOf: (unknown, unknown) => boolean,
+  oneOf: (v0: unknown, v1: unknown) => boolean,
   ...
 };
 

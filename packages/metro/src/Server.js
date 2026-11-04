@@ -604,7 +604,7 @@ export default class Server {
   ) => void = (
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (v: ?Error) => void,
   ) => {
     this._processRequest(req, res, next).catch(next);
   };
@@ -627,7 +627,7 @@ export default class Server {
   async _processRequest(
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (v: ?Error) => void,
   ): Promise<void> {
     const originalUrl = req.url;
     debug('Handling request:    %s', originalUrl);
