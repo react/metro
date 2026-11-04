@@ -46,6 +46,7 @@ export type JsTransformerConfig = Readonly<{
   unstable_allowRequireContext: boolean;
   unstable_memoizeInlineRequires?: boolean | undefined;
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_supportsInlineModules?: boolean | undefined;
 }>;
 
 export type JsTransformOptions = Readonly<{

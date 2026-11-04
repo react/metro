@@ -106,6 +106,42 @@ describe('Transformer', function () {
     );
   });
 
+  test.each([
+    [true, true],
+    [false, undefined],
+  ])(
+    'with resolver.unstable_allowVirtualModules: %s, sets unstable_supportsInlineModules in the keyed worker config to %s',
+    (unstable_allowVirtualModules, expected) => {
+      // eslint-disable-next-line no-new
+      new Transformer(
+        {
+          ...commonOptions,
+          cacheStores: [{get: jest.fn(), set: jest.fn()}],
+          resolver: {...commonOptions.resolver, unstable_allowVirtualModules},
+          // The resolver option is the only source of this value.
+          transformer: {
+            ...commonOptions.transformer,
+            unstable_supportsInlineModules: !unstable_allowVirtualModules,
+          },
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+
+      const {transformerConfig} = require('../getTransformCacheKey').mock
+        .calls[0][0].transformerConfig;
+      expect(transformerConfig.unstable_supportsInlineModules).toBe(expected);
+      expect(
+        Object.hasOwn(transformerConfig, 'unstable_supportsInlineModules'),
+      ).toBe(expected === true);
+
+      const WorkerFarm = require('../WorkerFarm').default;
+      expect(WorkerFarm.mock.lastCall[1].transformerConfig).toBe(
+        transformerConfig,
+      );
+    },
+  );
+
   test('logs cache read errors to reporter', async () => {
     const readError = new Error('Cache write error');
     const get = jest.fn().mockImplementation(() => {
