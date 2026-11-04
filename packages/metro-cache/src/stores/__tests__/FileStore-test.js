@@ -11,6 +11,17 @@
 
 import {memfs} from 'memfs';
 
+class FsError extends Error {
+  code: string;
+  syscall: string;
+
+  constructor(code: string, syscall: string) {
+    super(code);
+    this.code = code;
+    this.syscall = syscall;
+  }
+}
+
 describe('FileStore', () => {
   let FileStore;
   let fs;
@@ -140,5 +151,58 @@ describe('FileStore', () => {
     await expect(fileStore.set(cache, {foo: 43})).rejects.toBe(writeError);
     expect(fs.readdirSync('/root/fa')).toEqual(['ceb00c']);
     expect(await fileStore.get(cache)).toEqual({foo: 42});
+  });
+
+  test.each([['EACCES'], ['EBUSY'], ['EPERM']])(
+    'keeps the existing entry when rename fails with %s',
+    async code => {
+      const fileStore = new FileStore<unknown>({root: '/root'});
+      const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+      await fileStore.set(cache, {foo: 42});
+
+      jest
+        .spyOn(fs.promises, 'rename')
+        .mockRejectedValueOnce(new FsError(code, 'rename'));
+
+      await expect(fileStore.set(cache, {foo: 42})).resolves.toBeUndefined();
+      expect(fs.readdirSync('/root/fa')).toEqual(['ceb00c']);
+      expect(await fileStore.get(cache)).toEqual({foo: 42});
+    },
+  );
+
+  test('rethrows a rename conflict when there is no existing entry', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
+    const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+    const renameError = new FsError('EPERM', 'rename');
+
+    jest.spyOn(fs.promises, 'rename').mockRejectedValueOnce(renameError);
+
+    await expect(fileStore.set(cache, {foo: 42})).rejects.toBe(renameError);
+    expect(fs.readdirSync('/root/fa')).toEqual([]);
+  });
+
+  test('rethrows a write error with the same code as a rename conflict', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
+    const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+    await fileStore.set(cache, {foo: 42});
+    const writeError = new FsError('EPERM', 'open');
+
+    jest.spyOn(fs.promises, 'writeFile').mockRejectedValueOnce(writeError);
+
+    await expect(fileStore.set(cache, {foo: 43})).rejects.toBe(writeError);
+  });
+
+  test('rethrows the original error when cleanup also fails', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
+    const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+    await fileStore.set(cache, {foo: 42});
+    const writeError = new Error('Disk full');
+
+    jest.spyOn(fs.promises, 'writeFile').mockRejectedValueOnce(writeError);
+    jest
+      .spyOn(fs.promises, 'rm')
+      .mockRejectedValueOnce(new Error('Cleanup failed'));
+
+    await expect(fileStore.set(cache, {foo: 43})).rejects.toBe(writeError);
   });
 });

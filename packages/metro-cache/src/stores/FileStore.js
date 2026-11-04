@@ -15,6 +15,7 @@ import path from 'node:path';
 
 const NULL_BYTE = 0x00;
 const NULL_BYTE_BUFFER = Buffer.from([NULL_BYTE]);
+const RENAME_CONFLICT_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 
 export type Options = Readonly<{
   root: string,
@@ -76,7 +77,17 @@ export default class FileStore<T> {
       await fs.promises.writeFile(tempPath, content);
       await fs.promises.rename(tempPath, filePath);
     } catch (err) {
-      await fs.promises.rm(tempPath, {force: true});
+      await fs.promises.rm(tempPath, {force: true}).catch(() => {});
+      // Edge case: On Windows, renaming over a file fails while another writer
+      // or reader has it open. Keys are content-addressed, i.e. the existing
+      // entry is equivalent, so losing this race is safe.
+      if (
+        err.syscall === 'rename' &&
+        RENAME_CONFLICT_CODES.has(err.code) &&
+        fs.existsSync(filePath)
+      ) {
+        return;
+      }
       throw err;
     }
   }
