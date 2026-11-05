@@ -37,6 +37,41 @@ test('builds a simple bundle', async () => {
   expect(result.assets).toBeUndefined();
 });
 
+test('builds a bundle that runs under a global prefix', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    transformer: {globalPrefix: 'app1'},
+  });
+
+  const prefixed = await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+  const unprefixed = await Metro.runBuild(baseConfig, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+
+  const context: {[string]: unknown} = {};
+  // Exports cross realms, so compare their serialized form.
+  expect(JSON.stringify(execBundle(prefixed.code, context))).toBe(
+    JSON.stringify(execBundle(unprefixed.code)),
+  );
+  expect(
+    Object.keys(context)
+      .filter(name => /__(r|c|d|registerSegment|accept)$/.test(name))
+      .sort(),
+  ).toEqual([
+    'app1__accept',
+    'app1__c',
+    'app1__d',
+    'app1__r',
+    'app1__registerSegment',
+  ]);
+});
+
 test('tells a custom serializer the reserved string', async () => {
   const baseConfig = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
@@ -56,7 +91,10 @@ test('tells a custom serializer the reserved string', async () => {
     },
   });
 
-  await Metro.runBuild(config, {entry: 'TestBundle.js'});
+  await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
 
   expect(reservedString).toBe('_$$_METRO_');
 });

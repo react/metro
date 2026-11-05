@@ -656,7 +656,9 @@ A file size threshold (in bytes) above which some expensive optimizations are sk
 
 Type: `string`
 
-A prefix for the global names used by Metro's module system, e.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`. Defaults to `''`.
+A prefix for the global names used by Metro's module system, so that several bundles with different prefixes can share one JavaScript realm. E.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`, and the bundle runs its entry point with `app1__r(...)`. Defaults to `''`.
+
+The prefix applies to `__d`, `__r`, `__c` and `__registerSegment`, to `__loadBundleAsync`, and in development to `__accept`, `__requireCycleIgnorePatterns`, `__unstable_forceFullRefreshPatterns`, `__ReactRefresh` and `__SYSTRACE`. Code that calls any of these by name, such as a custom [`getRunModuleStatement`](#getrunmodulestatement) or native code that calls `__r`, must apply the same prefix. Each bundle also declares its prefix as the global `__METRO_GLOBAL_PREFIX__`.
 
 #### `allowOptionalDependencies`
 
@@ -752,7 +754,7 @@ Serializer options control [serialization](./Concepts.md#serialization): how tra
 
 Type: `(moduleId: number | string, globalPrefix: string) => string`
 
-Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42`.
+Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `${globalPrefix}__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42` with the default [`globalPrefix`](#globalprefix).
 
 #### `createModuleIdFactory`
 
