@@ -111,10 +111,11 @@ export default class DependencyGraph extends EventEmitter {
       type: 'dep_graph_loading',
       hasReducedPerformance: !!hasReducedPerformance,
     });
-    const {fileMap, hasteMap, dependencyPlugin} = createFileMap(config, {
-      throwOnModuleCollision: false,
-      watch,
-    });
+    const {fileMap, hasteMap, dependencyPlugin, packageJsonPlugin} =
+      createFileMap(config, {
+        throwOnModuleCollision: false,
+        watch,
+      });
 
     // We can have a lot of graphs listening to Haste for changes.
     // Bump this up to silence the max listeners EventEmitter warning.
@@ -140,6 +141,8 @@ export default class DependencyGraph extends EventEmitter {
       this.#packageCache = new PackageCache({
         getClosestPackage: absoluteModulePath =>
           this._getClosestPackage(absoluteModulePath),
+        readPackageJson: absolutePackageJsonPath =>
+          packageJsonPlugin.readPackageJson(absolutePackageJsonPath),
       });
       this._createModuleResolver();
     });
