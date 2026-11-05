@@ -96,7 +96,7 @@ export type State = {
   allowOptionalDependencies: AllowOptionalDependencies,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
-  unstable_isESMImportAtSource: ?(v: ReadonlySourceLocation) => boolean,
+  unstable_isESMImportAtSource: ?(location: ReadonlySourceLocation) => boolean,
 };
 
 export type Options = Readonly<{
@@ -109,7 +109,7 @@ export type Options = Readonly<{
   dependencyTransformer?: DependencyTransformer,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
-  unstable_isESMImportAtSource?: ?(v: ReadonlySourceLocation) => boolean,
+  unstable_isESMImportAtSource?: ?(location: ReadonlySourceLocation) => boolean,
 }>;
 
 export type CollectedDependencies = Readonly<{

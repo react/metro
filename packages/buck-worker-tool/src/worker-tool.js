@@ -67,20 +67,20 @@ type IncomingMessage = HandshakeMessage | CommandMessage;
 type Response = HandshakeResponse | CommandResponse | ErrorResponse;
 type RespondFn = (response: Response) => void;
 
-type JSONReaderDataHandler = (v: IncomingMessage) => unknown;
+type JSONReaderDataHandler = (message: IncomingMessage) => unknown;
 type JSONReaderEndHandler = () => unknown;
 
 type JSONReaderDataListener = (
-  v0: 'data',
-  v1: JSONReaderDataHandler,
+  event: 'data',
+  handler: JSONReaderDataHandler,
 ) => JSONReader;
 type JSONReaderEndListener = (
-  v0: 'end',
-  v1: JSONReaderEndHandler,
+  event: 'end',
+  handler: JSONReaderEndHandler,
 ) => JSONReader;
 type JSONReaderRootEndListener = (
-  v0: 'root_end',
-  v1: JSONReaderEndHandler,
+  event: 'root_end',
+  handler: JSONReaderEndHandler,
 ) => JSONReader;
 type JSONReaderListener = JSONReaderDataListener &
   JSONReaderEndListener &

@@ -17,10 +17,10 @@ const HMRClient = require('../HMRClient');
 
 let mockSocket: ?{
   onclose: () => void,
-  onmessage: (v: {data: string}) => void,
-  onerror: (v: {data: string}) => void,
+  onmessage: (event: {data: string}) => void,
+  onerror: (event: {data: string}) => void,
   close: () => void,
-  mockEmit: (v0: string, v1: {data: string}) => void,
+  mockEmit: (type: string, event: {data: string}) => void,
 } = null;
 let evaledCode = '';
 

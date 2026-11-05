@@ -25,12 +25,12 @@ export type {JsTransformOptions as TransformOptions} from 'metro-transform-worke
 
 type TransformerInterface = {
   transform(
-    v0: JsTransformerConfig,
-    v1: string,
-    v2: string,
-    v3: Buffer,
-    v4: JsTransformOptions,
-    v5: ?string,
+    config: JsTransformerConfig,
+    projectRoot: string,
+    projectRelativePath: string,
+    data: Buffer,
+    options: JsTransformOptions,
+    assetUrlPath: ?string,
   ): Promise<TransformResult<>>,
 };
 

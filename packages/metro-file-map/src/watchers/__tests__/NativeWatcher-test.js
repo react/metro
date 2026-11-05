@@ -24,13 +24,13 @@ const ROOT = resolve('/', 'project');
 
 type Deferred<T> = {
   promise: Promise<T>,
-  resolve: (v: T) => void,
-  reject: (v: Error) => void,
+  resolve: (value: T) => void,
+  reject: (error: Error) => void,
 };
 
 function deferred<T>(): Deferred<T> {
-  let resolve: (v: T) => void = () => {};
-  let reject: (v: Error) => void = () => {};
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: Error) => void = () => {};
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;

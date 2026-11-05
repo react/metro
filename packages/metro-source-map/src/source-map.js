@@ -187,7 +187,7 @@ function isVlqMap(
 
 function fromRawMappingsImpl(
   isBlocking: boolean,
-  onDone: (v: Generator) => void,
+  onDone: (generator: Generator) => void,
   modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number,
 ): void {

@@ -158,8 +158,8 @@ export type TransformResultWithSource<T = MixedOutput> = Readonly<{
 }>;
 
 export type TransformFn<T = MixedOutput> = (
-  v0: string,
-  v1: ?VirtualSource,
+  modulePath: string,
+  virtualSource: ?VirtualSource,
 ) => Promise<TransformResultWithSource<T>>;
 
 export type ResolveFn = (

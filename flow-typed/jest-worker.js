@@ -263,7 +263,7 @@ declare module 'jest-worker' {
 
   declare export class Worker<
     TExposed extends Readonly<{
-      [string]: (...rest: Array<$FlowFixMe>) => Promise<$FlowFixMe>,
+      [string]: (...args: Array<$FlowFixMe>) => Promise<$FlowFixMe>,
     }> = {},
     TSetupArgs extends ReadonlyArray<unknown> = ReadonlyArray<unknown>,
   > {

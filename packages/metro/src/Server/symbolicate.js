@@ -108,7 +108,7 @@ function originalPositionInTuples(
 
 function createFunctionNameGetter(
   module: ExplodedSourceMapModule,
-): (v: Position) => ?string {
+): (position: Position) => ?string {
   const consumer = new SourceMetadataMapConsumer(
     {
       version: 3,
@@ -144,7 +144,7 @@ export default async function symbolicate(
       readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
       readonly path: string,
     },
-    (v: Position) => ?string,
+    (position: Position) => ?string,
   >();
 
   function findModule(frame: StackFrameInput): ?ExplodedSourceMapModule {

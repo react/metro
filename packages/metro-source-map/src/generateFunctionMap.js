@@ -159,7 +159,7 @@ function functionMapBabelPlugin(): PluginObj<> {
 
 function getFunctionMapVisitor(
   context: ?Context,
-  pushMapping: (v: RangeMapping) => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ): FunctionMapVisitor {
   const nameStack: Array<{loc: BabelNodeSourceLocation, name: string}> = [];
   let tailPos = {line: 1, column: 0};
@@ -223,7 +223,7 @@ function getFunctionMapVisitor(
 function forEachMapping(
   ast: BabelNode,
   context: ?Context,
-  pushMapping: (v: RangeMapping) => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ) {
   const visitor = getFunctionMapVisitor(context, pushMapping);
 

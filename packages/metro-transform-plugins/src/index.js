@@ -24,7 +24,7 @@ export type {Options as InlinePluginOptions} from './inline-plugin';
 export type {PluginOptions as InlineRequiresPluginOptions} from './inline-requires-plugin';
 
 type TransformPlugins = {
-  addParamsToDefineCall(v: string, ...rest: Array<unknown>): string,
+  addParamsToDefineCall(code: string, ...paramsToAdd: Array<unknown>): string,
   constantFoldingPlugin: ConstantFoldingPlugin,
   importExportPlugin: ImportExportPlugin,
   inlinePlugin: InlinePlugin,

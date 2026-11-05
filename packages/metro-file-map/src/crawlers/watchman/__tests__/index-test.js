@@ -28,11 +28,11 @@ jest.mock('fb-watchman', () => ({
 }));
 
 // /some/path on posix, c:\some\path on Windows
-const systemPath: (v: string) => string = filePath =>
+const systemPath: (filePath: string) => string = filePath =>
   watchmanPath(filePath).replace(/\//g, path.sep);
 
 // /some/path on posix, c:/some/path on Windows. Relative unchanged.
-const watchmanPath: (v: string) => string = filePath =>
+const watchmanPath: (filePath: string) => string = filePath =>
   filePath.replace(/^\//, 'C:/');
 
 const DEFAULT_OPTIONS: CrawlerOptions = {
