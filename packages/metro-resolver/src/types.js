@@ -200,7 +200,7 @@ export type ResolutionContext = Readonly<{
    * Always equal to dependency.data.isESMImport where dependency is provided,
    * but may be used for resolution.
    */
-  isESMImport?: boolean,
+  isESMImport: boolean,
 
   /**
    * Synchronously returns information about a given absolute path, including
