@@ -17,7 +17,6 @@ import type {Reporter} from '../../lib/reporting';
 import type {ResolverInputOptions} from '../../shared/types';
 import type {
   CustomResolver,
-  DoesFileExist,
   FileCandidates,
   FileSystemLookup,
   Resolution,
@@ -38,7 +37,6 @@ import util from 'node:util';
 type Options = Readonly<{
   assetExts: ReadonlySet<string>,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
   emptyModulePath: string,
   extraNodeModules: ?any,
   fileSystemLookup: FileSystemLookup,
@@ -126,7 +124,6 @@ export class ModuleResolver {
     const {
       assetExts,
       disableHierarchicalLookup,
-      doesFileExist,
       extraNodeModules,
       fileSystemLookup,
       getPackage,
@@ -143,7 +140,6 @@ export class ModuleResolver {
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
       unstable_resolveExportsFromPackageRoot,
-      unstable_incrementalResolution,
     } = this._options;
 
     try {
@@ -155,7 +151,6 @@ export class ModuleResolver {
             customResolverOptions: resolverOptions.customResolverOptions ?? {},
             dev: resolverOptions.dev,
             disableHierarchicalLookup,
-            doesFileExist,
             extraNodeModules,
             fileSystemLookup,
             getPackage,
@@ -178,7 +173,6 @@ export class ModuleResolver {
             unstable_conditionsByPlatform,
             unstable_enablePackageExports,
             unstable_resolveExportsFromPackageRoot,
-            unstable_incrementalResolution,
             unstable_logWarning: this._logWarning,
           },
           dependency,
