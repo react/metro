@@ -221,9 +221,11 @@ Subpath patterns conveniently export many assets; we recommend specifying asset 
 
 From Metro 0.88, `"exports"` is read from the package root and chooses a package's file before an object-valued `"browser"` or `"react-native"` field can redirect it. React Native lists `"browser"` in [`resolver.resolverMainFields`](./Configuration.md#resolvermainfields) but doesn't assert the `browser` condition, so a package that reached a suitable build through one of those fields or a nested `package.json` may now resolve to a Node.js build. The bundle then fails with an error such as `Unable to resolve module stream`.
 
-- `react-dom/server` and `react-dom/static` resolve to Node.js builds. Import `react-dom/server.browser` or `react-dom/static.browser` instead, or set [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) to `false`.
+- `react-dom/server` and `react-dom/static` resolve to Node.js builds. Import `react-dom/server.browser` or `react-dom/static.browser` instead.
 - `msw/native` in msw 2.15 reaches the Node.js build of `@mswjs/interceptors`, which requires `node:zlib`. Set [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental) to `false`.
 - `import 'nanoid/async'` in nanoid 3 resolves to a build that requires `expo-random`. Use `require('nanoid/async')`, or set `resolver.unstable_resolveExportsFromPackageRoot` to `false`.
+
+To get the previous behavior back, set both [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) and `resolver.unstable_resolveExportsFromPackageRoot` to `false`. Setting `unstable_applyBrowserSpecAfterExports` to `false` alone restores `react-dom/server`, but can send a package with a nested `"browser"` map, such as `nanoid/async`, to a Node.js build.
 
 ### Package/ESM incompatibilities
 
