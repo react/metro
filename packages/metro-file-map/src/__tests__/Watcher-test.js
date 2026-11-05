@@ -20,6 +20,7 @@ import type {
 
 import TreeFS from '../lib/TreeFS';
 import {Watcher} from '../Watcher';
+import EventEmitter from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -39,14 +40,17 @@ type MockBackend = {
   root: string,
   clocks: ?Map<string, string>,
   emit: (event: WatcherBackendChangeEvent) => void,
+  emitError: (error: Error) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
+const mockStartWatching = jest.fn<[string], Promise<void>>();
 let mockNativeLiveOnStart = true;
 function mockBackendClass(kind: MockBackend['kind']) {
   return class {
     #root: string;
     #clocks: ?Map<string, string>;
     #listener: ?(event: WatcherBackendChangeEvent) => void;
+    #emitter: EventEmitter = new EventEmitter();
     static isSupported(): boolean {
       return true;
     }
@@ -60,13 +64,23 @@ function mockBackendClass(kind: MockBackend['kind']) {
     onFileEvent(listener: (event: WatcherBackendChangeEvent) => void) {
       this.#listener = listener;
     }
-    async startWatching() {
+    onError(listener: (error: Error) => void): () => void {
+      this.#emitter.on('error', listener);
+      return () => {
+        this.#emitter.removeListener('error', listener);
+      };
+    }
+    startWatching(): Promise<void> {
       mockStartedBackends.push({
         kind,
         root: this.#root,
         clocks: this.#clocks,
         emit: event => this.#listener?.(event),
+        emitError: error => {
+          this.#emitter.emit('error', error);
+        },
       });
+      return mockStartWatching(this.#root);
     }
     async stopWatching() {}
     getPauseReason(): ?string {
@@ -144,11 +158,104 @@ beforeEach(() => {
   mockNativeLiveOnStart = true;
   mockWatchmanCrawl.mockReset();
   mockNodeCrawl.mockReset();
+  mockStartWatching.mockReset();
+  mockStartWatching.mockImplementation(async () => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  jest.clearAllTimers();
   jest.restoreAllMocks();
+});
+
+describe('Watcher startup rejection', () => {
+  test.each([
+    [false, 'crawl'],
+    [false, 'watch'],
+    [true, 'watch'],
+  ])(
+    'propagates a backend rejection from %s/%s before the timeout',
+    async (useWatchman, operation) => {
+      const error = new Error('Backend could not start');
+      mockStartWatching.mockImplementationOnce(async () => {
+        throw error;
+      });
+      const watcher = createWatcher(useWatchman, null, true);
+      const outcomes: Array<?Error> = [];
+      const starting = (
+        operation === 'crawl' ? watcher.crawl() : watcher.watch(() => {})
+      ).then(
+        () => outcomes.push(null),
+        (error: Error) => outcomes.push(error),
+      );
+
+      // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(outcomes).toEqual([error]);
+      expect(jest.getTimerCount()).toBe(0);
+      await starting;
+      await watcher.close();
+    },
+  );
+
+  test('propagates a failure from watchRoot without leaving a timer', async () => {
+    const watcher = createWatcher(true, null, true);
+    await watcher.watch(() => {});
+    const error = new Error('Added root could not start');
+    mockStartWatching.mockImplementationOnce(async () => {
+      throw error;
+    });
+    const outcomes: Array<?Error> = [];
+    const starting = watcher.watchRoot(path.join(rootDir, 'added')).then(
+      () => outcomes.push(null),
+      (error: Error) => outcomes.push(error),
+    );
+
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(outcomes).toEqual([error]);
+    expect(jest.getTimerCount()).toBe(0);
+    await starting;
+    await watcher.close();
+  });
+
+  test('propagates a synchronous startup error without leaving a timer', async () => {
+    const error = new Error('Synchronous startup failure');
+    mockStartWatching.mockImplementationOnce(() => {
+      throw error;
+    });
+    const watcher = createWatcher(true, null, true);
+
+    await expect(watcher.watch(() => {})).rejects.toBe(error);
+    expect(jest.getTimerCount()).toBe(0);
+    await watcher.close();
+  });
+
+  test('retains the existing deadline for a startup that never settles', async () => {
+    mockStartWatching.mockImplementationOnce(() => new Promise(() => {}));
+    const watcher = createWatcher(true, null, true);
+    const outcomes: Array<?Error> = [];
+    const starting = watcher
+      .watch(() => {})
+      .then(
+        () => outcomes.push(null),
+        (error: Error) => outcomes.push(error),
+      );
+
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(239999);
+    expect(outcomes).toEqual([]);
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]?.message).toBe('Failed to start watch mode.');
+    expect(jest.getTimerCount()).toBe(0);
+    await starting;
+    await watcher.close();
+  });
 });
 
 describe('Watcher crawl fallback', () => {
@@ -233,6 +340,32 @@ describe('Watcher backend choice in watch mode', () => {
     root: rootDir,
     metadata: {modifiedTime: 1, size: 1, type: 'f'},
   };
+
+  test.each([false, true])(
+    'reports backend errors without losing later changes (useWatchman=%s)',
+    async useWatchman => {
+      mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+      mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));
+      const reportError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      const watcher = createWatcher(useWatchman, null, true);
+      const onChange = jest.fn<[WatcherBackendChangeEvent], void>();
+      await watcher.crawl();
+      await watcher.watch(onChange);
+
+      const backend = mockStartedBackends[0];
+      const error = new Error('Cannot read watched directory');
+      expect(() => backend.emitError(error)).not.toThrow();
+      expect(reportError).toHaveBeenCalledWith(
+        `metro-file-map: ${backend.kind} watcher error in ${rootDir}:`,
+        error,
+      );
+      backend.emit(event);
+      expect(onChange).toHaveBeenCalledWith(event);
+      await watcher.close();
+    },
+  );
 
   test('a successful Watchman crawl starts a Watchman backend only on watch()', async () => {
     mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));

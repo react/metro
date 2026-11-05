@@ -74,6 +74,9 @@ export class AbstractWatcher implements WatcherBackend {
 
   async stopWatching(): Promise<void> {
     this.#emitter.removeAllListeners();
+    // An in-flight filesystem operation can still report an error after the
+    // owner has detached. Do not turn that late error into an uncaught throw.
+    this.#emitter.on('error', () => {});
   }
 
   emitFileEvent(event: Omit<WatcherBackendChangeEvent, 'root'>) {
