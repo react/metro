@@ -31,7 +31,8 @@ const HELP = `  bundling_speed [--build-command=CMD]
 
     --build-command=CMD  Space-separated command that builds a bundle and
                          accepts \`metro build\` arguments (default: this
-                         checkout's \`metro build\`).
+                         checkout's \`metro build\`). It runs from the app's
+                         directory, so paths in it must be absolute.
 `;
 
 const OPTIONS = {'build-command': {type: 'string'}};

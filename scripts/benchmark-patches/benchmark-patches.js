@@ -124,6 +124,7 @@ function main() {
   process.on('SIGINT', () => {});
 
   if (hasBasePatch) {
+    patch(BASE_PATCH, {dryRun: true});
     patch(BASE_PATCH);
   }
   try {
