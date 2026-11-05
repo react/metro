@@ -47,6 +47,15 @@ describe('parseBundleOptionsFromBundleRequestUrl', () => {
     );
   });
 
+  test('rejects a virtual module URL', () => {
+    expect(() =>
+      parseBundleOptionsFromBundleRequestUrl(
+        'http://localhost/App.bundle?platform=ios&virtual=true',
+        new Set(['ios']),
+      ),
+    ).toThrowError('Virtual modules cannot be requested by URL yet.');
+  });
+
   test.each(['absolute', 'relative'])(
     '%s protocol urls- infers the source url and source map url from the pathname',
     type => {

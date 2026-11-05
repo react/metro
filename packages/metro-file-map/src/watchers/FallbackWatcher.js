@@ -57,6 +57,11 @@ export default class FallbackWatcher extends AbstractWatcher {
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
+  // Not live on darwin, though FallbackWatcher isn't currently used there.
+  static isLiveOnStart(): boolean {
+    return platform !== 'darwin';
+  }
+
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
 
@@ -494,10 +499,10 @@ function isIgnorableFileError(error: Error | {code: string}) {
  */
 async function recReaddir(
   root: string,
-  dirCallback: (string, Stats) => void,
-  fileCallback: (string, Stats) => void,
-  symlinkCallback: (string, Stats) => void,
-  errorCallback: Error => void,
+  dirCallback: (v0: string, v1: Stats) => void,
+  fileCallback: (v0: string, v1: Stats) => void,
+  symlinkCallback: (v0: string, v1: Stats) => void,
+  errorCallback: (v: Error) => void,
   ignored: ?RegExp,
 ): Promise<void> {
   const pending = [root];

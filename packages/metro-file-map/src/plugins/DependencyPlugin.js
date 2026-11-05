@@ -62,9 +62,9 @@ export default class DependencyPlugin extends FileDataPlugin<ReadonlyArray<strin
   }
 
   getDependencies(mixedPath: Path): ?ReadonlyArray<string> {
-    const result = this.getFileSystem().lookup(mixedPath);
+    const result = this.getOrComputeFileData(mixedPath);
     if (result.exists && result.type === 'f') {
-      return result.pluginData ?? [];
+      return result.data ?? [];
     }
     return null;
   }

@@ -243,10 +243,10 @@ function readAll(stream: Readable | ReadStream) {
 
     stream.setEncoding('utf8');
     stream.on('readable', () => {
-      let chunk;
-      // flowlint-next-line sketchy-null-string:off
-      while ((chunk = stream.read())) {
+      let chunk = stream.read();
+      while (chunk != null && chunk !== '') {
         data += chunk.toString();
+        chunk = stream.read();
       }
     });
     stream.on('end', () => {

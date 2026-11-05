@@ -13,6 +13,7 @@ import type {
   FileMapPlugin,
   FileMapPluginInitOptions,
   FileMapPluginWorker,
+  Observations,
   ReadonlyFileSystemChanges,
   V8Serializable,
 } from '../flow-types';
@@ -36,7 +37,10 @@ export default class FileDataPlugin<
   #worker: FileMapPluginWorker;
   #cacheKey: string;
   #files: ?FileMapPluginInitOptions<null, PerFileData>['files'];
-  #processFile: ?FileMapPluginInitOptions<null, PerFileData>['processFile'];
+  #getOrComputeFileData: ?FileMapPluginInitOptions<
+    null,
+    PerFileData,
+  >['getOrComputeFileData'];
 
   constructor(opts: FileDataPluginOptions) {
     this.name = opts.name;
@@ -52,22 +56,25 @@ export default class FileDataPlugin<
     initOptions: FileMapPluginInitOptions<null, PerFileData>,
   ): Promise<void> {
     this.#files = initOptions.files;
-    this.#processFile = initOptions.processFile;
+    this.#getOrComputeFileData = initOptions.getOrComputeFileData;
   }
 
   /**
-   * Run this plugin's worker now on the file at `mixedPath`, store its data
-   * and return it. A lazy plugin calls this for a file whose data, as given by
-   * `getFileSystem().lookup()`, is `undefined`.
+   * This plugin's data for the file at `mixedPath`, running its worker on the
+   * file first if the plugin is lazy and the file has no data yet. If
+   * `observations` is given, a regular file found is recorded in `content`.
    */
-  processFile(
+  getOrComputeFileData(
     mixedPath: string,
-  ): ReturnType<FileMapPluginInitOptions<null, PerFileData>['processFile']> {
-    const processFile = this.#processFile;
-    if (processFile == null) {
+    observations?: ?Observations,
+  ): ReturnType<
+    FileMapPluginInitOptions<null, PerFileData>['getOrComputeFileData'],
+  > {
+    const getOrComputeFileData = this.#getOrComputeFileData;
+    if (getOrComputeFileData == null) {
       throw new Error(`${this.name} plugin has not been initialized`);
     }
-    return processFile(mixedPath);
+    return getOrComputeFileData(mixedPath, observations);
   }
 
   getFileSystem(): FileMapPluginInitOptions<null, PerFileData>['files'] {

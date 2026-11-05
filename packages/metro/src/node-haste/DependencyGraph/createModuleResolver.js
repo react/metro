@@ -77,7 +77,12 @@ export default function createModuleResolver({
           resolution => basePath + '@' + resolution + 'x' + extension,
         ),
       ]
-        .map(assetPath => fileSystemLookup(assetPath).realPath)
+        .map(assetPath => {
+          const result = fileSystemLookup(assetPath);
+          // A directory such as `node_modules/lodash.zip` is not an asset, and
+          // must fall through to directory (package) resolution.
+          return result.exists && result.type === 'f' ? result.realPath : null;
+        })
         .filter(Boolean);
 
       return assets.length ? assets : null;
@@ -88,11 +93,16 @@ export default function createModuleResolver({
       ...config.resolver.schemeResolvers,
     },
     sourceExts: config.resolver.sourceExts,
+    unstable_allowVirtualModules: config.resolver.unstable_allowVirtualModules,
+    unstable_applyBrowserSpecAfterExports:
+      config.resolver.unstable_applyBrowserSpecAfterExports,
     unstable_conditionNames: config.resolver.unstable_conditionNames,
     unstable_conditionsByPlatform:
       config.resolver.unstable_conditionsByPlatform,
     unstable_enablePackageExports:
       config.resolver.unstable_enablePackageExports,
+    unstable_resolveExportsFromPackageRoot:
+      config.resolver.unstable_resolveExportsFromPackageRoot,
     unstable_incrementalResolution:
       config.resolver.unstable_incrementalResolution,
   });

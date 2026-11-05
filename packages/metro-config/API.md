@@ -152,12 +152,15 @@ export type ResolverConfigT = {
   resolverMainFields: ReadonlyArray<string>;
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>;
   sourceExts: ReadonlyArray<string>;
+  unstable_allowVirtualModules: boolean;
+  unstable_applyBrowserSpecAfterExports: boolean;
   unstable_conditionNames: ReadonlyArray<string>;
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>;
   }>;
   unstable_enablePackageExports: boolean;
   unstable_incrementalResolution: boolean;
+  unstable_resolveExportsFromPackageRoot: boolean;
   useWatchman: boolean;
   requireCycleIgnorePatterns: ReadonlyArray<RegExp>;
   unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>;
@@ -187,6 +190,9 @@ export type ServerConfigT = {
   forwardClientLogs: boolean;
   port: number;
   rewriteRequestUrl: (url: string) => string;
+  unstable_middleware: ReadonlyArray<ServerMiddleware>;
+  unstable_onServerCreated: (metroServer: Server) => void;
+  unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>;
   unstable_serverRoot: null | undefined | string;
   useGlobalHotkey: boolean;
   verifyConnections: boolean;
@@ -199,6 +205,8 @@ export type ServerConfigT = {
         requestCert?: boolean | undefined;
       };
 };
+
+export type ServerMiddleware = Middleware | Readonly<[path: string, handler: Middleware]>;
 
 export type SymbolicatorConfigT = {
   customizeFrame: (frame: {

@@ -69,6 +69,10 @@ type JestMockFn<TArguments extends ReadonlyArray<any>, TReturn> = {
    */
   mockRestore(): void,
   /**
+   * Returns the current implementation, or undefined for an unimplemented mock.
+   */
+  getMockImplementation(): void | ((...args: TArguments) => TReturn),
+  /**
    * Accepts a function that should be used as the implementation of the mock.
    * The mock itself will still record all calls that go into and instances
    * that come from itself -- the only difference is that the implementation
@@ -1187,9 +1191,9 @@ type JestPrettyFormatColors = {
   ...
 };
 
-type JestPrettyFormatIndent = string => string;
+type JestPrettyFormatIndent = (v: string) => string;
 type JestPrettyFormatRefs = Array<any>;
-type JestPrettyFormatPrint = any => string;
+type JestPrettyFormatPrint = (v: any) => string;
 type JestPrettyFormatStringOrNull = string | null;
 
 type JestPrettyFormatOptions = {|
@@ -1220,7 +1224,7 @@ type JestPrettyFormatPlugin = {
     opts: JestPrettyFormatOptions,
     colors: JestPrettyFormatColors,
   ) => string,
-  test: any => boolean,
+  test: (v: any) => boolean,
   ...
 };
 

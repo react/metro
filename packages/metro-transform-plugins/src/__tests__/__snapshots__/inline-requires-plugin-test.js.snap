@@ -10,6 +10,16 @@ var foo = require(\\"foo\\");
 "
 `;
 
+exports[`memoizeCalls=false: inline-requires deletes unused destructured requires: deletes unused destructured requires 1`] = `
+"
+const {a} = require(\\"foo\\");
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+
+"
+`;
+
 exports[`memoizeCalls=false: inline-requires ensures that the inlined require still points to the global require function even if local require is not called: ensures that the inlined require still points to the global require function even if local require is not called 1`] = `
 "
 const foo = require('foo');
@@ -91,6 +101,25 @@ function test() {
 "
 `;
 
+exports[`memoizeCalls=false: inline-requires ignores destructured properties that are re-assigned: ignores destructured properties that are re-assigned 1`] = `
+"
+var X = require(\\"X\\");
+const {a} = require(\\"X\\");
+X.a = function() {
+  a();
+};
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+const {
+  a
+} = require(\\"X\\");
+require(\\"X\\").a = function () {
+  a();
+};
+"
+`;
+
 exports[`memoizeCalls=false: inline-requires ignores require properties (as identifiers) that are re-assigned: ignores require properties (as identifiers) that are re-assigned 1`] = `
 "
 var X = require(\\"X\\");
@@ -134,6 +163,46 @@ foo.method()
 
 var baz = 4;
 require(\\"foo\\").method();
+"
+`;
+
+exports[`memoizeCalls=false: inline-requires inlines destructured requires referenced across scopes: inlines destructured requires referenced across scopes 1`] = `
+"
+const {a, b} = require(\\"foo\\");
+function f() {
+  return a() + b();
+}
+function g() {
+  if (b()) {
+    a();
+  }
+}
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+function f() {
+  return require(\\"foo\\").a() + require(\\"foo\\").b();
+}
+function g() {
+  if (require(\\"foo\\").b()) {
+    require(\\"foo\\").a();
+  }
+}
+"
+`;
+
+exports[`memoizeCalls=false: inline-requires inlines destructured requires: inlines destructured requires 1`] = `
+"
+const {a, b: c, \\"d-e\\": de} = require(\\"foo\\");
+a();
+c.x();
+de();
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+require(\\"foo\\").a();
+require(\\"foo\\").b.x();
+require(\\"foo\\")[\\"d-e\\"]();
 "
 `;
 
@@ -247,6 +316,16 @@ var foo = require(\\"foo\\");
 "
 `;
 
+exports[`memoizeCalls=true: inline-requires deletes unused destructured requires: deletes unused destructured requires 1`] = `
+"
+const {a} = require(\\"foo\\");
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+
+"
+`;
+
 exports[`memoizeCalls=true: inline-requires ensures that the inlined require still points to the global require function even if local require is not called: ensures that the inlined require still points to the global require function even if local require is not called 1`] = `
 "
 const foo = require('foo');
@@ -331,6 +410,26 @@ function test() {
 "
 `;
 
+exports[`memoizeCalls=true: inline-requires ignores destructured properties that are re-assigned: ignores destructured properties that are re-assigned 1`] = `
+"
+var X = require(\\"X\\");
+const {a} = require(\\"X\\");
+X.a = function() {
+  a();
+};
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+var X;
+const {
+  a
+} = require(\\"X\\");
+(X || (X = require(\\"X\\"))).a = function () {
+  a();
+};
+"
+`;
+
 exports[`memoizeCalls=true: inline-requires ignores require properties (as identifiers) that are re-assigned: ignores require properties (as identifiers) that are re-assigned 1`] = `
 "
 var X = require(\\"X\\");
@@ -377,6 +476,48 @@ foo.method()
 var foo;
 var baz = 4;
 (foo || (foo = require(\\"foo\\"))).method();
+"
+`;
+
+exports[`memoizeCalls=true: inline-requires inlines destructured requires referenced across scopes: inlines destructured requires referenced across scopes 1`] = `
+"
+const {a, b} = require(\\"foo\\");
+function f() {
+  return a() + b();
+}
+function g() {
+  if (b()) {
+    a();
+  }
+}
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+var _foo;
+function f() {
+  return (_foo || (_foo = require(\\"foo\\"))).a() + _foo.b();
+}
+function g() {
+  if ((_foo || (_foo = require(\\"foo\\"))).b()) {
+    (_foo || (_foo = require(\\"foo\\"))).a();
+  }
+}
+"
+`;
+
+exports[`memoizeCalls=true: inline-requires inlines destructured requires: inlines destructured requires 1`] = `
+"
+const {a, b: c, \\"d-e\\": de} = require(\\"foo\\");
+a();
+c.x();
+de();
+
+      ↓ ↓ ↓ ↓ ↓ ↓
+
+var _foo;
+(_foo || (_foo = require(\\"foo\\"))).a();
+_foo.b.x();
+_foo[\\"d-e\\"]();
 "
 `;
 

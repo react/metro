@@ -9,8 +9,14 @@
  */
 
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
-import type {ResolvedDependency, TransformResultDependency} from '../types';
+import type {
+  BundlerResolution,
+  ResolvedDependency,
+  TransformResultDependency,
+  VirtualSource,
+} from '../types';
 
+import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {buildSubgraph} from '../buildSubgraph';
 import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
@@ -87,7 +93,7 @@ describe('GraphTraversal', () => {
         };
       }),
       shouldTraverse: jest.fn(
-        (dependency: ResolvedDependency) =>
+        (dependency: ResolvedDependency, virtualSource: ?VirtualSource) =>
           dependency.data.data.asyncType !== 'weak',
       ),
     };
@@ -117,7 +123,7 @@ describe('GraphTraversal', () => {
       ]),
       getSource: expect.any(Function),
       output: [],
-      resolvedContexts: new Map(),
+      virtualSources: new Map(),
     });
   });
 
@@ -139,7 +145,7 @@ describe('GraphTraversal', () => {
     };
     expect(params.transform).toHaveBeenCalledWith(
       p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
-      expectedResolvedContext,
+      {type: 'requireContext', requireContext: expectedResolvedContext},
     );
     expect(params.transform).toHaveBeenCalledWith(
       p('/contextMatch'),
@@ -167,8 +173,14 @@ describe('GraphTraversal', () => {
                 },
               ],
             ]),
-            resolvedContexts: new Map([
-              ['key-virtual', expectedResolvedContext],
+            virtualSources: new Map([
+              [
+                'key-virtual',
+                {
+                  type: 'requireContext',
+                  requireContext: expectedResolvedContext,
+                },
+              ],
             ]),
             output: [],
             getSource: expect.any(Function),
@@ -178,7 +190,7 @@ describe('GraphTraversal', () => {
           p('/contextMatch'),
           {
             dependencies: new Map(),
-            resolvedContexts: new Map(),
+            virtualSources: new Map(),
             output: [],
             getSource: expect.any(Function),
           },
@@ -201,12 +213,80 @@ describe('GraphTraversal', () => {
                 },
               ],
             ]),
-            resolvedContexts: new Map(),
+            virtualSources: new Map(),
             output: [],
             getSource: expect.any(Function),
           },
         ],
       ]),
+    );
+  });
+
+  test('transforms a virtual module as its virtual path and resolves its dependencies from there', async () => {
+    const virtualPath = p('/virtual.ts');
+    const source = Buffer.from('export default 1;');
+    const sha1 = 'b'.repeat(40);
+    const modulePath = deriveVirtualModulePath(virtualPath);
+    transformDeps.set(virtualPath, [makeTransformDep('foo')]);
+    const resolveFromVirtual = jest.fn(
+      (from: string, dep: TransformResultDependency): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: p('/foo'),
+      }),
+    );
+    const localParams = {
+      ...params,
+      resolve: (
+        from: string,
+        dep: TransformResultDependency,
+      ): BundlerResolution =>
+        from === p('/bundle')
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath,
+              source,
+              sha1,
+            }
+          : resolveFromVirtual(from, dep),
+    };
+
+    const {moduleData} = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      localParams,
+    );
+
+    // The graph node is the virtual path in the virtual module namespace.
+    expect(moduleData.has(modulePath)).toBe(true);
+    // The transformer and the resolver see the virtual path itself, so that
+    // extension checks and relative resolution behave as for a file there.
+    expect(params.transform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source,
+      sha1,
+    });
+    expect(resolveFromVirtual).toHaveBeenCalledWith(
+      virtualPath,
+      expect.anything(),
+    );
+  });
+
+  test('does not treat a file resolution to a namespaced path as a virtual module', async () => {
+    const modulePath = deriveVirtualModulePath(p('/foo'));
+    transformDeps.set(modulePath, []);
+
+    await buildSubgraph(new Set([p('/bundle')]), new Map(), {
+      ...params,
+      resolve: (): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: modulePath,
+      }),
+    });
+
+    expect(params.transform).toHaveBeenCalledWith(modulePath, undefined);
+    expect(params.transform).not.toHaveBeenCalledWith(
+      p('/foo'),
+      expect.anything(),
     );
   });
 

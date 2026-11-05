@@ -13,8 +13,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const NULL_BYTE = 0x00;
-const NULL_BYTE_BUFFER = Buffer.from([NULL_BYTE]);
+// Any byte that cannot begin a JSON document, i.e. not whitespace
+// or any of `{["-tfn` or a digit. Nonzero ensures that zero-filled
+// files (e.g. write errors) are treated as cache misses.
+const BINARY_MARKER = 0x01;
+const BINARY_MARKER_BUFFER = Buffer.from([BINARY_MARKER]);
 const RENAME_CONFLICT_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 
 export type Options = Readonly<{
@@ -32,7 +35,7 @@ export default class FileStore<T> {
     try {
       const data = await fs.promises.readFile(this.#getFilePath(key));
 
-      if (data[0] === NULL_BYTE) {
+      if (data[0] === BINARY_MARKER) {
         return data.slice(1) as any;
       }
 
@@ -63,14 +66,14 @@ export default class FileStore<T> {
   async #set(filePath: string, value: T): Promise<void> {
     let content;
     if (value instanceof Buffer) {
-      content = Buffer.concat([NULL_BYTE_BUFFER, value]);
+      content = Buffer.concat([BINARY_MARKER_BUFFER, value]);
     } else {
       content = JSON.stringify(value) ?? JSON.stringify(null);
     }
     // Write to a unique temporary file and rename it into place, so that a
     // concurrent reader (or writer) of the same key never sees a partially
     // written entry. Writing in place truncates the file first, and a reader
-    // could then see a run of null bytes, which looks like a binary entry.
+    // could then see a truncated entry.
     const suffix = crypto.randomBytes(8).toString('hex');
     const tempPath = `${filePath}.${process.pid}.${suffix}.tmp`;
     try {

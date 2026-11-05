@@ -21,11 +21,13 @@ import EventEmitter from 'node:events';
 import * as path from 'node:path';
 import {serialize} from 'node:v8';
 
+const mockMkdir = jest.fn();
 const mockReadFile = jest.fn();
 const mockWriteFile = jest.fn();
 
 jest.mock('node:fs', () => ({
   promises: {
+    mkdir: (...args) => mockMkdir(...args),
     readFile: (...args) => mockReadFile(...args),
     writeFile: (...args) => mockWriteFile(...args),
   },
@@ -187,6 +189,58 @@ describe('cacheManager', () => {
       cacheManager.getCacheFilePath(),
       serialize(getSnapshot()),
     );
+  });
+
+  test('creates the cache directory if it does not exist', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const getSnapshot = jest.fn(
+      () =>
+        ({
+          clocks: new Map([['foo', 'bar']]),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+    );
+    mockWriteFile.mockRejectedValueOnce({code: 'ENOENT'});
+    const onWriteError = jest.fn();
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError,
+    });
+    expect(mockMkdir).toHaveBeenCalledWith(
+      path.dirname(cacheManager.getCacheFilePath()),
+      {recursive: true},
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(2);
+    expect(mockWriteFile).toHaveBeenLastCalledWith(
+      cacheManager.getCacheFilePath(),
+      serialize(getSnapshot()),
+    );
+    expect(onWriteError).not.toHaveBeenCalled();
+  });
+
+  test('reports other write errors without retrying', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const error = {code: 'EACCES'};
+    mockWriteFile.mockRejectedValueOnce(error);
+    const onWriteError = jest.fn();
+    await cacheManager.write(
+      () =>
+        ({
+          clocks: new Map(),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+      {
+        changedSinceCacheRead: true,
+        eventSource: {onChange: () => () => {}},
+        onWriteError,
+      },
+    );
+    expect(mockMkdir).not.toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(onWriteError).toHaveBeenCalledWith(error);
   });
 
   test('does not write when there have been no changes', async () => {

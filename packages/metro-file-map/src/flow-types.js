@@ -230,36 +230,58 @@ export type FileMapPluginInitOptions<
     }>,
     lookup(
       mixedPath: string,
-    ):
-      | {exists: false}
-      | {exists: true, type: 'f', readonly pluginData: PerFileData}
-      | {exists: true, type: 'd'},
+    ): {exists: false} | {exists: true, type: 'f' | 'd'},
   }>,
   pluginState: ?SerializableState,
   /**
-   * Synchronously run this plugin's worker, in-band, on the regular file at
-   * `mixedPath`, store the result as its plugin data and return it. Throws if
-   * the path is not a regular file, or the plugin has no worker.
+   * This plugin's data for the regular file at `mixedPath`. Throws if the
+   * plugin has no worker.
    *
-   * Plugin data is `undefined` for a file until a worker has run on it, which
-   * is when a lazy plugin should call this, and is reset to `undefined` when
-   * the file changes. `null` is a result like any other, so what a worker
-   * returns is stored with `undefined` replaced by `null`, and a file is
-   * processed at most once while it is unchanged.
+   * A lazy plugin's worker is run on a file, synchronously and in-band, the
+   * first time its data is asked for, and again after the file changes. The
+   * result is stored, with `undefined` replaced by `null`.
+   *
+   * A non-lazy plugin's worker has already run on every file it can give
+   * non-null data for, so a file it has not run on (eg, one its filter
+   * excludes) has `null` data, without running it.
+   *
+   * If `observations` is given, records what the result depends upon: a
+   * regular file found in `content`, since its data is derived from what it
+   * holds, and otherwise as `FileSystem.lookup` does. This is the same whether
+   * the data was stored or computed.
    */
-  processFile: (mixedPath: string) => PerFileData,
+  getOrComputeFileData: (
+    mixedPath: string,
+    observations?: ?Observations,
+  ) => FileDataResult<PerFileData>,
 }>;
+
+export type FileDataResult<out PerFileData> =
+  | Readonly<{exists: false}>
+  | Readonly<{exists: true, type: 'd'}>
+  | Readonly<{
+      exists: true,
+      type: 'f',
+      // The real, absolute path of the file.
+      realPath: string,
+      data: ?PerFileData,
+    }>;
 
 export type FileMapPluginWorker = Readonly<{
   worker: Readonly<{
     modulePath: string,
     setupArgs: JsonData,
   }>,
-  filter: ({normalPath: string, isNodeModules: boolean}) => boolean,
+  /**
+   * Whether the worker runs on a given file as it is crawled or changed.
+   * This applies to files under node_modules too, which a plugin may reject
+   * using `isNodeModules`.
+   */
+  filter: (v: {normalPath: string, isNodeModules: boolean}) => boolean,
   /**
    * If true, the worker is not run on files as they are crawled or changed,
    * and `filter` is not consulted. It runs only on the files the plugin asks
-   * for, through the `processFile` it is given on initialization. Use this
+   * for, through the `getOrComputeFileData` it is given on initialization. Use this
    * where a small, unpredictable subset of matching files is ever needed.
    */
   lazy?: boolean,
@@ -294,8 +316,8 @@ export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
 
 export interface MetadataWorker {
   processFile(
-    WorkerMessage,
-    Readonly<{getContent: () => Buffer}>,
+    v0: WorkerMessage,
+    v1: Readonly<{getContent: () => Buffer}>,
   ): V8Serializable;
 }
 
@@ -449,6 +471,8 @@ export type LookupResult =
     }
   | {
       exists: true,
+      // The directory's path relative to the root, with symlinks resolved.
+      canonicalPath: CanonicalPath,
       // The real, normal, absolute path of the directory.
       realPath: string,
       // Currently lookup always follows symlinks, so can only return
@@ -457,6 +481,8 @@ export type LookupResult =
     }
   | {
       exists: true,
+      // The file's path relative to the root, with symlinks resolved.
+      canonicalPath: CanonicalPath,
       // The real, normal, absolute path of the file.
       realPath: string,
       // Currently lookup always follows symlinks, so can only return
@@ -488,7 +514,9 @@ export interface Observations {
    * Files whose content was observed (including traversed symlinks, whose
    * content is their target) and directories whose immediate entries were
    * enumerated. Invalidated by modification, as well as by addition or
-   * removal.
+   * removal, so a path here may also be in `existence` (eg, after a `lookup`
+   * and a content read of the same file) without changing what invalidates
+   * the result.
    */
   readonly content: Set<CanonicalPath>;
 }

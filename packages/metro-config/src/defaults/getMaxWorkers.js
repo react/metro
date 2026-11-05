@@ -11,6 +11,13 @@
 
 import os from 'node:os';
 
+/**
+ * Returns the number of transform workers to use.
+ *
+ * An integer `workers` is clamped to [1, available cores]. Otherwise, the
+ * default is about `cores - 1` on small machines, approaching half the cores
+ * on large ones (e.g. 2 -> 1, 8 -> 6, 64 -> 32), and at least 1.
+ */
 export default function getMaxWorkers(workers: ?number): number {
   const cores = os.availableParallelism();
   return typeof workers === 'number' && Number.isInteger(workers)

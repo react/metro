@@ -145,7 +145,18 @@ function main() {
 
   for (let i = 0; i < t.TYPES.length; i++) {
     const type = t.TYPES[i];
-    let decl = `declare export function is${type}(node: ?Object, opts?: ?Object):`;
+    const nodeType = [
+      'ClassProperty',
+      'ClassPrivateProperty',
+      'TSPropertySignature',
+      'TSIndexSignature',
+      'TSEnumMember',
+      'Function',
+    ].includes(type)
+      ? 'any'
+      : 'Object';
+    const optsType = type === 'ImportDefaultSpecifier' ? 'any' : 'Object';
+    let decl = `declare export function is${type}(node: ?${nodeType}, opts?: ?${optsType}):`;
 
     const realName = t.DEPRECATED_KEYS[type] ?? type;
 

@@ -9,6 +9,8 @@
  * @oncall react_native
  */
 
+import type {FileDataResult, Observations} from '../../flow-types';
+
 import FileDataPlugin from '../FileDataPlugin';
 
 const options = {
@@ -36,19 +38,37 @@ describe('FileDataPlugin', () => {
     ).toEqual({worker: options.worker, filter: options.filter, lazy: true});
   });
 
-  test('processFile throws before the plugin is initialized', () => {
+  test('getOrComputeFileData throws before the plugin is initialized', () => {
     const plugin = new FileDataPlugin<?string>(options);
-    expect(() => plugin.processFile('/project/package.json')).toThrow(
+    expect(() => plugin.getOrComputeFileData('/project/package.json')).toThrow(
       'test-plugin plugin has not been initialized',
     );
   });
 
-  test('processFile asks the file map to process the file', async () => {
+  test('getOrComputeFileData asks the file map for the data, with observations', async () => {
     const plugin = new FileDataPlugin<?string>({...options, lazy: true});
-    const processFile = jest.fn<[string], ?string>(() => 'file data');
-    await plugin.initialize({files, pluginState: null, processFile});
+    const result = {
+      exists: true,
+      type: 'f',
+      realPath: '/project/package.json',
+      data: 'file data',
+    } as const;
+    const getOrComputeFileData = jest.fn<
+      [string, ?Observations],
+      FileDataResult<?string>,
+    >(() => result);
+    await plugin.initialize({files, pluginState: null, getOrComputeFileData});
+    const observations = {
+      existence: new Set<string>(),
+      content: new Set<string>(),
+    };
 
-    expect(plugin.processFile('/project/package.json')).toBe('file data');
-    expect(processFile).toHaveBeenCalledWith('/project/package.json');
+    expect(
+      plugin.getOrComputeFileData('/project/package.json', observations),
+    ).toBe(result);
+    expect(getOrComputeFileData).toHaveBeenCalledWith(
+      '/project/package.json',
+      observations,
+    );
   });
 });

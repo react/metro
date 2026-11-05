@@ -124,12 +124,12 @@ export class FileDataPlugin<PerFileData extends void | V8Serializable = void | V
   assertValid(): void;
   getCacheKey(): string;
   getFileSystem(): FileMapPluginInitOptions<null, PerFileData>['files'];
+  getOrComputeFileData(mixedPath: string, observations?: null | undefined | Observations): ReturnType<FileMapPluginInitOptions<null, PerFileData>['getOrComputeFileData']>;
   getSerializableSnapshot(): null;
   getWorker(): FileMapPluginWorker;
   initialize(initOptions: FileMapPluginInitOptions<null, PerFileData>): Promise<void>;
   readonly name: string;
   onChanged(_changes: ReadonlyFileSystemChanges<null | undefined | PerFileData>): void;
-  processFile(mixedPath: string): ReturnType<FileMapPluginInitOptions<null, PerFileData>['processFile']>;
 }
 
 export type FileDataPluginOptions = Readonly<
@@ -139,8 +139,19 @@ export type FileDataPluginOptions = Readonly<
   }
 >;
 
+export type FileDataResult<PerFileData> =
+  | Readonly<{exists: false}>
+  | Readonly<{exists: true; type: 'd'}>
+  | Readonly<{
+      exists: true;
+      type: 'f';
+      realPath: string;
+      data: null | undefined | PerFileData;
+    }>;
+
 class FileMap extends EventEmitter {
   constructor(options: InputOptions);
+  addRoot(root: string): Promise<void>;
   build(): Promise<BuildResult>;
   static create(options: InputOptions): FileMap;
   end(): Promise<void>;

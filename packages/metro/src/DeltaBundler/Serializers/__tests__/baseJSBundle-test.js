@@ -424,6 +424,49 @@ test('should add an inline source map to a very simple bundle', () => {
   });
 });
 
+test('applies processModuleFilter to the inline source map', () => {
+  const bundle = baseJSBundle(
+    '/root/foo',
+    [polyfill],
+    {
+      dependencies: new Map([
+        ['/root/foo', fooModule],
+        ['/root/bar', barModule],
+      ]),
+      entryPoints: new Set(['/root/foo']),
+      transformOptions,
+    },
+    {
+      asyncRequireModulePath: '',
+      createModuleId: createModuleIdFactory(),
+      dev: true,
+      getRunModuleStatement,
+      globalPrefix: '',
+      includeAsyncPaths: false,
+      inlineSourceMap: true,
+      modulesOnly: false,
+      processModuleFilter: module => module.path !== '/polyfill',
+      projectRoot: '/root',
+      runBeforeMainModule: [],
+      runModule: true,
+      serverRoot: '/root',
+      shouldAddToIgnoreList: () => false,
+      sourceMapUrl: null,
+      sourceUrl: null,
+      getSourceUrl: null,
+    },
+  );
+  // Without the polyfill, foo and bar are the first two lines of the bundle.
+  const base64 = bundle.post.slice(bundle.post.lastIndexOf('base64') + 7);
+  const map = JSON.parse(Buffer.from(base64, 'base64').toString());
+  expect(
+    map.sections.map(section => [section.offset.line, section.map.sources[0]]),
+  ).toEqual([
+    [0, '/root/foo'],
+    [1, '/root/bar'],
+  ]);
+});
+
 test('emits x_google_ignoreList based on shouldAddToIgnoreList', () => {
   const bundle = baseJSBundle(
     '/root/foo',

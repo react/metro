@@ -1,0 +1,144 @@
+# Posts automated PR reviews that are produced outside GitHub Actions and
+# sent here as `repository_dispatch` events (type `metro-review`), so that they
+# appear as github-actions[bot] rather than as the maintainer who runs the
+# reviewer. Sending a dispatch needs write access to this repo.
+#
+# This workflow holds no model credentials and never checks out PR code. It
+# validates the payload, drops reviews of a head that is no longer current,
+# then edits a single summary comment in place and adds inline comments for
+# findings not posted before. It never approves or requests changes.
+name: react/metro/review-post
+
+on:
+  repository_dispatch:
+    types: [metro-review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metro-review-post-${{ github.event.client_payload.pr }}
+  cancel-in-progress: false
+
+jobs:
+  post:
+    if: github.repository == 'react/metro'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const zlib = require('node:zlib');
+            const MARKER = '<!-- metro-review-bot -->';
+            const BOT = 'github-actions[bot]';
+
+            // #region Validate the payload
+
+            let p = context.payload.client_payload ?? {};
+            if (typeof p.gz === 'string') {
+              p = {...p, ...JSON.parse(zlib.gunzipSync(Buffer.from(p.gz, 'base64')).toString('utf8'))};
+            }
+            const fail = msg => {
+              core.setFailed(`rejected payload: ${msg}`);
+              return null;
+            };
+            if (p.v !== 1) return fail('unsupported version');
+            if (!Number.isInteger(p.pr) || p.pr < 1) return fail('bad pr');
+            if (!/^[0-9a-f]{40}$/.test(p.head_sha ?? '')) return fail('bad head_sha');
+            if (typeof p.summary !== 'string' || !p.summary.startsWith(MARKER) || p.summary.length > 60000) {
+              return fail('bad summary');
+            }
+            const comments = Array.isArray(p.comments) ? p.comments : [];
+            if (comments.length > 15) return fail('too many comments');
+            for (const c of comments) {
+              const ok =
+                /^[0-9a-f]{8}$/.test(c.id ?? '') &&
+                typeof c.path === 'string' && c.path.length < 500 && !c.path.startsWith('/') &&
+                Number.isInteger(c.line) && c.line > 0 &&
+                c.side === 'RIGHT' &&
+                typeof c.body === 'string' && c.body.length <= 5000;
+              if (!ok) return fail(`bad comment ${JSON.stringify(c).slice(0, 200)}`);
+            }
+            // Keeps @-mentions from notifying anyone. Review text is written by a
+            // model that has read the PR, and PR text is untrusted: a description
+            // or code comment could steer the review into naming arbitrary users
+            // or teams, and a bot that pings people on demand is a spam vector.
+            // Even an honest review that names a maintainer or a team would notify
+            // them from a bot. A zero-width joiner after the @ keeps the text
+            // readable while GitHub no longer treats it as a mention.
+            //
+            // Left alone: an @ preceded by a word character (e.g. an email
+            // address), and code (fenced blocks and inline spans) and URLs.
+            // Mentions there don't notify, and an invisible character would break
+            // suggestions, copied code and links to paths such as packages/@scope/.
+            // The sender does the same before dispatching, but a payload isn't
+            // trusted to have come from it.
+            const CODE_OR_URL = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`|https?:\/\/[^\s<>()\]]+)/;
+            const defuse = s =>
+              s
+                .split(CODE_OR_URL)
+                .map((part, i) => (i % 2 ? part : part.replace(/(^|\W)@([A-Za-z0-9][A-Za-z0-9-]*)/g, '$1@\u200d$2')))
+                .join('');
+
+            // #endregion
+            // #region Check the PR is still at the reviewed head
+
+            const {owner, repo} = context.repo;
+            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number: p.pr});
+            if (pr.state !== 'open') return core.notice(`#${p.pr} is ${pr.state}; nothing posted`);
+            if (pr.head.sha !== p.head_sha) {
+              return core.notice(`#${p.pr} moved to ${pr.head.sha.slice(0, 7)}; stale review of ${p.head_sha.slice(0, 7)} dropped`);
+            }
+
+            // Head-side lines a comment can anchor to, per file.
+            const anchors = new Map();
+            for (const f of await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.pr, per_page: 100})) {
+              const lines = new Set();
+              let n = 0;
+              for (const l of (f.patch ?? '').split('\n')) {
+                const m = l.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                if (m) n = Number(m[1]);
+                else if (n && (l.startsWith('+') || l.startsWith(' '))) lines.add(n++);
+              }
+              anchors.set(f.filename, lines);
+            }
+
+            // #endregion
+            // #region Post
+
+            const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.pr, per_page: 100});
+            const existing = issueComments.find(c => c.user.login === BOT && c.body.startsWith(MARKER));
+            const summary = defuse(p.summary);
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: summary});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number: p.pr, body: summary});
+            }
+
+            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: p.pr, per_page: 100});
+            const posted = new Set(
+              reviewComments
+                .filter(c => c.user.login === BOT)
+                .map(c => c.body.match(/id `([0-9a-f]{8})`/)?.[1])
+                .filter(Boolean),
+            );
+            const fresh = comments.filter(c => !posted.has(c.id) && anchors.get(c.path)?.has(c.line));
+            const skipped = comments.length - fresh.length;
+            if (fresh.length) {
+              await github.rest.pulls.createReview({
+                owner,
+                repo,
+                pull_number: p.pr,
+                commit_id: p.head_sha,
+                event: 'COMMENT',
+                comments: fresh.map(c => ({path: c.path, line: c.line, side: 'RIGHT', body: defuse(c.body)})),
+              });
+            }
+            core.notice(`#${p.pr}: summary ${existing ? 'updated' : 'created'}, ${fresh.length} inline comment(s) posted, ${skipped} already posted or unanchorable`);
+
+            // #endregion

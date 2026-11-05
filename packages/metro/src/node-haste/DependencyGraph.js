@@ -29,6 +29,8 @@ import type {
 } from 'metro-file-map';
 
 import {getDynamicRoots} from '../lib/dynamicRoots';
+import {getMetroBabelRuntimePackageJsonPath} from '../lib/metroBabelRuntime';
+import {getMetroRuntimePackageJsonPath} from '../lib/metroRuntime';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
 import {PackageCache} from './PackageCache';
@@ -121,7 +123,8 @@ export default class DependencyGraph extends EventEmitter {
     this._haste = fileMap;
     this._haste.on('status', status => this._onWatcherStatus(status));
 
-    this._initializedPromise = fileMap.build().then(({fileSystem}) => {
+    this._initializedPromise = fileMap.build().then(async ({fileSystem}) => {
+      await this._addMetroRuntimeRoots();
       log(createActionEndEntry(initializingMetroLogEntry));
       config.reporter.update({type: 'dep_graph_loaded'});
 
@@ -140,6 +143,29 @@ export default class DependencyGraph extends EventEmitter {
       });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * `metro:runtime` and `metro:babel-runtime` resolve into the metro-runtime
+   * that Metro depends on and its `@babel/runtime`, wherever they are
+   * installed, so their files must be in the file map even when no configured
+   * root contains them. metro-runtime is added first, so that an
+   * `@babel/runtime` nested within it needs no root of its own.
+   */
+  async _addMetroRuntimeRoots(): Promise<void> {
+    for (const getPackageJsonPath of [
+      getMetroRuntimePackageJsonPath,
+      getMetroBabelRuntimePackageJsonPath,
+    ]) {
+      let packageJsonPath;
+      try {
+        packageJsonPath = getPackageJsonPath();
+      } catch {
+        // Reported by the `metro:` scheme resolver, if it is ever used.
+        continue;
+      }
+      await this._haste.addRoot(path.dirname(packageJsonPath));
+    }
   }
 
   /**
@@ -299,9 +325,14 @@ export default class DependencyGraph extends EventEmitter {
       mapByResolverOptions,
       resolverOptionsKey,
     );
-    const mapByTarget = getOrCreateMap(mapByOrigin, originKey);
-    const mapByPlatform = getOrCreateMap(mapByTarget, targetKey);
-    let resolution: ?BundlerResolution = mapByPlatform.get(platformKey);
+    // A virtual module may be anchored at the importing module itself, so its
+    // resolution is memoised per origin file rather than per directory: the
+    // same specifier in two sibling files may be two modules. Only virtual
+    // resolutions are stored per file, so the per-directory memo is checked
+    // first and a hit there needs no second lookup.
+    let resolution: ?BundlerResolution =
+      mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey) ??
+      mapByOrigin.get(originModulePath)?.get(targetKey)?.get(platformKey);
 
     if (!resolution) {
       try {
@@ -327,7 +358,12 @@ export default class DependencyGraph extends EventEmitter {
       }
     }
 
-    mapByPlatform.set(platformKey, resolution);
+    const memoOriginKey =
+      resolution.type === 'virtualModule' ? originModulePath : originKey;
+    getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
+      platformKey,
+      resolution,
+    );
     return resolution;
   }
 

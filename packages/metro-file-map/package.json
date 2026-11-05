@@ -1,6 +1,6 @@
 {
   "name": "metro-file-map",
-  "version": "0.87.1",
+  "version": "0.87.3",
   "description": "[Experimental] - 🚇 File crawling, watching and mapping for Metro",
   "main": "src/index.js",
   "exports": {
@@ -22,7 +22,6 @@
     "debug": "^4.4.0",
     "fb-watchman": "^2.0.0",
     "flow-enums-runtime": "^0.0.6",
-    "graceful-fs": "^4.2.4",
     "invariant": "^2.2.4",
     "jest-worker": "^29.7.0",
     "nullthrows": "^1.1.1"

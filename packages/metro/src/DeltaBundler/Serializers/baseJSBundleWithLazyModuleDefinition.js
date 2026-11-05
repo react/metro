@@ -132,6 +132,7 @@ export default function baseJSBundleWithLazyModuleDefinition(
       getRunModuleStatement: options.getRunModuleStatement,
       globalPrefix: options.globalPrefix,
       inlineSourceMap: options.inlineSourceMap,
+      processModuleFilter: options.processModuleFilter,
       runBeforeMainModule: options.runBeforeMainModule,
       runModule: options.runModule,
       shouldAddToIgnoreList: options.shouldAddToIgnoreList,

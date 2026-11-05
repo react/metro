@@ -31,7 +31,7 @@ jest.mock('node:path', () => mockPathModule);
 describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
   // Convenience function to write paths with posix separators but convert them
   // to system separators
-  const p: string => string = filePath =>
+  const p: (v: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -167,6 +167,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         const observations = emptyObservations();
         expect(tfs.lookup(givenPath, observations)).toEqual({
           exists: true,
+          canonicalPath: canonical(expectedRealPath),
           realPath: expectedRealPath,
           type: 'f',
           metadata: expect.any(Array),
@@ -214,6 +215,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         expect(tfs.lookup(givenPath, observations)).toEqual({
           exists: true,
           type: 'd',
+          canonicalPath: canonical(expectedRealPath),
           realPath: expectedRealPath,
         });
         expect(observations).toEqual({
@@ -289,6 +291,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         const observations = emptyObservations();
         expect(tfs.lookup(mixedPath, observations)).toEqual({
           exists: true,
+          canonicalPath: canonical(expectedRealPath),
           realPath: expectedRealPath,
           type: 'f',
           metadata: expect.any(Array),
@@ -464,15 +467,123 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
-    test('with empty subpath behaves like no subdirectory specified', () => {
+    test('with empty subpath only considers files under the root', () => {
       const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([
-        [p('foo/another.js'), [123, 0, 0, null, 0, null]],
+        [p('foo/another.js'), [123, 2, 0, null, 0, 'another']],
+        [p('foo/owndir'), [0, 0, 0, null, 'foo', null]],
+        [p('foo/link-to-bar.js'), [0, 0, 0, null, 'bar.js', null]],
+        [p('foo/link-to-another.js'), [0, 0, 0, null, 'foo/another.js', null]],
+        [p('link-to-foo'), [456, 0, 0, null, 'foo', null]],
+        [p('abs-link-out'), [456, 0, 0, null, '../outside', null]],
+        [p('root'), [0, 0, 0, null, '..', null]],
+        [p('link-to-nowhere'), [123, 0, 0, null, 'nowhere', null]],
+        [p('link-to-self'), [123, 0, 0, null, 'link-to-self', null]],
+        [p('link-cycle-1'), [123, 0, 0, null, 'link-cycle-2', null]],
+        [p('link-cycle-2'), [123, 0, 0, null, 'link-cycle-1', null]],
+        [p('node_modules/pkg/a.js'), [123, 0, 0, null, 0, 'a']],
+        [p('node_modules/pkg/package.json'), [123, 0, 0, null, 0, 'pkg']],
       ]);
 
-      const withEmpty = tfs.getDifference(newFiles, {subpath: ''});
-      const withUndefined = tfs.getDifference(newFiles);
+      // Files outside the root (under '..') are not in a crawl of the root
+      expect(tfs.getDifference(newFiles, {subpath: ''}).removedFiles).toEqual(
+        new Set([p('bar.js')]),
+      );
 
-      expect(withEmpty).toEqual(withUndefined);
+      // Without a subpath, the whole tree is compared
+      expect(tfs.getDifference(newFiles).removedFiles).toEqual(
+        new Set([p('../outside/external.js'), p('bar.js')]),
+      );
+    });
+  });
+
+  describe('pathsOutsideRoots', () => {
+    const build = (rootDir: string, files: ReadonlyArray<string>) =>
+      new TreeFS({
+        rootDir: p(rootDir),
+        files: new Map<CanonicalPath, FileMetadata>(
+          files.map(file => [p(file), [123, 0, 0, null, 0]]),
+        ),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+
+    test.each([
+      [['/root/project'], ['../outside/a.js', '../../far/b.js']],
+      [
+        ['/root/project/src'],
+        ['index.js', '../outside/a.js', '../../far/b.js'],
+      ],
+      [
+        ['/root/project/src', '/root/outside'],
+        ['index.js', '../../far/b.js'],
+      ],
+      [
+        ['/root/project/src/deep'],
+        ['index.js', 'src/a.js', '../outside/a.js', '../../far/b.js'],
+      ],
+      [['/root'], ['../../far/b.js']],
+      [['/root', '/far'], []],
+      [['/'], []],
+      [['/root/project', '/root/outside/a.js'], ['../../far/b.js']],
+      [
+        [],
+        [
+          'index.js',
+          'src/a.js',
+          'src/deep/b.js',
+          '../outside/a.js',
+          '../../far/b.js',
+        ],
+      ],
+    ])('with roots %j', (roots, expected) => {
+      const fs = build('/root/project', [
+        'index.js',
+        'src/a.js',
+        'src/deep/b.js',
+        '../outside/a.js',
+        '../../far/b.js',
+      ]);
+      expect([...fs.pathsOutsideRoots(roots.map(p))].sort()).toEqual(
+        expected.map(p).sort(),
+      );
+    });
+
+    test('includes symlinks and node_modules', () => {
+      expect([...tfs.pathsOutsideRoots([p('/project/foo')])].sort()).toEqual(
+        [
+          '../outside/external.js',
+          'abs-link-out',
+          'bar.js',
+          'link-cycle-1',
+          'link-cycle-2',
+          'link-to-foo',
+          'link-to-nowhere',
+          'link-to-self',
+          'node_modules/pkg/a.js',
+          'node_modules/pkg/package.json',
+          'root',
+        ]
+          .map(p)
+          .sort(),
+      );
+    });
+  });
+
+  describe('resolveSymlinks', () => {
+    test.each([
+      ['/project/foo', '/project/foo'],
+      ['/project/link-to-foo', '/project/foo'],
+      ['/project/link-to-foo/missing/dir', '/project/foo/missing/dir'],
+      ['/project/abs-link-out/lib', '/outside/lib'],
+      ['/project/link-to-nowhere/dir', '/project/nowhere/dir'],
+      ['/project/root/project/link-to-foo', '/project/foo'],
+      ['/project/missing/link-to-foo', '/project/missing/link-to-foo'],
+      ['/project/bar.js/dir', '/project/bar.js/dir'],
+      ['/project/link-to-self', '/project/link-to-self'],
+      ['/elsewhere/dir', '/elsewhere/dir'],
+    ])('%s -> %s', (mixedPath, expected) => {
+      expect(tfs.resolveSymlinks(p(mixedPath))).toEqual(p(expected));
     });
   });
 
@@ -496,6 +607,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
               [p('a/b/c/d/link-to-C'), [0, 0, 0, null, '', null]],
               [p('a/b/c/d/link-to-B'), [0, 0, 0, null, '..', null]],
               [p('a/b/c/d/link-to-A'), [0, 0, 0, null, '../..', null]],
+              [p('link-to-B'), [0, 0, 0, null, '..', null]],
               [
                 p('n_m/workspace/link-to-pkg'),
                 [0, 0, 0, null, '../workspace-pkg', null],
@@ -525,6 +637,67 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         processFile: () => {
           throw new Error('Not implemented');
         },
+      });
+    });
+
+    test('finds the closest directory with a single-segment subpath', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/B/C/a/n_m/pkg/subpath/deep'),
+          'n_m',
+          {breakOnSegment: null, subpathType: 'd'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/n_m/pkg/n_m'),
+        containerRelativePath: p('subpath/deep'),
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([
+          p('a/n_m/pkg/subpath/deep/n_m'),
+          p('a/n_m/pkg/subpath/n_m'),
+          p('a/n_m/pkg/n_m'),
+        ]),
+      });
+    });
+
+    test('finds the closest match for a deep subpath', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/B/C/a/b/c'),
+          p('n_m/pkg'),
+          {breakOnSegment: null, subpathType: 'd'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/n_m/pkg'),
+        containerRelativePath: p('b/c'),
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([p('a/b/c/n_m'), p('a/b/n_m'), p('a/n_m/pkg')]),
+      });
+    });
+
+    test('finds a subpath re-entering the root from an ancestor of the root', () => {
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/foo'),
+          p('B/C/a/package.json'),
+          {breakOnSegment: null, subpathType: 'f'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/package.json'),
+        containerRelativePath: 'foo',
+      });
+      expect(observations).toEqual({
+        content: new Set(),
+        existence: new Set([p('../../foo'), p('a/package.json')]),
       });
     });
 
@@ -605,6 +778,14 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         ['/A/B/C/foo.js', '/A/B/C/package.json', '/A/B/package.json'],
         ['/A/B/C/a/b/c/d/link-to-A'],
       ],
+      // A symlink in the root to an ancestor of the root
+      [
+        '/A/B/C/link-to-B/foo.js',
+        '/A/package.json',
+        'B/foo.js',
+        ['/A/B/foo.js', '/A/B/package.json'],
+        ['/A/B/C/link-to-B'],
+      ],
       [
         '/A/B/C/a/1/foo.js',
         '/A/B/C/a/1/real-package.json',
@@ -662,6 +843,8 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ) => {
         const pathMap = (normalPosixPath: string) =>
           mockPathModule.resolve(p('/A/B/C'), p(normalPosixPath));
+        const toCanonical = (posixPath: string) =>
+          canonicalTo(p('/A/B/C'))(pathMap(posixPath));
         const observations = emptyObservations();
         expect(
           tfs.hierarchicalLookup(
@@ -681,8 +864,6 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
                 containerRelativePath: p(expectedRelativeSubpath),
               },
         );
-        const toCanonical = (posixPath: string) =>
-          canonicalTo(p('/A/B/C'))(pathMap(posixPath));
         expect(observations).toEqual({
           content: new Set(expectedContent.map(toCanonical)),
           existence: new Set(

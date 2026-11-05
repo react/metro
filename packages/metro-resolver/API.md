@@ -84,11 +84,13 @@ export type ResolutionContext = Readonly<{
   resolveRequest?: null | undefined | CustomResolver;
   schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}> | undefined;
   sourceExts: ReadonlyArray<string>;
+  unstable_applyBrowserSpecAfterExports: boolean;
   unstable_conditionNames: ReadonlyArray<string>;
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>;
   }>;
   unstable_enablePackageExports: boolean;
+  unstable_resolveExportsFromPackageRoot: boolean;
   unstable_incrementalResolution: boolean;
   unstable_logWarning: (message: string) => void;
 }>;
@@ -98,5 +100,11 @@ export function resolve(context: ResolutionContext, specifier: string, platform:
 export type ResolveAsset = (dirPath: string, assetName: string, extension: string) => null | undefined | ReadonlyArray<string>;
 
 export type Result<TResolution, TCandidates> = {readonly type: 'resolved'; readonly resolution: TResolution} | {readonly type: 'failed'; readonly candidates: TCandidates};
+
+export type VirtualResolution = Readonly<{
+  type: 'virtualModule';
+  virtualPath: null | undefined | string;
+  source: string | Buffer;
+}>;
 
 ```

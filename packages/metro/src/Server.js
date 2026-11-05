@@ -56,6 +56,12 @@ import {calculateBundleProgressRatio} from './lib/bundleProgressUtils';
 import bundleToString from './lib/bundleToString';
 import formatBundlingError from './lib/formatBundlingError';
 import getGraphId from './lib/getGraphId';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+  isVirtualModuleUrl,
+} from './lib/modulePath';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import parseJsonBody from './lib/parseJsonBody';
 import RootUrlMap from './lib/RootUrlMap';
@@ -68,10 +74,10 @@ import symbolicate from './Server/symbolicate';
 import {SourcePathsMode} from './shared/types';
 import {codeFrameColumns} from '@babel/code-frame';
 import debugModule from 'debug';
-import * as fs from 'graceful-fs';
 import * as jscSafeUrl from 'jsc-safe-url';
 import {Logger} from 'metro-core';
 import mime from 'mime-types';
+import fs from 'node:fs';
 import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import querystring from 'node:querystring';
@@ -444,8 +450,6 @@ export default class Server {
       platform,
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
-      watchFolders: this._config.watchFolders,
-      dynamicRoots: this._bundler.getBundler().getDynamicRoots(),
     });
   }
 
@@ -600,7 +604,7 @@ export default class Server {
   ) => void = (
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (v: ?Error) => void,
   ) => {
     this._processRequest(req, res, next).catch(next);
   };
@@ -623,7 +627,7 @@ export default class Server {
   async _processRequest(
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (v: ?Error) => void,
   ): Promise<void> {
     const originalUrl = req.url;
     debug('Handling request:    %s', originalUrl);
@@ -703,9 +707,19 @@ export default class Server {
     } else if (pathname === '/symbolicate') {
       await this._symbolicate(req, res);
     } else {
-      const sourceFilePath =
+      let sourceFilePath =
         this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
-      if (sourceFilePath != null) {
+      if (
+        sourceFilePath == null &&
+        filePathname.startsWith('/[metro-watchFolders]/')
+      ) {
+        // The id may belong to a root added before the bundler is ready.
+        await this._bundler.getBundler().ready();
+        sourceFilePath =
+          this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      }
+      // Virtual modules aren't served by URL yet.
+      if (sourceFilePath != null && !isVirtualModuleUrl(urlObj.searchParams)) {
         await this._processSourceRequest(sourceFilePath, res);
       } else {
         next();
@@ -1167,10 +1181,11 @@ export default class Server {
       };
     },
     finish({req, mres, serializerOptions, result, bundlePerfLogger}) {
+      const bundleByteLength = Buffer.byteLength(result.bundle);
       bundlePerfLogger.annotate({
         int: {
           bundle_length: result.bundle.length,
-          bundle_byte_length: Buffer.byteLength(result.bundle),
+          bundle_byte_length: bundleByteLength,
         },
       });
       mres.once('error', () => {
@@ -1210,10 +1225,7 @@ export default class Server {
         }
         mres.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
         mres.setHeader('Last-Modified', result.lastModifiedDate.toUTCString());
-        mres.setHeader(
-          'Content-Length',
-          String(Buffer.byteLength(result.bundle)),
-        );
+        mres.setHeader('Content-Length', String(bundleByteLength));
         mres.end(result.bundle);
       }
     },
@@ -1750,8 +1762,14 @@ export default class Server {
   // eslint-disable-next-line consistent-return
   _getModuleSourceUrl(module: Module<>, mode: SourcePathsMode): string {
     switch (mode) {
-      case SourcePathsMode.ServerUrl:
-        return this._rootUrlMap.urlPathnameOfFilePath(module.path);
+      case SourcePathsMode.ServerUrl: {
+        const pathname = this._rootUrlMap.urlPathnameOfFilePath(
+          getModuleSourcePath(module.path),
+        );
+        return isVirtualModulePath(module.path)
+          ? `${pathname}?${VIRTUAL_MODULE_URL_PARAM}=true`
+          : pathname;
+      }
       case SourcePathsMode.Absolute:
         return module.path;
     }

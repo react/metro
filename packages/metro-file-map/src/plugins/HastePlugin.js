@@ -61,7 +61,7 @@ export default class HastePlugin
   readonly #duplicates: DuplicatesIndex = new Map();
   readonly #enableHastePackages: boolean;
   readonly #failValidationOnConflicts: boolean;
-  #getModuleNameByPath: string => ?string;
+  #getModuleNameByPath: (v: string) => ?string;
   readonly #hasteImplModulePath: ?string;
   readonly #map: Map<string, HasteMapItem> = new Map();
   readonly #pathUtils: RootPathUtils;
@@ -109,11 +109,11 @@ export default class HastePlugin
       }
     }
     this.#getModuleNameByPath = mixedPath => {
-      const result = files.lookup(mixedPath);
+      const result = opts.getOrComputeFileData(mixedPath);
       return result.exists &&
         result.type === 'f' &&
-        typeof result.pluginData === 'string'
-        ? result.pluginData
+        typeof result.data === 'string'
+        ? result.data
         : null;
     };
     this.#perfLogger?.point('constructHasteMap_end');

@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {WatchmanClockSpec} from '../flow-types';
 import type {WatcherOptions} from './common';
 import type {
   Client,
@@ -20,6 +21,7 @@ import type {
   WatchmanWatchResponse,
 } from 'fb-watchman';
 
+import normalizePathSeparatorsToPosix from '../lib/normalizePathSeparatorsToPosix';
 import normalizePathSeparatorsToSystem from '../lib/normalizePathSeparatorsToSystem';
 import {AbstractWatcher} from './AbstractWatcher';
 import * as common from './common';
@@ -48,12 +50,17 @@ export default class WatchmanWatcher extends AbstractWatcher {
   }>;
   readonly #watchmanDeferStates: ReadonlyArray<string>;
   #deferringStates: ?Set<string> = null;
+  // Clocks captured by the crawl, keyed by absolute (posix-separated) Watchman
+  // watch root. Consumed by the initial subscription only - a re-subscribe
+  // after disconnection starts from a fresh clock as before.
+  #clocks: ?Map<string, WatchmanClockSpec>;
 
   constructor(dir: string, opts: WatcherOptions) {
-    const {watchmanDeferStates, ...baseOpts} = opts;
+    const {watchmanDeferStates, clocks, ...baseOpts} = opts;
     super(dir, baseOpts);
 
     this.#watchmanDeferStates = watchmanDeferStates;
+    this.#clocks = clocks ?? null;
 
     // Use a unique subscription name per process per watched directory
     const watchKey = createHash('md5').update(this.root).digest('hex');
@@ -117,7 +124,18 @@ export default class WatchmanWatcher extends AbstractWatcher {
         root: normalizePathSeparatorsToSystem(resp.watch),
       };
 
-      self.#client.command(['clock', getWatchRoot()], onClock);
+      // If the crawl gave us a clock for this watch root, subscribe `since`
+      // it, so that changes made between the crawl and this subscription are
+      // reported rather than missed. Otherwise request a fresh clock.
+      const sinceClock = self.#clocks?.get(
+        normalizePathSeparatorsToPosix(resp.watch),
+      );
+      self.#clocks = null;
+      if (sinceClock != null) {
+        subscribe(sinceClock);
+      } else {
+        self.#client.command(['clock', getWatchRoot()], onClock);
+      }
     }
 
     function onClock(error: ?Error, resp: WatchmanClockResponse) {
@@ -127,18 +145,21 @@ export default class WatchmanWatcher extends AbstractWatcher {
       }
 
       debug('Received clock response: %s', resp.clock);
+      handleWarning(resp);
+      subscribe(resp.clock);
+    }
+
+    function subscribe(since: WatchmanClockSpec) {
       const watchProjectInfo = self.#watchProjectInfo;
 
       invariant(
         watchProjectInfo != null,
-        'watch-project response should have been set before clock response',
+        'watch-project response should have been set before subscribing',
       );
-
-      handleWarning(resp);
 
       const options: WatchmanQuery = {
         fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
-        since: resp.clock,
+        since,
         defer: self.#watchmanDeferStates,
         relative_root: watchProjectInfo.relativePath,
       };

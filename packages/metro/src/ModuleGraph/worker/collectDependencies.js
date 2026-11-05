@@ -26,9 +26,9 @@ import type {
   AsyncDependencyType,
 } from 'metro/private/DeltaBundler/types';
 
+import {traverse} from '@babel/core';
 import generate from '@babel/generator';
 import template from '@babel/template';
-import traverse from '@babel/traverse';
 import * as types from '@babel/types';
 import {isImport, isProgram} from '@babel/types';
 import invariant from 'invariant';
@@ -96,7 +96,7 @@ export type State = {
   allowOptionalDependencies: AllowOptionalDependencies,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
-  unstable_isESMImportAtSource: ?(ReadonlySourceLocation) => boolean,
+  unstable_isESMImportAtSource: ?(v: ReadonlySourceLocation) => boolean,
 };
 
 export type Options = Readonly<{
@@ -109,7 +109,7 @@ export type Options = Readonly<{
   dependencyTransformer?: DependencyTransformer,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
-  unstable_isESMImportAtSource?: ?(ReadonlySourceLocation) => boolean,
+  unstable_isESMImportAtSource?: ?(v: ReadonlySourceLocation) => boolean,
 }>;
 
 export type CollectedDependencies = Readonly<{
@@ -812,7 +812,9 @@ const DefaultDependencyTransformer: DependencyTransformer = {
     >;
     // Always add the debug name argument last
     if (state.keepRequireNames) {
-      path.node.arguments.push(types.stringLiteral(dependency.name));
+      path.node.arguments.push(
+        types.stringLiteral(getDebugName(dependency.name)),
+      );
     }
   },
 
@@ -906,7 +908,27 @@ function createModuleIDExpression(
 }
 
 function createModuleNameLiteral(dependency: InternalDependency) {
-  return types.stringLiteral(dependency.name);
+  return types.stringLiteral(getDebugName(dependency.name));
+}
+
+const INLINE_MODULE_PREFIX = 'metro:inline';
+
+/**
+ * The name shown beside a dependency in development output. An inline module
+ * specifier carries a whole module in its payload, so only its header is kept.
+ */
+function getDebugName(name: string): string {
+  if (
+    name.length > INLINE_MODULE_PREFIX.length &&
+    name.slice(0, INLINE_MODULE_PREFIX.length).toLowerCase() ===
+      INLINE_MODULE_PREFIX
+  ) {
+    const commaIndex = name.indexOf(',');
+    if (commaIndex !== -1) {
+      return name.slice(0, commaIndex + 1) + '...';
+    }
+  }
+  return name;
 }
 
 /**

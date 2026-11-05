@@ -17,7 +17,7 @@ export type DependencyMap = Readonly<
 export type Exports = any;
 
 export type FactoryFn = (
-  global: object,
+  global: any,
   require: RequireFn,
   metroImportDefault: RequireFn,
   metroImportAll: RequireFn,

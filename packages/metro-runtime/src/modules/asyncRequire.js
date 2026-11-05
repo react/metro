@@ -10,8 +10,8 @@
  */
 
 type MetroRequire = {
-  (number): unknown,
-  importAll: <T>(number) => T,
+  (v: number): unknown,
+  importAll: <T>(v: number) => T,
   ...
 };
 

@@ -13,13 +13,14 @@ import type {AssetData} from './Assets';
 import type {ReadOnlyGraph} from './DeltaBundler';
 import type {ServerOptions} from './Server';
 import type {BuildOptions, OutputOptions, RequestOptions} from './shared/types';
-import type {HandleFunction} from 'connect';
+import type {HandleFunction, Server as ConnectServer} from 'connect';
 import type {TransformProfile} from 'metro-babel-transformer';
 import type {
   ConfigT,
   InputConfigT,
   MetroConfig,
   Middleware,
+  ServerMiddleware,
 } from 'metro-config';
 import type {CustomResolverOptions} from 'metro-resolver';
 import type {CustomTransformOptions} from 'metro-transform-worker';
@@ -80,7 +81,13 @@ export type RunServerOptions = Readonly<{
   secure?: boolean, // deprecated
   secureCert?: string, // deprecated
   secureKey?: string, // deprecated
-  unstable_extraMiddleware?: ReadonlyArray<HandleFunction>,
+  unstable_extraMiddleware?: ReadonlyArray<HandleFunction>, // deprecated
+  // Runs after `config.server.unstable_middleware`.
+  unstable_middleware?: ReadonlyArray<ServerMiddleware>,
+  // Called after `config.server.unstable_onServerCreated`.
+  unstable_onServerCreated?: (metroServer: MetroServer) => void,
+  // Runs before `config.server.unstable_priorityMiddleware`.
+  unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
   waitForBundler?: boolean,
   watch?: boolean,
   websocketEndpoints?: Readonly<{
@@ -235,6 +242,7 @@ export const createConnectMiddleware = async function (
   options?: RunMetroOptions,
 ): Promise<MetroMiddleWare> {
   const metroServer = await runMetro(config, options);
+  config.server.unstable_onServerCreated(metroServer);
 
   let enhancedMiddleware: Middleware = metroServer.processRequest;
 
@@ -267,7 +275,11 @@ export const createConnectMiddleware = async function (
       });
     },
     metroServer,
-    middleware: enhancedMiddleware,
+    middleware: composeMiddleware(
+      config.server.unstable_priorityMiddleware,
+      enhancedMiddleware,
+      config.server.unstable_middleware,
+    ),
     async end(): Promise<void> {
       await metroServer.end();
     },
@@ -288,7 +300,10 @@ export const runServer = async (
     secure, //deprecated
     secureCert, // deprecated
     secureKey, // deprecated
-    unstable_extraMiddleware,
+    unstable_extraMiddleware = [], // deprecated
+    unstable_middleware = [],
+    unstable_onServerCreated,
+    unstable_priorityMiddleware = [],
     waitForBundler = false,
     websocketEndpoints: userWebsocketEndpoints = {},
     watch,
@@ -296,20 +311,12 @@ export const runServer = async (
   await earlyPortCheck(host, config.server.port);
 
   if (secure != null || secureCert != null || secureKey != null) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      util.styleText(['inverse', 'yellow', 'bold'], ' DEPRECATED '),
+    logDeprecationWarning(
       'The `secure`, `secureCert`, and `secureKey` options are now deprecated. ' +
         'Please use the `secureServerOptions` object instead to pass options to ' +
         "Metro's https development server, or `config.server.tls` in Metro's configuration",
     );
   }
-  // Lazy require
-  // eslint-disable-next-line import/no-commonjs
-  const connect = require('connect');
-
-  const serverApp = connect();
-
   const {
     middleware,
     end: endMiddleware,
@@ -320,11 +327,13 @@ export const runServer = async (
     watch,
   });
 
-  for (const handler of unstable_extraMiddleware ?? []) {
-    serverApp.use(handler);
-  }
+  unstable_onServerCreated?.(metroServer);
 
-  serverApp.use(middleware);
+  const serverApp = composeMiddleware(
+    [...unstable_extraMiddleware, ...unstable_priorityMiddleware],
+    middleware,
+    unstable_middleware,
+  );
 
   let httpServer;
 
@@ -589,4 +598,31 @@ async function earlyPortCheck(host: void | string, port: number) {
   } finally {
     await new Promise(resolve => server.close(() => resolve()));
   }
+}
+
+function logDeprecationWarning(message: string): void {
+  // eslint-disable-next-line no-console
+  console.warn(
+    util.styleText(['inverse', 'yellow', 'bold'], ' DEPRECATED '),
+    message,
+  );
+}
+
+function composeMiddleware(
+  before: ReadonlyArray<ServerMiddleware>,
+  inner: Middleware,
+  after: ReadonlyArray<ServerMiddleware>,
+): ConnectServer {
+  // Lazy require
+  // eslint-disable-next-line import/no-commonjs
+  const connect = require('connect');
+  const app = connect();
+  for (const entry of [...before, inner, ...after]) {
+    if (typeof entry === 'function') {
+      app.use(entry);
+    } else {
+      app.use(entry[0], entry[1]);
+    }
+  }
+  return app;
 }

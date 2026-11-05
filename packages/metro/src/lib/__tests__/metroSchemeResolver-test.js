@@ -94,3 +94,44 @@ test('throws for unsupported metro: specifiers', () => {
   ).toThrow("Unsupported 'metro:' pathname: something-else");
   expect(calls).toHaveLength(0);
 });
+
+test.each([
+  ['metro:runtime', 'metro-runtime'],
+  ['metro:runtime/modules/asyncRequire', 'metro-runtime/modules/asyncRequire'],
+])(
+  'resolves %s to metro-runtime via package self resolution',
+  (specifier, expected) => {
+    const {resolveRequest, calls} = makeCapturingResolveRequest();
+    const context = {
+      ...makeContext(resolveRequest),
+      unstable_enablePackageExports: false,
+    };
+
+    expect(metroSchemeResolver(context, specifier, 'ios')).toEqual({
+      type: 'sourceFile',
+      filePath: p('/resolved.js'),
+    });
+    expect(calls).toEqual([
+      {
+        originModulePath: require.resolve('metro-runtime/package.json'),
+        specifier: expected,
+        platform: 'ios',
+      },
+    ]);
+  },
+);
+
+test('applies package exports for metro:runtime regardless of the project setting', () => {
+  const contexts: Array<CustomResolutionContext> = [];
+  const context = {
+    ...makeContext(ctx => {
+      contexts.push(ctx);
+      return {type: 'sourceFile', filePath: p('/resolved.js')};
+    }),
+    unstable_enablePackageExports: false,
+  };
+
+  metroSchemeResolver(context, 'metro:runtime/modules/asyncRequire', null);
+  expect(contexts).toHaveLength(1);
+  expect(contexts[0].unstable_enablePackageExports).toBe(true);
+});

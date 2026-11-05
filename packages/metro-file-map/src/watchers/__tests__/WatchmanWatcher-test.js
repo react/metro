@@ -31,7 +31,7 @@ const cmdCallback = <T>(err: ?Error, result: Partial<T>): void => {
 // Convenience function to write paths with posix separators but convert them
 // to system separators, and prepend a mock drive letter to absolute paths on
 // Windows.
-const p: string => string = filePath =>
+const p: (v: string) => string = filePath =>
   process.platform === 'win32'
     ? filePath.replaceAll('/', '\\').replace(/^\\/, 'C:\\')
     : filePath;
@@ -39,7 +39,7 @@ const p: string => string = filePath =>
 // Format a posix path as a Watchman-native path on the current platform, i.e.,
 // on Windows, drive letters on absolute paths, but posix-style separators.
 // This should be used for mocking Watchman *output*.
-const wp: string => string = filePath =>
+const wp: (v: string) => string = filePath =>
   process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
 
 jest.mock('fb-watchman', () => ({
@@ -100,6 +100,90 @@ describe('WatchmanWatcher', () => {
     cmdCallback<WatchmanSubscribeResponse>(null, {});
 
     // Return to assert promise resolves, not rejects
+    return startPromise;
+  });
+
+  test('subscribes since a supplied clock instead of fetching a fresh one', () => {
+    const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+      ignored: null,
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      watchmanDeferStates: ['busy'],
+      clocks: new Map([[wp('/project'), 'c:crawl-clock:1']]),
+    });
+    const startPromise = watchmanWatcher.startWatching();
+
+    cmdCallback<WatchmanWatchResponse>(null, {
+      watch: wp('/project'),
+      relative_path: wp('subdir/js'),
+    });
+
+    // With a clock for the watch root, there's no need for a `clock` command -
+    // the subscription is made `since` the supplied clock directly.
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      [
+        'subscribe',
+        p('/project'),
+        watchmanWatcher.subscriptionName,
+        {
+          defer: ['busy'],
+          fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
+          relative_root: p('subdir/js'),
+          since: 'c:crawl-clock:1',
+        },
+      ],
+      expect.any(Function),
+    );
+
+    cmdCallback<WatchmanSubscribeResponse>(null, {});
+    return startPromise;
+  });
+
+  test('fetches a fresh clock when no supplied clock matches the watch root', () => {
+    const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+      ignored: null,
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      watchmanDeferStates: ['busy'],
+      clocks: new Map([[wp('/other'), 'c:crawl-clock:1']]),
+    });
+    const startPromise = watchmanWatcher.startWatching();
+
+    cmdCallback<WatchmanWatchResponse>(null, {
+      watch: wp('/project'),
+      relative_path: wp('subdir/js'),
+    });
+
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      ['clock', p('/project')],
+      expect.any(Function),
+    );
+    cmdCallback<WatchmanClockResponse>(null, {
+      clock: 'c:fresh-clock:1',
+    });
+
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      [
+        'subscribe',
+        p('/project'),
+        watchmanWatcher.subscriptionName,
+        {
+          defer: ['busy'],
+          fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
+          relative_root: p('subdir/js'),
+          since: 'c:fresh-clock:1',
+        },
+      ],
+      expect.any(Function),
+    );
+
+    cmdCallback<WatchmanSubscribeResponse>(null, {});
     return startPromise;
   });
 

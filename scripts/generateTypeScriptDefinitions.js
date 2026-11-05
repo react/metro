@@ -239,9 +239,9 @@ export async function generateTsDefsForJsGlobs(
   await Promise.all(
     filesToProcess.map(async ([jsFile, sourceFile]) => {
       const absoluteTsFile = getTSDeclAbsolutePath(jsFile);
-      const sourceTSDeclarationPath = absoluteTsFile.replace(
-        TYPES_DIR,
-        SRC_DIR,
+      const sourceTSDeclarationPath = path.resolve(
+        WORKSPACE_ROOT,
+        jsFile.replace(/\.js$/, '.d.ts'),
       );
       const absoluteSourceFile = path.resolve(WORKSPACE_ROOT, sourceFile);
 
@@ -419,7 +419,7 @@ function removeDeclareConstAtLine(
 function findBlockStart(
   lines: ReadonlyArray<string>,
   lineIndex: number,
-  predicate: string => boolean,
+  predicate: (v: string) => boolean,
 ): ?number {
   for (let i = lineIndex; i >= 0; i--) {
     if (predicate(lines[i])) {
