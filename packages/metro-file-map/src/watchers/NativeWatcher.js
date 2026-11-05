@@ -115,6 +115,7 @@ export default class NativeWatcher extends AbstractWatcher {
         });
       },
     );
+    this.#fsWatcher.on('error', error => this.emitError(error));
 
     debug('Watching %s', this.root);
   }

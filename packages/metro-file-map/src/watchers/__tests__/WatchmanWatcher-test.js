@@ -78,6 +78,63 @@ describe('WatchmanWatcher', () => {
       jest.restoreAllMocks();
     });
 
+    test('does not warn about missed changes on initial startup', () => {
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    test.each(['end', 'error'])(
+      'warns once about missed changes after recovering from %s',
+      event => {
+        const warn = jest.spyOn(console, 'warn');
+        mockClient.emit(event, new Error('Connection lost'));
+        warn.mockClear();
+        jest.advanceTimersByTime(1000);
+        mockClient.emit('error', new Error('Still unavailable'));
+        expect(console.warn).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(2000);
+        completeSubscription();
+
+        expect(console.warn).toHaveBeenCalledTimes(1);
+        const warning = warn.mock.calls[0][0];
+        expect(warning).toContain(p('/project'));
+        expect(warning).toContain(
+          'Changes made while disconnected may have been missed',
+        );
+        expect(warning).toContain('Restart Metro');
+
+        mockClient.emit('subscription', {
+          subscription: watcher.subscriptionName,
+          files: [],
+        });
+        expect(console.warn).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('warns again after a separate connection outage recovers', () => {
+      for (let outage = 0; outage < 2; outage++) {
+        mockClient.emit('error', new Error('Connection lost'));
+        jest.advanceTimersByTime(1000);
+        completeSubscription();
+      }
+      expect(console.warn).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not report recovery from a retired client', async () => {
+      const warn = jest.spyOn(console, 'warn');
+      mockClient.emit('end');
+      jest.advanceTimersByTime(1000);
+      cmdCallback<WatchmanWatchResponse>(null, {watch: wp('/project')});
+      cmdCallback<WatchmanClockResponse>(null, {clock: 'c:123'});
+      const onSubscribe = mockClient.command.mock.lastCall[1];
+      warn.mockClear();
+
+      await watcher.stopWatching();
+      onSubscribe(null, {});
+
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
     test.each(['transport', 'watch-project', 'clock', 'subscribe'])(
       'recovers after a failed reconnect at %s',
       stage => {

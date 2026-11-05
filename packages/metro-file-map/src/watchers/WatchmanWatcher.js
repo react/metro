@@ -243,7 +243,13 @@ export default class WatchmanWatcher extends AbstractWatcher {
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = null;
       this.#init(
-        () => {},
+        () => {
+          console.warn(
+            `[metro-file-map] Warning: Reconnected to Watchman for ${this.root}. ` +
+              'Changes made while disconnected may have been missed. ' +
+              'Restart Metro to resynchronize the file map.',
+          );
+        },
         error => {
           this.emitError(error);
           this.#scheduleReconnect();

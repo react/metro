@@ -43,6 +43,7 @@ type MockBackend = {
   emitError: (error: Error) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
+const mockStartWatching = jest.fn<[string], Promise<void>>();
 let mockNativeLiveOnStart = true;
 function mockBackendClass(kind: MockBackend['kind']) {
   return class {
@@ -69,7 +70,7 @@ function mockBackendClass(kind: MockBackend['kind']) {
         this.#emitter.removeListener('error', listener);
       };
     }
-    async startWatching() {
+    startWatching(): Promise<void> {
       mockStartedBackends.push({
         kind,
         root: this.#root,
@@ -79,6 +80,7 @@ function mockBackendClass(kind: MockBackend['kind']) {
           this.#emitter.emit('error', error);
         },
       });
+      return mockStartWatching(this.#root);
     }
     async stopWatching() {}
     getPauseReason(): ?string {
@@ -156,11 +158,104 @@ beforeEach(() => {
   mockNativeLiveOnStart = true;
   mockWatchmanCrawl.mockReset();
   mockNodeCrawl.mockReset();
+  mockStartWatching.mockReset();
+  mockStartWatching.mockImplementation(async () => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  jest.clearAllTimers();
   jest.restoreAllMocks();
+});
+
+describe('Watcher startup rejection', () => {
+  test.each([
+    [false, 'crawl'],
+    [false, 'watch'],
+    [true, 'watch'],
+  ])(
+    'propagates a backend rejection from %s/%s before the timeout',
+    async (useWatchman, operation) => {
+      const error = new Error('Backend could not start');
+      mockStartWatching.mockImplementationOnce(async () => {
+        throw error;
+      });
+      const watcher = createWatcher(useWatchman, null, true);
+      const outcomes: Array<?Error> = [];
+      const starting = (
+        operation === 'crawl' ? watcher.crawl() : watcher.watch(() => {})
+      ).then(
+        () => outcomes.push(null),
+        (error: Error) => outcomes.push(error),
+      );
+
+      // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(outcomes).toEqual([error]);
+      expect(jest.getTimerCount()).toBe(0);
+      await starting;
+      await watcher.close();
+    },
+  );
+
+  test('propagates a failure from watchRoot without leaving a timer', async () => {
+    const watcher = createWatcher(true, null, true);
+    await watcher.watch(() => {});
+    const error = new Error('Added root could not start');
+    mockStartWatching.mockImplementationOnce(async () => {
+      throw error;
+    });
+    const outcomes: Array<?Error> = [];
+    const starting = watcher.watchRoot(path.join(rootDir, 'added')).then(
+      () => outcomes.push(null),
+      (error: Error) => outcomes.push(error),
+    );
+
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(outcomes).toEqual([error]);
+    expect(jest.getTimerCount()).toBe(0);
+    await starting;
+    await watcher.close();
+  });
+
+  test('propagates a synchronous startup error without leaving a timer', async () => {
+    const error = new Error('Synchronous startup failure');
+    mockStartWatching.mockImplementationOnce(() => {
+      throw error;
+    });
+    const watcher = createWatcher(true, null, true);
+
+    await expect(watcher.watch(() => {})).rejects.toBe(error);
+    expect(jest.getTimerCount()).toBe(0);
+    await watcher.close();
+  });
+
+  test('retains the existing deadline for a startup that never settles', async () => {
+    mockStartWatching.mockImplementationOnce(() => new Promise(() => {}));
+    const watcher = createWatcher(true, null, true);
+    const outcomes: Array<?Error> = [];
+    const starting = watcher
+      .watch(() => {})
+      .then(
+        () => outcomes.push(null),
+        (error: Error) => outcomes.push(error),
+      );
+
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(239999);
+    expect(outcomes).toEqual([]);
+    // $FlowFixMe[prop-missing] Available in Jest 29, missing from its libdef.
+    await jest.advanceTimersByTimeAsync(1);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]?.message).toBe('Failed to start watch mode.');
+    expect(jest.getTimerCount()).toBe(0);
+    await starting;
+    await watcher.close();
+  });
 });
 
 describe('Watcher crawl fallback', () => {

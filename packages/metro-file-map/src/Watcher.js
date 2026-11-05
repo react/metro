@@ -324,7 +324,7 @@ export class Watcher extends EventEmitter {
       const watcher: WatcherBackend = new WatcherImpl(root, watcherOptions);
       const reportedResourceLimits = new Set<string>();
 
-      return new Promise(async (resolve, reject) => {
+      return new Promise((resolve, reject) => {
         const rejectTimeout = setTimeout(
           () => reject(new Error('Failed to start watch mode.')),
           MAX_WAIT_TIME,
@@ -379,9 +379,18 @@ export class Watcher extends EventEmitter {
             this.#bufferedEvents.push(change);
           }
         });
-        await watcher.startWatching();
-        clearTimeout(rejectTimeout);
-        resolve(watcher);
+        void Promise.resolve()
+          .then(() => watcher.startWatching())
+          .then(
+            () => {
+              clearTimeout(rejectTimeout);
+              resolve(watcher);
+            },
+            error => {
+              clearTimeout(rejectTimeout);
+              reject(error);
+            },
+          );
       });
     };
 

@@ -47,6 +47,20 @@ const DEBOUNCE_MS = 100;
  */
 const CRAWL_CONCURRENCY = 32;
 
+class WatchLostError extends Error {
+  code: unknown;
+
+  constructor(dir: string, cause: Error) {
+    super(
+      `Watch lost for ${dir}: ${cause.message}. ` +
+        'Changes in this directory will not be detected. ' +
+        'Restart Metro to resume watching.',
+      {cause},
+    );
+    this.code = (cause as interface {readonly code?: unknown}).code;
+  }
+}
+
 export default class FallbackWatcher extends AbstractWatcher {
   readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
@@ -220,7 +234,7 @@ export default class FallbackWatcher extends AbstractWatcher {
       if (this.#watched[dir] === watcher) {
         delete this.#watched[dir];
       }
-      this.#checkedEmitError(error);
+      this.#checkedEmitError(new WatchLostError(dir, error));
     });
 
     if (this.root !== dir) {
