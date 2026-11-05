@@ -18,7 +18,7 @@ import {Worker} from '../worker';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
 
-jest.mock('fs', () => {
+jest.mock('node:fs', () => {
   const path = require('node:path');
   const mockFs = {
     [path.join('/project', 'fruits', 'Banana.js')]: `
@@ -47,7 +47,7 @@ jest.mock('fs', () => {
   };
 
   return {
-    ...jest.createMockFromModule('fs'),
+    ...jest.createMockFromModule('node:fs'),
     readFileSync: jest.fn((path, options) => {
       const entry = mockFs[path];
       if (entry) {
@@ -64,7 +64,7 @@ jest.mock('fs', () => {
   };
 });
 
-const fs: FS = jest.requireMock('fs');
+const fs: FS = jest.requireMock('node:fs');
 
 const defaults: WorkerMessage = {
   computeSha1: false,
@@ -240,7 +240,7 @@ describe('worker', () => {
 
   test('can be loaded directly without transpilation', async () => {
     const code = await jest
-      .requireActual<FS>('fs')
+      .requireActual<FS>('node:fs')
       .promises.readFile(require.resolve('../worker.js'), 'utf8');
     expect(() => new vm.Script(code)).not.toThrow();
   });

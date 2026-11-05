@@ -294,6 +294,20 @@ describe('composeSourceMaps', () => {
     expect(mergedMap).toEqual(fixtures['merged_1_2.json']);
   });
 
+  test('keeps only the last mapping at a generated column mapped more than once', () => {
+    const mergedMap = composeSourceMaps([
+      {version: 3, names: [], sources: ['a.js'], mappings: 'AAAA,KAAK'},
+      {version: 3, names: [], sources: ['b.js'], mappings: 'AAAA,AAAK'},
+    ]);
+    expect(
+      [...new Consumer(mergedMap).generatedMappings()].map(mapping => [
+        mapping.generatedColumn,
+        mapping.originalLine,
+        mapping.originalColumn,
+      ]),
+    ).toEqual([[0, 1, 5]]);
+  });
+
   test('merges two maps preserving unmapped regions in the first one', () => {
     const mergedMap = composeSourceMaps([
       fixtures['ignore_1.json'],

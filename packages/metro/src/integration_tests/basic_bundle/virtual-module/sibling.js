@@ -5,8 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @format
+ * @oncall react_native
  */
 
-declare const exclusionList: ReadonlySet<string>;
-
-export = exclusionList;
+module.exports = require('test:bump');

@@ -19,7 +19,7 @@ import type {
   Program,
 } from '@babel/types';
 
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import nullthrows from 'nullthrows';
 
 export type Options = {

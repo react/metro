@@ -19,7 +19,7 @@ const defaultDependencyExtractor = require('./dependencyExtractor');
 import type {MetadataWorker, WorkerMessage, V8Serializable, DependencyExtractor} from '../../flow-types';
 */
 
-module.exports = class DependencyExtractorWorker /*:: implements MetadataWorker */ {
+class DependencyExtractorWorker /*:: implements MetadataWorker */ {
   // prettier-ignore
   /*:: readonly  */ #dependencyExtractor /*: ?DependencyExtractor['extract'] */;
 
@@ -56,4 +56,6 @@ module.exports = class DependencyExtractorWorker /*:: implements MetadataWorker 
     // Return as array (PerFileData type)
     return Array.from(dependencies);
   }
-};
+}
+
+module.exports = DependencyExtractorWorker;

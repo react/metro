@@ -187,7 +187,11 @@ export class RootPathUtils {
     // so resolve with node:path. This runs once per symlink, when its node is
     // populated, not on traversal.
     const normal = this.absoluteToNormal(
-      path.resolve(this.#rootDir, symlinkNormalPath, '..', readlinkResult),
+      path.resolve(
+        this.normalToAbsolute(symlinkNormalPath),
+        '..',
+        readlinkResult,
+      ),
     );
     // Normalization keeps a trailing separator when the result is the root or
     // an ancestor of it (e.g. a link to '/'), and readlink itself may return

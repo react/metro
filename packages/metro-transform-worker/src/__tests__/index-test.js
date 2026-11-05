@@ -12,14 +12,17 @@
 'use strict';
 
 jest
-  .mock('../utils/getMinifier', () => () => ({code, map, config}) => {
-    const trimmed = config.output.comments
-      ? code
-      : code.replace('/*#__PURE__*/', '');
-    return {
-      code: trimmed.replace('arbitrary(code)', 'minified(code)'),
-      map,
-    };
+  .mock('../utils/getMinifier', () => {
+    const minifier = jest.fn(({code, map, config}) => {
+      const trimmed = config.output.comments
+        ? code
+        : code.replace('/*#__PURE__*/', '');
+      return {
+        code: trimmed.replace('arbitrary(code)', 'minified(code)'),
+        map,
+      };
+    });
+    return () => minifier;
   })
   .mock('metro-transform-plugins', () => ({
     ...jest.requireActual('metro-transform-plugins'),
@@ -30,12 +33,18 @@ jest
 
 import type {JsTransformerConfig, JsTransformOptions} from '../index';
 import typeof * as TransformerType from '../index';
+import type {
+  BabelTransformer,
+  BabelTransformerArgs,
+} from 'metro-babel-transformer';
 import typeof FSType from 'node:fs';
 
 const {
   posixToSystemPath: p,
 } = require('metro-resolver/private/__tests__/utils');
+const {vlqMapFromBabelDecodedMap} = require('metro-source-map');
 const {Buffer} = require('node:buffer');
+const path = require('node:path');
 
 const babelTransformerPath =
   require.resolve('@react-native/metro-babel-transformer');
@@ -157,6 +166,30 @@ test('uses the indexed watch folder path for asset URLs', async () => {
   expect(result.output[0].data.code).toContain(
     '"httpServerLocation": "/assets/[metro-watchFolders]/1"',
   );
+  expect(result.output[0].data.unstable_assetUrlPath).toBe(
+    '[metro-watchFolders]/1/test.mp4',
+  );
+});
+
+test('reports the project-relative URL path of an asset given no URL path', async () => {
+  fs.mkdirSync(p('/root/external'), {recursive: true});
+  fs.writeFileSync(p('/root/external/test.mp4'), 'asset data');
+
+  const result = await Transformer.transform(
+    baseConfig,
+    p('/root'),
+    'external/test.mp4',
+    Buffer.from('asset data'),
+    {
+      ...baseTransformOptions,
+      type: 'asset',
+    },
+  );
+
+  expect(result.output[0].data.code).toContain(
+    '"httpServerLocation": "/assets/external"',
+  );
+  expect(result.output[0].data.unstable_assetUrlPath).toBe('external/test.mp4');
 });
 
 test('transforms a module with dependencies', async () => {
@@ -303,6 +336,80 @@ test('does not add "use strict" on non-modules', async () => {
     [HEADER_DEV, '  module.exports = {};', '});'].join('\n'),
   );
 });
+
+function mockBabelTransformer(): JestMockFn<
+  [BabelTransformerArgs],
+  ReturnType<BabelTransformer['transform']>,
+> {
+  const actual = jest.requireActual<BabelTransformer>(babelTransformerPath);
+  const transform = jest.fn(actual.transform);
+  jest.doMock(babelTransformerPath, () => ({...actual, transform}));
+  return transform;
+}
+
+test("passes Metro's own Babel runtime when enableBabelRuntime is true", async () => {
+  const babelTransform = mockBabelTransformer();
+  const {version} = jest.requireActual<{version: string, ...}>(
+    require.resolve('@babel/runtime/package.json', {
+      paths: [path.dirname(require.resolve('metro-runtime/package.json'))],
+    }),
+  );
+
+  await Transformer.transform(
+    baseConfig,
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code)', 'utf8'),
+    baseTransformOptions,
+  );
+
+  expect(babelTransform.mock.calls[0][0].options).toMatchObject({
+    babelRuntimeModuleName: 'metro:babel-runtime',
+    babelRuntimeVersion: version,
+  });
+});
+
+test.each([false, '7.25.0'])(
+  "does not pass Metro's own Babel runtime when enableBabelRuntime is %p",
+  async enableBabelRuntime => {
+    const babelTransform = mockBabelTransformer();
+
+    await Transformer.transform(
+      {...baseConfig, enableBabelRuntime},
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code)', 'utf8'),
+      baseTransformOptions,
+    );
+
+    const {options} = babelTransform.mock.calls[0][0];
+    expect(options).not.toHaveProperty('babelRuntimeModuleName');
+    expect(options).not.toHaveProperty('babelRuntimeVersion');
+  },
+);
+
+test.each([
+  [true, true],
+  [false, false],
+  [undefined, false],
+])(
+  'with unstable_supportsInlineModules: %s, passes supportsInlineModules: %s to the Babel transformer',
+  async (unstable_supportsInlineModules, expected) => {
+    const babelTransform = mockBabelTransformer();
+
+    await Transformer.transform(
+      {...baseConfig, unstable_supportsInlineModules},
+      '/root',
+      'local/file.js',
+      Buffer.from('arbitrary(code)', 'utf8'),
+      baseTransformOptions,
+    );
+
+    expect(babelTransform.mock.calls[0][0].options.supportsInlineModules).toBe(
+      expected,
+    );
+  },
+);
 
 test('preserves require() calls when module wrapping is disabled', async () => {
   const contents = ['require("./c");'].join('\n');
@@ -457,7 +564,7 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
     source,
     {...baseTransformOptions, experimentalImportSupport: true},
   );
-  // Minified path re-encodes the minifier's tuple output to VLQ.
+  // Minified path encodes VLQ from the minifier's decoded map.
   const minifiedResult = await Transformer.transform(
     baseConfig,
     '/root',
@@ -479,6 +586,32 @@ test('emits a compact VlqMap for both the non-minified and minified paths', asyn
   }
 });
 
+test("uses the minifier's decoded map, if it has one, without reading `map`", async () => {
+  const decodedMap = {mappings: [[[0, 0, 0, 0, 0]]], names: ['arbitrary']};
+  jest
+    .requireMock('../utils/getMinifier')()
+    .mockImplementationOnce(() => ({
+      code: 'minified(code);',
+      decodedMap,
+      // flowlint-next-line unsafe-getters-setters:off
+      get map() {
+        throw new Error('Expected the decoded map to be used');
+      },
+    }));
+
+  const result = await Transformer.transform(
+    baseConfig,
+    '/root',
+    'local/file.js',
+    Buffer.from('arbitrary(code);', 'utf8'),
+    {...baseTransformOptions, dev: false, minify: true},
+  );
+
+  expect(result.output[0].data.map).toEqual(
+    vlqMapFromBabelDecodedMap(decodedMap, [1, 'minified(code);'.length]),
+  );
+});
+
 test('throws if the reserved dependency map name appears in the input', async () => {
   await expect(
     Transformer.transform(
@@ -494,6 +627,57 @@ test('throws if the reserved dependency map name appears in the input', async ()
   ).rejects.toThrowErrorMatchingInlineSnapshot(
     `"Source code contains the reserved string \`THE_DEP_MAP\` at character offset 55"`,
   );
+});
+
+test.each([
+  ['local/file.js', 'arbitrary(_$$_METRO_MODULE_ID);', 10],
+  ['local/file.js', "arbitrary('_$$_METRO_UNUSED');", 11],
+  ['local/file.js', 'arbitrary(code); /* _$$_METRO_UNUSED */', 20],
+  ['local/file.json', '{"key": "_$$_METRO_UNUSED"}', 9],
+])(
+  'throws if the reserved string appears in %s: %s',
+  async (filename, code, offset) => {
+    await expect(
+      Transformer.transform(
+        baseConfig,
+        '/root',
+        filename,
+        Buffer.from(code, 'utf8'),
+        baseTransformOptions,
+      ),
+    ).rejects.toThrow(
+      `Source code contains the reserved string \`_$$_METRO_\` at character offset ${offset}`,
+    );
+  },
+);
+
+test('throws if the reserved string appears in a JSON file of type asset', async () => {
+  await expect(
+    Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.json',
+      Buffer.from('{"key": "_$$_METRO_UNUSED"}', 'utf8'),
+      {...baseTransformOptions, type: 'asset'},
+    ),
+  ).rejects.toThrow(
+    'Source code contains the reserved string `_$$_METRO_` at character offset 9',
+  );
+});
+
+test('does not check the contents of an asset for reserved strings', async () => {
+  const contents = '_$$_METRO_UNUSED THE_DEP_MAP';
+  fs.writeFileSync(p('/root/local/test.mp4'), contents);
+
+  const result = await Transformer.transform(
+    {...baseConfig, unstable_dependencyMapReservedName: 'THE_DEP_MAP'},
+    p('/root'),
+    'local/test.mp4',
+    Buffer.from(contents, 'utf8'),
+    {...baseTransformOptions, type: 'asset'},
+  );
+
+  expect(result.output[0].data.code).not.toContain('_$$_METRO_UNUSED');
 });
 
 test('allows disabling the normalizePseudoGlobals pass when minifying', async () => {

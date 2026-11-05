@@ -47,12 +47,15 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     resolveRequest: null,
     resolverMainFields: ['browser', 'main'],
     schemeResolvers: {},
+    unstable_allowVirtualModules: false,
+    unstable_applyBrowserSpecAfterExports: false,
     unstable_conditionNames: [],
     unstable_conditionsByPlatform: {
       web: ['browser'],
     },
     unstable_enablePackageExports: true,
     unstable_incrementalResolution: false,
+    unstable_resolveExportsFromPackageRoot: false,
     useWatchman: true,
     requireCycleIgnorePatterns: [/(^|\/|\\)node_modules($|\/|\\)/],
     unstable_forceFullRefreshPatterns: [],
@@ -79,6 +82,12 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     forwardClientLogs: true,
     port: 8081,
     rewriteRequestUrl: url => url,
+    // Keep empty to not shadows a Metro builtin or user entry paths
+    // merged with user middleware as [...defaults, ...user]
+    unstable_middleware: [],
+    unstable_onServerCreated: () => {},
+    // merged with user middleware as [...user, ...defaults]
+    unstable_priorityMiddleware: [],
     unstable_serverRoot: null,
     useGlobalHotkey: true,
     verifyConnections: false,
@@ -136,6 +145,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     unstable_disableModuleWrapping: false,
     unstable_disableNormalizePseudoGlobals: false,
     unstable_compactOutput: false,
+    unstable_disableInputAstCloning: true,
     unstable_memoizeInlineRequires: false,
     unstable_workerThreads: false,
   },

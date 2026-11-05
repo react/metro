@@ -45,10 +45,6 @@ export type ExtraTransformOptions = Readonly<{
 
 export type GetTransformOptionsOpts = {
   dev: boolean,
-  /**
-   * @deprecated Always true
-   */
-  hot: true,
   platform: ?string,
 };
 
@@ -59,6 +55,11 @@ export type GetTransformOptions = (
 ) => Promise<Partial<ExtraTransformOptions>>;
 
 export type Middleware = HandleFunction;
+
+export type ServerMiddleware =
+  | Middleware
+  // Mounted with connect semantics: prefix match, stripped from `req.url`.
+  | Readonly<[path: string, handler: Middleware]>;
 
 type PerfAnnotations = Partial<{
   string: Readonly<{[key: string]: string}>,
@@ -115,12 +116,15 @@ type ResolverConfigT = {
   resolverMainFields: ReadonlyArray<string>,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
   unstable_incrementalResolution: boolean,
+  unstable_resolveExportsFromPackageRoot: boolean,
   useWatchman: boolean,
   requireCycleIgnorePatterns: ReadonlyArray<RegExp>,
   unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>,
@@ -184,7 +188,7 @@ type MetalConfigT = {
 type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult<>>>;
 
 type ServerConfigT = {
-  /** @deprecated */
+  /** @deprecated Use `unstable_middleware`, `unstable_priorityMiddleware`, or `unstable_onServerCreated` */
   enhanceMiddleware: (
     middleware: Middleware,
     server: MetroServer,
@@ -192,6 +196,17 @@ type ServerConfigT = {
   forwardClientLogs: boolean,
   port: number,
   rewriteRequestUrl: (url: string) => string,
+  // Only receives requests that Metro endpoints did not handle.
+  // `runServer`'s `unstable_middleware` option runs after these handlers.
+  unstable_middleware: ReadonlyArray<ServerMiddleware>,
+  // Called with Metro's server instance before the HTTP server listens.
+  // `runServer`'s `unstable_onServerCreated` option is called after it.
+  unstable_onServerCreated: (metroServer: MetroServer) => void,
+  // Runs before Metro endpoints, which only receive a request if these
+  // handlers call `next()`.
+  // `runServer`'s `unstable_priorityMiddleware` option runs before these
+  // handlers.
+  unstable_priorityMiddleware: ReadonlyArray<ServerMiddleware>,
   unstable_serverRoot: ?string,
   useGlobalHotkey: boolean,
   verifyConnections: boolean,

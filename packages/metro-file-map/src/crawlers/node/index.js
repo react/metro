@@ -12,7 +12,7 @@
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
 import {RootPathUtils} from '../../lib/RootPathUtils';
-import * as fs from 'graceful-fs';
+import fs from 'node:fs';
 import * as path from 'node:path';
 
 function find(options: CrawlerOptions): Promise<FileData> {
@@ -101,7 +101,9 @@ function find(options: CrawlerOptions): Promise<FileData> {
       });
     }
 
-    for (const root of roots) {
+    for (const givenRoot of roots) {
+      // Paths are built by concatenation, so the root must be normalised.
+      const root = path.resolve(givenRoot);
       const rootNormal = pathUtils.absoluteToNormal(root);
       const isWithinRoot =
         rootNormal !== '..' && !rootNormal.startsWith('..' + path.sep);

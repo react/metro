@@ -12,7 +12,7 @@
 import type {AssetData} from '../../Assets';
 import type {Module, ReadOnlyDependencies} from '../types';
 
-import {getAssetData, getAssetUrlPath} from '../../Assets';
+import {getAssetData} from '../../Assets';
 import {getJsOutput, isJsModule} from './helpers/js';
 import path from 'node:path';
 
@@ -22,7 +22,6 @@ type Options = {
   platform: ?string,
   projectRoot: string,
   publicPath: string,
-  watchFolders: ReadonlyArray<string>,
 };
 
 export default async function getAssets(
@@ -33,20 +32,20 @@ export default async function getAssets(
   const {processModuleFilter} = options;
 
   for (const module of dependencies.values()) {
+    if (!isJsModule(module) || !processModuleFilter(module)) {
+      continue;
+    }
+    const output = getJsOutput(module);
+    const projectRelativePath = path.relative(options.projectRoot, module.path);
     if (
-      isJsModule(module) &&
-      processModuleFilter(module) &&
-      getJsOutput(module).type === 'js/module/asset' &&
-      path.relative(options.projectRoot, module.path) !== 'package.json'
+      output.type === 'js/module/asset' &&
+      projectRelativePath !== 'package.json'
     ) {
       promises.push(
         getAssetData(
           module.path,
-          getAssetUrlPath(
-            module.path,
-            options.projectRoot,
-            options.watchFolders,
-          ),
+          // Transformers other than Metro's use the project-relative path.
+          output.data.unstable_assetUrlPath ?? projectRelativePath,
           options.assetPlugins,
           options.platform,
           options.publicPath,

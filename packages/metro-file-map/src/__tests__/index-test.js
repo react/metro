@@ -22,13 +22,13 @@ import type {
   HasteMap,
   MockMap,
   ReadonlyFileSystemChanges,
-  WatcherBackendOptions,
   WorkerSetupArgs,
 } from '../flow-types';
 import type {DependencyPlugin} from '../index';
 import type {default as FileMapT} from '../index';
 import type {HasteMapOptions} from '../plugins/HastePlugin';
 import type {MockMapOptions} from '../plugins/MockPlugin';
+import type {WatcherOptions} from '../watchers/common';
 import typeof WorkerModule from '../worker';
 
 import {AbstractWatcher} from '../watchers/AbstractWatcher';
@@ -51,6 +51,11 @@ const toPosixMessage = (message: string): string =>
   process.platform === 'win32'
     ? message.replaceAll('C:\\', '/').replaceAll('\\', '/')
     : message;
+
+// Format a posix path as a Watchman-native path on the current platform, i.e.,
+// on Windows, drive letters on absolute paths, but posix-style separators.
+const wp = (filePath: string): string =>
+  process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
 
 function mockHashContents(contents: string | Buffer) {
   return crypto.createHash('sha1').update(contents).digest('hex');
@@ -140,8 +145,11 @@ jest.mock('../crawlers/watchman', () => ({
 }));
 
 class MockWatcher extends AbstractWatcher {
-  constructor(root: string, opts: WatcherBackendOptions) {
+  readonly opts: WatcherOptions;
+
+  constructor(root: string, opts: WatcherOptions) {
     super(root, opts);
+    this.opts = opts;
     mockEmitters[root] = this;
   }
 
@@ -207,6 +215,8 @@ jest.mock('fs', () => ({
       }
       return entry.link;
     }),
+    // No root in the mock file system is a symlink.
+    realpath: jest.fn(async path => path),
   },
 }));
 jest.mock('node:fs', () => jest.requireMock('fs'));
@@ -337,7 +347,7 @@ describe('FileMap', () => {
     // $FlowFixMe[incompatible-type]
     mockChangedFiles = null;
 
-    fs = require('graceful-fs');
+    fs = require('node:fs');
 
     consoleWarn = console.warn;
     consoleError = console.error;
@@ -443,6 +453,55 @@ describe('FileMap', () => {
 
   test('exports constants', () => {
     expect(FileMap.H).toBe(require('../constants').default);
+  });
+
+  test('getOrComputeFileData records a file found as content, as well as what lookup records', async () => {
+    const {dependencyPlugin} = await buildNewFileMap();
+    if (dependencyPlugin == null) {
+      throw new Error('Expected a DependencyPlugin');
+    }
+    const observations = {
+      existence: new Set<string>(),
+      content: new Set<string>(),
+    };
+
+    expect(
+      dependencyPlugin.getOrComputeFileData(
+        p('/project/fruits/Banana.js'),
+        observations,
+      ),
+    ).toMatchObject({exists: true, type: 'f'});
+    expect(
+      dependencyPlugin.getOrComputeFileData(p('/project/fruits'), observations),
+    ).toEqual({exists: true, type: 'd'});
+    expect(
+      dependencyPlugin.getOrComputeFileData(
+        p('/project/fruits/Missing.js'),
+        observations,
+      ),
+    ).toEqual({exists: false});
+
+    expect(observations).toEqual({
+      content: new Set([path.join('fruits', 'Banana.js')]),
+      existence: new Set([
+        path.join('fruits', 'Banana.js'),
+        'fruits',
+        path.join('fruits', 'Missing.js'),
+      ]),
+    });
+  });
+
+  test("getOrComputeFileData gives null for a file a non-lazy plugin's worker skipped", async () => {
+    mockFs[p('/project/fruits/Pear.json')] = '{}';
+    const {dependencyPlugin} = await buildNewFileMap({
+      extensions: ['js', 'json'],
+    });
+    if (dependencyPlugin == null) {
+      throw new Error('Expected a DependencyPlugin');
+    }
+    expect(
+      dependencyPlugin.getOrComputeFileData(p('/project/fruits/Pear.json')),
+    ).toMatchObject({exists: true, type: 'f', data: null});
   });
 
   test('ignores files given a pattern', async () => {
@@ -1643,26 +1702,27 @@ describe('FileMap', () => {
         watch: true,
         plugins: [lazyPlugin],
       });
+      const onMetadata = jest.fn();
       await fileMap.build();
       try {
         const bananaPath = p('/project/fruits/Banana.js');
-        const getPluginData = () => {
-          const result = lazyPlugin.getFileSystem().lookup(bananaPath);
-          if (!result.exists || result.type !== 'f') {
-            throw new Error('Expected a file');
-          }
-          return result.pluginData;
-        };
-        const onMetadata = jest.fn();
         fileMap.on('metadata', onMetadata);
 
-        // The crawl does not run a lazy plugin's worker
-        expect(getPluginData()).toBeUndefined();
-
         const expected = {length: String(mockFs[bananaPath]).length};
-        expect(lazyPlugin.processFile(bananaPath)).toEqual(expected);
-        // The data is stored, and the cache told there is something to save
-        expect(getPluginData()).toEqual(expected);
+        expect(lazyPlugin.getOrComputeFileData(bananaPath)).toEqual({
+          exists: true,
+          type: 'f',
+          realPath: bananaPath,
+          data: expected,
+        });
+        // The crawl did not run the worker, so it ran now, and the cache is
+        // told there is something to save
+        expect(onMetadata).toHaveBeenCalledTimes(1);
+
+        // The data is stored
+        expect(lazyPlugin.getOrComputeFileData(bananaPath)).toMatchObject({
+          data: expected,
+        });
         expect(onMetadata).toHaveBeenCalledTimes(1);
 
         mockFs[bananaPath] = '// A changed banana';
@@ -1673,11 +1733,11 @@ describe('FileMap', () => {
         });
         await waitForItToChange(fileMap);
 
-        // Nor does a change, which leaves the file unprocessed again
-        expect(getPluginData()).toBeUndefined();
-        expect(lazyPlugin.processFile(bananaPath)).toEqual({
-          length: '// A changed banana'.length,
+        // A change leaves the file unprocessed again
+        expect(lazyPlugin.getOrComputeFileData(bananaPath)).toMatchObject({
+          data: {length: '// A changed banana'.length},
         });
+        expect(onMetadata).toHaveBeenCalledTimes(2);
       } finally {
         await fileMap.end();
       }
@@ -1768,6 +1828,56 @@ describe('FileMap', () => {
       modifiedTime: 45,
       size: 55,
     };
+
+    fm_it(
+      'passes the clocks from the crawl to the watcher, keyed by watch root',
+      async () => {
+        for (const root of [p('/project/fruits'), p('/project/vegetables')]) {
+          expect(mockEmitters[root].opts.clocks).toEqual(
+            new Map([
+              [wp('/project/fruits'), 'c:fake-clock:1'],
+              [wp('/project/vegetables'), 'c:fake-clock:2'],
+              [wp('/project/video'), 'c:fake-clock:3'],
+            ]),
+          );
+        }
+      },
+    );
+
+    test('does not miss a change made while the file map is being built', async () => {
+      mockNodeCrawler.mockImplementationOnce(async () => {
+        // The watcher is already running at this point, so this reports a
+        // change that the crawl itself cannot see.
+        mockFs[p('/project/fruits/Tomato.js')] = '// Tomato!';
+        mockEmitters[p('/project/fruits')]?.emitFileEvent({
+          event: 'touch',
+          relativePath: 'Tomato.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        return {changedFiles: new Map(), removedFiles: new Set()};
+      });
+
+      let fileMap: ?FileMapT = null;
+      let fileSystem: ?FileSystem = null;
+      try {
+        ({fileMap, fileSystem} = await buildNewFileMap({
+          useWatchman: false,
+          watch: true,
+        }));
+        const changeEvent = await Promise.race([
+          waitForItToChange(fileMap),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]);
+        expect(fileSystem?.exists(p('/project/fruits/Tomato.js'))).toBe(true);
+        expect(
+          [...(changeEvent?.changes.addedFiles ?? [])].map(
+            ([filePath]) => filePath,
+          ),
+        ).toContain(path.join('fruits', 'Tomato.js'));
+      } finally {
+        await fileMap?.end();
+      }
+    });
 
     fm_it(
       'handles several change events at once',

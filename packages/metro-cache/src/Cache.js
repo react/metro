@@ -85,6 +85,10 @@ export default class Cache<T> {
     const stores = this.#stores;
     const stop = this.#hits.get(key);
     const length = stores.length;
+    if (length === 0 || stores[0] === stop) {
+      return;
+    }
+
     const promises = [];
     const writeErrors = [];
     const storesWithErrors = new Set<string>();

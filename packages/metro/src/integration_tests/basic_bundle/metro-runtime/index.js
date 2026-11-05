@@ -4,11 +4,10 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
+ * @flow strict
  * @format
  */
 
-declare const dependencyExtractor: {
-  extract: (code: string) => Set<string>;
-};
-
-export = dependencyExtractor;
+export const lazyValue: Promise<string> = import('./lazy').then(
+  module => module.default,
+);

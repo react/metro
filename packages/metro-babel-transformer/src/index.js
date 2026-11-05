@@ -33,6 +33,8 @@ export type CustomTransformOptions = {
 export type TransformProfile = 'default' | 'hermes-stable' | 'hermes-canary';
 
 type BabelTransformerOptions = Readonly<{
+  babelRuntimeModuleName?: string,
+  babelRuntimeVersion?: string,
   customTransformOptions?: CustomTransformOptions,
   dev: boolean,
   enableBabelRCLookup?: boolean,
@@ -45,6 +47,7 @@ type BabelTransformerOptions = Readonly<{
   platform: ?string,
   projectRoot: string,
   publicPath: string,
+  supportsInlineModules?: boolean,
   unstable_transformProfile?: TransformProfile,
   globalPrefix: string,
   inlineRequires?: void,
@@ -111,6 +114,18 @@ function transform(
         name: 'metro',
         platform: options.platform,
         inlinePlatform: options.inlinePlatform,
+        // Consumers, including `@react-native/babel-preset`, accept a
+        // string-valued `enableBabelRuntime`, which sets the `@babel/runtime`
+        // version to target.
+        ...(options.babelRuntimeModuleName != null &&
+        options.babelRuntimeVersion != null
+          ? {
+              babelRuntimeModuleName: options.babelRuntimeModuleName,
+              enableBabelRuntime: options.babelRuntimeVersion,
+            }
+          : null),
+        // Whether `metro:inline` specifiers will resolve.
+        supportsInlineModules: options.supportsInlineModules,
       },
       // NOTE(EvanBacon): We split the parse/transform steps up to accommodate
       // Hermes parsing, but this defaults to cloning the AST which increases

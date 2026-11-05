@@ -4,7 +4,9 @@
 
 ```ts
 
-const minifierFn: typeof minifier;
-export default minifierFn;
+const $$MODULE_EXPORTS$$: typeof minifier;
+
+type $$MODULE_EXPORTS$$ = typeof $$MODULE_EXPORTS$$;
+export default $$MODULE_EXPORTS$$;
 
 ```

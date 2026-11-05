@@ -10,8 +10,8 @@
 
 'use strict';
 
-export default function (declared: Object): (opts: any) => any {
-  return function (opts: Object) {
+export default function (declared: any): (opts: any) => any {
+  return function (opts: any) {
     for (var p in declared) {
       if (opts[p] == null && declared[p].default != null) {
         opts[p] = declared[p].default;

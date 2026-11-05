@@ -8,4 +8,4 @@
  * @oncall react_native
  */
 
-// No exports
+export const answer = 42;

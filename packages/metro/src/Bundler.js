@@ -11,6 +11,7 @@
 
 import type {TransformResultWithSource} from './DeltaBundler';
 import type {TransformOptions} from './DeltaBundler/Worker';
+import type {DynamicRoot} from './lib/dynamicRoots';
 import type {ConfigT} from 'metro-config';
 import type EventEmitter from 'node:events';
 
@@ -36,6 +37,7 @@ export default class Bundler {
       .then(() => {
         config.reporter.update({type: 'transformer_load_started'});
         this._transformer = new Transformer(config, {
+          getDynamicRoots: () => this._depGraph.getDynamicRoots(),
           getOrComputeSha1: filePath =>
             this._depGraph.getOrComputeSha1(filePath),
         });
@@ -69,6 +71,14 @@ export default class Bundler {
     } finally {
       await this._depGraph.end();
     }
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. Empty until the dependency graph is ready.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    return this._depGraph.getDynamicRoots();
   }
 
   async getDependencyGraph(): Promise<DependencyGraph> {

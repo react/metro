@@ -8,11 +8,14 @@
  * @format
  */
 
-import type {WatcherBackendChangeEvent} from '../flow-types';
+import type {
+  WatcherBackendChangeEvent,
+  WatcherIncludedFiles,
+} from '../flow-types';
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {includedByGlob, typeFromStat} from './common';
+import {isIncluded, typeFromStat} from './common';
 import debugModule from 'debug';
 import {promises as fsPromises, watch} from 'node:fs';
 import {platform} from 'node:os';
@@ -56,12 +59,18 @@ export default class NativeWatcher extends AbstractWatcher {
     return platform() === 'darwin';
   }
 
+  // fs.watch can return before any changes are reported: libuv starts the
+  // FSEvents stream on another thread, and the stream reports only changes
+  // made after it starts.
+  static isLiveOnStart(): boolean {
+    return false;
+  }
+
   constructor(
     dir: string,
     opts: Readonly<{
       ignored: ?RegExp,
-      globs: ReadonlyArray<string>,
-      dot: boolean,
+      included: ?WatcherIncludedFiles,
       ...
     }>,
   ) {
@@ -154,7 +163,7 @@ export default class NativeWatcher extends AbstractWatcher {
         return null;
       }
 
-      if (!includedByGlob(type, this.globs, this.dot, relativePath)) {
+      if (!isIncluded(type, this.included, relativePath)) {
         return null;
       }
 

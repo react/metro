@@ -63,7 +63,7 @@ export const createPathNormalizer = (
   platform: 'win32' | 'posix' = process.platform === 'win32'
     ? 'win32'
     : 'posix',
-): (string => string) =>
+): ((posixPath: string) => string) =>
   platform === 'win32'
     ? posixPath => posixPath.replace(/^\//, 'C:\\').replaceAll('/', '\\')
     : posixPath => posixPath;

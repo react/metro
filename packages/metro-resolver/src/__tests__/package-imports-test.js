@@ -167,4 +167,87 @@ describe('import subpath conditional imports resolution', () => {
       filePath: p('/root/node_modules/test-pkg/lib/foo-react-native.mjs'),
     });
   });
+
+  test.each([
+    [
+      'unmatched condition',
+      {require: './lib/foo.js'},
+      {browser: './lib/foo-browser.js'},
+    ],
+    ['empty condition object', {require: './lib/foo.js'}, {}],
+    [
+      'nested unmatched condition',
+      {require: './lib/foo.js'},
+      {require: {browser: './lib/foo-browser.js'}},
+    ],
+    [
+      'unmatched condition',
+      {default: './lib/foo.js'},
+      {browser: './lib/foo-browser.js'},
+    ],
+    ['empty condition object', {default: './lib/foo.js'}, {}],
+    [
+      'nested unmatched condition',
+      {default: './lib/foo.js'},
+      {require: {browser: './lib/foo-browser.js'}},
+    ],
+  ])(
+    'should continue parent conditions after %s to %p',
+    (_, fallback, nestedConditions) => {
+      const logWarning = jest.fn();
+      const context = {
+        ...baseContext,
+        ...createPackageAccessors({
+          [p('/root/node_modules/test-pkg/package.json')]: {
+            imports: {
+              '#foo': {
+                'react-native': nestedConditions,
+                ...fallback,
+              },
+            },
+          },
+        }),
+        unstable_conditionNames: ['react-native'],
+        unstable_logWarning: logWarning,
+      };
+
+      expect(Resolver.resolve(context, '#foo', null)).toEqual({
+        type: 'sourceFile',
+        filePath: p('/root/node_modules/test-pkg/lib/foo.js'),
+      });
+      expect(logWarning).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ['null', null, 'no match was resolved'],
+    ['invalid', 'invalid-target', 'invalid package.json configuration'],
+    ['numeric', 42, 'invalid package.json configuration'],
+    ['boolean', false, 'invalid package.json configuration'],
+    ['empty array', [], 'no match was resolved'],
+  ])(
+    'should not continue parent conditions after a %s target',
+    (_, target, warning) => {
+      const logWarning = jest.fn();
+      const context = {
+        ...baseContext,
+        ...createPackageAccessors({
+          [p('/root/node_modules/test-pkg/package.json')]: JSON.stringify({
+            imports: {
+              '#foo': {
+                'react-native': {require: target},
+                default: './lib/foo.js',
+              },
+            },
+          }),
+        }),
+        unstable_conditionNames: ['react-native'],
+        unstable_logWarning: logWarning,
+      };
+
+      expect(() => Resolver.resolve(context, '#foo', null)).toThrow();
+      expect(logWarning).toHaveBeenCalledTimes(1);
+      expect(logWarning.mock.calls[0][0]).toContain(warning);
+    },
+  );
 });

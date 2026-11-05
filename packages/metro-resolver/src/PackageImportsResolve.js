@@ -14,6 +14,10 @@ import type {ExportsLikeMap, FileResolution, ResolutionContext} from './types';
 import InvalidPackageConfigurationError from './errors/InvalidPackageConfigurationError';
 import PackageImportNotResolvedError from './errors/PackageImportNotResolvedError';
 import resolveAsset from './resolveAsset';
+import {
+  findInvalidPathSegment,
+  hasInvalidPatternMatchSegment,
+} from './utils/findInvalidPathSegment';
 import isAssetFile from './utils/isAssetFile';
 import {isSubpathDefinedInExportsLike} from './utils/isSubpathDefinedInExportsLike';
 import {matchSubpathFromExportsLike} from './utils/matchSubpathFromExportsLike';
@@ -71,6 +75,22 @@ export function resolvePackageTargetFromImports(
     normalizedMap,
     platform,
     createConfigError,
+    target => {
+      // Per Node.js PACKAGE_TARGET_RESOLVE, these are neither a path within the
+      // package nor the name of a package.
+      if (
+        target.startsWith('../') ||
+        target.startsWith('/') ||
+        URL.canParse(target) ||
+        (target.startsWith('./') &&
+          findInvalidPathSegment(target.slice(2)) != null)
+      ) {
+        throw createConfigError(
+          `The target for "${importPath}" defined in "imports" is "${target}", ` +
+            'however this value is invalid.',
+        );
+      }
+    },
   );
 
   if (target == null) {
@@ -82,12 +102,33 @@ export function resolvePackageTargetFromImports(
     });
   }
 
+  // As in Node.js, a target naming a package is selected, ending any search of
+  // an array of fallback targets. Metro does not support resolving it.
+  if (!target.startsWith('./')) {
+    throw createConfigError(
+      `The target for "${importPath}" defined in "imports" is "${target}", ` +
+        'however targets which are packages are not supported.',
+    );
+  }
+
+  if (patternMatch != null && hasInvalidPatternMatchSegment(patternMatch)) {
+    throw new PackageImportNotResolvedError({
+      importSpecifier: importPath,
+      reason:
+        `"${importPath}" matches a subpath pattern in "imports" of ` +
+        `${packagePath}, however it includes an invalid path segment.`,
+    });
+  }
+
   const filePath = path.join(
     packagePath,
     patternMatch != null ? target.replaceAll('*', patternMatch) : target,
   );
 
-  if (isAssetFile(filePath, context.assetExts)) {
+  if (
+    !filePath.endsWith(path.sep) &&
+    isAssetFile(filePath, context.assetExts)
+  ) {
     const assetResult = resolveAsset(context, filePath);
 
     if (assetResult != null) {

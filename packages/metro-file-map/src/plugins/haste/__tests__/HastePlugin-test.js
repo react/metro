@@ -19,7 +19,7 @@ let mockPathModule;
 jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
-  const p: string => string = filePath =>
+  const p: (filePath: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -82,7 +82,7 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
         ]),
         lookup: jest.fn(),
       },
-      processFile: () => {
+      getOrComputeFileData: () => {
         throw new Error('Not implemented');
       },
       pluginState: null,
@@ -110,7 +110,7 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
           lookup: jest.fn(),
         },
-        processFile: () => {
+        getOrComputeFileData: () => {
           throw new Error('Not implemented');
         },
         pluginState: null,
@@ -145,7 +145,7 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
           lookup: jest.fn(),
         },
-        processFile: () => {
+        getOrComputeFileData: () => {
           throw new Error('Not implemented');
         },
         pluginState: null,
@@ -181,37 +181,37 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
 
   describe('getModuleNameByPath', () => {
     let hasteMap: HasteMapType;
-    let lookup;
+    let getOrComputeFileData;
 
     beforeEach(async () => {
       hasteMap = new HasteMap(opts);
-      lookup = jest.fn().mockReturnValue(null);
+      getOrComputeFileData = jest.fn().mockReturnValue(null);
 
       await hasteMap.initialize({
         files: {
           fileIterator: jest.fn().mockReturnValue(INITIAL_FILES),
-          lookup,
+          lookup: jest.fn(),
         },
-        processFile: () => {
-          throw new Error('Not implemented');
-        },
+        getOrComputeFileData,
         pluginState: null,
       });
     });
 
     test('returns the correct module name', () => {
-      lookup.mockImplementation(
+      getOrComputeFileData.mockImplementation(
         filePath =>
           ({
             [p('/root/Foo.js')]: {
               exists: true,
               type: 'f',
-              pluginData: 'Foo' as ?string,
+              realPath: p('/root/Foo.js'),
+              data: 'Foo' as ?string,
             },
             [p('/root/not-haste.js')]: {
               exists: true,
               type: 'f',
-              pluginData: null as ?string,
+              realPath: p('/root/not-haste.js'),
+              data: null as ?string,
             },
           })[filePath] ?? {exists: false},
       );

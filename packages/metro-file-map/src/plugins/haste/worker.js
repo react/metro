@@ -21,7 +21,7 @@ import type {MetadataWorker, WorkerMessage, V8Serializable} from '../../flow-typ
 
 const PACKAGE_JSON = path.sep + 'package.json';
 
-module.exports = class Worker /*:: implements MetadataWorker */ {
+class Worker /*:: implements MetadataWorker */ {
   /*:: readonly  */ #hasteImpl /*: ?Readonly<{getHasteName: string => ?string}>  */ =
     null;
 
@@ -63,4 +63,6 @@ module.exports = class Worker /*:: implements MetadataWorker */ {
     }
     return hasteName;
   }
-};
+}
+
+module.exports = Worker;

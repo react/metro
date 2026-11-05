@@ -10,7 +10,7 @@
 
 import type {Node} from '@babel/types';
 
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import nullthrows from 'nullthrows';
 
 /**

@@ -27,6 +27,7 @@ import {posixToSystemPath as p} from 'metro-resolver/private/__tests__/utils';
 import MockRequest from 'mock-req';
 // $FlowFixMe[untyped-import]
 import MockResponse from 'mock-res';
+import nullthrows from 'nullthrows';
 
 const {
   getDefaultConfig: {getDefaultValues},
@@ -61,6 +62,7 @@ describe('processRequest', () => {
   let buildGraph;
   let getDelta;
   let getDependencyGraph;
+  let getDynamicRoots;
   let getTransformFn;
   let getResolveDependencyFn;
   let getAsset;
@@ -110,6 +112,10 @@ describe('processRequest', () => {
     jest
       .spyOn(Bundler.prototype, 'getDependencyGraph')
       .mockImplementation(getDependencyGraph);
+    getDynamicRoots = jest.fn().mockReturnValue([]);
+    jest
+      .spyOn(Bundler.prototype, 'getDynamicRoots')
+      .mockImplementation(getDynamicRoots);
 
     fs = mockFs;
 
@@ -797,6 +803,31 @@ describe('processRequest', () => {
     });
   });
 
+  test('marks the url-server source path of a virtual module', async () => {
+    const buildGraphImpl = nullthrows(buildGraph.getMockImplementation());
+    buildGraph.mockImplementationOnce(async (...args) => {
+      const graph = await buildGraphImpl(...args);
+      // A virtual module at the path of a real one.
+      dependencies.set('virtual:' + p('/root/foo.js'), {
+        ...nullthrows(dependencies.get(p('/root/foo.js'))),
+        path: 'virtual:' + p('/root/foo.js'),
+        getSource: () => Buffer.from('code-virtual'),
+      });
+      return graph;
+    });
+
+    const response = await makeRequest('mybundle.map?sourcePaths=url-server');
+
+    expect(
+      response._getJSON().sections.map(section => section.map.sources),
+    ).toEqual([
+      ['/require-js'],
+      ['/[metro-project]/mybundle.js'],
+      ['/[metro-project]/foo.js'],
+      ['/[metro-project]/foo.js?virtual=true'],
+    ]);
+  });
+
   test('passes in the unstable_transformProfile param', async () => {
     await makeRequest('index.bundle?unstable_transformProfile=hermes-stable');
 
@@ -910,7 +941,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -928,7 +959,7 @@ describe('processRequest', () => {
       expect(response._getString()).toBe('i am image');
 
       expect(getAsset).toBeCalledWith(
-        p('./imgs/a.png'),
+        p('/root/imgs/a.png'),
         p('/root'),
         [p('/root')],
         'ios',
@@ -1091,6 +1122,13 @@ describe('processRequest', () => {
       const response = await makeRequest('/[metro-project]/logo.png');
 
       expect(response.getHeader('content-type')).toBe('image/png');
+    });
+
+    test('does not serve a file for a virtual module at its path', async () => {
+      // The request is passed on to the next handler, with no error.
+      await expect(
+        makeRequest('/[metro-project]/foo.js?virtual=true'),
+      ).rejects.toBeUndefined();
     });
   });
 
@@ -1485,6 +1523,54 @@ describe('processRequest', () => {
         expect(result.codeFrame).toBeNull();
       });
 
+      test.each([
+        ['/[metro-project]/mybundle.js', '/root/mybundle.js'],
+        ['/[metro-project]/My%20App.js', '/root/My App.js'],
+        ['/%5Bmetro-project%5D/My%20App.js', '/root/My App.js'],
+        ['/[metro-project]/My App.js', '/root/My App.js'],
+        ['/[metro-project]/100%.js', '/root/100%.js'],
+      ])(
+        'should return codeFrame when file is the virtual path %s',
+        async (file, filePath) => {
+          fs.writeFileSync(p(filePath), 'this\nis\nfake source');
+
+          const response = await makeRequest('/symbolicate', {
+            headers: {'content-type': 'application/json'},
+            data: JSON.stringify({
+              stack: [{file, lineNumber: 2, column: 0, methodName: 'test'}],
+            }),
+          });
+
+          const result = response._getJSON();
+          expect(result.stack[0].file).toBe(file);
+          expect(result.codeFrame).not.toBeNull();
+          expect(result.codeFrame.fileName).toBe(file);
+          expect(result.codeFrame.content).toEqual(expect.any(String));
+        },
+      );
+
+      test('should return codeFrame when file is a relative path (resolved against projectRoot)', async () => {
+        const response = await makeRequest('/symbolicate', {
+          headers: {'content-type': 'application/json'},
+          data: JSON.stringify({
+            stack: [
+              {
+                file: 'mybundle.js',
+                lineNumber: 2,
+                column: 0,
+                methodName: 'test',
+              },
+            ],
+          }),
+        });
+
+        const result = response._getJSON();
+        expect(result.stack[0].file).toBe('mybundle.js');
+        expect(result.codeFrame).not.toBeNull();
+        expect(result.codeFrame.fileName).toBe('mybundle.js');
+        expect(result.codeFrame.content).toEqual(expect.any(String));
+      });
+
       // TODO: This probably should restore the *original* file before rewrite
       // or normalisation.
       test('should leave original file and position when cannot symbolicate (after normalisation and rewriting?)', async () => {
@@ -1587,7 +1673,6 @@ describe('processRequest', () => {
         expect.anything(),
         expect.objectContaining({
           projectRoot: p('/root'),
-          watchFolders: [p('/root')],
         }),
       );
     });
@@ -1614,67 +1699,6 @@ describe('processRequest', () => {
       );
     });
 
-    test('resolves [metro-watchFolders]/N/ prefix against the Nth watch folder', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/1/expo-router/entry',
-        ),
-      ).toEqual({
-        rootDir: p('/external/packages'),
-        filePath: p('./expo-router/entry'),
-      });
-    });
-
-    test('resolves [metro-watchFolders]/0/ prefix against the first watch folder', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/0/app/index',
-        ),
-      ).toEqual({
-        rootDir: p('/project'),
-        filePath: p('./app/index'),
-      });
-    });
-
-    test('resolves [metro-project]/ prefix against projectRoot', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-project]/src/App',
-        ),
-      ).toEqual({
-        rootDir: p('/project'),
-        filePath: p('./src/App'),
-      });
-    });
-
-    test('returns null for paths without a recognized prefix', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix('./mybundle'),
-      ).toBeNull();
-    });
-
-    test('returns null for out-of-bounds watchFolder index', () => {
-      expect(
-        watchFolderServer._resolveWatchFolderPrefix(
-          './[metro-watchFolders]/99/mybundle',
-        ),
-      ).toBeNull();
-    });
-
-    test('_getEntryPointAbsolutePath resolves prefixed entry against the corresponding watch folder', () => {
-      expect(
-        watchFolderServer._getEntryPointAbsolutePath(
-          './[metro-watchFolders]/1/expo-router/entry',
-        ),
-      ).toBe(p('/external/packages/expo-router/entry'));
-    });
-
-    test('_getEntryPointAbsolutePath resolves non-prefixed entry against server root', () => {
-      expect(watchFolderServer._getEntryPointAbsolutePath('./mybundle')).toBe(
-        p('/project/mybundle'),
-      );
-    });
-
     test.each([
       [p('/project/imgs/a.png')],
       [p('/project/nested/deep/b.png')],
@@ -1690,13 +1714,12 @@ describe('processRequest', () => {
         ]);
 
         // Mirrors how _processSingleAssetRequest resolves an incoming URL.
-        const resolved = watchFolderServer._resolveWatchFolderPrefix(
-          './' + urlPath,
-        );
         expect(
           path.resolve(
-            resolved?.rootDir ?? p('/project'),
-            resolved?.filePath ?? urlPath,
+            p('/project'),
+            watchFolderServer._rootUrlMap.filePathOfUrlDecodedPathname(
+              urlPath,
+            ) ?? urlPath,
           ),
         ).toBe(absolutePath);
       },

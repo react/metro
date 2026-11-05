@@ -57,6 +57,11 @@ export default class FallbackWatcher extends AbstractWatcher {
   readonly #watched: {[key: string]: FSWatcher, __proto__: null} =
     Object.create(null);
 
+  // Not live on darwin, though FallbackWatcher isn't currently used there.
+  static isLiveOnStart(): boolean {
+    return platform !== 'darwin';
+  }
+
   async startWatching(): Promise<void> {
     this.#watchdir(this.root);
 
@@ -106,8 +111,7 @@ export default class FallbackWatcher extends AbstractWatcher {
     const relativePath = path.relative(this.root, filepath);
     if (
       this.doIgnore(relativePath) ||
-      (type === 'f' &&
-        !common.includedByGlob('f', this.globs, this.dot, relativePath))
+      (type === 'f' && !common.isIncluded('f', this.included, relativePath))
     ) {
       return false;
     }
@@ -186,9 +190,21 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
     let watcher: FSWatcher;
     try {
-      watcher = fs.watch(dir, {persistent: true}, (event, filename) =>
-        this.#normalizeChange(dir, event, filename),
-      );
+      watcher = fs.watch(dir, {persistent: true}, (event, filename) => {
+        // libuv on Windows reports a deleted watched directory to its own
+        // handle as a rename naming the directory's absolute path, and before
+        // libuv 1.53 repeats that report until the handle is closed. If the
+        // directory is recreated first, the open handle also stops it from
+        // being watched again. Linux and macOS name the directory by its
+        // basename instead, so this branch is Windows-only.
+        if (filename != null && path.isAbsolute(filename)) {
+          this.#reconcileWatchedDirectory(dir, watcher).catch(error =>
+            this.emitError(error),
+          );
+          return;
+        }
+        this.#normalizeChange(dir, event, filename);
+      });
     } catch (error) {
       // A directory we cannot watch is still worth crawling, so report the
       // error and carry on rather than losing the subtree under it.
@@ -224,6 +240,38 @@ export default class FallbackWatcher extends AbstractWatcher {
         delete this.#watched[dir];
       });
     }
+  }
+
+  /**
+   * Stop watching a directory and every directory beneath it.
+   */
+  async #stopWatchingTree(dirpath: string): Promise<void> {
+    const prefix = dirpath + path.sep;
+    const nested = Object.keys(this.#watched).filter(watchedDir =>
+      watchedDir.startsWith(prefix),
+    );
+    await Promise.all(
+      [dirpath, ...nested].map(watchedDir => this.#stopWatching(watchedDir)),
+    );
+  }
+
+  /**
+   * A watched directory reported its own path, so it was deleted or replaced:
+   * close its handles and process it as its parent's rename event would.
+   */
+  async #reconcileWatchedDirectory(
+    dir: string,
+    watcher: FSWatcher,
+  ): Promise<void> {
+    if (this.#watched[dir] !== watcher) {
+      return;
+    }
+    if (dir === this.root) {
+      await this.#stopWatching(dir);
+      return;
+    }
+    await this.#stopWatchingTree(dir);
+    await this.#processChange(path.dirname(dir), 'rename', path.basename(dir));
   }
 
   /**
@@ -298,7 +346,7 @@ export default class FallbackWatcher extends AbstractWatcher {
 
         if (
           this.doIgnore(relativePath) ||
-          !common.includedByGlob('d', this.globs, this.dot, relativePath)
+          !common.isIncluded('d', this.included, relativePath)
         ) {
           return;
         }
@@ -388,7 +436,14 @@ export default class FallbackWatcher extends AbstractWatcher {
       if (registered) {
         this.#emitEvent({event: DELETE_EVENT, relativePath});
       }
-      await this.#stopWatching(fullPath);
+      // Close every handle under a deleted directory. Left open, a handle stops
+      // its path from being watched again once it is recreated. On Linux it
+      // also follows the directory if it was moved (as npm moves a package
+      // aside to update it), so it goes on watching the old copy. macOS
+      // watches by path, so there an open handle is merely redundant.
+      if (removedFiles.length > 0 || this.#watched[fullPath]) {
+        await this.#stopWatchingTree(fullPath);
+      }
     }
   }
 
@@ -444,10 +499,10 @@ function isIgnorableFileError(error: Error | {code: string}) {
  */
 async function recReaddir(
   root: string,
-  dirCallback: (string, Stats) => void,
-  fileCallback: (string, Stats) => void,
-  symlinkCallback: (string, Stats) => void,
-  errorCallback: Error => void,
+  dirCallback: (dirPath: string, stats: Stats) => void,
+  fileCallback: (filePath: string, stats: Stats) => void,
+  symlinkCallback: (symlinkPath: string, stats: Stats) => void,
+  errorCallback: (error: Error) => void,
   ignored: ?RegExp,
 ): Promise<void> {
   const pending = [root];

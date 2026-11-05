@@ -41,7 +41,7 @@ type ProcessFileRequest = Readonly<{
 }>;
 
 interface AsyncWorker {
-  readonly processFile: WorkerMessage => Promise<WorkerMetadata>;
+  readonly processFile: (message: WorkerMessage) => Promise<WorkerMetadata>;
   readonly end: () => Promise<void>;
 }
 
@@ -157,8 +157,8 @@ export class FileProcessor {
   /**
    * Synchronously run one plugin's worker on a regular file and store the
    * result as that plugin's data. This is how a lazy plugin's files are
-   * processed, so neither its filter nor the exclusion of node_modules
-   * applies - the plugin asked for this file.
+   * processed, so its filter does not apply - the plugin asked for this
+   * file.
    */
   processFileForPlugin(
     absolutePath: string,
@@ -214,23 +214,6 @@ export class FileProcessor {
       return null;
     }
 
-    // Use a cheaper worker configuration for node_modules files, because
-    // they may never be Haste modules or packages.
-    //
-    // Note that we'd only expect node_modules files to reach this point if
-    // retainAllFiles is true, or they're touched during watch mode.
-    if (isNodeModules) {
-      if (computeSha1) {
-        return {
-          computeSha1: true,
-          filePath: this.#rootPathUtils.normalToAbsolute(normalPath),
-          maybeReturnContent,
-          pluginsToRun,
-        };
-      }
-      return null;
-    }
-
     return {
       computeSha1,
       filePath: this.#rootPathUtils.normalToAbsolute(normalPath),
@@ -254,7 +237,7 @@ export class FileProcessor {
     debug('Creating worker farm of %d worker threads', numWorkers);
     this.#perfLogger?.point('initWorkers_start');
     const jestWorker = new JestWorker<{
-      processFile: WorkerMessage => Promise<WorkerMetadata>,
+      processFile: (message: WorkerMessage) => Promise<WorkerMetadata>,
     }>(workerPath, {
       exposedMethods: ['processFile'],
       maxRetries: 3,
@@ -310,6 +293,7 @@ function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {
     mixedError.message == null ||
     mixedError.stack == null
   ) {
+    // $FlowFixMe[incompatible-type]
     const error = new Error(mixedError);
     error.stack = ''; // Remove stack for stack-less errors.
     return error;

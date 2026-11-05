@@ -24,13 +24,13 @@ const ROOT = resolve('/', 'project');
 
 type Deferred<T> = {
   promise: Promise<T>,
-  resolve: T => void,
-  reject: Error => void,
+  resolve: (value: T) => void,
+  reject: (error: Error) => void,
 };
 
 function deferred<T>(): Deferred<T> {
-  let resolve: T => void = () => {};
-  let reject: Error => void = () => {};
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: Error) => void = () => {};
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
@@ -78,7 +78,10 @@ describe('NativeWatcher', () => {
       return stat.promise;
     });
 
-    watcher = new NativeWatcher(ROOT, {dot: true, globs: [], ignored: null});
+    watcher = new NativeWatcher(ROOT, {
+      included: null,
+      ignored: null,
+    });
     events = [];
     watcher.onFileEvent(event => {
       events.push(event);

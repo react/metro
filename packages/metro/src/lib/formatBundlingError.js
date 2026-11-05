@@ -43,10 +43,7 @@ export default function formatBundlingError(
       `${error.fromModulePath}\' tries to require \'${he.hasteName}\', but ` +
       'there are several files providing this module. You can delete or ' +
       'fix them: \n\n' +
-      Object.keys(he.duplicatesSet)
-        .sort()
-        .map(dupFilePath => `${dupFilePath}`)
-        .join('\n\n');
+      [...he.duplicatesSet.keys()].sort().join('\n\n');
 
     return {
       type: 'AmbiguousModuleResolutionError',
@@ -69,6 +66,7 @@ export default function formatBundlingError(
       errors: [
         {
           description: error.message,
+          // $FlowFixMe[prop-missing]
           filename: error.filename,
           lineNumber: error.lineNumber,
         },

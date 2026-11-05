@@ -68,6 +68,7 @@ export class DependencyGraph extends EventEmitter {
   end(): Promise<void>;
   getAllFiles(): Array<string>;
   getDependencies(filePath: string): Array<string>;
+  getDynamicRoots(): ReadonlyArray<DynamicRoot>;
   getHasteName(filePath: string): string;
   getOrComputeSha1(mixedPath: string): Promise<{content?: Buffer | undefined; sha1: string}>;
   getWatcher(): EventEmitter;
@@ -279,6 +280,9 @@ export type RunServerOptions = Readonly<{
   secureCert?: string | undefined;
   secureKey?: string | undefined;
   unstable_extraMiddleware?: ReadonlyArray<HandleFunction> | undefined;
+  unstable_middleware?: ReadonlyArray<ServerMiddleware> | undefined;
+  unstable_onServerCreated?: ((metroServer: MetroServer) => void) | undefined;
+  unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware> | undefined;
   waitForBundler?: boolean | undefined;
   watch?: boolean | undefined;
   websocketEndpoints?: Readonly<{[path: string]: Server_4}> | undefined;
@@ -298,6 +302,7 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean;
   processModuleFilter: (module: Module) => boolean;
   projectRoot: string;
+  reservedString: string;
   runBeforeMainModule: ReadonlyArray<string>;
   runModule: boolean;
   serverRoot: string;

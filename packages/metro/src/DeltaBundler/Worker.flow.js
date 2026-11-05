@@ -16,7 +16,7 @@ import type {
   JsTransformOptions,
 } from 'metro-transform-worker';
 
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,12 +25,12 @@ export type {JsTransformOptions as TransformOptions} from 'metro-transform-worke
 
 type TransformerInterface = {
   transform(
-    JsTransformerConfig,
-    string,
-    string,
-    Buffer,
-    JsTransformOptions,
-    ?string,
+    config: JsTransformerConfig,
+    projectRoot: string,
+    projectRelativePath: string,
+    data: Buffer,
+    options: JsTransformOptions,
+    assetUrlPath: ?string,
   ): Promise<TransformResult<>>,
 };
 
@@ -46,6 +46,12 @@ type Data = Readonly<{
   transformFileStartLogEntry: LogEntry,
   transformFileEndLogEntry: LogEntry,
 }>;
+
+// jest-worker assigns the ID of the worker to JEST_WORKER_ID in a worker thread,
+// regardless of the `env` it is given. Transform output must not depend on the
+// worker that produced it, and a Babel plugin may inline any environment
+// variable.
+delete process.env.JEST_WORKER_ID;
 
 /**
  * When the `Buffer` is sent over the worker thread it gets serialized into a JSON object.

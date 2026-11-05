@@ -17,7 +17,7 @@ jest.mock('node:path', () => mockPathModule);
 describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
   // Convenience function to write paths with posix separators but convert them
   // to system separators
-  const p: string => string = filePath =>
+  const p: (filePath: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -324,6 +324,23 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
         (readlinkResult, expected) => {
           expect(
             pathUtils.resolveSymlinkToNormal('link', readlinkResult),
+          ).toEqual(expected);
+        },
+      );
+
+      test.each([
+        ['..\\..\\..\\D:\\store\\a\\link', '..\\b', '..\\..\\..\\D:\\store\\b'],
+        [
+          '..\\..\\..\\D:\\store\\.bun\\rn@1\\node_modules\\invariant',
+          '..\\..\\invariant@2\\node_modules\\invariant',
+          '..\\..\\..\\D:\\store\\.bun\\invariant@2\\node_modules\\invariant',
+        ],
+        ['..\\..\\..\\D:\\link', 'target', '..\\..\\..\\D:\\target'],
+      ])(
+        'resolves relative target of cross-drive symlink (%s -> %s) to %s',
+        (symlinkPath, readlinkResult, expected) => {
+          expect(
+            pathUtils.resolveSymlinkToNormal(symlinkPath, readlinkResult),
           ).toEqual(expected);
         },
       );

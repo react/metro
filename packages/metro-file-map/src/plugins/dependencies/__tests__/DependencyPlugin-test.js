@@ -14,13 +14,11 @@ import path from 'node:path';
 
 describe('DependencyPlugin', () => {
   let plugin: DependencyPlugin;
-  let mockFiles;
+  let mockGetOrComputeFileData;
 
   beforeEach(() => {
     jest.resetModules();
-    mockFiles = {
-      lookup: jest.fn(),
-    };
+    mockGetOrComputeFileData = jest.fn();
   });
 
   describe('constructor', () => {
@@ -234,64 +232,77 @@ describe('DependencyPlugin', () => {
     });
 
     test('returns null for non-existent file', async () => {
-      mockFiles.lookup.mockReturnValue({
+      mockGetOrComputeFileData.mockReturnValue({
         exists: false,
       });
 
-      // $FlowFixMe[unclear-type]
-      await plugin.initialize({files: mockFiles} as any);
+      await plugin.initialize({
+        getOrComputeFileData: mockGetOrComputeFileData,
+        // $FlowFixMe[unclear-type] - Only the init options the plugin reads
+      } as any);
 
       expect(plugin.getDependencies('nonexistent.js')).toBeNull();
     });
 
     test('returns null for directory', async () => {
-      mockFiles.lookup.mockReturnValue({
+      mockGetOrComputeFileData.mockReturnValue({
         exists: true,
         type: 'd',
       });
 
-      // $FlowFixMe[unclear-type]
-      await plugin.initialize({files: mockFiles} as any);
+      await plugin.initialize({
+        getOrComputeFileData: mockGetOrComputeFileData,
+        // $FlowFixMe[unclear-type] - Only the init options the plugin reads
+      } as any);
 
       expect(plugin.getDependencies('src')).toBeNull();
     });
 
     test('returns dependencies from plugin data', async () => {
-      mockFiles.lookup.mockReturnValue({
+      mockGetOrComputeFileData.mockReturnValue({
         exists: true,
         type: 'f',
-        pluginData: ['React', 'lodash', './utils'],
+        realPath: 'src/index.js',
+        data: ['React', 'lodash', './utils'],
       });
 
-      // $FlowFixMe[unclear-type]
-      await plugin.initialize({files: mockFiles} as any);
+      await plugin.initialize({
+        getOrComputeFileData: mockGetOrComputeFileData,
+        // $FlowFixMe[unclear-type] - Only the init options the plugin reads
+      } as any);
 
       const deps = plugin.getDependencies('src/Component.js');
       expect(deps).toEqual(['React', 'lodash', './utils']);
     });
 
     test('returns [] when file exists but plugin data is not set', async () => {
-      mockFiles.lookup.mockReturnValue({
+      mockGetOrComputeFileData.mockReturnValue({
         exists: true,
         type: 'f',
-        pluginData: null,
+        realPath: 'src/index.js',
+        data: null,
       });
 
-      // $FlowFixMe[unclear-type]
-      await plugin.initialize({files: mockFiles} as any);
+      await plugin.initialize({
+        getOrComputeFileData: mockGetOrComputeFileData,
+        // $FlowFixMe[unclear-type] - Only the init options the plugin reads
+      } as any);
 
       expect(plugin.getDependencies('src/index.js')).toEqual([]);
     });
 
     test('handles empty dependencies array', async () => {
-      mockFiles.lookup.mockReturnValue({
+      mockGetOrComputeFileData.mockReturnValue({
         exists: true,
         type: 'f',
-        pluginData: [],
+        realPath: 'src/index.js',
+        data: [],
       });
 
-      // $FlowFixMe[unclear-type]
-      await plugin.initialize({files: mockFiles} as any);
+      await plugin.initialize({
+        getOrComputeFileData: mockGetOrComputeFileData,
+        // $FlowFixMe[unclear-type] - Only the init options the plugin reads
+      } as any);
 
       expect(plugin.getDependencies('src/index.js')).toEqual([]);
     });

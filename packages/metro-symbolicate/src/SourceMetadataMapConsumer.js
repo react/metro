@@ -35,8 +35,8 @@ type FunctionMapping = {
   ...
 };
 type SourceNameNormalizer = (
-  string,
-  {readonly sourceRoot?: ?string, ...},
+  sourceInput: string,
+  map: {readonly sourceRoot?: ?string, ...},
 ) => string;
 type MetadataMap = {[source: string]: ?FBSourceMetadata, ...};
 

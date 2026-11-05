@@ -137,6 +137,7 @@ test('should generate a very simple bundle', () => {
         modulesOnly: false,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: [],
         runModule: true,
         serverRoot: '/root',
@@ -191,6 +192,7 @@ test('should generate a bundle with correct non ascii characters parsing', () =>
         modulesOnly: false,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: [],
         runModule: true,
         serverRoot: '/root',
@@ -250,6 +252,7 @@ test('should add runBeforeMainModule statements if found in the graph', () => {
         modulesOnly: false,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: ['/root/bar', 'non-existent'],
         runModule: true,
         serverRoot: '/root',
@@ -290,6 +293,7 @@ test('should handle numeric module ids', () => {
         modulesOnly: false,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: ['/root/bar', 'non-existent'],
         runModule: true,
         serverRoot: '/root',
@@ -339,6 +343,7 @@ test('outputs custom runModule statements', () => {
         modulesOnly: false,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: ['/root/bar'],
         runModule: true,
         serverRoot: '/root',
@@ -378,6 +383,7 @@ test('should add an inline source map to a very simple bundle', () => {
       modulesOnly: false,
       processModuleFilter: () => true,
       projectRoot: '/root',
+      reservedString: '_$$_METRO_',
       runBeforeMainModule: [],
       runModule: true,
       serverRoot: '/root',
@@ -424,6 +430,50 @@ test('should add an inline source map to a very simple bundle', () => {
   });
 });
 
+test('applies processModuleFilter to the inline source map', () => {
+  const bundle = baseJSBundle(
+    '/root/foo',
+    [polyfill],
+    {
+      dependencies: new Map([
+        ['/root/foo', fooModule],
+        ['/root/bar', barModule],
+      ]),
+      entryPoints: new Set(['/root/foo']),
+      transformOptions,
+    },
+    {
+      asyncRequireModulePath: '',
+      createModuleId: createModuleIdFactory(),
+      dev: true,
+      getRunModuleStatement,
+      globalPrefix: '',
+      includeAsyncPaths: false,
+      inlineSourceMap: true,
+      modulesOnly: false,
+      processModuleFilter: module => module.path !== '/polyfill',
+      projectRoot: '/root',
+      reservedString: '_$$_METRO_',
+      runBeforeMainModule: [],
+      runModule: true,
+      serverRoot: '/root',
+      shouldAddToIgnoreList: () => false,
+      sourceMapUrl: null,
+      sourceUrl: null,
+      getSourceUrl: null,
+    },
+  );
+  // Without the polyfill, foo and bar are the first two lines of the bundle.
+  const base64 = bundle.post.slice(bundle.post.lastIndexOf('base64') + 7);
+  const map = JSON.parse(Buffer.from(base64, 'base64').toString());
+  expect(
+    map.sections.map(section => [section.offset.line, section.map.sources[0]]),
+  ).toEqual([
+    [0, '/root/foo'],
+    [1, '/root/bar'],
+  ]);
+});
+
 test('emits x_google_ignoreList based on shouldAddToIgnoreList', () => {
   const bundle = baseJSBundle(
     '/root/foo',
@@ -448,6 +498,7 @@ test('emits x_google_ignoreList based on shouldAddToIgnoreList', () => {
       modulesOnly: false,
       processModuleFilter: () => true,
       projectRoot: '/root',
+      reservedString: '_$$_METRO_',
       runBeforeMainModule: [],
       runModule: true,
       serverRoot: '/root',
@@ -522,6 +573,7 @@ test('does not add polyfills when `modulesOnly` is used', () => {
         modulesOnly: true,
         processModuleFilter: () => true,
         projectRoot: '/root',
+        reservedString: '_$$_METRO_',
         runBeforeMainModule: [],
         runModule: true,
         serverRoot: '/root',
@@ -589,6 +641,7 @@ test('inlines module ids when unstable_inlineDependencyMap is set', () => {
       modulesOnly: false,
       processModuleFilter: () => true,
       projectRoot: '/root',
+      reservedString: '_$$_METRO_',
       runBeforeMainModule: [],
       runModule: true,
       serverRoot: '/root',

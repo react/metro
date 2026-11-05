@@ -27,8 +27,7 @@ module.exports = {
   },
   transformer: {
     assetRegistryPath: path.join(ROOT_PATH, 'AssetRegistry'),
-    asyncRequireModulePath:
-      require.resolve('metro-runtime/src/modules/asyncRequire'),
+    asyncRequireModulePath: 'metro:runtime/modules/asyncRequire',
     babelTransformerPath:
       require.resolve('@react-native/metro-babel-transformer'),
     enableBabelRCLookup: false,

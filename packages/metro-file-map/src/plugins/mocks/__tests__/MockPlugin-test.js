@@ -15,7 +15,7 @@ let mockPathModule;
 jest.mock('node:path', () => mockPathModule);
 
 describe.each([['win32'], ['posix']])('MockPlugin on %s', platform => {
-  const p: string => string = filePath =>
+  const p: (filePath: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -136,7 +136,7 @@ Duplicate manual mock found for \`foo\`:
           throw new Error('should not be used');
         },
       },
-      processFile: () => {
+      getOrComputeFileData: () => {
         throw new Error('Not implemented');
       },
       pluginState: {

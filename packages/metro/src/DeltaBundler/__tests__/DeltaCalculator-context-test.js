@@ -114,6 +114,7 @@ describe('DeltaCalculator + require.context', () => {
         output: [],
         path: p('/bundle'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });
       this.dependencies.set(p('/ctx?ctx=xxx'), {
@@ -138,6 +139,7 @@ describe('DeltaCalculator + require.context', () => {
         output: [],
         path: p('/ctx?ctx=xxx'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });
       this.dependencies.set(p('/ctx/foo'), {
@@ -146,6 +148,7 @@ describe('DeltaCalculator + require.context', () => {
         output: [],
         path: p('/ctx/foo'),
         // $FlowFixMe[prop-missing]
+        // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });
 

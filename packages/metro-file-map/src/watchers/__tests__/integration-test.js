@@ -69,8 +69,11 @@ describe.each(Object.keys(WATCHERS))(
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const opts: WatcherOptions = {
-        dot: true,
-        globs: ['**/package.json', '**/*.js', '**/cookie-*'],
+        included: {
+          extensions: new Set(['js']),
+          basenames: new Set(['package.json']),
+          basenamePrefixes: ['cookie-'],
+        },
         // We need to ignore `.watchmanconfig` to keep these tests stable.
         // Even though we write it before initialising watchers, OS-level
         // delays/debouncing(?) can mean the write is *sometimes* reported by

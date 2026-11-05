@@ -10,8 +10,8 @@
  */
 
 type MetroRequire = {
-  (number): unknown,
-  importAll: <T>(number) => T,
+  (moduleID: number): unknown,
+  importAll: <T>(moduleID: number) => T,
   ...
 };
 
@@ -31,6 +31,24 @@ type ReadonlyJsonData =
 type DependencyMapPaths = ?Readonly<{
   [moduleID: number | string]: ReadonlyJsonData,
 }>;
+
+type AsyncRequire = {
+  <T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): Promise<T>,
+  unstable_importMaybeSync<T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+  ): Promise<T> | T,
+  prefetch(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): void,
+  ...
+};
 
 declare var __METRO_GLOBAL_PREFIX__: string;
 
@@ -97,4 +115,5 @@ asyncRequire.prefetch = function (
   );
 };
 
-module.exports = asyncRequire;
+// The explicit type carries the statics through to generated type definitions.
+module.exports = asyncRequire as AsyncRequire;
