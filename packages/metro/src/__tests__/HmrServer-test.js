@@ -95,14 +95,15 @@ describe('HmrServer', () => {
     jest
       .spyOn(deltaBundlerMock, 'listen')
       .mockImplementation((graph, callback) => {
-        changeEventSource.on('change', (...args) => {
+        const listener = (...args: Array<unknown>) => {
           const promise = callback(...args);
           changeHandlerPromises.add(promise);
           return promise;
-        });
+        };
+        changeEventSource.on('change', listener);
 
         return () => {
-          changeEventSource.removeListener('change', callback);
+          changeEventSource.removeListener('change', listener);
         };
       });
 
@@ -746,6 +747,89 @@ describe('HmrServer', () => {
         type: 'update-done',
       },
     ]);
+  });
+  test('should stop listening once the last client of a group disconnects', async () => {
+    const sendMessage1 = jest.fn();
+    const sendMessage2 = jest.fn();
+    const client1 = await connect(
+      '/hot?bundleEntry=EntryPoint.js&platform=ios',
+      sendMessage1,
+    );
+    const client2 = await connect(
+      '/hot?bundleEntry=EntryPoint.js&platform=ios',
+      sendMessage2,
+    );
+    sendMessage1.mockReset();
+    sendMessage2.mockReset();
+
+    hmrServer.onClientDisconnect(client1);
+    await emitChangeEvent();
+    expect(sendMessage1).not.toHaveBeenCalled();
+    expect(sendMessage2).toHaveBeenCalled();
+
+    hmrServer.onClientDisconnect(client2);
+    updateGraphMock.mockClear();
+    await emitChangeEvent();
+    expect(updateGraphMock).not.toHaveBeenCalled();
+  });
+
+  test('should not revive a group whose last client disconnected during an update', async () => {
+    const client1 = await connect(
+      '/hot?bundleEntry=EntryPoint.js&platform=ios',
+    );
+    expect(deltaBundlerMock.listen).toHaveBeenCalledTimes(1);
+
+    let resolveUpdate: (result: unknown) => void = () => {};
+    const updateStarted = new Promise<void>(started => {
+      updateGraphMock.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            resolveUpdate = resolve;
+            started();
+          }),
+      );
+    });
+    jest.useFakeTimers();
+    changeEventSource.emit('change');
+    jest.runAllTimers();
+    jest.useRealTimers();
+    await updateStarted;
+
+    hmrServer.onClientDisconnect(client1);
+    resolveUpdate({
+      revision: {id: 'rev1', graph: mockedGraph},
+      delta: {added: new Map(), modified: new Map(), deleted: new Set()},
+    });
+    await waitForAllChangeHandlers();
+
+    // A client reconnecting at the new revision gets a new, listening group.
+    getRevisionByGraphIdMock.mockReturnValue(
+      Promise.resolve({graph: mockedGraph, id: 'rev1'}),
+    );
+    getRevisionMock.mockReturnValue(
+      Promise.resolve({graph: mockedGraph, id: 'rev1'}),
+    );
+    updateGraphMock.mockResolvedValue({
+      revision: {id: 'rev1', graph: mockedGraph},
+      delta: {added: new Map(), modified: new Map(), deleted: new Set()},
+    });
+    const sendMessage2 = jest.fn();
+    await connect('/hot?bundleEntry=EntryPoint.js&platform=ios', sendMessage2);
+    expect(deltaBundlerMock.listen).toHaveBeenCalledTimes(2);
+
+    sendMessage2.mockReset();
+    updateGraphMock.mockResolvedValue({
+      revision: {id: 'rev2', graph: mockedGraph},
+      delta: {
+        added: new Map(),
+        modified: new Map([[hiModule.path, hiModule]]),
+        deleted: new Set(),
+      },
+    });
+    await emitChangeEvent();
+    expect(
+      sendMessage2.mock.calls.map(call => JSON.parse(call[0]).type),
+    ).toEqual(['update-start', 'update', 'update-done']);
   });
 });
 

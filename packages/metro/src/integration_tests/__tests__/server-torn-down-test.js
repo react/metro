@@ -10,7 +10,6 @@
  */
 
 const Metro = require('../../..');
-// $FlowFixMe[cannot-resolve-module] - Untyped module
 const asyncHooks = require('node:async_hooks');
 
 jest.useRealTimers();
