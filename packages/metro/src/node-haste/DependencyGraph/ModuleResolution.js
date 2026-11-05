@@ -28,7 +28,6 @@ import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
-import createDefaultContext from 'metro-resolver/private/createDefaultContext';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -130,39 +129,37 @@ export class ModuleResolver {
 
     try {
       const result = Resolver.resolve(
-        createDefaultContext(
-          {
-            allowHaste,
-            assetExts,
-            customResolverOptions: resolverOptions.customResolverOptions ?? {},
-            dev: resolverOptions.dev,
-            disableHierarchicalLookup,
-            extraNodeModules,
-            fileSystemLookup,
-            getPackage,
-            getPackageForModule,
-            isESMImport: dependency.data.isESMImport,
-            mainFields,
-            nodeModulesPaths,
-            originModulePath,
-            preferNativePlatform,
-            resolveAsset,
-            resolveHasteModule: (name: string) =>
-              this._options.getHasteModulePath(name, platform),
-            resolveHastePackage: (name: string) =>
-              this._options.getHastePackagePath(name, platform),
-            resolveRequest,
-            schemeResolvers,
-            sourceExts,
-            unstable_applyBrowserSpecAfterExports,
-            unstable_conditionNames,
-            unstable_conditionsByPlatform,
-            unstable_enablePackageExports,
-            unstable_resolveExportsFromPackageRoot,
-            unstable_logWarning: this._logWarning,
-          },
+        {
+          allowHaste,
+          assetExts,
+          customResolverOptions: resolverOptions.customResolverOptions ?? {},
           dependency,
-        ),
+          dev: resolverOptions.dev,
+          disableHierarchicalLookup,
+          extraNodeModules,
+          fileSystemLookup,
+          getPackage,
+          getPackageForModule,
+          isESMImport: dependency.data.isESMImport,
+          mainFields,
+          nodeModulesPaths,
+          originModulePath,
+          preferNativePlatform,
+          resolveAsset,
+          resolveHasteModule: (name: string) =>
+            this._options.getHasteModulePath(name, platform),
+          resolveHastePackage: (name: string) =>
+            this._options.getHastePackagePath(name, platform),
+          resolveRequest,
+          schemeResolvers,
+          sourceExts,
+          unstable_applyBrowserSpecAfterExports,
+          unstable_conditionNames,
+          unstable_conditionsByPlatform,
+          unstable_enablePackageExports,
+          unstable_resolveExportsFromPackageRoot,
+          unstable_logWarning: this._logWarning,
+        },
         dependency.name,
         platform,
       );
