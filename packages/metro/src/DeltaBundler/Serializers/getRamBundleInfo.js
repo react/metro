@@ -156,7 +156,7 @@ async function _getRamOptions(
 
   const {preloadedModules, ramGroups} = await getTransformOptions(
     [entryFile],
-    {dev: options.dev, hot: true, platform: options.platform},
+    {dev: options.dev, platform: options.platform},
     async (x: string) => Array.from(getDependencies(x)),
   );
 
