@@ -81,7 +81,15 @@ export type DefineFn = (
 type VerboseModuleNameForDev = string;
 type ModuleDefiner = (moduleId: ModuleID) => void;
 
-global.__r = metroRequire as RequireFn;
+if (!global.__r) {
+  // Entry point require function.
+  // Install only if the runtime owner hasn't already provided one.
+  global.__r = metroRequire as RequireFn;
+} else {
+  // Install it as a separate binding.
+  // The runtime owner might e.g. use it to implement his own __r wrapper.
+  global.__e = metroRequire as RequireFn;
+}
 global[`${__METRO_GLOBAL_PREFIX__}__d`] = define as DefineFn;
 global.__c = clear;
 global.__registerSegment = registerSegment;
