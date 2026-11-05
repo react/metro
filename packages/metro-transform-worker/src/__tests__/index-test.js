@@ -629,6 +629,57 @@ test('throws if the reserved dependency map name appears in the input', async ()
   );
 });
 
+test.each([
+  ['local/file.js', 'arbitrary(_$$_METRO_MODULE_ID);', 10],
+  ['local/file.js', "arbitrary('_$$_METRO_UNUSED');", 11],
+  ['local/file.js', 'arbitrary(code); /* _$$_METRO_UNUSED */', 20],
+  ['local/file.json', '{"key": "_$$_METRO_UNUSED"}', 9],
+])(
+  'throws if the reserved string appears in %s: %s',
+  async (filename, code, offset) => {
+    await expect(
+      Transformer.transform(
+        baseConfig,
+        '/root',
+        filename,
+        Buffer.from(code, 'utf8'),
+        baseTransformOptions,
+      ),
+    ).rejects.toThrow(
+      `Source code contains the reserved string \`_$$_METRO_\` at character offset ${offset}`,
+    );
+  },
+);
+
+test('throws if the reserved string appears in a JSON file of type asset', async () => {
+  await expect(
+    Transformer.transform(
+      baseConfig,
+      '/root',
+      'local/file.json',
+      Buffer.from('{"key": "_$$_METRO_UNUSED"}', 'utf8'),
+      {...baseTransformOptions, type: 'asset'},
+    ),
+  ).rejects.toThrow(
+    'Source code contains the reserved string `_$$_METRO_` at character offset 9',
+  );
+});
+
+test('does not check the contents of an asset for reserved strings', async () => {
+  const contents = '_$$_METRO_UNUSED THE_DEP_MAP';
+  fs.writeFileSync(p('/root/local/test.mp4'), contents);
+
+  const result = await Transformer.transform(
+    {...baseConfig, unstable_dependencyMapReservedName: 'THE_DEP_MAP'},
+    p('/root'),
+    'local/test.mp4',
+    Buffer.from(contents, 'utf8'),
+    {...baseTransformOptions, type: 'asset'},
+  );
+
+  expect(result.output[0].data.code).not.toContain('_$$_METRO_UNUSED');
+});
+
 test('allows disabling the normalizePseudoGlobals pass when minifying', async () => {
   const result = await Transformer.transform(
     {...baseConfig, unstable_disableNormalizePseudoGlobals: true},

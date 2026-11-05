@@ -64,6 +64,7 @@ import {
 } from './lib/modulePath';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import parseJsonBody from './lib/parseJsonBody';
+import {RESERVED_STRING} from './lib/reservedString';
 import RootUrlMap from './lib/RootUrlMap';
 import splitBundleOptions from './lib/splitBundleOptions';
 import * as transformHelpers from './lib/transformHelpers';
@@ -253,6 +254,7 @@ export default class Server {
       includeAsyncPaths: graphOptions.lazy,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -403,6 +405,7 @@ export default class Server {
       platform: transformOptions.platform,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -1148,6 +1151,7 @@ export default class Server {
           dev: transformOptions.dev,
           projectRoot: this._config.projectRoot,
           modulesOnly: serializerOptions.modulesOnly,
+          reservedString: RESERVED_STRING,
           runBeforeMainModule:
             this._config.serializer.getModulesRunBeforeMainModule(
               path.relative(this._config.projectRoot, entryFile),
