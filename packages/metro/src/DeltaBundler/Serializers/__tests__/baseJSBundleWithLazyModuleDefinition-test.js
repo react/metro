@@ -81,7 +81,7 @@ const transformOptions: TransformInputOptions = {
   unstable_transformProfile: 'default',
 };
 
-function serialize() {
+function serialize(globalPrefix: string = '') {
   return baseJSBundleWithLazyModuleDefinition(
     '/root/foo',
     [polyfill],
@@ -99,7 +99,7 @@ function serialize() {
       dev: true,
       getRunModuleStatement: (moduleId: number | string) =>
         `require(${JSON.stringify(moduleId)});`,
-      globalPrefix: '',
+      globalPrefix,
       includeAsyncPaths: false,
       inlineSourceMap: false,
       modulesOnly: false,
@@ -206,4 +206,14 @@ test('modulesOnly omits the eager polyfills but keeps the segment', () => {
   expect(code).toContain('__registerSegment(0, function defSeg0(moduleId) {');
   expect(code).toContain('var ___d = __d;');
   expect(code).toContain('case 0:');
+});
+
+test('prefixes the segment definer with the global prefix', () => {
+  const {code} = serialize('app1');
+
+  expect(code).toContain(
+    'app1__registerSegment(0, function defSeg0(moduleId) {',
+  );
+  expect(code).not.toMatch(/(^|[^\w])__registerSegment\(/);
+  expect(code).toContain('var _app1__d = app1__d;');
 });

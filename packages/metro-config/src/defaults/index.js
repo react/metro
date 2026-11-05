@@ -63,8 +63,11 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
 
   serializer: {
     polyfillModuleNames: [],
-    getRunModuleStatement: (moduleId: number | string, globalPrefix: string) =>
-      `__r(${JSON.stringify(moduleId)});`,
+    // `globalPrefix` defaults to '' for wrappers that pass only the module ID.
+    getRunModuleStatement: (
+      moduleId: number | string,
+      globalPrefix: string = '',
+    ) => `${globalPrefix}__r(${JSON.stringify(moduleId)});`,
     getPolyfills: () => [],
     getModulesRunBeforeMainModule: () => [],
     processModuleFilter: module => true,
