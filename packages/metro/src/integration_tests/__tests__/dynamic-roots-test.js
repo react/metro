@@ -141,10 +141,6 @@ describe("Metro's own metro-runtime outside every configured root", () => {
         disableHierarchicalLookup: true,
         nodeModulesPaths: [],
       },
-      transformer: {
-        ...baseConfig.transformer,
-        asyncRequireModulePath: 'metro:runtime/modules/asyncRequire',
-      },
       watchFolders: [baseConfig.projectRoot],
     };
   });
@@ -155,10 +151,27 @@ describe("Metro's own metro-runtime outside every configured root", () => {
     }
   });
 
-  test('builds and runs a bundle that uses import() with asyncRequireModulePath from metro:runtime', async () => {
+  test('builds and runs a bundle that uses import() with the default asyncRequireModulePath', async () => {
     const result = await Metro.runBuild(config, {
       entry: 'metro-runtime/index.js',
     });
     await expect(execBundle(result.code).lazyValue).resolves.toBe('lazy');
+  });
+
+  test('builds and runs a bundle with an empty resolution and the default emptyModulePath', async () => {
+    const result = await Metro.runBuild(
+      {
+        ...config,
+        resolver: {
+          ...config.resolver,
+          resolveRequest: (context, moduleName, platform) =>
+            moduleName === 'resolves-to-empty'
+              ? {type: 'empty'}
+              : context.resolveRequest(context, moduleName, platform),
+        },
+      },
+      {entry: 'metro-runtime/empty.js'},
+    );
+    expect(execBundle(result.code).emptyValue).toEqual({});
   });
 });

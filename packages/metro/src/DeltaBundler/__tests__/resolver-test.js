@@ -2847,6 +2847,22 @@ function dep(name: string): TransformResultDependency {
         });
       });
 
+      test('throws a descriptive error if emptyModulePath itself resolves to empty', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver({
+          resolver: {
+            emptyModulePath: 'metro:runtime/modules/empty-module',
+            resolveRequest: () => ({type: 'empty'}),
+          },
+        });
+
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('anything')),
+        ).toThrow(
+          "`resolver.emptyModulePath` ('metro:runtime/modules/empty-module') resolved to an empty module.",
+        );
+      });
+
       test('resolves to a virtual module at the given virtual path', async () => {
         setMockFileSystem({'index.js': ''});
         resolveRequest.mockReturnValue({

@@ -38,8 +38,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     blockList: exclusionList(),
     dependencyExtractor: undefined,
     disableHierarchicalLookup: false,
-    emptyModulePath:
-      require.resolve('metro-runtime/src/modules/empty-module.js'),
+    emptyModulePath: 'metro:runtime/modules/empty-module',
     enableGlobalPackages: false,
     extraNodeModules: {},
     hasteImplModulePath: undefined,
@@ -101,7 +100,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
 
   transformer: {
     assetPlugins: [],
-    asyncRequireModulePath: 'metro-runtime/src/modules/asyncRequire',
+    asyncRequireModulePath: 'metro:runtime/modules/asyncRequire',
     assetRegistryPath: 'missing-asset-registry-path',
     babelTransformerPath: 'metro-babel-transformer',
     dynamicDepsInPackages: 'throwAtRuntime',

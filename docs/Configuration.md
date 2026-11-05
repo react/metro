@@ -297,7 +297,7 @@ For example, for `import 'lodash'` in `/app/src/App.js`, Metro tries `/app/src/n
 
 Type: `string`
 
-The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to the empty module in `metro-runtime`. Only needs changing if Metro is installed outside your project.
+The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to `metro:runtime/modules/empty-module`, the empty module in the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 #### `enableGlobalPackages`
 
@@ -321,7 +321,7 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath). See [Module Resolution](./Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
@@ -564,13 +564,13 @@ Transformer options control [transformation](./Concepts.md#transformation): how 
 
 Type: `string`
 
-The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro-runtime/src/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
+The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro:runtime/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
 
 Using a custom value for bundle splitting, as in older Metro versions, is deprecated in favor of the [`__loadBundleAsync`](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) API.
 
 :::note
 
-The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
+The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. The default value resolves, from any importer, to the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 :::
 
