@@ -15,8 +15,11 @@ import type {
   Program,
 } from '@babel/types';
 
+import {RESERVED_STRING} from '../../lib/reservedString';
 import template from '@babel/template';
 import * as t from '@babel/types';
+
+const MODULE_ID_PLACEHOLDER = `${RESERVED_STRING}MODULE_ID`;
 
 // Check first the `global` variable as the global object. This way serializers
 // can create a local variable called global to fake it as a global object
@@ -52,7 +55,7 @@ function wrapModule(
             t.identifier('$SHBuiltin'),
             t.identifier('moduleFactory'),
           ),
-          [t.identifier('_$$_METRO_MODULE_ID'), factory],
+          [t.identifier(MODULE_ID_PLACEHOLDER), factory],
         )
       : factory,
   ]);
@@ -132,7 +135,11 @@ function wrapModuleString(
   return (
     `${globalPrefix}__d(` +
     (unstable_useStaticHermesModuleFactory
-      ? '$SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, ' + factory + ')'
+      ? '$SHBuiltin.moduleFactory(' +
+        MODULE_ID_PLACEHOLDER +
+        ', ' +
+        factory +
+        ')'
       : factory) +
     ');'
   );

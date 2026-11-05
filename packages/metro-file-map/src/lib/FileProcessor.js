@@ -293,6 +293,7 @@ function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {
     mixedError.message == null ||
     mixedError.stack == null
   ) {
+    // $FlowFixMe[incompatible-type]
     const error = new Error(mixedError);
     error.stack = ''; // Remove stack for stack-less errors.
     return error;

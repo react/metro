@@ -11,6 +11,8 @@
 
 'use strict';
 
+import type {SerializerOptions} from '../../DeltaBundler/types';
+
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 const MetroConfig = require('metro-config');
@@ -33,6 +35,30 @@ test('builds a simple bundle', async () => {
 
   // Assets are not returned by default
   expect(result.assets).toBeUndefined();
+});
+
+test('tells a custom serializer the reserved string', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  let reservedString;
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    serializer: {
+      customSerializer: async (
+        _entryPoint: string,
+        _preModules: unknown,
+        _graph: unknown,
+        options: SerializerOptions,
+      ) => {
+        reservedString = options.reservedString;
+        return 'code';
+      },
+    },
+  });
+
+  await Metro.runBuild(config, {entry: 'TestBundle.js'});
+
+  expect(reservedString).toBe('_$$_METRO_');
 });
 
 test.each([
