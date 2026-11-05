@@ -21,6 +21,7 @@ type UnderlyingStream = Socket | Writable;
 const STATUS_UPDATE_DELAY_MS = 33;
 const NON_TTY_STATUS_UPDATE_DELAY_MS = 3500;
 const EXTERNAL_WRITES_QUIET_MS = 333;
+const EXTERNAL_WRITES_MAX_WAIT_MS = 2000;
 
 /**
  * Cut a string into an array of strings of the specified maximum size. A newline
@@ -89,6 +90,7 @@ export default class Terminal {
   #isFlushRequested: boolean;
   #statusDelay: {promise: Promise<void>, endEarly: () => void} | null;
   #bytesWrittenAfterLastWrite: number;
+  #externalBytesWritten: number;
   #flushBeforeExit: () => void;
 
   constructor(stream: UnderlyingStream, opts: {ttyPrint?: boolean} = {}) {
@@ -101,6 +103,7 @@ export default class Terminal {
     this.#isFlushRequested = false;
     this.#statusDelay = null;
     this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
+    this.#externalBytesWritten = 0;
     this.#flushBeforeExit = () => {
       void this.flush();
     };
@@ -166,11 +169,13 @@ export default class Terminal {
   }
 
   /**
-   * Writes to the stream, tracking the write's completion and the bytes written
-   * after it. Writes to a stream complete in order, so the last write's
-   * completion covers all of them.
+   * Writes to the stream, tracking the write's completion, the bytes written
+   * outside of Terminal before it, and the bytes written after it. Writes to a
+   * stream complete in order, so the last write's completion covers all of
+   * them.
    */
   #write(chunk: string): void {
+    this.#externalBytesWritten = this.#getExternalBytesWritten();
     this.#lastWritePromise = new Promise(resolve =>
       this.#stream.write(chunk, () => resolve()),
     );
@@ -208,19 +213,39 @@ export default class Terminal {
   /**
    * Waits until no output is written outside of Terminal for
    * EXTERNAL_WRITES_QUIET_MS, so the status isn't written in the middle of a
-   * burst of such output. Returns nothing without such output, so the status
-   * can be written synchronously.
+   * burst of such output, for at most EXTERNAL_WRITES_MAX_WAIT_MS, so sustained
+   * output doesn't hide the status. Returns nothing without such output, so the
+   * status can be written synchronously.
    */
   #waitForExternalWritesToStop(
-    bytesWritten: number = this.#bytesWrittenAfterLastWrite,
+    externalBytesWritten: number = this.#externalBytesWritten,
+    deadline: number = Date.now() + EXTERNAL_WRITES_MAX_WAIT_MS,
   ): Promise<void> | void {
-    const currentBytesWritten = this.#getBytesWritten();
-    if (this.#isFlushRequested || currentBytesWritten === bytesWritten) {
+    const currentExternalBytesWritten = this.#getExternalBytesWritten();
+    const now = Date.now();
+    if (
+      this.#isFlushRequested ||
+      currentExternalBytesWritten === externalBytesWritten ||
+      now >= deadline
+    ) {
       return undefined;
     }
 
-    return this.#delayStatus(EXTERNAL_WRITES_QUIET_MS).then(() =>
-      this.#waitForExternalWritesToStop(currentBytesWritten),
+    return this.#delayStatus(
+      Math.min(EXTERNAL_WRITES_QUIET_MS, deadline - now),
+    ).then(() =>
+      this.#waitForExternalWritesToStop(currentExternalBytesWritten, deadline),
+    );
+  }
+
+  /**
+   * Bytes written outside of Terminal since it was created.
+   */
+  #getExternalBytesWritten(): number {
+    return (
+      this.#externalBytesWritten +
+      this.#getBytesWritten() -
+      this.#bytesWrittenAfterLastWrite
     );
   }
 

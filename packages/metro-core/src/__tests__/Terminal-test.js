@@ -218,6 +218,28 @@ describe.each([false, true])(
       );
     });
 
+    test('writes the status during sustained external writes', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      stream.write('ext\n');
+      terminal.status('status');
+      for (let i = 0; i < 12; i++) {
+        await jest.advanceTimersByTimeAsync(200);
+        stream.write('ext\n');
+      }
+      expect(stream.buffer.join('')).toContain('status');
+    });
+
+    test("doesn't count Terminal's own logs as external writes", async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      stream.write('ext\n');
+      terminal.status('status');
+      for (let i = 0; i < 6; i++) {
+        await jest.advanceTimersByTimeAsync(100);
+        terminal.log('log');
+      }
+      expect(stream.buffer.join('')).toContain('status');
+    });
+
     test('flush does not wait for the next status update', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.status('status');
