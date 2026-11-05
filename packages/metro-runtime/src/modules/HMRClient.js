@@ -30,9 +30,15 @@ const inject = ({module: [id, code], sourceURL}: HmrModule) => {
   }
 };
 
+const HMRClientOnUpdate = global.HMRClientOnUpdate as Array<
+  (update: HmrModule) => void,
+>;
+
 const injectUpdate = (update: HmrUpdate) => {
-  update.added.forEach(inject);
-  update.modified.forEach(inject);
+  HMRClientOnUpdate.forEach(callback => {
+    update.added.forEach(callback);
+    update.modified.forEach(callback);
+  });
 };
 
 class HMRClient extends EventEmitter {
@@ -45,6 +51,8 @@ class HMRClient extends EventEmitter {
 
   constructor(url: string) {
     super();
+
+    HMRClientOnUpdate.push(inject);
 
     // Access the global WebSocket object only after enabling the client,
     // since some polyfills do the initialization lazily.
