@@ -196,7 +196,7 @@ describe('wrapModule()', () => {
         }),
       ),
     ).toMatchInlineSnapshot(
-      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/bar.bundle?param1=true&modulesOnly=true&runModule=false&virtual=true"}});`,
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/bar.js.bundle?param1=true&modulesOnly=true&runModule=false&virtual=true"}});`,
     );
   });
 
