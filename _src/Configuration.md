@@ -598,7 +598,7 @@ When using React Native, `getTransformOptions` enables `inlineRequires` by defau
 ```flow
 function getTransformOptions(
   entryPoints: $ReadOnlyArray<string>,
-  options: {dev: boolean, hot: true, platform: ?string},
+  options: {dev: boolean, platform: ?string},
   getDependenciesOf: (path: string) => Promise<Array<string>>,
 ): Promise<ExtraTransformOptions> {
   // ...
@@ -608,7 +608,6 @@ function getTransformOptions(
 - **`entryPoints`**: Absolute paths to the bundle's [entry points](./Concepts.md#entry-point) (typically just one).
 - **`options`**:
   - **`dev`**: Whether the bundle is built in development mode.
-  - **`hot`**: <div class="label deprecated">Deprecated</div> Always true.
   - **`platform`**: The target platform (e.g. `ios`, `android`).
 - **`getDependenciesOf`**: Given a module's absolute path, resolves to the absolute paths of its transitive dependencies.
 
