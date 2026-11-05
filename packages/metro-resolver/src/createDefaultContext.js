@@ -12,25 +12,16 @@
 import type {ResolutionContext} from './types';
 import type {TransformResultDependency} from 'metro/private/DeltaBundler/types';
 
-import {redirectModulePath} from './PackageResolve';
-
-type PartialContext = Readonly<{
-  ...ResolutionContext,
-  redirectModulePath?: ResolutionContext['redirectModulePath'],
-}>;
-
 /**
  * Helper used by the `metro` package to create the `ResolutionContext` object.
  * As context values can be overridden by callers, this occurs externally to
  * `resolve.js`.
  */
 export default function createDefaultContext(
-  context: PartialContext,
+  context: ResolutionContext,
   dependency: TransformResultDependency,
 ): ResolutionContext {
   return {
-    redirectModulePath: (modulePath: string) =>
-      redirectModulePath(context, modulePath),
     dependency,
     ...context,
   };

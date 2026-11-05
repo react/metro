@@ -127,11 +127,6 @@ export type PackageForModule = Readonly<{
 }>;
 
 /**
- * Check existence of a single file.
- */
-export type DoesFileExist = (filePath: string) => boolean;
-
-/**
  * Performs a lookup against an absolute or project-relative path to determine
  * whether it exists as a file or directory. Follows any symlinks, and returns
  * a real absolute path on existence.
@@ -158,12 +153,6 @@ export type ResolutionContext = Readonly<{
   customResolverOptions: CustomResolverOptions,
   disableHierarchicalLookup: boolean,
 
-  /**
-   * Determine whether a regular file exists at the given path.
-   *
-   * @deprecated, prefer `fileSystemLookup`
-   */
-  doesFileExist: DoesFileExist,
   extraNodeModules: ?{[packageName: string]: string, ...},
 
   /** Is resolving for a development bundle. */
@@ -236,7 +225,6 @@ export type ResolutionContext = Readonly<{
   nodeModulesPaths: ReadonlyArray<string>,
   preferNativePlatform: boolean,
   resolveAsset: ResolveAsset,
-  redirectModulePath: (modulePath: string) => string | false,
 
   /**
    * Given a name, this should return the full path to the file that provides
@@ -285,7 +273,6 @@ export type ResolutionContext = Readonly<{
    * closest to the requested subpath.
    */
   unstable_resolveExportsFromPackageRoot: boolean,
-  unstable_incrementalResolution: boolean,
   unstable_logWarning: (message: string) => void,
 }>;
 

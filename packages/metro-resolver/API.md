@@ -14,8 +14,6 @@ export type CustomResolverOptions = {
   readonly [key: string]: unknown;
 };
 
-export type DoesFileExist = (filePath: string) => boolean;
-
 export class FailedToResolveNameError extends Error {
   constructor(dirPaths: ReadonlyArray<string>, extraPaths: ReadonlyArray<string>);
   dirPaths: ReadonlyArray<string>;
@@ -65,7 +63,6 @@ export type ResolutionContext = Readonly<{
   assetExts: ReadonlySet<string>;
   customResolverOptions: CustomResolverOptions;
   disableHierarchicalLookup: boolean;
-  doesFileExist: DoesFileExist;
   extraNodeModules: null | undefined | {[packageName: string]: string};
   dev: boolean;
   getPackage: (packageJsonPath: string) => null | undefined | PackageJson;
@@ -78,7 +75,6 @@ export type ResolutionContext = Readonly<{
   nodeModulesPaths: ReadonlyArray<string>;
   preferNativePlatform: boolean;
   resolveAsset: ResolveAsset;
-  redirectModulePath: (modulePath: string) => string | false;
   resolveHasteModule: (name: string) => null | undefined | string;
   resolveHastePackage: (name: string) => null | undefined | string;
   resolveRequest?: null | undefined | CustomResolver;
@@ -91,7 +87,6 @@ export type ResolutionContext = Readonly<{
   }>;
   unstable_enablePackageExports: boolean;
   unstable_resolveExportsFromPackageRoot: boolean;
-  unstable_incrementalResolution: boolean;
   unstable_logWarning: (message: string) => void;
 }>;
 
