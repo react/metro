@@ -1,5 +1,6 @@
 ---
 id: configuration
+slug: /configuration
 title: Configuring Metro
 ---
 
@@ -46,10 +47,10 @@ Metro loads `.*ts` config files with Node.js native TypeScript support: _erasabl
 
 Most options are grouped by the part of Metro they configure:
 
-- `resolver`: [Resolution](./Concepts.md#resolution).
-- `transformer`: [Transformation](./Concepts.md#transformation).
-- `serializer`: [Serialization](./Concepts.md#serialization).
-- `server`, `symbolicator` and `watcher`: The development server and [file watching](./Concepts.md#file-watching).
+- `resolver`: [Resolution](../../../__docs__/Concepts.md#resolution).
+- `transformer`: [Transformation](../../../__docs__/Concepts.md#transformation).
+- `serializer`: [Serialization](../../../__docs__/Concepts.md#serialization).
+- `server`, `symbolicator` and `watcher`: The development server and [file watching](../../../__docs__/Concepts.md#file-watching).
 
 General options sit at the top level:
 
@@ -83,7 +84,7 @@ Top-level options for caching, which files Metro can see, and parallelism.
 
 Type: `CacheStores` (see details below)
 
-Storage adapters for Metro's [transformer cache](./Caching.md): any mix of [built-in](./Caching.md#built-in-cache-stores) and [custom](./Caching.md#custom-cache-stores) stores. Defaults to a single on-disk store in a temporary directory.
+Storage adapters for Metro's [transformer cache](../../metro-cache/__docs__/Caching.md): any mix of [built-in](../../metro-cache/__docs__/Caching.md#built-in-cache-stores) and [custom](../../metro-cache/__docs__/Caching.md#custom-cache-stores) stores. Defaults to a single on-disk store in a temporary directory.
 
 Metro reads each store in order using a machine-independent cache key for the file, then writes the transform result to _all_ stores that returned `null` (a cache miss) for that key.
 
@@ -108,13 +109,13 @@ type JsonSerializable = /* Any JSON-serializable value */;
 
 Type: `string`
 
-An arbitrary string appended to all cache keys before hashing; changing it invalidates the whole [transformer cache](./Caching.md). Rarely needed, as Metro derives cache keys from your config and source file contents. Defaults to `'1.0'`.
+An arbitrary string appended to all cache keys before hashing; changing it invalidates the whole [transformer cache](../../metro-cache/__docs__/Caching.md). Rarely needed, as Metro derives cache keys from your config and source file contents. Defaults to `'1.0'`.
 
 #### `projectRoot`
 
 Type: `string`
 
-Your project's root folder. Directories of any files it depends on outside this root must be listed in [`watchFolders`](#watchfolders). See [Project root and watch folders](./Concepts.md#project-root-and-watch-folders).
+Your project's root folder. Directories of any files it depends on outside this root must be listed in [`watchFolders`](#watchfolders). See [Project root and watch folders](../../../__docs__/Concepts.md#project-root-and-watch-folders).
 
 In React Native, this is the directory passed to `getDefaultConfig` (usually `__dirname`, the directory containing `metro.config.js`).
 
@@ -132,7 +133,7 @@ Directories outside [`projectRoot`](#projectroot) that can contain source files 
 
 :::info
 
-Despite its name, this isn't only about [file watching](./Concepts.md#file-watching): even in an offline build (e.g. CI), all files must be visible through `watchFolders` and `projectRoot`. Symlink targets _must also be within `watchFolders`_ and not otherwise excluded.
+Despite its name, this isn't only about [file watching](../../../__docs__/Concepts.md#file-watching): even in an offline build (e.g. CI), all files must be visible through `watchFolders` and `projectRoot`. Symlink targets _must also be within `watchFolders`_ and not otherwise excluded.
 
 In a workspace, such as a [Yarn workspace](https://classic.yarnpkg.com/lang/en/docs/workspaces/), you'll likely want to include the workspace _root_ so Metro can resolve other workspaces and hoisted `node_modules`. For [linked packages](https://classic.yarnpkg.com/lang/en/docs/cli/link/), list their source locations (or a containing directory).
 
@@ -241,7 +242,7 @@ const unstable_perfLoggerFactory = (type, factoryOpts) => {
 
 ### Resolver Options
 
-Resolver options control [resolution](./Concepts.md#resolution): how Metro finds the file that an import such as `'./Button'` or `'react-native'` refers to. See [Module Resolution](./Resolution.md) for the full algorithm.
+Resolver options control [resolution](../../../__docs__/Concepts.md#resolution): how Metro finds the file that an import such as `'./Button'` or `'react-native'` refers to. See [Module Resolution](../../metro-resolver/__docs__/Resolution.md) for the full algorithm.
 
 #### `assetExts`
 
@@ -269,7 +270,7 @@ Asset density suffixes. For each entry, the default `resolveAsset` tries `${asse
 
 Type: `Array<string>`
 
-Source file extensions to include in the bundle, e.g. `'ts'` for `.ts` files, in the order files are matched on disk (see [Module Resolution](./Resolution.md)). Setting this replaces the default list (see [`assetExts`](#assetexts) to extend it). Defaults to `['js', 'jsx', 'json', 'ts', 'tsx']`.
+Source file extensions to include in the bundle, e.g. `'ts'` for `.ts` files, in the order files are matched on disk (see [Module Resolution](../../metro-resolver/__docs__/Resolution.md)). Setting this replaces the default list (see [`assetExts`](#assetexts) to extend it). Defaults to `['js', 'jsx', 'json', 'ts', 'tsx']`.
 
 #### `resolverMainFields`
 
@@ -277,7 +278,7 @@ Type: `Array<string>`
 
 The `package.json` fields describing a package's entry points. The default `['browser', 'main']` uses `browser` if it exists and `main` otherwise. For example, if a package without an `"exports"` field has `"main": "lib/index.js"` and `"react-native": "src/index.js"`, it resolves to `lib/index.js` under Metro's default and `src/index.js` under React Native's (see below).
 
-Metro's default resolver processes each field per the [`browser` field spec](https://github.com/defunctzombie/package-browser-field-spec), including [replacing](https://github.com/defunctzombie/package-browser-field-spec#replace-specific-files---advanced) and [ignoring](https://github.com/defunctzombie/package-browser-field-spec#ignore-a-module) specific files. See [Module Resolution](./Resolution.md).
+Metro's default resolver processes each field per the [`browser` field spec](https://github.com/defunctzombie/package-browser-field-spec), including [replacing](https://github.com/defunctzombie/package-browser-field-spec#replace-specific-files---advanced) and [ignoring](https://github.com/defunctzombie/package-browser-field-spec#ignore-a-module) specific files. See [Module Resolution](../../metro-resolver/__docs__/Resolution.md).
 
 :::note
 
@@ -319,9 +320,9 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 #### `resolveRequest`
 
-Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
+Type: [`?CustomResolver`](../../metro-resolver/__docs__/Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. See [Module Resolution](../../metro-resolver/__docs__/Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
@@ -336,7 +337,7 @@ resolveRequest: (context, moduleName, platform) => {
 
 #### `schemeResolvers`
 
-Type: `{[scheme: string]: CustomResolver}` (see [`CustomResolver`](./Resolution.md#resolverequest-customresolver))
+Type: `{[scheme: string]: CustomResolver}` (see [`CustomResolver`](../../metro-resolver/__docs__/Resolution.md#resolverequest-customresolver))
 
 Custom resolvers for import specifiers that start with a URI scheme, such as `my-scheme:foo`. Keys are lowercase scheme names (the prefix before the first `:`, without the colon). Metro's default resolution calls the matching resolver with the full specifier. Defaults to `{}`.
 
@@ -353,7 +354,7 @@ Differences from [`resolveRequest`](#resolverequest):
 
 - They run _within_ Metro's default resolution instead of replacing it. A user `resolveRequest` takes precedence; scheme resolvers apply once it delegates back via `context.resolveRequest`.
 - Only specifiers with a registered scheme are dispatched. Relative (`./`, `../`) and subpath (`#…`) imports are resolved first and never treated as schemes.
-- The resolver's [`context.resolveRequest`](./Resolution.md#resolverequest-customresolver) delegates to Metro's default resolution, for easy chaining.
+- The resolver's [`context.resolveRequest`](../../metro-resolver/__docs__/Resolution.md#resolverequest-customresolver) delegates to Metro's default resolution, for easy chaining.
 
 Schemes are lowercased before lookup, so keys must be lowercase; `Foo:` and `foo:` both match `'foo'`. `mergeConfig` merges `schemeResolvers` per scheme: a later config replaces an earlier resolver only for the same key. Metro's built-in scheme resolvers (currently `metro:`), registered when it builds a resolution context, apply _beneath_ this option, so an entry here overrides a built-in with the same key.
 
@@ -367,7 +368,7 @@ Schemes are lowercased before lookup, so keys must be lowercase; `Foo:` and `foo
 
 Type: `boolean`
 
-If `false`, Metro doesn't use [Watchman](https://facebook.github.io/watchman/) (even if installed) to crawl and [watch](./Concepts.md#file-watching) files. Defaults to `true`.
+If `false`, Metro doesn't use [Watchman](https://facebook.github.io/watchman/) (even if installed) to crawl and [watch](../../../__docs__/Concepts.md#file-watching) files. Defaults to `true`.
 
 #### `blockList`
 
@@ -375,7 +376,7 @@ Type: `RegExp` or `Array<RegExp>`
 
 Paths to exclude from Metro's file map. Files whose absolute paths match are hidden from Metro: they can't be resolved, imported, or served via the `/assets/` endpoint. Defaults to a pattern that hides `__tests__` directories; setting `blockList` replaces it.
 
-Use this to hide directories Metro would otherwise crawl and [watch](./Concepts.md#file-watching) that aren't part of your app, e.g. native build output:
+Use this to hide directories Metro would otherwise crawl and [watch](../../../__docs__/Concepts.md#file-watching) that aren't part of your app, e.g. native build output:
 
 ```js
 resolver: {
@@ -389,7 +390,7 @@ resolver: {
 
 Type: `?string`
 
-Path to the project's [Haste](./Concepts.md#haste) implementation. Most React Native apps don't need this. Expected signature:
+Path to the project's [Haste](../../../__docs__/Concepts.md#haste) implementation. Most React Native apps don't need this. Expected signature:
 
 ```flow
 module.exports = {
@@ -426,7 +427,7 @@ module.exports = {
 
 Type: `Array<string>`
 
-The [platforms](./Concepts.md#platform) Metro recognizes, e.g. the `ios` in `Button.ios.js`. Defaults to `['ios', 'android', 'windows', 'web']`. See also [React Native's platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions).
+The [platforms](../../../__docs__/Concepts.md#platform) Metro recognizes, e.g. the `ios` in `Button.ios.js`. Defaults to `['ios', 'android', 'windows', 'web']`. See also [React Native's platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions).
 
 :::note
 
@@ -537,7 +538,7 @@ Matched conditions are merged with [`unstable_conditionNames`](#unstable_conditi
 
 Type: `boolean`
 
-Enables [Package Exports](https://nodejs.org/docs/latest-v18.x/api/packages.html#package-entry-points) support: Metro resolves package entry points using the [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) in `package.json` when present. See [Package Exports Support](./PackageExports.md). Defaults to `true` since Metro 0.82.0. This option will be removed in a future release.
+Enables [Package Exports](https://nodejs.org/docs/latest-v18.x/api/packages.html#package-entry-points) support: Metro resolves package entry points using the [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) in `package.json` when present. See [Package Exports Support](../../metro-resolver/__docs__/PackageExports.md). Defaults to `true` since Metro 0.82.0. This option will be removed in a future release.
 
 When `"exports"` has no match, Metro logs a warning and resolves without it. This is largely backwards-compatible, except:
 
@@ -554,7 +555,7 @@ Modules that trigger a full reload instead of a Fast Refresh update when changed
 
 ### Transformer Options
 
-Transformer options control [transformation](./Concepts.md#transformation): how each module is compiled (by default, with Babel) and minified, and how assets are handled.
+Transformer options control [transformation](../../../__docs__/Concepts.md#transformation): how each module is compiled (by default, with Babel) and minified, and how assets are handled.
 
 <!-- Keep old links to `asyncRequireModulePath` working -->
 
@@ -570,7 +571,7 @@ Using a custom value for bundle splitting, as in older Metro versions, is deprec
 
 :::note
 
-The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
+The module is [resolved](../../metro-resolver/__docs__/Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 :::
 
@@ -605,7 +606,7 @@ function getTransformOptions(
 }
 ```
 
-- **`entryPoints`**: Absolute paths to the bundle's [entry points](./Concepts.md#entry-point) (typically just one).
+- **`entryPoints`**: Absolute paths to the bundle's [entry points](../../../__docs__/Concepts.md#entry-point) (typically just one).
 - **`options`**:
   - **`dev`**: Whether the bundle is built in development mode.
   - **`platform`**: The target platform (e.g. `ios`, `android`).
@@ -746,19 +747,19 @@ Whether to parse JavaScript with [`flow-parser`](https://www.npmjs.com/package/f
 
 ### Serializer Options
 
-Serializer options control [serialization](./Concepts.md#serialization): how transformed modules are combined into the final bundle, and what runs before your app code.
+Serializer options control [serialization](../../../__docs__/Concepts.md#serialization): how transformed modules are combined into the final bundle, and what runs before your app code.
 
 #### `getRunModuleStatement`
 
 Type: `(moduleId: number | string, globalPrefix: string) => string`
 
-Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42`.
+Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](../../../__docs__/Concepts.md#entry-point). Defaults to `` `__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42`.
 
 #### `createModuleIdFactory`
 
 Type: `() => (path: string) => number`
 
-Returns a function mapping a [module](./Concepts.md#module)'s absolute path to the ID used in `require` statements. By default, IDs are sequential numbers in the order modules are first seen.
+Returns a function mapping a [module](../../../__docs__/Concepts.md#module)'s absolute path to the ID used in `require` statements. By default, IDs are sequential numbers in the order modules are first seen.
 
 #### `getPolyfills`
 
@@ -776,7 +777,7 @@ When using React Native, `getPolyfills` returns the polyfills from `@react-nativ
 
 Type: `(entryFilePath: string) => Array<string>`
 
-Absolute paths of modules to require before the [entry point](./Concepts.md#entry-point), if they're already in the bundle. Receives the entry point's path relative to [`projectRoot`](#projectroot), e.g. `index.js`. React Native's default returns `[require.resolve('react-native/setup-env')]`, so its environment setup runs before your entry point.
+Absolute paths of modules to require before the [entry point](../../../__docs__/Concepts.md#entry-point), if they're already in the bundle. Receives the entry point's path relative to [`projectRoot`](#projectroot), e.g. `index.js`. React Native's default returns `[require.resolve('react-native/setup-env')]`, so its environment setup runs before your entry point.
 
 #### `processModuleFilter`
 
@@ -804,13 +805,13 @@ Type: `?(entryPoint: string, preModules: $ReadOnlyArray<Module>, graph: ReadOnly
 
 Replaces Metro's default bundle serializer. Defaults to `null`.
 
-`options.reservedString` is the string [reserved for identifiers that Metro generates](./Bundling.md#modules), e.g. `${options.reservedString}MODULE_ID`. Use this option rather than assuming its value. The default transformer rejects this string in source and JSON files, which prevents accidental collisions.
+`options.reservedString` is the string [reserved for identifiers that Metro generates](../../metro/__docs__/Bundling.md#modules), e.g. `${options.reservedString}MODULE_ID`. Use this option rather than assuming its value. The default transformer rejects this string in source and JSON files, which prevents accidental collisions.
 
 #### `experimentalSerializerHook`
 
 Type: `(graph: ReadOnlyGraph, delta: DeltaResult) => mixed`
 
-Called with the [dependency graph](./Concepts.md#dependency-graph) and the changes since the previous build, each time a graph is built or updated.
+Called with the [dependency graph](../../../__docs__/Concepts.md#dependency-graph) and the changes since the previous build, each time a graph is built or updated.
 
 #### `unstable_lazilyDefineModules` <div class="label experimental">Experimental</div>
 
@@ -870,7 +871,7 @@ Type: `Array<Middleware | [path: string, handler: Middleware]>`
 
 Custom [`connect`](https://www.npmjs.com/package/connect) middleware for adding endpoints to Metro's dev server, mounted in array order. A `[path, handler]` entry uses `connect` semantics: it matches the path as a prefix and strips it from `req.url`, keeping the full URL in `req.originalUrl`.
 
-[`runServer`](./API.md#async-runserverconfig-options) also takes an `unstable_middleware` option, which runs after these handlers.
+[`runServer`](../../metro/__docs__/API.md#async-runserverconfig-options) also takes an `unstable_middleware` option, which runs after these handlers.
 
 ```js
 server: {
@@ -885,13 +886,13 @@ Type: `Array<Middleware | [path: string, handler: Middleware]>`
 
 Like [`unstable_middleware`](#unstable_middleware-experimental), but runs before Metro, seeing the URL before [`rewriteRequestUrl`](#rewriterequesturl). Each handler must call `next()` for every request it doesn't fully handle, or the request never reaches Metro, which builds and serves bundles, source maps and assets, symbolicates stack traces, and serves its other dev server endpoints.
 
-[`runServer`](./API.md#async-runserverconfig-options) also takes an `unstable_priorityMiddleware` option, which runs before these handlers.
+[`runServer`](../../metro/__docs__/API.md#async-runserverconfig-options) also takes an `unstable_priorityMiddleware` option, which runs before these handlers.
 
 #### `unstable_onServerCreated` <div class="label experimental">Experimental</div>
 
 Type: `(MetroServer) => void`
 
-Called with Metro's server instance when [`runServer`](./API.md#async-runserverconfig-options) or [`createConnectMiddleware`](./API.md#createconnectmiddlewareconfig-options) creates it, after the bundler is ready when `waitForBundler` is set, and before `runServer` starts the HTTP server. `runServer`'s own `unstable_onServerCreated` option is called after this one.
+Called with Metro's server instance when [`runServer`](../../metro/__docs__/API.md#async-runserverconfig-options) or [`createConnectMiddleware`](../../metro/__docs__/API.md#createconnectmiddlewareconfig-options) creates it, after the bundler is ready when `waitForBundler` is set, and before `runServer` starts the HTTP server. `runServer`'s own `unstable_onServerCreated` option is called after this one.
 
 #### `rewriteRequestUrl`
 
@@ -964,7 +965,7 @@ Called with the whole symbolicated stack (after `customizeFrame`) and the `extra
 
 ### Watcher Options
 
-Options for the [filesystem watcher](./Concepts.md#file-watching), which tracks changes to files in [`projectRoot`](#projectroot) and [`watchFolders`](#watchfolders).
+Options for the [filesystem watcher](../../../__docs__/Concepts.md#file-watching), which tracks changes to files in [`projectRoot`](#projectroot) and [`watchFolders`](#watchfolders).
 
 :::note
 
@@ -976,7 +977,7 @@ Dot notation in this section indicates a nested configuration object, e.g. `watc
 
 Type: `Array<string>`
 
-Extensions to [watch](./Concepts.md#file-watching) in addition to [`sourceExts`](#sourceexts), but which the resolver doesn't try automatically. Unlike `sourceExts`, modules with these extensions:
+Extensions to [watch](../../../__docs__/Concepts.md#file-watching) in addition to [`sourceExts`](#sourceexts), but which the resolver doesn't try automatically. Unlike `sourceExts`, modules with these extensions:
 
 - Can only be imported when the extension is specified (e.g. `import moduleA from 'moduleA.mjs'`).
 - Do not get platform-specific resolution.
@@ -987,7 +988,7 @@ Defaults to `['cjs', 'mjs']`.
 
 Type: `boolean`
 
-Whether to periodically check the [filesystem watcher](./Concepts.md#file-watching)'s health by writing a temporary file to the project and waiting for it to be observed. Defaults to `false`.
+Whether to periodically check the [filesystem watcher](../../../__docs__/Concepts.md#file-watching)'s health by writing a temporary file to the project and waiting for it to be observed. Defaults to `false`.
 
 #### `healthCheck.filePrefix`
 

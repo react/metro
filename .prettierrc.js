@@ -22,7 +22,7 @@ module.exports = {
       },
     },
     {
-      files: ['docs/*.md'],
+      files: ['**/__docs__/*.md'],
       options: {
         parser: 'markdown',
         requirePragma: false,

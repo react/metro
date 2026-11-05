@@ -19,5 +19,6 @@
     "link-fragments": true,
     "table-column-count": true
   },
-  "globs": ["docs/*.md"]
+  "globs": ["**/__docs__/*.md"],
+  "ignores": ["**/node_modules", "website/.docs", "website/build"]
 }

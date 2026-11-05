@@ -1,5 +1,6 @@
 ---
 id: local-development
+slug: /local-development
 title: Local Development Setup
 ---
 

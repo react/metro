@@ -1,26 +1,27 @@
 ---
 id: bundling
+slug: /bundling
 title: Bundling
 ---
 
-_Bundling_ turns your app's source files into a _bundle_: the JavaScript your app loads at runtime. A bundle contains every [module](./Concepts.md#module) reachable from the [entry point](./Concepts.md#entry-point), [transformed](./Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](./Concepts.md#serialization).
+_Bundling_ turns your app's source files into a _bundle_: the JavaScript your app loads at runtime. A bundle contains every [module](../../../__docs__/Concepts.md#module) reachable from the [entry point](../../../__docs__/Concepts.md#entry-point), [transformed](../../../__docs__/Concepts.md#transformation) into code the app's JavaScript engine can run, and combined by Metro's [serializer](../../../__docs__/Concepts.md#serialization).
 
 ## Building a bundle
 
 You can get a bundle from Metro:
 
-- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [URL and bundle request](./GettingStarted.md#url-and-bundle-request).
+- **From the development server**, by requesting the entry point's path with `.bundle` instead of `.js`, e.g. `http://localhost:8081/index.bundle?platform=ios`. This is how React Native apps load their code in development. See [URL and bundle request](../../../__docs__/GettingStarted.md#url-and-bundle-request).
 - **As build output**, with `npx react-native bundle` for React Native release builds, [`metro build`](./CLI.md#build-entry), or [`runBuild`](./API.md#async-runbuildconfig-options).
 
 To build a bundle, Metro:
 
-1. [Resolves](./Concepts.md#resolution) and [transforms](./Concepts.md#transformation) the entry point and, recursively, every module it depends on, building the [dependency graph](./Concepts.md#dependency-graph).
-2. Assigns each module a numeric ID, using [`serializer.createModuleIdFactory`](./Configuration.md#createmoduleidfactory).
-3. [Serializes](./Concepts.md#serialization) the graph into a bundle, in this order:
+1. [Resolves](../../../__docs__/Concepts.md#resolution) and [transforms](../../../__docs__/Concepts.md#transformation) the entry point and, recursively, every module it depends on, building the [dependency graph](../../../__docs__/Concepts.md#dependency-graph).
+2. Assigns each module a numeric ID, using [`serializer.createModuleIdFactory`](../../metro-config/__docs__/Configuration.md#createmoduleidfactory).
+3. [Serializes](../../../__docs__/Concepts.md#serialization) the graph into a bundle, in this order:
    - Variable declarations Metro's runtime relies on, such as `__DEV__`.
    - [Scripts](#scripts): Metro's module system and polyfills.
    - Each [module](#modules), wrapped in a `__d` call.
-   - Calls that run the modules from [`serializer.getModulesRunBeforeMainModule`](./Configuration.md#getmodulesrunbeforemainmodule), then the entry point.
+   - Calls that run the modules from [`serializer.getModulesRunBeforeMainModule`](../../metro-config/__docs__/Configuration.md#getmodulesrunbeforemainmodule), then the entry point.
 
 ## Modules
 
@@ -48,7 +49,7 @@ Modules refer to each other by numeric IDs assigned at build time, not by path. 
 
 ### Scripts
 
-Metro's runtime and the polyfills from [`serializer.getPolyfills`](./Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](./Configuration.md#polyfillmodulenames) are transformed as _scripts_ instead of modules, and placed at the start of the bundle, before the modules. A script:
+Metro's runtime and the polyfills from [`serializer.getPolyfills`](../../metro-config/__docs__/Configuration.md#getpolyfills) and [`serializer.polyfillModuleNames`](../../metro-config/__docs__/Configuration.md#polyfillmodulenames) are transformed as _scripts_ instead of modules, and placed at the start of the bundle, before the modules. A script:
 
 - Is wrapped in a function that runs as soon as the bundle loads, with the global object as its `global` argument, instead of in a `__d` call.
 - Is not registered as a module, so it has no module ID and can't be required.
@@ -109,7 +110,7 @@ __r(0);
 
 ### RAM bundles
 
-A RAM bundle stores each module's code separately, either in its own file or at its own offset in a single file. A runtime that parses JavaScript source can then parse only the startup code at launch, and each module when it's first required, instead of the whole bundle. With [inline requires](./Configuration.md#gettransformoptions), a module is required, and so parsed, only when code first uses it, not when a file that imports it loads. This helps when parsing a large bundle slows startup. Metro only writes RAM bundles as build output; the development server doesn't serve them.
+A RAM bundle stores each module's code separately, either in its own file or at its own offset in a single file. A runtime that parses JavaScript source can then parse only the startup code at launch, and each module when it's first required, instead of the whole bundle. With [inline requires](../../metro-config/__docs__/Configuration.md#gettransformoptions), a module is required, and so parsed, only when code first uses it, not when a file that imports it loads. This helps when parsing a large bundle slows startup. Metro only writes RAM bundles as build output; the development server doesn't serve them.
 
 :::note
 
@@ -169,9 +170,9 @@ startup code          followed by \0
 module code           followed by \0, one per module
 ```
 
-Offsets are relative to the start of the startup code, and lengths include the null byte, so a module's code can also be read as a null-terminated string. The entry for module `x` is at byte `(3 + 2 * x) * 4`, and the startup code starts right after the table, at byte `(3 + 2 * numEntries) * 4`. The entries of modules grouped with [`ramGroups`](./Configuration.md#gettransformoptions) all point to the same code, which contains the whole group.
+Offsets are relative to the start of the startup code, and lengths include the null byte, so a module's code can also be read as a null-terminated string. The entry for module `x` is at byte `(3 + 2 * x) * 4`, and the startup code starts right after the table, at byte `(3 + 2 * numEntries) * 4`. The entries of modules grouped with [`ramGroups`](../../metro-config/__docs__/Configuration.md#gettransformoptions) all point to the same code, which contains the whole group.
 
-The startup code runs when the bundle loads: polyfills, Metro's module system, [`preloadedModules`](./Configuration.md#gettransformoptions), and the call that runs the entry point.
+The startup code runs when the bundle loads: polyfills, Metro's module system, [`preloadedModules`](../../metro-config/__docs__/Configuration.md#gettransformoptions), and the call that runs the entry point.
 
 #### File RAM bundle
 

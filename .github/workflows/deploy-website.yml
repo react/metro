@@ -5,7 +5,7 @@ on:
     branches:
       - "main"
     paths:
-      - "docs/**"
+      - "**/__docs__/**"
       - "website/**"
       - ".github/workflows/deploy-website.yml"
 

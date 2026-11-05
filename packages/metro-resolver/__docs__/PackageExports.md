@@ -1,5 +1,6 @@
 ---
 id: package-exports
+slug: /package-exports
 title: Package Exports Support
 ---
 
@@ -20,11 +21,11 @@ Package Exports support has been enabled by default in Metro since [0.82](https:
 
 ## Configuration options
 
-| Option                                                                                                    | Description                                                                          |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) | Enable/disable Package Exports support.                                              |
-| [`resolver.unstable_conditionNames`](./Configuration.md#unstable_conditionnames-experimental)             | Condition names to assert when resolving conditional exports.                        |
-| [`resolver.unstable_conditionsByPlatform`](./Configuration.md#unstable_conditionsbyplatform-experimental) | Additional condition names to assert for a given [platform](./Concepts.md#platform). |
+| Option                                                                                                                              | Description                                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`resolver.unstable_enablePackageExports`](../../metro-config/__docs__/Configuration.md#unstable_enablepackageexports-experimental) | Enable/disable Package Exports support.                                                              |
+| [`resolver.unstable_conditionNames`](../../metro-config/__docs__/Configuration.md#unstable_conditionnames-experimental)             | Condition names to assert when resolving conditional exports.                                        |
+| [`resolver.unstable_conditionsByPlatform`](../../metro-config/__docs__/Configuration.md#unstable_conditionsbyplatform-experimental) | Additional condition names to assert for a given [platform](../../../__docs__/Concepts.md#platform). |
 
 ## How Metro applies `import`/`require` exports conditions
 
@@ -73,13 +74,13 @@ If a package's `package.json` has an `"exports"` field, Metro consults it first.
 
 - `"exports"` is used instead of any `"react-native"`, `"browser"`, or `"main"` field, and instead of a file on disk at the same subpath (e.g. with `"./utils": "./dist/utils.js"`, `'some-pkg/utils'` resolves to `dist/utils.js` even if the package has a root `utils.js`).
 - **Fallback**: If the requested subpath isn't matched in `"exports"`, Metro tries again using the fields above.
-- An object-valued `"browser"` field (or other object-valued [main field](./Configuration.md#resolvermainfields)) can still redirect the requested subpath before `"exports"` is matched. Enable [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) to apply those redirections to the file that `"exports"` resolves to instead, as webpack 5 and Vite 8 do.
+- An object-valued `"browser"` field (or other object-valued [main field](../../metro-config/__docs__/Configuration.md#resolvermainfields)) can still redirect the requested subpath before `"exports"` is matched. Enable [`resolver.unstable_applyBrowserSpecAfterExports`](../../metro-config/__docs__/Configuration.md#unstable_applybrowserspecafterexports-experimental) to apply those redirections to the file that `"exports"` resolves to instead, as webpack 5 and Vite 8 do.
 
 Subpaths matched in `"exports"` (including via [subpath patterns](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns)) resolve to the exact target file the package specifies:
 
-- Metro does not expand [`sourceExts`](./Configuration.md#sourceexts) against the import specifier.
+- Metro does not expand [`sourceExts`](../../metro-config/__docs__/Configuration.md#sourceexts) against the import specifier.
 - Metro does not resolve [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code) against the target file.
-- **Unchanged**: Metro expands [asset densities](./Configuration.md#assetresolutions) (e.g. `icon.png` → `icon@2x.png`) if the target file [is an asset](./Configuration.md#assetexts).
+- **Unchanged**: Metro expands [asset densities](../../metro-config/__docs__/Configuration.md#assetresolutions) (e.g. `icon.png` → `icon@2x.png`) if the target file [is an asset](../../metro-config/__docs__/Configuration.md#assetexts).
 
 #### Example
 
@@ -168,7 +169,7 @@ We've introduced the `"react-native"` community condition, representing React Na
 >
 > _Will be matched by the React Native framework (all platforms). To target React Native for Web, "browser" should be specified before this condition._
 
-For packages using `"exports"`, this condition replaces the `"react-native"` root field. Root field priority is set per project (via [`resolver.resolverMainFields`](./Configuration.md#resolvermainfields)), [which creates ambiguity with React Native for Web](https://github.com/expo/router/issues/37#issuecomment-1275925758). Under `"exports"`, _packages define the resolution order for conditional entry points themselves_, removing this ambiguity.
+For packages using `"exports"`, this condition replaces the `"react-native"` root field. Root field priority is set per project (via [`resolver.resolverMainFields`](../../metro-config/__docs__/Configuration.md#resolvermainfields)), [which creates ambiguity with React Native for Web](https://github.com/expo/router/issues/37#issuecomment-1275925758). Under `"exports"`, _packages define the resolution order for conditional entry points themselves_, removing this ambiguity.
 
 #### Example: Use conditional exports to target web and React Native
 
@@ -180,7 +181,7 @@ For packages using `"exports"`, this condition replaces the `"react-native"` roo
   }
 ```
 
-Metro picks the first condition it asserts: `"react-native"` on Android and iOS (React Native's default config), but `"browser"` for `web` (asserted via the default [`resolver.unstable_conditionsByPlatform`](./Configuration.md#unstable_conditionsbyplatform-experimental)), since it comes first.
+Metro picks the first condition it asserts: `"react-native"` on Android and iOS (React Native's default config), but `"browser"` for `web` (asserted via the default [`resolver.unstable_conditionsByPlatform`](../../metro-config/__docs__/Configuration.md#unstable_conditionsbyplatform-experimental)), since it comes first.
 
 :::note
 
@@ -210,7 +211,7 @@ export default FooComponent;
 
 ### Asset files
 
-As with source files, assets must be listed in `"exports"` to be imported without warnings. Asset files with [multiple densities](./Configuration.md#assetresolutions), e.g. `icon.png` and `icon@2x.png`, work without being listed individually.
+As with source files, assets must be listed in `"exports"` to be imported without warnings. Asset files with [multiple densities](../../metro-config/__docs__/Configuration.md#assetresolutions), e.g. `icon.png` and `icon@2x.png`, work without being listed individually.
 
 Subpath patterns conveniently export many assets; we recommend specifying asset subpaths **with their file extension**. For example, with `"exports": {"./assets/*.png": "./dist/assets/*.png"}`, `'some-pkg/assets/icon.png'` resolves to `dist/assets/icon.png` along with any existing density variants, such as `dist/assets/icon@2x.png`.
 
@@ -226,7 +227,7 @@ Since `"exports"` takes priority, Metro may resolve a package to a file not desi
 In these cases, **React Native developers** can:
 
 - `require()` that dependency to try to get its CommonJS version (see [above](#how-metro-applies-importrequire-exports-conditions)).
-- Disable `exports` support by setting [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) to `false`.
+- Disable `exports` support by setting [`resolver.unstable_enablePackageExports`](../../metro-config/__docs__/Configuration.md#unstable_enablepackageexports-experimental) to `false`.
 - (Advanced) Use a [custom resolver](./Resolution.md#resolverequest-customresolver) for specific packages, as below.
 
 #### Example: Custom resolver

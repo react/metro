@@ -22,7 +22,7 @@ To add Metro to an existing project, see our [Getting Started guide](https://met
 
 All available documentation, including on [configuring Metro](https://metrobundler.dev/docs/configuration), can be found on the [Metro website](https://metrobundler.dev/docs/getting-started).
 
-Source code for documentation is located in this repository under `docs/`.
+Source code for documentation is located in this repository in `__docs__` folders, next to the code it documents.
 
 ## Contributing
 

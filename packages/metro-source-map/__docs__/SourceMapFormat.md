@@ -1,5 +1,6 @@
 ---
 id: source-map-format
+slug: /source-map-format
 title: Source Map Format
 ---
 
@@ -145,7 +146,7 @@ decoded.push({column, name: names[nameIndex] /* 'b' */, line});
 
 ## `x_google_ignoreList`
 
-Metro's source maps include the [`x_google_ignoreList`](https://developer.chrome.com/articles/x-google-ignore-list/) field by default, listing sources that debuggers should treat as third-party code, e.g. by hiding them from stack traces and skipping them when stepping. Use the [`serializer.isThirdPartyModule`](./Configuration.md#isthirdpartymodule) option to control which modules are ignore-listed.
+Metro's source maps include the [`x_google_ignoreList`](https://developer.chrome.com/articles/x-google-ignore-list/) field by default, listing sources that debuggers should treat as third-party code, e.g. by hiding them from stack traces and skipping them when stepping. Use the [`serializer.isThirdPartyModule`](../../metro-config/__docs__/Configuration.md#isthirdpartymodule) option to control which modules are ignore-listed.
 
 The field lists indices into `sources`. By default, files under `node_modules` are ignore-listed:
 

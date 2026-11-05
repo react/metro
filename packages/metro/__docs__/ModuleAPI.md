@@ -1,5 +1,6 @@
 ---
 id: module-api
+slug: /module-api
 title: Module API
 ---
 
@@ -16,11 +17,11 @@ const jsonData = require('./path/data.json');
 const {View} = require('react-native');
 ```
 
-The argument to `require()` must be a compile-time constant, such as a string literal, so that Metro knows at build time which modules to include. A non-constant argument, e.g. `require('./images/' + name + '.png')`, fails at build time, except in files inside `node_modules`, where the [`dynamicDepsInPackages`](./Configuration.md#dynamicdepsinpackages) config option controls whether it fails at build time or at runtime.
+The argument to `require()` must be a compile-time constant, such as a string literal, so that Metro knows at build time which modules to include. A non-constant argument, e.g. `require('./images/' + name + '.png')`, fails at build time, except in files inside `node_modules`, where the [`dynamicDepsInPackages`](../../metro-config/__docs__/Configuration.md#dynamicdepsinpackages) config option controls whether it fails at build time or at runtime.
 
 ### Advanced usage: `require` at runtime
 
-At build time, Metro [resolves](./Concepts.md#resolution) module names to absolute paths and [assigns an opaque module ID](./Configuration.md#createmoduleidfactory) to each one.
+At build time, Metro [resolves](../../../__docs__/Concepts.md#resolution) module names to absolute paths and [assigns an opaque module ID](../../metro-config/__docs__/Configuration.md#createmoduleidfactory) to each one.
 
 At runtime, `require` refers to a function that takes an opaque module ID (_not_ a name or path) and returns a module. This is useful if you already have a module ID from another module API, such as [`require.resolveWeak`](#requireresolveweak).
 

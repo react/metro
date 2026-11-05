@@ -1,5 +1,6 @@
 **/__mocks__/
 **/__tests__/
+**/__docs__/
 /build/
 /src.real/
 /types/

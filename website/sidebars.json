@@ -1,9 +1,22 @@
 {
   "docs": {
-    "Introduction": ["getting-started", "concepts"],
-    "API Reference": ["api", "module-api", "configuration", "cli"],
-    "Guides": ["package-exports", "troubleshooting"],
-    "Contributing": ["local-development"],
-    "Deep Dives": ["bundling", "caching", "resolution", "source-map-format"]
+    "Introduction": ["__docs__/getting-started", "__docs__/concepts"],
+    "API Reference": [
+      "packages/metro/__docs__/api",
+      "packages/metro/__docs__/module-api",
+      "packages/metro-config/__docs__/configuration",
+      "packages/metro/__docs__/cli"
+    ],
+    "Guides": [
+      "packages/metro-resolver/__docs__/package-exports",
+      "__docs__/troubleshooting"
+    ],
+    "Contributing": ["__docs__/local-development"],
+    "Deep Dives": [
+      "packages/metro/__docs__/bundling",
+      "packages/metro-cache/__docs__/caching",
+      "packages/metro-resolver/__docs__/resolution",
+      "packages/metro-source-map/__docs__/source-map-format"
+    ]
   }
 }

@@ -1,5 +1,6 @@
 ---
 id: troubleshooting
+slug: /troubleshooting
 title: Troubleshooting
 ---
 
@@ -13,9 +14,9 @@ Uh oh, something went wrong? Try these steps in order, checking after each one w
 
    Helps when a package can't be found or is in a broken state, e.g. after switching branches or upgrading dependencies.
 
-3. **Reset Metro's cache:** pass the `--reset-cache` flag (e.g. `npx react-native start --reset-cache`), or add [`resetCache: true`](./Configuration.md#resetcache) to your Metro configuration file.
+3. **Reset Metro's cache:** pass the `--reset-cache` flag (e.g. `npx react-native start --reset-cache`), or add [`resetCache: true`](../packages/metro-config/__docs__/Configuration.md#resetcache) to your Metro configuration file.
 
-   This clears Metro's [cache](./Caching.md) of transformed files and rebuilds its map of your project's files from scratch. Helps when the bundle doesn't reflect your latest code or configuration.
+   This clears Metro's [cache](../packages/metro-cache/__docs__/Caching.md) of transformed files and rebuilds its map of your project's files from scratch. Helps when the bundle doesn't reflect your latest code or configuration.
 
 4. **Delete Metro's cache files:** `rm -rf ${TMPDIR:-/tmp}/metro-*`
 

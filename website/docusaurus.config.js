@@ -11,6 +11,30 @@
 'use strict';
 
 const {fbContent} = require('docusaurus-plugin-internaldocs-fb/internal');
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Docusaurus reads docs from one folder, so the root and per-package
+// `__docs__` folders are mirrored into `website/.docs`.
+const metroRoot = path.resolve(__dirname, '..');
+const docsMirror = path.join(__dirname, '.docs');
+const docsFolders = [
+  '__docs__',
+  ...fs
+    .readdirSync(path.join(metroRoot, 'packages'))
+    .map(pkg => path.join('packages', pkg, '__docs__')),
+].filter(dir => fs.existsSync(path.join(metroRoot, dir)));
+
+function mirrorDocs() {
+  for (const dir of docsFolders) {
+    fs.cpSync(path.join(metroRoot, dir), path.join(docsMirror, dir), {
+      recursive: true,
+    });
+  }
+}
+
+fs.rmSync(docsMirror, {recursive: true, force: true});
+mirrorDocs();
 
 /** @type {import('@docusaurus/types').Config} */
 const siteConfig = {
@@ -19,12 +43,17 @@ const siteConfig = {
       require.resolve('docusaurus-plugin-internaldocs-fb/docusaurus-preset'),
       {
         docs: {
-          path: '../docs',
-          editUrl: fbContent({
-            internal:
-              'https://www.internalfb.com/intern/diffusion/FBS/browse/master/xplat/js/tools/metro/docs/',
-            external: 'https://github.com/react/metro/edit/main/docs',
-          }),
+          path: '.docs',
+          // The default excludes `_`-prefixed folders such as `__docs__`.
+          // `__docs__/index.md` lists the docs for readers of the repository.
+          exclude: ['__docs__/index.md'],
+          // `docPath` mirrors the source path relative to the metro folder.
+          editUrl: ({docPath}) =>
+            fbContent({
+              internal:
+                'https://www.internalfb.com/intern/diffusion/FBS/browse/master/xplat/js/tools/metro/',
+              external: 'https://github.com/react/metro/edit/main/',
+            }) + docPath,
           sidebarPath: require.resolve('./sidebars.json'),
           showLastUpdateTime: fbContent({
             internal: false,
@@ -43,7 +72,15 @@ const siteConfig = {
       },
     ],
   ],
-  plugins: ['docusaurus-plugin-sass'],
+  plugins: [
+    'docusaurus-plugin-sass',
+    () => ({
+      name: 'metro-docs-mirror',
+      getPathsToWatch: () =>
+        docsFolders.map(dir => path.join(metroRoot, dir, '*.md')),
+      loadContent: mirrorDocs,
+    }),
+  ],
   title: 'Metro',
   tagline: '\ud83d\ude87 The JavaScript bundler for React Native',
   organizationName: 'react',

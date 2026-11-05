@@ -10,6 +10,7 @@ packages/*/build/
 packages/*/types/
 
 website/build/
+website/.docs/
 website/i18n/*
 website/node_modules
 website/translated_docs

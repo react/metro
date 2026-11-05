@@ -1,9 +1,10 @@
 ---
 id: resolution
+slug: /resolution
 title: Module Resolution
 ---
 
-[Module resolution](./Concepts.md#resolution) is how Metro turns the module name in an `import` or `require()` into a file on disk, at build time. For example, in an iOS bundle:
+[Module resolution](../../../__docs__/Concepts.md#resolution) is how Metro turns the module name in an `import` or `require()` into a file on disk, at build time. For example, in an iOS bundle:
 
 ```js
 // src/App.js
@@ -13,17 +14,17 @@ import Button from './Button'; // → e.g. src/Button.ios.js
 
 In short:
 
-- **Relative paths** (`'./Button'`, `'../utils'`) are resolved against the importing file's directory. If no file exists at that exact path, Metro tries [platform](./Concepts.md#platform)-specific and extension variants in order: `Button.ios.js`, `Button.native.js`, `Button.js`, then `.jsx` variants, and so on through [`sourceExts`](#sourceexts-readonlyarraystring). Extensions take priority over platforms: with the default `sourceExts`, `Button.js` wins over `Button.ios.ts`.
+- **Relative paths** (`'./Button'`, `'../utils'`) are resolved against the importing file's directory. If no file exists at that exact path, Metro tries [platform](../../../__docs__/Concepts.md#platform)-specific and extension variants in order: `Button.ios.js`, `Button.native.js`, `Button.js`, then `.jsx` variants, and so on through [`sourceExts`](#sourceexts-readonlyarraystring). Extensions take priority over platforms: with the default `sourceExts`, `Button.js` wins over `Button.ios.ts`.
 - **Package names** (`'react-native'`, `'lodash/merge'`) are looked up in `node_modules` directories, from the importing file's directory up to the root. Metro uses the package's [`"exports"`](./PackageExports.md) field if present; otherwise it resolves the subpath as a file, finding the entry point via [main fields](#mainfields-readonlyarraystring) (in React Native: `"react-native"`, `"browser"`, then `"main"`).
-- **Other specifiers**, such as [subpath imports](https://nodejs.org/api/packages.html#subpath-imports) (`'#foo'`), [Haste](./Concepts.md#haste) names and URL schemes, are covered in the [algorithm](#resolve).
+- **Other specifiers**, such as [subpath imports](https://nodejs.org/api/packages.html#subpath-imports) (`'#foo'`), [Haste](../../../__docs__/Concepts.md#haste) names and URL schemes, are covered in the [algorithm](#resolve).
 
-This is a version of [Node's module resolution algorithm](https://nodejs.org/api/modules.html#loading-from-node_modules-folders). Metro adds [Haste](./Concepts.md#haste) (importing modules by a globally unique name, e.g. `import Foo from 'Foo'`), [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions), asset extensions and image resolutions (so React Native can [pick the best image](https://reactnative.dev/docs/images#static-image-resources) for the device's screen density at runtime), and custom resolvers that can override almost everything ([`resolver.resolveRequest`](./Configuration.md#resolverequest)).
+This is a version of [Node's module resolution algorithm](https://nodejs.org/api/modules.html#loading-from-node_modules-folders). Metro adds [Haste](../../../__docs__/Concepts.md#haste) (importing modules by a globally unique name, e.g. `import Foo from 'Foo'`), [platform-specific extensions](https://reactnative.dev/docs/platform-specific-code#platform-specific-extensions), asset extensions and image resolutions (so React Native can [pick the best image](https://reactnative.dev/docs/images#static-image-resources) for the device's screen density at runtime), and custom resolvers that can override almost everything ([`resolver.resolveRequest`](../../metro-config/__docs__/Configuration.md#resolverequest)).
 
 Read on if you're writing a [custom resolver](#resolverequest-customresolver), debugging an "Unable to resolve module" error, or working out why Metro picked a particular file.
 
 ## Resolution algorithm
 
-Given a [resolution context](#resolution-context) _context_ (whose fields mostly come from your [`resolver` config](./Configuration.md#resolver-options)), a module name _moduleName_, and an optional [platform](./Concepts.md#platform) identifier _platform_, Metro's resolver performs [**RESOLVE**](#resolve)(_context_, _moduleName_, _platform_), which either returns one of the [resolution types](#resolution-types) or throws an error.
+Given a [resolution context](#resolution-context) _context_ (whose fields mostly come from your [`resolver` config](../../metro-config/__docs__/Configuration.md#resolver-options)), a module name _moduleName_, and an optional [platform](../../../__docs__/Concepts.md#platform) identifier _platform_, Metro's resolver performs [**RESOLVE**](#resolve)(_context_, _moduleName_, _platform_), which either returns one of the [resolution types](#resolution-types) or throws an error.
 
 ### Resolution types
 
@@ -39,7 +40,7 @@ One or more absolute paths to files on disk, e.g. `icon.png` and `icon@2x.png` f
 
 #### Empty module
 
-The built-in empty module specified in [`resolver.emptyModulePath`](./Configuration.md#emptymodulepath), e.g. when a package's `"browser"` field maps a module to `false`.
+The built-in empty module specified in [`resolver.emptyModulePath`](../../metro-config/__docs__/Configuration.md#emptymodulepath), e.g. when a package's `"browser"` field maps a module to `false`.
 
 ### Algorithm
 
@@ -74,7 +75,7 @@ Parameters: (_context_, _moduleName_, _platform_)
    2. If resolved as a Haste package path, then
       1. Return [**RESOLVE_PACKAGE**](#resolve_package)(_context_, _packageDir_ + _relativePath_, _platform_), where _packageDir_ is the Haste package's directory and _relativePath_ the rest of _moduleName_ after the package name. Throw an error if this fails.
          E.g. if the Haste package path for `'@a/b'` is `foo/package.json`, resolve `'@a/b/c'` as `foo/c`.
-7. If [`context.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled, then
+7. If [`context.unstable_enablePackageExports`](../../metro-config/__docs__/Configuration.md#unstable_enablepackageexports-experimental) is enabled, then
    1. Get the result of [**PACKAGE_SELF_RESOLVE**](#package_self_resolve)(_context_, _moduleName_, _platform_).
    2. If resolved, return result.
 8. If [`context.disableHierarchicalLookup`](#disablehierarchicallookup-boolean) is not `true`, then
@@ -142,7 +143,7 @@ Lets code inside a package import that package by its own name via its `"exports
 
 Parameters: (_context_, _packagePath_, _filePath_, _exportsField_, _platform_)
 
-> Resolves a package subpath based on the [Package Entry Points spec](https://nodejs.org/docs/latest-v19.x/api/packages.html#package-entry-points) (the `"exports"` field), when [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental) is enabled.
+> Resolves a package subpath based on the [Package Entry Points spec](https://nodejs.org/docs/latest-v19.x/api/packages.html#package-entry-points) (the `"exports"` field), when [`resolver.unstable_enablePackageExports`](../../metro-config/__docs__/Configuration.md#unstable_enablepackageexports-experimental) is enabled.
 
 1. Let _subpath_ be the relative path from _packagePath_ to _filePath_, or `'.'`.
 2. If _exportsField_ contains an invalid configuration, raise an `InvalidPackageConfigurationError`.
@@ -184,7 +185,7 @@ Parameters: (_context_, _filePath_, _platform_)
 
 Parameters: (_context_, _moduleName_, _platform_)
 
-Looks up _moduleName_ as a [Haste](./Concepts.md#haste) module or package.
+Looks up _moduleName_ as a [Haste](../../../__docs__/Concepts.md#haste) module or package.
 
 1. If _moduleName_ contains no `'/'`, try resolving it as a [Haste module](#resolvehastemodule-string--string).
    If found, then
@@ -220,11 +221,11 @@ For example, if `/app/node_modules/foo/package.json` has `"browser": {"./lib/ser
 
 ### Resolution context
 
-The object passed to the resolver for each request, e.g. as the first argument to a [custom resolver](#resolverequest-customresolver). Most fields come from your [`resolver` config](./Configuration.md#resolver-options). Custom resolvers most often read [`originModulePath`](#originmodulepath-string) and [`customResolverOptions`](#customresolveroptions-string-mixed), and call [`resolveRequest`](#resolverequest-customresolver) to fall back to the default resolver.
+The object passed to the resolver for each request, e.g. as the first argument to a [custom resolver](#resolverequest-customresolver). Most fields come from your [`resolver` config](../../metro-config/__docs__/Configuration.md#resolver-options). Custom resolvers most often read [`originModulePath`](#originmodulepath-string) and [`customResolverOptions`](#customresolveroptions-string-mixed), and call [`resolveRequest`](#resolverequest-customresolver) to fall back to the default resolver.
 
 #### `assetExts: $ReadOnlySet<string>`
 
-The set of file extensions used to identify asset files. Defaults to [`resolver.assetExts`](./Configuration.md#assetexts).
+The set of file extensions used to identify asset files. Defaults to [`resolver.assetExts`](../../metro-config/__docs__/Configuration.md#assetexts).
 
 #### `dev: boolean`
 
@@ -238,13 +239,13 @@ Returns whether the file at the given path exists. The default implementation wr
 
 _Added in v0.81.0_
 
-Returns information about the given absolute or project-relative path, following symlinks. A file "exists" only if Metro knows about it (see [project root and watch folders](./Concepts.md#project-root-and-watch-folders)), and a directory must be non-empty. The returned `realPath` is real and absolute; e.g. for a directory symlinked by pnpm, `fileSystemLookup('/app/node_modules/foo')` returns `{exists: true, type: 'd', realPath: '/app/node_modules/.pnpm/foo@1.0.0/node_modules/foo'}`. Missing paths return `{exists: false}`.
+Returns information about the given absolute or project-relative path, following symlinks. A file "exists" only if Metro knows about it (see [project root and watch folders](../../../__docs__/Concepts.md#project-root-and-watch-folders)), and a directory must be non-empty. The returned `realPath` is real and absolute; e.g. for a directory symlinked by pnpm, `fileSystemLookup('/app/node_modules/foo')` returns `{exists: true, type: 'd', realPath: '/app/node_modules/.pnpm/foo@1.0.0/node_modules/foo'}`. Missing paths return `{exists: false}`.
 
 By default, Metro uses an in-memory file map prepared in advance, so resolution needs no disk I/O and real paths are almost free.
 
 #### `nodeModulesPaths: $ReadOnlyArray<string>`
 
-Paths to check for modules after looking through all `node_modules` directories. Defaults to [`resolver.nodeModulesPaths`](./Configuration.md#nodemodulespaths).
+Paths to check for modules after looking through all `node_modules` directories. Defaults to [`resolver.nodeModulesPaths`](../../metro-config/__docs__/Configuration.md#nodemodulespaths).
 
 #### `preferNativePlatform: boolean`
 
@@ -256,15 +257,15 @@ Defaults to [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection), which Met
 
 #### `resolveAsset: (dirPath: string, assetName: string, extension: string) => ?$ReadOnlyArray<string>`
 
-Returns all asset files in `dirPath` matching `assetName` and `extension`, or `null` if there are none. The default implementation considers `${assetName}${extension}` and, for each of [`resolver.assetResolutions`](./Configuration.md#assetresolutions), `${assetName}@${resolution}x${extension}`. For example, `resolveAsset('/app/img', 'logo', '.png')` may return `['/app/img/logo.png', '/app/img/logo@2x.png', '/app/img/logo@3x.png']`. See also [Static Image Resources](https://reactnative.dev/docs/images#static-image-resources).
+Returns all asset files in `dirPath` matching `assetName` and `extension`, or `null` if there are none. The default implementation considers `${assetName}${extension}` and, for each of [`resolver.assetResolutions`](../../metro-config/__docs__/Configuration.md#assetresolutions), `${assetName}@${resolution}x${extension}`. For example, `resolveAsset('/app/img', 'logo', '.png')` may return `['/app/img/logo.png', '/app/img/logo@2x.png', '/app/img/logo@3x.png']`. See also [Static Image Resources](https://reactnative.dev/docs/images#static-image-resources).
 
 #### `sourceExts: $ReadOnlyArray<string>`
 
-File extensions to try, in order, when resolving a module path that does not exist on disk. Defaults to [`resolver.sourceExts`](./Configuration.md#sourceexts).
+File extensions to try, in order, when resolving a module path that does not exist on disk. Defaults to [`resolver.sourceExts`](../../metro-config/__docs__/Configuration.md#sourceexts).
 
 #### `mainFields: $ReadOnlyArray<string>`
 
-The ordered list of `package.json` fields read to resolve a package's main entry point (and any subpath file replacements) per the ["browser" field spec](https://github.com/defunctzombie/package-browser-field-spec). Defaults to [`resolver.resolverMainFields`](./Configuration.md#resolvermainfields).
+The ordered list of `package.json` fields read to resolve a package's main entry point (and any subpath file replacements) per the ["browser" field spec](https://github.com/defunctzombie/package-browser-field-spec). Defaults to [`resolver.resolverMainFields`](../../metro-config/__docs__/Configuration.md#resolvermainfields).
 
 #### `getPackage: string => ?PackageJson`
 
@@ -286,7 +287,7 @@ Resolves a Haste module name to an absolute path, or `null` if no such module ex
 
 #### `resolveHastePackage: string => ?string`
 
-Resolves a Haste (global) package name to an absolute `package.json` path, or `null` if no such package exists. The default implementation uses [metro-file-map](https://www.npmjs.com/package/metro-file-map)'s `getPackage` method and can be turned on or off using [`resolver.enableGlobalPackages`](./Configuration.md#enableglobalpackages).
+Resolves a Haste (global) package name to an absolute `package.json` path, or `null` if no such package exists. The default implementation uses [metro-file-map](https://www.npmjs.com/package/metro-file-map)'s `getPackage` method and can be turned on or off using [`resolver.enableGlobalPackages`](../../metro-config/__docs__/Configuration.md#enableglobalpackages).
 
 #### `allowHaste: boolean`
 
@@ -294,7 +295,7 @@ Resolves a Haste (global) package name to an absolute `package.json` path, or `n
 
 #### `disableHierarchicalLookup: boolean`
 
-If `true`, the resolver does not look up modules in `node_modules` directories per the Node resolution algorithm. Defaults to [`resolver.disableHierarchicalLookup`](./Configuration.md#disablehierarchicallookup).
+If `true`, the resolver does not look up modules in `node_modules` directories per the Node resolution algorithm. Defaults to [`resolver.disableHierarchicalLookup`](../../metro-config/__docs__/Configuration.md#disablehierarchicallookup).
 
 #### `extraNodeModules: ?{[string]: string}`
 
@@ -310,7 +311,7 @@ Any custom options passed to the resolver. By default, Metro populates this from
 
 #### `resolveRequest: CustomResolver`
 
-An alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](./Configuration.md#resolverequest). Its signature is:
+An alternative resolver function to which the current request may be delegated. Defaults to [`resolver.resolveRequest`](../../metro-config/__docs__/Configuration.md#resolverequest). Its signature is:
 
 ```flow
 function resolveRequest(
@@ -345,31 +346,31 @@ Custom resolvers must follow the [caching](#caching) rules.
 
 #### `schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>`
 
-[Custom resolvers](#resolverequest-customresolver) for specifiers prefixed with a URI scheme, keyed by scheme name (the part before the first `':'`, without the colon). Schemes are lowercased before lookup, so keys must be lowercase (both `Foo:` and `foo:` match `'foo'`). Defaults to Metro's built-in scheme resolvers (currently `metro:`) merged with [`resolver.schemeResolvers`](./Configuration.md#schemeresolvers), which take precedence.
+[Custom resolvers](#resolverequest-customresolver) for specifiers prefixed with a URI scheme, keyed by scheme name (the part before the first `':'`, without the colon). Schemes are lowercased before lookup, so keys must be lowercase (both `Foo:` and `foo:` match `'foo'`). Defaults to Metro's built-in scheme resolvers (currently `metro:`) merged with [`resolver.schemeResolvers`](../../metro-config/__docs__/Configuration.md#schemeresolvers), which take precedence.
 
 A matching resolver is called with the full specifier (e.g. `my-scheme:foo` for key `'my-scheme'`) and can chain back into default resolution via [`context.resolveRequest`](#resolverequest-customresolver), e.g. to resolve a relative path.
 
-Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never treated as schemes. See [**RESOLVE**](#resolve) step 4, and [`resolver.schemeResolvers`](./Configuration.md#schemeresolvers) for precedence relative to [`resolveRequest`](#resolverequest-customresolver).
+Relative (`./`, `../`) and subpath (`#…`) imports are handled first and never treated as schemes. See [**RESOLVE**](#resolve) step 4, and [`resolver.schemeResolvers`](../../metro-config/__docs__/Configuration.md#schemeresolvers) for precedence relative to [`resolveRequest`](#resolverequest-customresolver).
 
 #### `unstable_applyBrowserSpecAfterExports: boolean`
 
-Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the source file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental).
+Whether [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection) is applied to the source file resolved from a package's `"exports"` field, instead of to the requested subpath before `"exports"` is considered. Defaults to [`resolver.unstable_applyBrowserSpecAfterExports`](../../metro-config/__docs__/Configuration.md#unstable_applybrowserspecafterexports-experimental).
 
 #### `unstable_resolveExportsFromPackageRoot: boolean`
 
-Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, a package in `node_modules` has no `"exports"`, and the closest is used for an [`extraNodeModules`](#extranodemodules-string-string) mapping. A target of a `"browser"` spec redirection uses the root only if it's inside the root's directory and not under a nested `node_modules`. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
+Whether [**RESOLVE_PACKAGE**](#resolve_package) reads `"exports"` from the `package.json` at the root of the package named by a bare specifier, instead of the closest `package.json` to the candidate path. If that directory has no `package.json`, a package in `node_modules` has no `"exports"`, and the closest is used for an [`extraNodeModules`](#extranodemodules-string-string) mapping. A target of a `"browser"` spec redirection uses the root only if it's inside the root's directory and not under a nested `node_modules`. Defaults to [`resolver.unstable_resolveExportsFromPackageRoot`](../../metro-config/__docs__/Configuration.md#unstable_resolveexportsfrompackageroot-experimental).
 
 #### `unstable_conditionNames: $ReadOnlyArray<string>`
 
-Additional condition names asserted when resolving the `"exports"` and `"imports"` fields. Defaults to [`resolver.unstable_conditionNames`](./Configuration.md#unstable_conditionnames-experimental).
+Additional condition names asserted when resolving the `"exports"` and `"imports"` fields. Defaults to [`resolver.unstable_conditionNames`](../../metro-config/__docs__/Configuration.md#unstable_conditionnames-experimental).
 
 #### `unstable_conditionsByPlatform: {[platform: string]: $ReadOnlyArray<string>}`
 
-Additional condition names asserted for a given platform when resolving the `"exports"` and `"imports"` fields. Defaults to [`resolver.unstable_conditionsByPlatform`](./Configuration.md#unstable_conditionsbyplatform-experimental). For example, Metro's default `{web: ['browser']}` asserts `'browser'` only when bundling for `web`.
+Additional condition names asserted for a given platform when resolving the `"exports"` and `"imports"` fields. Defaults to [`resolver.unstable_conditionsByPlatform`](../../metro-config/__docs__/Configuration.md#unstable_conditionsbyplatform-experimental). For example, Metro's default `{web: ['browser']}` asserts `'browser'` only when bundling for `web`.
 
 #### `unstable_enablePackageExports: boolean`
 
-Whether the `"exports"` field is used for resolution. Defaults to [`resolver.unstable_enablePackageExports`](./Configuration.md#unstable_enablepackageexports-experimental).
+Whether the `"exports"` field is used for resolution. Defaults to [`resolver.unstable_enablePackageExports`](../../metro-config/__docs__/Configuration.md#unstable_enablepackageexports-experimental).
 
 #### `dependency: ?Dependency`
 

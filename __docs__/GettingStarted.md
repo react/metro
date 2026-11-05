@@ -1,5 +1,6 @@
 ---
 id: getting-started
+slug: /getting-started
 title: Getting Started
 ---
 
@@ -7,7 +8,7 @@ Metro is the JavaScript bundler used by React Native. This page shows how to ins
 
 :::note Using React Native?
 
-React Native projects already include Metro: `npx react-native start` starts a Metro development server, and `npx react-native bundle` builds a bundle. To customize Metro, edit your `metro.config.js` (see [Configuring Metro](./Configuration.md)). Read on to use Metro outside React Native or build your own tooling on it.
+React Native projects already include Metro: `npx react-native start` starts a Metro development server, and `npx react-native bundle` builds a bundle. To customize Metro, edit your `metro.config.js` (see [Configuring Metro](../packages/metro-config/__docs__/Configuration.md)). Read on to use Metro outside React Native or build your own tooling on it.
 
 :::
 
@@ -32,7 +33,7 @@ npx metro serve
 npx metro build index.js --out bundle.js
 ```
 
-See [Metro CLI Options](./CLI.md) for all commands and options.
+See [Metro CLI Options](../packages/metro/__docs__/CLI.md) for all commands and options.
 
 ### Running Programmatically
 
@@ -43,7 +44,7 @@ The `metro` module (`const Metro = require('metro')`) exports these main functio
 - [`createConnectMiddleware`](#method-createconnectmiddlewareconfig-options): Add Metro to an existing Express or Connect server.
 - [`runMetro`](#method-runmetroconfig): Get a Metro server and handle HTTP yourself.
 
-Each takes your Metro configuration, loaded from `metro.config.js` with [`Metro.loadConfig()`](./API.md#loadconfigoptions-defaultconfigoverrides), as the first argument. The [Bundling API](./API.md) reference lists every function and option.
+Each takes your Metro configuration, loaded from `metro.config.js` with [`Metro.loadConfig()`](../packages/metro/__docs__/API.md#loadconfigoptions-defaultconfigoverrides), as the first argument. The [Bundling API](../packages/metro/__docs__/API.md) reference lists every function and option.
 
 ### Method `runMetro(config)`
 
@@ -83,7 +84,7 @@ Starts a complete development server and resolves to `{httpServer}`, the Node.js
 
 #### Options
 
-Commonly used options include `host`, [`watch`](./Concepts.md#file-watching), `onReady` and `secureServerOptions`. See [`runServer`](./API.md#async-runserverconfig-options) for the full list. For example, to serve over HTTPS:
+Commonly used options include `host`, [`watch`](./Concepts.md#file-watching), `onReady` and `secureServerOptions`. See [`runServer`](../packages/metro/__docs__/API.md#async-runserverconfig-options) for the full list. For example, to serve over HTTPS:
 
 ```js
 const fs = require('fs');
@@ -104,7 +105,7 @@ Builds a bundle once. Resolves to an object with `code`, `map` and, optionally, 
 
 #### Options
 
-The only required option is `entry`. Commonly used options include `platform`, `dev`, `minify` and `out`. See [`runBuild`](./API.md#async-runbuildconfig-options) for the full list and defaults.
+The only required option is `entry`. Commonly used options include `platform`, `dev`, `minify` and `out`. See [`runBuild`](../packages/metro/__docs__/API.md#async-runbuildconfig-options) for the full list and defaults.
 
 ```js
 const config = await Metro.loadConfig();
@@ -141,7 +142,7 @@ Metro.loadConfig().then(async config => {
 });
 ```
 
-See [`createConnectMiddleware`](./API.md#createconnectmiddlewareconfig-options) for its options and return value.
+See [`createConnectMiddleware`](../packages/metro/__docs__/API.md#createconnectmiddlewareconfig-options) for its options and return value.
 
 ## Available options
 
@@ -162,7 +163,7 @@ module.exports = {
 };
 ```
 
-See [Configuring Metro](./Configuration.md) for all configuration options.
+See [Configuring Metro](../packages/metro-config/__docs__/Configuration.md) for all configuration options.
 
 ## URL and bundle request
 
@@ -170,13 +171,13 @@ A running Metro server serves bundles, source maps and assets over HTTP. In deve
 
 ### Assets
 
-Require an asset like a JavaScript file, e.g. `require('./logo.png')`. Metro recognizes assets by their file extension, which must be listed in [`resolver.assetExts`](./Configuration.md#assetexts), and makes `require` return the path to the file. Assets are generally served as-is.
+Require an asset like a JavaScript file, e.g. `require('./logo.png')`. Metro recognizes assets by their file extension, which must be listed in [`resolver.assetExts`](../packages/metro-config/__docs__/Configuration.md#assetexts), and makes `require` return the path to the file. Assets are generally served as-is.
 
 Metro can also serve a variant of an asset for a specific [platform](./Concepts.md#platform) (dotted suffix, e.g. `.ios`) or, for images, resolution (`@` suffix, e.g. `@2x`): `logo@2x.ios.png` is the 2x iOS variant of `logo.png`. `require` handles this for you.
 
 ### Bundle
 
-Any JS file in the [project root](./Concepts.md#project-root-and-watch-folders) can be the [entry point](./Concepts.md#entry-point) of a bundle, which includes the file and, recursively, everything it requires. To request a bundle, use the file's path relative to the project root (or [`server.unstable_serverRoot`](./Configuration.md#unstable_serverroot-experimental), if set), with `.js` changed to `.bundle`.
+Any JS file in the [project root](./Concepts.md#project-root-and-watch-folders) can be the [entry point](./Concepts.md#entry-point) of a bundle, which includes the file and, recursively, everything it requires. To request a bundle, use the file's path relative to the project root (or [`server.unstable_serverRoot`](../packages/metro-config/__docs__/Configuration.md#unstable_serverroot-experimental), if set), with `.js` changed to `.bundle`.
 
 Pass build options as query parameters. All are optional. Boolean ones take `true` or `false` and default to `false` unless noted. `dev`, `platform` and `minify` correspond to the bundle's settings of the same name.
 
@@ -185,13 +186,13 @@ Pass build options as query parameters. All are optional. Boolean ones take `tru
 - `minify`: Minify the code.
 - `excludeSource`: Leave the source code out of the source map, e.g. `/index.map?platform=ios&dev=true&excludeSource=true` returns a source map without `sourcesContent`.
 - `inlineSourceMap`: Append the source map to the bundle as a base64 `data:` URL.
-- `lazy`: Leave modules loaded with [`import()`](./ModuleAPI.md) out of the bundle and load them on demand.
+- `lazy`: Leave modules loaded with [`import()`](../packages/metro/__docs__/ModuleAPI.md) out of the bundle and load them on demand.
 - `modulesOnly`: Leave out Metro's runtime and polyfills, serving only the modules.
 - `runModule`: End the bundle with the statements that run the entry point. Defaults to `true`.
 - `shallow`: Include only the entry module, without its dependencies.
 - `sourcePaths`: Reference source files in the source map as absolute file paths (`absolute`) or URL paths on the server (`url-server`). Defaults to `absolute`.
-- `unstable_transformProfile`: Passed to the [Babel transformer](./Configuration.md#babeltransformerpath) to target a specific JavaScript engine (`default`, `hermes-stable` or `hermes-canary`). Defaults to `default`.
-- `resolver.<key>` and `transform.<key>`: [Custom resolver options](./Resolution.md#customresolveroptions-string-mixed) and custom transform options, e.g. `transform.foo=bar` passes `{foo: 'bar'}` to the transformer.
+- `unstable_transformProfile`: Passed to the [Babel transformer](../packages/metro-config/__docs__/Configuration.md#babeltransformerpath) to target a specific JavaScript engine (`default`, `hermes-stable` or `hermes-canary`). Defaults to `default`.
+- `resolver.<key>` and `transform.<key>`: [Custom resolver options](../packages/metro-resolver/__docs__/Resolution.md#customresolveroptions-string-mixed) and custom transform options, e.g. `transform.foo=bar` passes `{foo: 'bar'}` to the transformer.
 
 For example, `http://localhost:8081/foo/bar/baz.bundle?dev=true&platform=ios` builds a development bundle for iOS from `foo/bar/baz.js`.
 
@@ -201,7 +202,7 @@ Metro builds a source map for each bundle. To request it, use the bundle's URL w
 
 ## JavaScript transformer
 
-The JavaScript transformer ([`babelTransformerPath`](./Configuration.md#babeltransformerpath)) manipulates each file's JS code, usually by calling Babel (see [Transformation](./Concepts.md#transformation)). React Native's default config sets one up (`@react-native/metro-babel-transformer`), so you only need your own for custom transformations. It can export two methods:
+The JavaScript transformer ([`babelTransformerPath`](../packages/metro-config/__docs__/Configuration.md#babeltransformerpath)) manipulates each file's JS code, usually by calling Babel (see [Transformation](./Concepts.md#transformation)). React Native's default config sets one up (`@react-native/metro-babel-transformer`), so you only need your own for custom transformations. It can export two methods:
 
 ### Method `transform(module)`
 

@@ -1,9 +1,10 @@
 ---
 id: caching
+slug: /caching
 title: Caching
 ---
 
-Metro speeds up builds by caching the result of [transforming](./Concepts.md#transformation) each module, and doesn't retransform a module unless its source code (or the current configuration) has changed since.
+Metro speeds up builds by caching the result of [transforming](../../../__docs__/Concepts.md#transformation) each module, and doesn't retransform a module unless its source code (or the current configuration) has changed since.
 
 Cache entries are keyed by the module's path and contents, the transform options and the transformer configuration, e.g. `Button.js` gets separate entries for `platform=ios` and `platform=android`, or for `dev=true` and `dev=false`.
 
@@ -14,10 +15,10 @@ Out of the box, Metro uses a **local cache** on disk, by default in a `metro-cac
 A typical setup involves:
 
 1. A storage backend specific to your team (e.g. an S3 bucket).
-2. Running [`metro build`](./CLI.md#build-entry) periodically (e.g. in a CI job) to populate the cache, using `HttpStore` (or a custom read/write cache store) in your Metro config.
+2. Running [`metro build`](../../metro/__docs__/CLI.md#build-entry) periodically (e.g. in a CI job) to populate the cache, using `HttpStore` (or a custom read/write cache store) in your Metro config.
 3. Configuring Metro on development machines to read from the cache, using `HttpGetStore` (or a custom read-only cache store).
 
-Caches are configured with [`cacheStores`](./Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
+Caches are configured with [`cacheStores`](../../metro-config/__docs__/Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
 
 ```js
 // metro.config.js
@@ -35,7 +36,7 @@ module.exports = mergeConfig(getDefaultConfig(__dirname), {
 
 ## Built-in cache stores
 
-Metro provides these stores for use with [`cacheStores`](./Configuration.md#cachestores):
+Metro provides these stores for use with [`cacheStores`](../../metro-config/__docs__/Configuration.md#cachestores):
 
 - **`FileStore({root: string})`** stores cache entries as files under `root`, named after the hex-encoded key: a key starting with `c083bf...` is stored in `<root>/c0/83bf...`.
 - **`AutoCleanFileStore(options)`** <div class="label deprecated">Deprecated</div> is a `FileStore` that periodically cleans up old entries. It accepts `FileStore`'s options plus:
@@ -62,7 +63,7 @@ Import these classes from the `metro-cache` package, or get them through the fun
 
 ## Custom cache stores
 
-For other storage backends, pass an instance of a class with this interface into [`cacheStores`](./Configuration.md#cachestores):
+For other storage backends, pass an instance of a class with this interface into [`cacheStores`](../../metro-config/__docs__/Configuration.md#cachestores):
 
 ```flow
 interface CacheStore<T: Buffer | JsonSerializable> {
