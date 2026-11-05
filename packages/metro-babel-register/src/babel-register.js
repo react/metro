@@ -57,6 +57,19 @@ function register(
   require('@babel/register')(registerConfig);
 }
 
+// `@babel/register` keys its cache on the serialised options, plugin visitors
+// included. Babel explodes a plugin's visitor when it loads the plugin, but one
+// without a visitor gets an empty object that its first traversal explodes in
+// place, so every key changed after the first transform in each process.
+function withVisitor/*:: <Args extends ReadonlyArray<unknown>> */(
+  plugin /*: (...Args) => {...} */,
+) /*: (...Args) => {...} */ {
+  return (...args) => {
+    const pluginObj = plugin(...args);
+    return 'visitor' in pluginObj ? pluginObj : {...pluginObj, visitor: {}};
+  };
+}
+
 function config(
   onlyList /*: ReadonlyArray<RegExp | string> */,
   options /*: ?Readonly<{
@@ -90,7 +103,7 @@ function config(
       {
         test: /\.js$/,
         plugins: [
-          [require('flow-parser/babel-plugin')],
+          [withVisitor(require('flow-parser/babel-plugin'))],
           [require('babel-plugin-transform-flow-enums')],
           [require('@babel/plugin-transform-flow-strip-types').default],
         ],
