@@ -213,6 +213,38 @@ describe('with package exports resolution enabled', () => {
       );
     });
 
+    test.each([
+      ['false', false],
+      ['true', true],
+      ['a number', 1],
+    ])(
+      '[nonstrict] should fall back to "main" field resolution when "exports" is %s',
+      (_, exportsField) => {
+        const logWarning = jest.fn();
+        const context = {
+          ...baseContext,
+          ...createPackageAccessors({
+            [p('/root/node_modules/test-pkg/package.json')]: {
+              main: 'index-main.js',
+              exports: exportsField,
+            },
+          }),
+          unstable_logWarning: logWarning,
+        };
+
+        expect(Resolver.resolve(context, 'test-pkg', null)).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/index-main.js'),
+        });
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toBe(
+          `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).
+` +
+            'Reason: The "exports" field must be a string, an array or an object. Falling back to file-based resolution.',
+        );
+      },
+    );
+
     describe('should resolve "exports" target directly', () => {
       const context = {
         ...baseContext,
