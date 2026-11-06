@@ -46,18 +46,20 @@ export default async function getPrependedScripts(
     options.platform,
     resolverOptions,
   );
-  const resolveFromProjectRoot = (name: string) =>
-    resolve(`${config.projectRoot}/.`, {
-      name,
-      data: {key: name, locs: [], asyncType: null, isESMImport: false},
-    }).filePath;
+  const dependencyGraph = await bundler.getDependencyGraph();
 
-  const moduleSystem = resolveFromProjectRoot(defaults.moduleSystem);
+  const moduleSystem = resolve(`${config.projectRoot}/.`, {
+    name: defaults.moduleSystem,
+    data: {
+      key: defaults.moduleSystem,
+      locs: [],
+      asyncType: null,
+      isESMImport: false,
+    },
+  }).filePath;
 
   // A bundle with no module system builds successfully but fails at runtime.
-  if (
-    moduleSystem === resolveFromProjectRoot(config.resolver.emptyModulePath)
-  ) {
+  if (dependencyGraph.isEmptyModule(moduleSystem)) {
     throw new Error(
       `The module system ('${defaults.moduleSystem}') resolved to an empty ` +
         'module. A custom `resolver.resolveRequest` must delegate this ' +

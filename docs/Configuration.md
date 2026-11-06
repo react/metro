@@ -329,7 +329,9 @@ resolveRequest: (context, moduleName, platform) => {
     // Resolve to a file path, or throw if there is no resolution.
     return {filePath: 'path/to/file', type: 'sourceFile'};
   }
-  // Optionally, chain to the standard Metro resolver.
+  // Chain to the standard Metro resolver for anything not handled above. This
+  // must include `metro:` specifiers, such as the module system
+  // (`metro:runtime/polyfills/require`), which is resolved for every build.
   return context.resolveRequest(context, moduleName, platform);
 };
 ```

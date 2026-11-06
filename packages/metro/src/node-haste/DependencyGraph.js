@@ -367,6 +367,10 @@ export default class DependencyGraph extends EventEmitter {
     return resolution;
   }
 
+  isEmptyModule(filePath: string): boolean {
+    return this._moduleResolver.isEmptyModule(filePath);
+  }
+
   doesFileExist = (filePath: string): boolean => {
     return this._fileSystem.exists(filePath);
   };
