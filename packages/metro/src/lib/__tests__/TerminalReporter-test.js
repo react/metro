@@ -12,9 +12,24 @@
 import TerminalReporter from '../TerminalReporter';
 
 describe('TerminalReporter', () => {
-  test('shows the latest bundle transform progress', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('updates the bundle transform progress status at most every 100ms', () => {
     const terminal = {log: jest.fn(), status: jest.fn()};
     const reporter = new TerminalReporter(terminal as $FlowFixMe);
+    const progress = (transformedFileCount: number) =>
+      reporter.update({
+        buildID: 'build-1',
+        type: 'bundle_transform_progressed',
+        transformedFileCount,
+        totalFileCount: 10,
+      });
     reporter.update({
       buildID: 'build-1',
       bundleDetails: {
@@ -28,19 +43,13 @@ describe('TerminalReporter', () => {
       },
       type: 'bundle_build_started',
     });
-    reporter.update({
-      buildID: 'build-1',
-      type: 'bundle_transform_progressed',
-      transformedFileCount: 1,
-      totalFileCount: 10,
-    });
-    reporter.update({
-      buildID: 'build-1',
-      type: 'bundle_transform_progressed',
-      transformedFileCount: 2,
-      totalFileCount: 10,
-    });
+    progress(1);
+    progress(2);
+    expect(terminal.status).toHaveBeenCalledTimes(2);
+    expect(terminal.status.mock.calls[1][0]).toContain('(1/10)');
+    jest.advanceTimersByTime(100);
+    progress(3);
     expect(terminal.status).toHaveBeenCalledTimes(3);
-    expect(terminal.status.mock.calls[2][0]).toContain('(2/10)');
+    expect(terminal.status.mock.calls[2][0]).toContain('(3/10)');
   });
 });

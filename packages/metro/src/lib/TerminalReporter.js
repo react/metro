@@ -65,6 +65,7 @@ interface SnippetError extends Error {
 const DARK_BLOCK_CHAR = '\u2593';
 const LIGHT_BLOCK_CHAR = '\u2591';
 const MAX_PROGRESS_BAR_CHAR_WIDTH = 16;
+const PROGRESS_STATUS_INTERVAL_MS = 100;
 
 /**
  * We try to print useful information to the terminal for interactive builds.
@@ -80,12 +81,15 @@ export default class TerminalReporter {
 
   _interactionStatus: ?string;
 
+  _lastProgressStatusTime: number;
+
   _prevHealthCheckResult: ?HealthCheckResult;
 
   readonly terminal: Terminal;
 
   constructor(terminal: Terminal) {
     this._activeBundles = new Map();
+    this._lastProgressStatusTime = -Infinity;
     this.terminal = terminal;
   }
 
@@ -519,10 +523,19 @@ export default class TerminalReporter {
   /**
    * Single entry point for reporting events. That allows us to implement the
    * corresponding JSON reporter easily and have a consistent reporting.
+   * Bundle transform progress updates the status at most every
+   * PROGRESS_STATUS_INTERVAL_MS.
    */
   update(event: TerminalReportableEvent): void {
     this._log(event);
     this._updateState(event);
+    if (event.type === 'bundle_transform_progressed') {
+      const now = performance.now();
+      if (now - this._lastProgressStatusTime < PROGRESS_STATUS_INTERVAL_MS) {
+        return;
+      }
+      this._lastProgressStatusTime = now;
+    }
     this.terminal.status(this._getStatusMessage());
   }
 }

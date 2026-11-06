@@ -143,6 +143,15 @@ describe.each([false, true])(
       );
     });
 
+    test('keeps the status on the screen when logging', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      terminal.log('foo');
+      expect(stream.buffer.join('').trim()).toEqual(
+        ttyPrint ? 'foo       status' : 'status    foo',
+      );
+    });
+
     test('persists status', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.log('foo');
@@ -198,7 +207,7 @@ describe.each([false, true])(
       await settle(terminal.flush());
       expect(stream.buffer.join('').trim()).toEqual(
         ttyPrint
-          ? 'foo       external  bar       status'
+          ? 'foo       status    external  bar       status'
           : 'status    foo       external  bar',
       );
     });

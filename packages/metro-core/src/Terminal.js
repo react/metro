@@ -270,11 +270,12 @@ export default class Terminal {
   /**
    * Erases the written status from the screen, unless it can't be reliably
    * erased, in which case it is left to drift with the scrollbar. In
-   * non-interactive terminals, the written status stays.
+   * non-interactive terminals, the written status stays. Returns whether the
+   * status was erased.
    */
-  #eraseWrittenStatusMaybe(): void {
+  #eraseWrittenStatusMaybe(): boolean {
     if (!this.#ttyStream) {
-      return;
+      return false;
     }
 
     const writtenStatus = this.#writtenStatus;
@@ -288,12 +289,13 @@ export default class Terminal {
       // be known without overriding the stdout/stderr globals
       this.#getBytesWritten() !== this.#bytesWrittenAfterLastWrite
     ) {
-      return;
+      return false;
     }
 
     const statusLinesCount = writtenStatus.split('\n').length;
     // Moves to the start of the line, up over the status lines, and clears below
     this.#write(`\r\x1B[${statusLinesCount}A\x1B[J`);
+    return true;
   }
 
   /**
@@ -320,11 +322,18 @@ export default class Terminal {
    * Similar to `console.log`, except it moves the status/progress text out of
    * the way correctly. In non-interactive terminals this is the same as
    * `console.log`. The line is written immediately, so it keeps its order
-   * relative to other output.
+   * relative to other output. An erased status is written again below the line
+   * in the same write, so it stays on the screen, unless the status is cleared.
    */
   log(format: string, ...args: Array<unknown>): void {
-    this.#eraseWrittenStatusMaybe();
-    this.#write(util.format(format, ...args) + '\n');
+    const writtenStatus = this.#writtenStatus;
+    const line = util.format(format, ...args) + '\n';
+    if (this.#eraseWrittenStatusMaybe() && this.#status.length > 0) {
+      this.#write(line + writtenStatus + '\n');
+      this.#writtenStatus = writtenStatus;
+    } else {
+      this.#write(line);
+    }
 
     this.#scheduleStatusUpdate();
   }
