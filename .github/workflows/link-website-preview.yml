@@ -1,0 +1,93 @@
+# Comments on PRs from forks that change the website with a link to the website
+# preview that preview-website.yml publishes from the fork, once the preview
+# serves the PR head, and with a warning that the fork owner hosts and controls
+# the preview. Edits the same comment on later pushes.
+#
+# Never checks out PR code.
+name: Link website preview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/preview-website.yml"
+      - ".github/workflows/link-website-preview.yml"
+      - ".github/actions/website-install/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: link-website-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  link:
+    name: Website preview
+    if: github.event.pull_request.head.repo.fork && github.event.pull_request.head.ref != 'gh-pages'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const {number, head} = context.payload.pull_request;
+            // Matches the preview directory in preview-website.yml.
+            const previewDir = head.ref.replace(/[^A-Za-z0-9._\/-]/gu, '-');
+            const url = `https://${head.repo.owner.login}.github.io/${head.repo.name}/${previewDir}/`;
+            const sha = head.sha.slice(0, 7);
+
+            let live = false;
+            for (let i = 0; i < 90 && !live; i++) {
+              if (i > 0) await new Promise(resolve => setTimeout(resolve, 10_000));
+              try {
+                const res = await fetch(`${url}.sha?${head.sha}`);
+                live = res.ok && (await res.text()).trim() === head.sha;
+              } catch (error) {
+                core.info(`Fetching ${url}.sha failed: ${error.message}`);
+              }
+            }
+            if (!live) {
+              const title = 'Website preview not deployed';
+              await core.summary
+                .addHeading(title, 3)
+                .addRaw(`This link didn't serve ${sha} within 15 minutes:`, true)
+                .addCodeBlock(url)
+                .addRaw('To publish the preview from your fork:', true)
+                .addList([
+                  'Enable workflows in the Actions tab.',
+                  'Set Settings &gt; Pages &gt; Source to "Deploy from a branch", <code>gh-pages</code>, <code>/ (root)</code>.',
+                  'Push the branch again, and check that the "Preview website" workflow passes in the Actions tab.',
+                ])
+                .write();
+              core.error(`${url} didn't serve ${sha} within 15 minutes.`, {title});
+              process.exitCode = core.ExitCode.Failure;
+              return;
+            }
+
+            const MARKER = '<!-- website-preview -->';
+            const BOT = 'github-actions[bot]';
+            const body = [
+              MARKER,
+              '## Website preview',
+              '',
+              '> [!WARNING]',
+              `> **Hosted by \`${head.repo.owner.login}\` on the GitHub Pages of \`${head.repo.full_name}\`, not by this repository. Its owner controls what it serves.**`,
+              '>',
+              `> ${url}`,
+              '>',
+              `> _Built from ${sha}._`,
+            ].join('\n');
+            const {owner, repo} = context.repo;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: number, per_page: 100});
+            const existing = comments.find(c => c.user.login === BOT && c.body.startsWith(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number: number, body});
+            }
+            core.notice(`Preview: ${url}`);
