@@ -251,3 +251,48 @@ test('module URLs resolve back to the exact file and platform', () => {
     ).toMatchObject({entryFile: './dual.ios.cjs', platform: 'ios'});
   }
 });
+
+test('async paths in updated modules carry the platform of the bundle', () => {
+  const lazyModule: Module<> = {
+    ...fooModule,
+    path: '/root/lazy.ios.js',
+    dependencies: new Map([
+      [
+        './chunk',
+        {
+          absolutePath: '/root/chunk.ios.js',
+          data: {
+            data: {
+              asyncType: 'async',
+              isESMImport: false,
+              locs: [],
+              key: './chunk',
+            },
+            name: './chunk',
+          },
+        },
+      ],
+    ]),
+  };
+  const {added} = hmrJSBundle(
+    {
+      added: new Map([['/root/lazy.ios.js', lazyModule]]),
+      modified: new Map(),
+      deleted: new Set(),
+      reset: false,
+    },
+    {
+      entryPoints: new Set(['/root/lazy.ios.js']),
+      dependencies: new Map([['/root/lazy.ios.js', lazyModule]]),
+      transformOptions: {...transformOptions, platform: 'ios'},
+    },
+    {
+      ...options,
+      clientUrl: new URL('http://localhost/index.ios.bundle?lazy=true'),
+      includeAsyncPaths: true,
+    },
+  );
+  expect(added[0].module[1]).toContain(
+    '"paths":{"0":"/chunk.ios.js.bundle?lazy=true&platform=ios&modulesOnly=true&runModule=false"}',
+  );
+});
