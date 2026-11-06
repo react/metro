@@ -34,6 +34,9 @@ export type Options = Readonly<{
   createModuleId: (absolutePath: string) => number | string,
   dev: boolean,
   includeAsyncPaths: boolean,
+  // The platform the bundle is built for, set on async bundle URLs so that the
+  // server builds each split bundle for the same platform.
+  platform?: ?string,
   projectRoot: string,
   serverRoot: string,
   sourceUrl: ?string,
@@ -106,6 +109,9 @@ function getDefaultAsyncDependencyPath(
   // most parameters from the main bundle's URL.
 
   const {searchParams} = new URL(jscSafeUrl.toNormalUrl(options.sourceUrl));
+  if (options.platform != null) {
+    searchParams.set('platform', options.platform);
+  }
   searchParams.set('modulesOnly', 'true');
   searchParams.set('runModule', 'false');
   if (isVirtualModulePath(dependency.absolutePath)) {

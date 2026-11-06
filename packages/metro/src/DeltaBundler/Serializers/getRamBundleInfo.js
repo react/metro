@@ -55,7 +55,10 @@ export default async function getRamBundleInfo(
     .filter(options.processModuleFilter)
     .map((module: Module<>): RamModuleTransport => ({
       id: options.createModuleId(module.path),
-      code: wrapModule(module, options),
+      code: wrapModule(module, {
+        ...options,
+        platform: graph.transformOptions.platform,
+      }),
       map: sourceMapObject([module], {
         excludeSource: options.excludeSource,
         processModuleFilter: options.processModuleFilter,

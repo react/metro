@@ -254,6 +254,37 @@ describe('wrapModule()', () => {
     ).toBe('./node_modules/bar/dist/index.cjs');
   });
 
+  test('async bundle paths carry the platform of the bundle', () => {
+    const dep = nullthrows(myModule.dependencies.get('bar'));
+    myModule.dependencies.set('bar', {
+      ...dep,
+      absolutePath: p('/root/bar.ios.js'),
+      data: {...dep.data, data: {...dep.data.data, asyncType: 'async'}},
+    });
+    const wrapped = wrapModule(myModule, {
+      createModuleId: createModuleIdFactory(),
+      dev: false,
+      includeAsyncPaths: true,
+      platform: 'ios',
+      projectRoot: p('/root'),
+      serverRoot: p('/root'),
+      sourceUrl: 'http://localhost/Main.ios.bundle?param1=true',
+    });
+    expect(raw(wrapped)).toMatchInlineSnapshot(
+      `__d(function() { console.log("foo") },0,{"0":1,"1":2,"paths":{"1":"/bar.ios.js.bundle?param1=true&platform=ios&modulesOnly=true&runModule=false"}});`,
+    );
+
+    // The platform can't be inferred from the chunk's file name, so it must be
+    // in the query string.
+    const asyncPath = nullthrows(wrapped.match(/"paths":\{"1":"([^"]+)"/))[1];
+    expect(
+      parseBundleOptionsFromBundleRequestUrl(
+        'http://localhost' + asyncPath,
+        new Set(['ios']),
+      ).platform,
+    ).toBe('ios');
+  });
+
   test('async bundle paths override modulesOnly and runModule', () => {
     const dep = nullthrows(myModule.dependencies.get('bar'));
     myModule.dependencies.set('bar', {

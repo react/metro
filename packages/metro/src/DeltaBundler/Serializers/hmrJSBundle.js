@@ -105,6 +105,7 @@ function prepareModule(
 ): string {
   const code = wrapModule(module, {
     ...options,
+    platform: graph.transformOptions.platform,
     sourceUrl: options.clientUrl.toString(),
     dev: true,
   });

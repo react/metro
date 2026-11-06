@@ -115,6 +115,22 @@ describe('Metro development server serves bundles via HTTP', () => {
     );
   });
 
+  test('builds lazy bundles for the platform inferred from the entry file name', async () => {
+    const object = await downloadAndExec(
+      '/async-platform/index.ios.bundle?dev=true&minify=false&lazy=true',
+    );
+    await expect(object.asyncImport).resolves.toHaveProperty(
+      'default',
+      'dep.ios.js',
+    );
+    expect(bundlesDownloaded).toEqual(
+      new Set([
+        '/async-platform/index.ios.bundle?dev=true&minify=false&lazy=true',
+        '/async-platform/chunk.js.bundle?dev=true&minify=false&lazy=true&platform=ios&modulesOnly=true&runModule=false',
+      ]),
+    );
+  });
+
   test('should serve non-lazy bundles by default', async () => {
     const object = await downloadAndExec(
       '/import-export/index.bundle?platform=ios&dev=true&minify=false',

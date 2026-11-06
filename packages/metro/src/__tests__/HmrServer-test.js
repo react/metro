@@ -86,6 +86,7 @@ describe('HmrServer', () => {
     mockedGraph = {
       dependencies: new Map<$FlowFixMe, $FlowFixMe>(),
       entryPoint: p('/root/EntryPoint.js'),
+      transformOptions: {platform: 'ios'},
     };
     changeHandlerPromises.clear();
 
