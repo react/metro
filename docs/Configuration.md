@@ -321,7 +321,7 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath). See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath-deprecated). See [Module Resolution](./Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
