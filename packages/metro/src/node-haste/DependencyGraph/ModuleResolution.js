@@ -113,15 +113,6 @@ export class ModuleResolver {
     return emptyModule;
   }
 
-  /**
-   * Whether a prior resolution of this resolver returned `filePath` as the
-   * empty module. This doesn't resolve `emptyModulePath`, which is only needed
-   * once a resolution returns `{type: 'empty'}`.
-   */
-  isEmptyModule(filePath: string): boolean {
-    return this._cachedEmptyModule?.filePath === filePath;
-  }
-
   resolveDependency(
     originModulePath: string,
     dependency: TransformResultDependency,

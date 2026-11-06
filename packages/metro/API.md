@@ -72,7 +72,6 @@ export class DependencyGraph extends EventEmitter {
   getHasteName(filePath: string): string;
   getOrComputeSha1(mixedPath: string): Promise<{content?: Buffer | undefined; sha1: string}>;
   getWatcher(): EventEmitter;
-  isEmptyModule(filePath: string): boolean;
   matchFilesWithContext(from: string, context: Readonly<{recursive: boolean; filter: RegExp}>): Iterable<string>;
   ready(): Promise<void>;
   resolveDependency(

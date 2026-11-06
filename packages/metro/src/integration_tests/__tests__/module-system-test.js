@@ -38,19 +38,6 @@ test('resolves the module system through the resolver', async () => {
   );
 });
 
-test('rejects a module system that resolves to an empty module', async () => {
-  await expect(
-    build({
-      resolveRequest: (context, moduleName, platform) =>
-        moduleName === 'metro:runtime/polyfills/require'
-          ? {type: 'empty'}
-          : delegate(context, moduleName, platform),
-    }),
-  ).rejects.toThrow(
-    "The module system ('metro:runtime/polyfills/require') resolved to an empty module.",
-  );
-});
-
 test('does not resolve an unused `emptyModulePath`', async () => {
   const emptyModulePath = '/does/not/exist/empty.js';
   const resolveRequest = jest.fn(delegate);
