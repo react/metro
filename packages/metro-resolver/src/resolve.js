@@ -901,7 +901,8 @@ function resolvePackageEntryPoint(
 
   const packageJsonPath = path.join(packagePath, 'package.json');
 
-  if (!context.doesFileExist(packageJsonPath)) {
+  const packageJsonLookup = context.fileSystemLookup(packageJsonPath);
+  if (!packageJsonLookup.exists || packageJsonLookup.type !== 'f') {
     return resolveFile(context, packagePath, 'index', platform);
   }
 

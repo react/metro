@@ -1138,7 +1138,7 @@ describe('with package exports resolution enabled', () => {
             ...assetResolutions.map(
               resolution => basePath + '@' + resolution + 'x' + extension,
             ),
-          ].filter(candidate => baseContext.doesFileExist(candidate));
+          ].filter(candidate => baseContext.fileSystemLookup(candidate).exists);
 
           return assets.length ? assets : null;
         },
@@ -1178,8 +1178,8 @@ describe('with package exports resolution enabled', () => {
           },
         }),
         resolveAsset: (dirPath: string, basename: string, extension: string) =>
-          [dirPath + path.sep + basename + extension].filter(candidate =>
-            baseContext.doesFileExist(candidate),
+          [dirPath + path.sep + basename + extension].filter(
+            candidate => baseContext.fileSystemLookup(candidate).exists,
           ),
         unstable_applyBrowserSpecAfterExports: true,
       };

@@ -38,7 +38,9 @@ describe('asset resolutions', () => {
       ),
     ];
 
-    assets = assets.filter(candidate => baseContext.doesFileExist(candidate));
+    assets = assets.filter(
+      candidate => baseContext.fileSystemLookup(candidate).exists,
+    );
 
     return assets.length ? assets : null;
   };
