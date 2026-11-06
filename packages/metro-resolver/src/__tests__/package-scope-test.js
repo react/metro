@@ -272,7 +272,11 @@ describe('package scope lookups', () => {
   });
 
   test('package entry point makes no more lookups from the package root', () => {
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_enablePackageExports: true,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
     Resolver.resolve(context, 'pkg', 'ios');
     const expected = lookedUpPaths();
 
@@ -290,7 +294,11 @@ describe('package scope lookups', () => {
       ...fileMap,
       [p('/root/src/node_modules/unrelated/index.js')]: '',
     });
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_enablePackageExports: true,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
     Resolver.resolve(context, 'pkg', 'ios');
     const expected = lookedUpPaths();
     expect(expected).toContain(p('/root/src/node_modules/pkg'));
