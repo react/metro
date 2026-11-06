@@ -86,11 +86,6 @@ function setUp() {
     `module.exports = require(${JSON.stringify(METRO_BABEL_CONFIG)});\n`,
   );
   fs.writeFileSync(path.join(APP_DIR, '.watchmanconfig'), '{}\n');
-  // The app has no node_modules to resolve Metro's runtime from
-  fs.writeFileSync(
-    path.join(APP_DIR, 'metro.config.js'),
-    "module.exports = {transformer: {asyncRequireModulePath: 'metro:runtime/modules/asyncRequire'}};\n",
-  );
   for (let i = 0; i < APP_MODULE_COUNT; i++) {
     const children = [2 * i + 1, 2 * i + 2].filter(
       child => child < APP_MODULE_COUNT,
