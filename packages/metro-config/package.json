@@ -24,8 +24,7 @@
     "jest-validate": "^29.7.0",
     "metro": "0.87.3",
     "metro-cache": "0.87.3",
-    "metro-core": "0.87.3",
-    "metro-runtime": "0.87.3"
+    "metro-core": "0.87.3"
   },
   "devDependencies": {
     "@types/connect": "^3.4.35",
