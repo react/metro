@@ -1,0 +1,103 @@
+# Adds a section linking the website preview that preview-website.yml publishes
+# from the fork to the description of PRs from forks that change the website,
+# once the preview serves the PR head, and comments that it did. Fails if the
+# description links the preview without that exact section, which warns that
+# the fork owner hosts and controls the preview.
+#
+# Never checks out PR code.
+name: Link website preview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/preview-website.yml"
+      - ".github/workflows/link-website-preview.yml"
+      - ".github/actions/website-install/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: link-website-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  link:
+    name: Website preview
+    if: github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const {number, head} = context.payload.pull_request;
+            const branchPath = head.ref.split('/').map(encodeURIComponent).join('/');
+            const url = `https://${head.repo.owner.login}.github.io/${head.repo.name}/${branchPath}/`;
+            const sha = head.sha.slice(0, 7);
+            const section = [
+              '## Website preview',
+              '',
+              '> [!WARNING]',
+              `> **Hosted by \`${head.repo.owner.login}\` on the GitHub Pages of \`${head.repo.full_name}\`, not by this repository. Its owner controls what it serves.**`,
+              '>',
+              `> ${url}`,
+              '>',
+              '> _Added by the Link website preview workflow._',
+            ].join('\n');
+
+            let live = false;
+            for (let i = 0; i < 90 && !live; i++) {
+              if (i > 0) await new Promise(resolve => setTimeout(resolve, 10_000));
+              const res = await fetch(`${url}.sha?${head.sha}`);
+              live = res.ok && (await res.text()).trim() === head.sha;
+            }
+            if (!live) {
+              const title = 'Website preview not deployed';
+              await core.summary
+                .addHeading(title, 3)
+                .addRaw(`This link didn't serve ${sha} within 15 minutes:`, true)
+                .addCodeBlock(url)
+                .addRaw('To publish the preview from your fork:', true)
+                .addList([
+                  'Enable workflows in the Actions tab.',
+                  'Set Settings &gt; Pages &gt; Source to "Deploy from a branch", <code>gh-pages</code>, <code>/ (root)</code>.',
+                  'Push the branch again, and check that the "Preview website" workflow passes in the Actions tab.',
+                ])
+                .write();
+              core.error(`${url} didn't serve ${sha} within 15 minutes.`, {title});
+              process.exitCode = core.ExitCode.Failure;
+              return;
+            }
+
+            const {owner, repo} = context.repo;
+            // Read after waiting, so edits made meanwhile are kept.
+            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number: number});
+            // Descriptions edited on github.com use CRLF.
+            const current = (pr.body ?? '').replace(/\r\n/g, '\n');
+            if (!current.includes(url)) {
+              const body = `${current.trimEnd()}\n\n${section}\n`.trimStart();
+              await github.rest.pulls.update({owner, repo, pull_number: number, body});
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: number,
+                body: 'Added a link to the website preview to the PR description.',
+              });
+            } else if (!current.includes(section)) {
+              const title = 'Website preview section changed';
+              await core.summary
+                .addHeading(title, 3)
+                .addRaw('The PR description links the website preview, but doesn\'t include this section exactly. Restore it, or remove the link to have it added again.', true)
+                .addCodeBlock(section, 'markdown')
+                .write();
+              core.error(`The PR description links ${url} without the exact website preview section.`, {title});
+              process.exitCode = core.ExitCode.Failure;
+              return;
+            }
+            core.notice(`Preview: ${url}`);
