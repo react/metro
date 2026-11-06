@@ -86,7 +86,7 @@ export function createResolutionContext(
     resolveHastePackage: (name: string) => null,
     schemeResolvers: {},
     sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
-    unstable_applyBrowserSpecAfterExports: false,
+    unstable_applyBrowserSpecAfterExports: true,
     unstable_conditionNames: ['require'],
     unstable_conditionsByPlatform: {
       web: ['browser'],
@@ -94,7 +94,7 @@ export function createResolutionContext(
     unstable_enablePackageExports: false,
     unstable_incrementalResolution: false,
     unstable_logWarning: () => {},
-    unstable_resolveExportsFromPackageRoot: false,
+    unstable_resolveExportsFromPackageRoot: true,
     ...createPackageAccessors(fileMap),
   };
 }

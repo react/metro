@@ -73,7 +73,8 @@ If a package's `package.json` has an `"exports"` field, Metro consults it first.
 
 - `"exports"` is used instead of any `"react-native"`, `"browser"`, or `"main"` field, and instead of a file on disk at the same subpath (e.g. with `"./utils": "./dist/utils.js"`, `'some-pkg/utils'` resolves to `dist/utils.js` even if the package has a root `utils.js`).
 - **Fallback**: If the requested subpath isn't matched in `"exports"`, Metro tries again using the fields above.
-- An object-valued `"browser"` field (or other object-valued [main field](./Configuration.md#resolvermainfields)) can still redirect the requested subpath before `"exports"` is matched. Enable [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) to apply those redirections to the file that `"exports"` resolves to instead, as webpack 5 and Vite 8 do.
+- An object-valued `"browser"` field (or other object-valued [main field](./Configuration.md#resolvermainfields)) redirects the file that `"exports"` resolves to, as in webpack 5 and Vite 8, rather than the requested subpath. Set [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) to `false` to redirect the requested subpath before `"exports"` is matched.
+- `"exports"` is read from the `package.json` at the root of the package named by the specifier, as in Node.js, webpack 5 and Vite 8, so a nested `package.json` doesn't hide it. Set [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental) to `false` to read it from the `package.json` closest to the requested subpath.
 
 Subpaths matched in `"exports"` (including via [subpath patterns](https://nodejs.org/docs/latest-v19.x/api/packages.html#subpath-patterns)) resolve to the exact target file the package specifies:
 
@@ -215,6 +216,16 @@ As with source files, assets must be listed in `"exports"` to be imported withou
 Subpath patterns conveniently export many assets; we recommend specifying asset subpaths **with their file extension**. For example, with `"exports": {"./assets/*.png": "./dist/assets/*.png"}`, `'some-pkg/assets/icon.png'` resolves to `dist/assets/icon.png` along with any existing density variants, such as `dist/assets/icon@2x.png`.
 
 ## Troubleshooting
+
+### Unresolved modules on Android and iOS
+
+From Metro 0.88, `"exports"` is read from the package root and chooses a package's file before an object-valued `"browser"` or `"react-native"` field can redirect it. React Native lists `"browser"` in [`resolver.resolverMainFields`](./Configuration.md#resolvermainfields) but doesn't assert the `browser` condition, so a package that reached a suitable build through one of those fields or a nested `package.json` may now resolve to a Node.js build. The bundle then fails with an error such as `Unable to resolve module stream`.
+
+- `react-dom/server` and `react-dom/static` resolve to Node.js builds. Import `react-dom/server.browser` or `react-dom/static.browser` instead.
+- `msw/native` in msw 2.15 reaches the Node.js build of `@mswjs/interceptors`, which requires `node:zlib`. Set [`resolver.unstable_resolveExportsFromPackageRoot`](./Configuration.md#unstable_resolveexportsfrompackageroot-experimental) to `false`.
+- `import 'nanoid/async'` in nanoid 3 resolves to a build that requires `expo-random`. Use `require('nanoid/async')`, or set `resolver.unstable_resolveExportsFromPackageRoot` to `false`.
+
+To get the previous behavior back, set both [`resolver.unstable_applyBrowserSpecAfterExports`](./Configuration.md#unstable_applybrowserspecafterexports-experimental) and `resolver.unstable_resolveExportsFromPackageRoot` to `false`. Setting `unstable_applyBrowserSpecAfterExports` to `false` alone restores `react-dom/server`, but can send a package with a nested `"browser"` map, such as `nanoid/async`, to a Node.js build.
 
 ### Package/ESM incompatibilities
 
