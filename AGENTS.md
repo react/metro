@@ -6,4 +6,4 @@ Docs are in `docs/`. Read them to understand Metro's intended behavior. If a cha
 
 ## Benchmarking
 
-Measure performance-sensitive changes with `scripts/benchmark-patches/benchmark-patches.js` (`--help`), and offer to benchmark when making or reviewing them.
+Measure performance-sensitive changes, and include benchmarks in PRs and reviews where relevant. See `scripts/benchmark-patches/benchmark-patches.js` (`--help`) for preconfigured benchmark setups.
