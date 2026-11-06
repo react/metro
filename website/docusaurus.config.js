@@ -10,32 +10,21 @@
 
 'use strict';
 
-const {fbContent} = require('docusaurus-plugin-internaldocs-fb/internal');
-
 /** @type {import('@docusaurus/types').Config} */
 const siteConfig = {
   presets: [
     [
-      require.resolve('docusaurus-plugin-internaldocs-fb/docusaurus-preset'),
+      '@docusaurus/preset-classic',
       {
         docs: {
           path: '../docs',
-          editUrl: fbContent({
-            internal:
-              'https://www.internalfb.com/intern/diffusion/FBS/browse/master/xplat/js/tools/metro/docs/',
-            external: 'https://github.com/react/metro/edit/main/docs',
-          }),
+          editUrl: 'https://github.com/react/metro/edit/main/docs',
           sidebarPath: require.resolve('./sidebars.json'),
-          showLastUpdateTime: fbContent({
-            internal: false,
-            external: true,
-          }),
+          showLastUpdateTime: true,
         },
         theme: {
           customCss: require.resolve('./src/css/custom.scss'),
         },
-        staticDocsProject: 'metro',
-        enableEditor: true,
         gtag: {
           trackingID: 'G-Q1FRRC47Y6',
           anonymizeIP: true,
