@@ -35,7 +35,6 @@
     "invariant": "^2.2.4",
     "jest-worker": "^29.7.0",
     "jsc-safe-url": "^0.2.2",
-    "lodash.throttle": "^4.1.1",
     "metro-babel-transformer": "0.87.3",
     "metro-cache": "0.87.3",
     "metro-cache-key": "0.87.3",

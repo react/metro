@@ -332,12 +332,6 @@ export class Terminal {
 export type TerminalReportableEvent =
   | ReportableEvent
   | {
-      buildID: string;
-      type: 'bundle_transform_progressed_throttled';
-      transformedFileCount: number;
-      totalFileCount: number;
-    }
-  | {
       type: 'unstable_server_log';
       level: 'info' | 'warn' | 'error';
       data: string | Array<unknown>;
