@@ -81,10 +81,16 @@ export type DefineFn = (
 type VerboseModuleNameForDev = string;
 type ModuleDefiner = (moduleId: ModuleID) => void;
 
-global.__r = metroRequire as RequireFn;
-global[`${__METRO_GLOBAL_PREFIX__}__d`] = define as DefineFn;
-global.__c = clear;
-global.__registerSegment = registerSegment;
+// The bundle's prelude declares `__METRO_GLOBAL_PREFIX__` as a global
+// immediately before this runs, and any later bundle in the same realm (e.g.
+// a Module Federation remote) reassigns it. Read it once, so that this module
+// system keeps addressing its own globals.
+const GLOBAL_PREFIX: string = __METRO_GLOBAL_PREFIX__;
+
+global[`${GLOBAL_PREFIX}__r`] = metroRequire as RequireFn;
+global[`${GLOBAL_PREFIX}__d`] = define as DefineFn;
+global[`${GLOBAL_PREFIX}__c`] = clear;
+global[`${GLOBAL_PREFIX}__registerSegment`] = registerSegment;
 
 var modules = clear();
 
@@ -134,7 +140,12 @@ function define(
       // If the module has already been defined and the define method has been
       // called with inverseDependencies, we can hot reload it.
       if (inverseDependencies) {
-        global.__accept(moduleId, factory, dependencyMap, inverseDependencies);
+        global[`${GLOBAL_PREFIX}__accept`](
+          moduleId,
+          factory,
+          dependencyMap,
+          inverseDependencies,
+        );
       }
     }
 
@@ -224,8 +235,7 @@ function metroRequire(
 // We print require cycles unless they match a pattern in the
 // `requireCycleIgnorePatterns` configuration.
 function shouldPrintRequireCycle(modules: ReadonlyArray<?string>): boolean {
-  const regExps =
-    global[__METRO_GLOBAL_PREFIX__ + '__requireCycleIgnorePatterns'];
+  const regExps = global[GLOBAL_PREFIX + '__requireCycleIgnorePatterns'];
   if (!Array.isArray(regExps)) {
     return true;
   }
@@ -473,8 +483,7 @@ function loadModuleImplementation(
         const RefreshRuntime = Refresh;
         global.$RefreshReg$ = (type, id) => {
           // prefix the id with global prefix to enable multiple HMR clients
-          const prefixedModuleId =
-            __METRO_GLOBAL_PREFIX__ + ' ' + moduleId + ' ' + id;
+          const prefixedModuleId = GLOBAL_PREFIX + ' ' + moduleId + ' ' + id;
           RefreshRuntime.register(type, prefixedModuleId);
         };
         global.$RefreshSig$ =
@@ -509,7 +518,7 @@ function loadModuleImplementation(
 
       if (Refresh != null) {
         // prefix the id with global prefix to enable multiple HMR clients
-        const prefixedModuleId = __METRO_GLOBAL_PREFIX__ + ' ' + moduleId;
+        const prefixedModuleId = GLOBAL_PREFIX + ' ' + moduleId;
         registerExportsForReactRefresh(
           Refresh,
           moduleObject.exports,
@@ -618,7 +627,7 @@ if (__DEV__) {
     // specifying patterns for modules that should trigger a full refresh
     // instead of attempting hot reload.
     const forceFullRefreshPatterns =
-      global[__METRO_GLOBAL_PREFIX__ + '__unstable_forceFullRefreshPatterns'];
+      global[GLOBAL_PREFIX + '__unstable_forceFullRefreshPatterns'];
 
     if (
       forceFullRefreshPatterns != null &&
@@ -1082,7 +1091,7 @@ if (__DEV__) {
     }
   };
 
-  global.__accept = metroHotUpdateModule;
+  global[`${GLOBAL_PREFIX}__accept`] = metroHotUpdateModule;
 }
 
 if (__DEV__) {
@@ -1095,18 +1104,18 @@ if (__DEV__) {
   var requireSystrace = function requireSystrace() {
     return (
       // $FlowFixMe[prop-missing]
-      global[__METRO_GLOBAL_PREFIX__ + '__SYSTRACE'] || metroRequire.Systrace
+      global[GLOBAL_PREFIX + '__SYSTRACE'] || metroRequire.Systrace
     );
   };
 
   var requireRefresh = function requireRefresh() {
-    // __METRO_GLOBAL_PREFIX__ and global.__METRO_GLOBAL_PREFIX__ differ from
-    // each other when multiple module systems are used - e.g, in the context
-    // of Module Federation, the first one would refer to the local prefix
-    // defined at the top of the bundle, while the other always refers to the
-    // one coming from the Host
+    // GLOBAL_PREFIX and global.__METRO_GLOBAL_PREFIX__ differ from each other
+    // when multiple module systems are used - e.g, in the context of Module
+    // Federation, the first one would refer to the local prefix defined at the
+    // top of the bundle, while the other always refers to the one coming from
+    // the Host
     return (
-      global[__METRO_GLOBAL_PREFIX__ + '__ReactRefresh'] ||
+      global[GLOBAL_PREFIX + '__ReactRefresh'] ||
       global[global.__METRO_GLOBAL_PREFIX__ + '__ReactRefresh'] ||
       // $FlowFixMe[prop-missing]
       metroRequire.Refresh

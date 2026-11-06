@@ -120,7 +120,8 @@ export class Runtime {
     );
     this.define = this.#global[this.#globalPrefix + '__d'];
     this.metroRequire = this.#global[this.#globalPrefix + '__r'];
-    this.registerSegment = this.#global.__registerSegment;
+    this.registerSegment =
+      this.#global[this.#globalPrefix + '__registerSegment'];
 
     // Set up Fast Refresh. Adapted from `setUpReactRefresh.js` in React Native.
     jest.isolateModules(() => {
