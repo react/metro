@@ -558,11 +558,7 @@ Modules that trigger a full reload instead of a Fast Refresh update when changed
 
 Transformer options control [transformation](./Concepts.md#transformation): how each module is compiled (by default, with Babel) and minified, and how assets are handled.
 
-<!-- Keep old links to `asyncRequireModulePath` working -->
-
-<a name="asyncrequiremodulepath"></a>
-
-#### `asyncRequireModulePath` <div class="label deprecated">Deprecated</div>
+#### `asyncRequireModulePath` <div class="label deprecated">Deprecated</div> {#asyncrequiremodulepath}
 
 Type: `string`
 
