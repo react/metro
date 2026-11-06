@@ -12,6 +12,7 @@ on:
       - "docs/**"
       - "website/**"
       - ".github/workflows/preview-website.yml"
+      - ".github/actions/website-install/**"
   push:
     branches-ignore:
       - "main"
@@ -20,6 +21,7 @@ on:
       - "docs/**"
       - "website/**"
       - ".github/workflows/preview-website.yml"
+      - ".github/actions/website-install/**"
 
 permissions:
   contents: read
@@ -40,13 +42,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
-        with:
-          node-version: lts/*
-          cache: yarn
-          cache-dependency-path: website/yarn.lock
-      - run: yarn --frozen-lockfile
-        working-directory: website
+      - uses: ./.github/actions/website-install
       - run: yarn build
         working-directory: website
       - name: Push preview to gh-pages
