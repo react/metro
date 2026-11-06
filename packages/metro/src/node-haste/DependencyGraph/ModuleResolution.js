@@ -69,6 +69,7 @@ export class ModuleResolver {
   _projectRootFakeModulePath: string;
   // An empty module, the result of resolving `emptyModulePath` from the project root.
   _cachedEmptyModule: ?BundlerResolution;
+  _isResolvingEmptyModule: boolean = false;
 
   constructor(options: Options) {
     this._options = options;
@@ -79,21 +80,34 @@ export class ModuleResolver {
   _getEmptyModule(): BundlerResolution {
     let emptyModule = this._cachedEmptyModule;
     if (!emptyModule) {
-      emptyModule = this.resolveDependency(
-        this._projectRootFakeModulePath,
-        {
-          data: {
-            asyncType: null,
-            isESMImport: false,
-            key: this._options.emptyModulePath,
-            locs: [],
+      const {emptyModulePath} = this._options;
+      if (this._isResolvingEmptyModule) {
+        throw new Error(
+          `\`resolver.emptyModulePath\` ('${emptyModulePath}') resolved to an ` +
+            'empty module. A custom `resolver.resolveRequest` must delegate ' +
+            'this specifier to `context.resolveRequest`, or resolve it to a file.',
+        );
+      }
+      this._isResolvingEmptyModule = true;
+      try {
+        emptyModule = this.resolveDependency(
+          this._projectRootFakeModulePath,
+          {
+            data: {
+              asyncType: null,
+              isESMImport: false,
+              key: emptyModulePath,
+              locs: [],
+            },
+            name: emptyModulePath,
           },
-          name: this._options.emptyModulePath,
-        },
-        false,
-        null,
-        /* resolverOptions */ {dev: false},
-      );
+          false,
+          null,
+          /* resolverOptions */ {dev: false},
+        );
+      } finally {
+        this._isResolvingEmptyModule = false;
+      }
       this._cachedEmptyModule = emptyModule;
     }
     return emptyModule;
