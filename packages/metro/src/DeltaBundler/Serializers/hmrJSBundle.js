@@ -49,12 +49,9 @@ function generateModules(
           path
             .relative(
               options.serverRoot ?? options.projectRoot,
-              path.join(
-                path.dirname(sourcePath),
-                path.basename(sourcePath, path.extname(sourcePath)) +
-                  '.' +
-                  extension,
-              ),
+              // Keep the file extension, as for async bundle paths, so that the
+              // server resolves the URL to this exact file.
+              sourcePath + '.' + extension,
             )
             .split(path.sep)
             // using this Metro particular convention for encoding file paths as URL paths.
@@ -65,6 +62,9 @@ function generateModules(
 
       const clientUrl = new URL(options.clientUrl);
       clientUrl.searchParams.delete('excludeSource');
+      if (graph.transformOptions.platform != null) {
+        clientUrl.searchParams.set('platform', graph.transformOptions.platform);
+      }
       if (isVirtualModulePath(module.path)) {
         clientUrl.searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
       }
@@ -105,6 +105,7 @@ function prepareModule(
 ): string {
   const code = wrapModule(module, {
     ...options,
+    platform: graph.transformOptions.platform,
     sourceUrl: options.clientUrl.toString(),
     dev: true,
   });

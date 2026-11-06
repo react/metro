@@ -64,6 +64,7 @@ export default function baseJSBundleWithLazyModuleDefinition(
     createModuleId: options.createModuleId,
     dev: options.dev,
     includeAsyncPaths: options.includeAsyncPaths,
+    platform: graph.transformOptions.platform,
     projectRoot: options.projectRoot,
     serverRoot: options.serverRoot,
     sourceUrl: options.sourceUrl,
