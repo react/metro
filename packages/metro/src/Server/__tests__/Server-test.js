@@ -186,7 +186,7 @@ describe('processRequest', () => {
     requrl: string,
     options?: ?Readonly<{
       method?: string,
-      headers?: Readonly<{[string]: string}>,
+      headers?: Readonly<{[key: string]: string}>,
       data?: string,
     }>,
   ) =>

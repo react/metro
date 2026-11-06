@@ -406,7 +406,7 @@ test('explicit exports override export all at runtime', () => {
     ),
   ).code;
   const context = {
-    exports: {} as {[string]: unknown},
+    exports: {} as {[key: string]: unknown},
     require: (id: string) => {
       if (id !== 'foo') {
         throw new Error(`Unexpected module: ${id}`);
@@ -438,7 +438,7 @@ test('export all does not re-export the default of the source', () => {
     ),
   ).code;
   const context = {
-    exports: {} as {[string]: unknown},
+    exports: {} as {[key: string]: unknown},
     require: (id: string) => {
       if (id !== 'foo') {
         throw new Error(`Unexpected module: ${id}`);
@@ -481,8 +481,8 @@ test('export all as namespace includes the default of the source', () => {
     }
     return source;
   };
-  const exportsObj: {[string]: unknown} = {};
-  const context: {[string]: unknown} = {
+  const exportsObj: {[key: string]: unknown} = {};
+  const context: {[key: string]: unknown} = {
     exports: exportsObj,
     require: requireMock,
   };
@@ -518,7 +518,7 @@ test('re-export dependencies evaluate before module body at runtime', () => {
   const events = [];
   const context = {
     events,
-    exports: {} as {[string]: unknown},
+    exports: {} as {[key: string]: unknown},
     require: (id: string) => {
       events.push(`require ${id}`);
       return id === 'foo' ? {value: 'foo value'} : {star: 'bar star'};

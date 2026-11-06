@@ -15,7 +15,10 @@ import {createResolutionContext, posixToSystemPath as p} from './utils';
 describe.each(['exports root', 'exports subpath', 'imports'])(
   '%s arrays',
   kind => {
-    function resolve(target: unknown, otherMappings: {[string]: unknown} = {}) {
+    function resolve(
+      target: unknown,
+      otherMappings: {[key: string]: unknown} = {},
+    ) {
       const logWarning = jest.fn();
       const isImports = kind === 'imports';
       const packageJson = isImports

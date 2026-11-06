@@ -34,7 +34,7 @@ import getPlatformExtension from './haste/getPlatformExtension';
 import {HasteConflictsError} from './haste/HasteConflictsError';
 import path from 'node:path';
 
-const EMPTY_OBJ: Readonly<{[string]: HasteMapItemMetadata}> = {};
+const EMPTY_OBJ: Readonly<{[key: string]: HasteMapItemMetadata}> = {};
 const EMPTY_MAP: ReadonlyMap<string, DuplicatesSet> = new Map();
 const PACKAGE_JSON = /(?:[/\\]|^)package\.json$/;
 

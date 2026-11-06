@@ -293,7 +293,8 @@ export default function resolve(
   const {disableHierarchicalLookup} = context;
 
   if (!disableHierarchicalLookup) {
-    const visited: {[string]: ?true, __proto__: null} = Object.create(null);
+    const visited: {[key: string]: ?true, __proto__: null} =
+      Object.create(null);
     let next = path.dirname(originModulePath);
     let candidate;
     do {

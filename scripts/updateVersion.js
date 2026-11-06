@@ -67,7 +67,7 @@ function updateAllPackageManifests(
 
 // given a dependency object (from package.json) update version for local pkgs
 function updateCrossDepsInline(
-  allDeps /*: {[string]: unknown, ...} */, // json object
+  allDeps /*: {[key: string]: unknown, ...} */, // json object
   subDeps /*: ReadonlySet<string> */,
   version /*: string */,
 ) {
@@ -84,7 +84,7 @@ function updateCrossDepsInline(
 function mutateManifestFile(
   filePath /*: string */,
   mutator /*: (manifest: {
-    [string]: string | number | Array<unknown> | {[string]: unknown, ...},
+    [key: string]: string | number | Array<unknown> | {[key: string]: unknown, ...},
   }) => void */,
 ) {
   const manifest = JSON.parse(fs.readFileSync(filePath, 'utf8'));
