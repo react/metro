@@ -17,7 +17,6 @@ import type {Reporter} from '../../lib/reporting';
 import type {ResolverInputOptions} from '../../shared/types';
 import type {
   CustomResolver,
-  DoesFileExist,
   FileCandidates,
   FileSystemLookup,
   Resolution,
@@ -29,7 +28,6 @@ import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
-import createDefaultContext from 'metro-resolver/private/createDefaultContext';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,7 +36,6 @@ import util from 'node:util';
 type Options = Readonly<{
   assetExts: ReadonlySet<string>,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
   emptyModulePath: string,
   extraNodeModules: ?any,
   fileSystemLookup: FileSystemLookup,
@@ -72,6 +69,7 @@ export class ModuleResolver {
   _projectRootFakeModulePath: string;
   // An empty module, the result of resolving `emptyModulePath` from the project root.
   _cachedEmptyModule: ?BundlerResolution;
+  _isResolvingEmptyModule: boolean = false;
 
   constructor(options: Options) {
     this._options = options;
@@ -82,21 +80,34 @@ export class ModuleResolver {
   _getEmptyModule(): BundlerResolution {
     let emptyModule = this._cachedEmptyModule;
     if (!emptyModule) {
-      emptyModule = this.resolveDependency(
-        this._projectRootFakeModulePath,
-        {
-          data: {
-            asyncType: null,
-            isESMImport: false,
-            key: this._options.emptyModulePath,
-            locs: [],
+      const {emptyModulePath} = this._options;
+      if (this._isResolvingEmptyModule) {
+        throw new Error(
+          `\`resolver.emptyModulePath\` ('${emptyModulePath}') resolved to an ` +
+            'empty module. A custom `resolver.resolveRequest` must delegate ' +
+            'this specifier to `context.resolveRequest`, or resolve it to a file.',
+        );
+      }
+      this._isResolvingEmptyModule = true;
+      try {
+        emptyModule = this.resolveDependency(
+          this._projectRootFakeModulePath,
+          {
+            data: {
+              asyncType: null,
+              isESMImport: false,
+              key: emptyModulePath,
+              locs: [],
+            },
+            name: emptyModulePath,
           },
-          name: this._options.emptyModulePath,
-        },
-        false,
-        null,
-        /* resolverOptions */ {dev: false},
-      );
+          false,
+          null,
+          /* resolverOptions */ {dev: false},
+        );
+      } finally {
+        this._isResolvingEmptyModule = false;
+      }
       this._cachedEmptyModule = emptyModule;
     }
     return emptyModule;
@@ -112,7 +123,6 @@ export class ModuleResolver {
     const {
       assetExts,
       disableHierarchicalLookup,
-      doesFileExist,
       extraNodeModules,
       fileSystemLookup,
       getPackage,
@@ -129,46 +139,41 @@ export class ModuleResolver {
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
       unstable_resolveExportsFromPackageRoot,
-      unstable_incrementalResolution,
     } = this._options;
 
     try {
       const result = Resolver.resolve(
-        createDefaultContext(
-          {
-            allowHaste,
-            assetExts,
-            customResolverOptions: resolverOptions.customResolverOptions ?? {},
-            dev: resolverOptions.dev,
-            disableHierarchicalLookup,
-            doesFileExist,
-            extraNodeModules,
-            fileSystemLookup,
-            getPackage,
-            getPackageForModule,
-            isESMImport: dependency.data.isESMImport,
-            mainFields,
-            nodeModulesPaths,
-            originModulePath,
-            preferNativePlatform,
-            resolveAsset,
-            resolveHasteModule: (name: string) =>
-              this._options.getHasteModulePath(name, platform),
-            resolveHastePackage: (name: string) =>
-              this._options.getHastePackagePath(name, platform),
-            resolveRequest,
-            schemeResolvers,
-            sourceExts,
-            unstable_applyBrowserSpecAfterExports,
-            unstable_conditionNames,
-            unstable_conditionsByPlatform,
-            unstable_enablePackageExports,
-            unstable_resolveExportsFromPackageRoot,
-            unstable_incrementalResolution,
-            unstable_logWarning: this._logWarning,
-          },
+        {
+          allowHaste,
+          assetExts,
+          customResolverOptions: resolverOptions.customResolverOptions ?? {},
           dependency,
-        ),
+          dev: resolverOptions.dev,
+          disableHierarchicalLookup,
+          extraNodeModules,
+          fileSystemLookup,
+          getPackage,
+          getPackageForModule,
+          isESMImport: dependency.data.isESMImport,
+          mainFields,
+          nodeModulesPaths,
+          originModulePath,
+          preferNativePlatform,
+          resolveAsset,
+          resolveHasteModule: (name: string) =>
+            this._options.getHasteModulePath(name, platform),
+          resolveHastePackage: (name: string) =>
+            this._options.getHastePackagePath(name, platform),
+          resolveRequest,
+          schemeResolvers,
+          sourceExts,
+          unstable_applyBrowserSpecAfterExports,
+          unstable_conditionNames,
+          unstable_conditionsByPlatform,
+          unstable_enablePackageExports,
+          unstable_resolveExportsFromPackageRoot,
+          unstable_logWarning: this._logWarning,
+        },
         dependency.name,
         platform,
       );

@@ -46,7 +46,6 @@ export default function createModuleResolver({
   return new ModuleResolver({
     assetExts: new Set(config.resolver.assetExts),
     disableHierarchicalLookup: config.resolver.disableHierarchicalLookup,
-    doesFileExist: (filePath: string) => fileSystem.exists(filePath),
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,

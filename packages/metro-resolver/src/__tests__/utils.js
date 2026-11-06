@@ -47,12 +47,6 @@ export function createResolutionContext(
     assetExts: new Set(['jpg', 'png']),
     customResolverOptions: {},
     disableHierarchicalLookup: false,
-    doesFileExist: (filePath: string) =>
-      // Should return false unless realpath(filePath) exists. We mock shallow
-      // dereferencing.
-      fileMap[filePath] != null &&
-      (typeof fileMap[filePath] === 'string' ||
-        typeof fileMap[filePath].realPath === 'string'),
     extraNodeModules: null,
     fileSystemLookup: inputPath => {
       // Normalise and remove any trailing slash.
@@ -80,21 +74,19 @@ export function createResolutionContext(
     mainFields: ['browser', 'main'],
     nodeModulesPaths: [],
     preferNativePlatform: false,
-    redirectModulePath: (filePath: string) => filePath,
     resolveAsset: (filePath: string) => null,
     resolveHasteModule: (name: string) => null,
     resolveHastePackage: (name: string) => null,
     schemeResolvers: {},
     sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
-    unstable_applyBrowserSpecAfterExports: false,
+    unstable_applyBrowserSpecAfterExports: true,
     unstable_conditionNames: ['require'],
     unstable_conditionsByPlatform: {
       web: ['browser'],
     },
     unstable_enablePackageExports: false,
-    unstable_incrementalResolution: false,
     unstable_logWarning: () => {},
-    unstable_resolveExportsFromPackageRoot: false,
+    unstable_resolveExportsFromPackageRoot: true,
     ...createPackageAccessors(fileMap),
   };
 }

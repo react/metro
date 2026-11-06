@@ -213,6 +213,38 @@ describe('with package exports resolution enabled', () => {
       );
     });
 
+    test.each([
+      ['false', false],
+      ['true', true],
+      ['a number', 1],
+    ])(
+      '[nonstrict] should fall back to "main" field resolution when "exports" is %s',
+      (_, exportsField) => {
+        const logWarning = jest.fn();
+        const context = {
+          ...baseContext,
+          ...createPackageAccessors({
+            [p('/root/node_modules/test-pkg/package.json')]: {
+              main: 'index-main.js',
+              exports: exportsField,
+            },
+          }),
+          unstable_logWarning: logWarning,
+        };
+
+        expect(Resolver.resolve(context, 'test-pkg', null)).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/test-pkg/index-main.js'),
+        });
+        expect(logWarning).toHaveBeenCalledTimes(1);
+        expect(logWarning.mock.calls[0][0]).toBe(
+          `The package ${p('/root/node_modules/test-pkg')} contains an invalid package.json configuration. Consider raising this issue with the package maintainer(s).
+` +
+            'Reason: The "exports" field must be a string, an array or an object. Falling back to file-based resolution.',
+        );
+      },
+    );
+
     describe('should resolve "exports" target directly', () => {
       const context = {
         ...baseContext,
@@ -1138,7 +1170,7 @@ describe('with package exports resolution enabled', () => {
             ...assetResolutions.map(
               resolution => basePath + '@' + resolution + 'x' + extension,
             ),
-          ].filter(candidate => baseContext.doesFileExist(candidate));
+          ].filter(candidate => baseContext.fileSystemLookup(candidate).exists);
 
           return assets.length ? assets : null;
         },
@@ -1178,8 +1210,8 @@ describe('with package exports resolution enabled', () => {
           },
         }),
         resolveAsset: (dirPath: string, basename: string, extension: string) =>
-          [dirPath + path.sep + basename + extension].filter(candidate =>
-            baseContext.doesFileExist(candidate),
+          [dirPath + path.sep + basename + extension].filter(
+            candidate => baseContext.fileSystemLookup(candidate).exists,
           ),
         unstable_applyBrowserSpecAfterExports: true,
       };
@@ -1521,9 +1553,13 @@ describe('with package exports resolution enabled', () => {
       unstable_enablePackageExports: true,
     };
 
-    test('should redirect the requested subpath before "exports" by default', () => {
+    test('should redirect the requested subpath before "exports" with unstable_applyBrowserSpecAfterExports: false', () => {
       const logWarning = jest.fn();
-      const context = {...baseContext, unstable_logWarning: logWarning};
+      const context = {
+        ...baseContext,
+        unstable_applyBrowserSpecAfterExports: false,
+        unstable_logWarning: logWarning,
+      };
 
       expect(Resolver.resolve(context, 'test-pkg/hash', 'ios')).toEqual({
         type: 'sourceFile',

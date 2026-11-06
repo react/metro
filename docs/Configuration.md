@@ -297,7 +297,7 @@ For example, for `import 'lodash'` in `/app/src/App.js`, Metro tries `/app/src/n
 
 Type: `string`
 
-The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to the empty module in `metro-runtime`. Only needs changing if Metro is installed outside your project.
+The module used when Metro needs an empty module, e.g. when a package's `browser` field maps a file to `false`. Defaults to `metro:runtime/modules/empty-module`, the empty module in the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 #### `enableGlobalPackages`
 
@@ -321,7 +321,7 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath-deprecated). See [Module Resolution](./Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
@@ -329,7 +329,7 @@ resolveRequest: (context, moduleName, platform) => {
     // Resolve to a file path, or throw if there is no resolution.
     return {filePath: 'path/to/file', type: 'sourceFile'};
   }
-  // Optionally, chain to the standard Metro resolver.
+  // Chain to the standard Metro resolver for anything not handled above.
   return context.resolveRequest(context, moduleName, platform);
 };
 ```
@@ -485,7 +485,7 @@ When `true`, Metro tells Babel plugins and presets that support it, through [cal
 
 Type: `boolean`
 
-When a package has an [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports), apply its [`"browser"` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (from any object-valued field in [`resolverMainFields`](#resolvermainfields)) to the file that `"exports"` resolves to, instead of to the requested subpath before `"exports"` is considered. This matches webpack 5 and Vite 8, except that assets (see [`assetExts`](#assetexts)) resolved from `"exports"` are not redirected. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `false`.
+When a package has an [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports), apply its [`"browser"` field spec](https://github.com/defunctzombie/package-browser-field-spec) redirections (from any object-valued field in [`resolverMainFields`](#resolvermainfields)) to the file that `"exports"` resolves to, instead of to the requested subpath before `"exports"` is considered. This matches webpack 5 and Vite 8, except that assets (see [`assetExts`](#assetexts)) resolved from `"exports"` are not redirected. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `true`.
 
 For example, given a package with:
 
@@ -499,15 +499,17 @@ For example, given a package with:
   }
 ```
 
-With this option, `'pkg/hash'` resolves through `"exports"` to `hash-browser.js` for `web` (the `"browser"` condition), and to `hash-node.js` elsewhere, which the `"./hash-node.js"` key then redirects to `hash-browser.js` if `"browser"` is in `resolverMainFields`. Without it, the `"./hash"` key redirects the import to `./hash-browser.js` first, which is not listed in `"exports"`, so Metro logs a warning and falls back to file-based resolution.
+By default, `'pkg/hash'` resolves through `"exports"` to `hash-browser.js` for `web` (the `"browser"` condition), and to `hash-node.js` elsewhere, which the `"./hash-node.js"` key then redirects to `hash-browser.js` if `"browser"` is in `resolverMainFields`. When this option is `false`, the `"./hash"` key redirects the import to `./hash-browser.js` first, which is not listed in `"exports"`, so Metro logs a warning and falls back to file-based resolution.
+
+On Android and iOS, a package's `"exports"` conditions therefore choose its file, even if its `"browser"` field names a build for the requested subpath. See [Unresolved modules on Android and iOS](./PackageExports.md#unresolved-modules-on-android-and-ios) for packages this affects, including `react-dom/server`.
 
 #### `unstable_resolveExportsFromPackageRoot` <div class="label experimental">Experimental</div>
 
 Type: `boolean`
 
-Read a package's [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) from the `package.json` at the root of the package named by a bare specifier, as Node.js, webpack 5 and Vite 8 do, instead of the `package.json` closest to the requested subpath. A nested `package.json`, such as a legacy shim or one declaring only `"type"`, doesn't hide the root `"exports"`, and a nested `"exports"` isn't used, even if the root has no `package.json`, except through an [`extraNodeModules`](#extranodemodules) mapping. As in Node.js, the subpath of a package in `node_modules` is the literal text following the package name, so `pkg/./sub` and `pkg/sub/` don't match `"./sub"`, although `pkg/` is treated as `pkg`, and `pkg/node_modules/dep` doesn't use the `"exports"` of `dep`. A subpath pattern such as `"./*"` doesn't match a subpath containing a `.`, `..` or `node_modules` segment. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true`. Defaults to `false`.
+Read a package's [`"exports"` field](https://nodejs.org/docs/latest-v18.x/api/packages.html#exports) from the `package.json` at the root of the package named by a bare specifier, as Node.js, webpack 5 and Vite 8 do, instead of the `package.json` closest to the requested subpath. A nested `package.json`, such as a legacy shim or one declaring only `"type"`, doesn't hide the root `"exports"`, and a nested `"exports"` isn't used, even if the root has no `package.json`, except through an [`extraNodeModules`](#extranodemodules) mapping. As in Node.js, the subpath of a package in `node_modules` is the literal text following the package name, so `pkg/./sub` and `pkg/sub/` don't match `"./sub"`, although `pkg/` is treated as `pkg`, and `pkg/node_modules/dep` doesn't use the `"exports"` of `dep`. A subpath pattern such as `"./*"` doesn't match a subpath containing a `.`, `..` or `node_modules` segment. Takes effect when [`unstable_enablePackageExports`](#unstable_enablepackageexports-experimental) is `true` (the default). Defaults to `true`.
 
-Packages may rely on a nested `package.json` to reach a build that works on native, which this bypasses. For example, `@mswjs/interceptors/fetch` in version 0.41 resolves to a Node.js build on iOS and Android, which requires `node:zlib`. If the nested `"browser"` field is an object, also enable [`unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-experimental) to apply it to the file resolved from `"exports"`. Otherwise, `nanoid/async` in version 3 resolves to a build that requires `crypto`.
+Packages may rely on a nested `package.json` to reach a build that works on native, which this bypasses. See [Unresolved modules on Android and iOS](./PackageExports.md#unresolved-modules-on-android-and-ios) for packages this affects, including `msw/native` and `nanoid/async`. A nested object-valued `"browser"` field is still applied to the file resolved from `"exports"`, as long as [`unstable_applyBrowserSpecAfterExports`](#unstable_applybrowserspecafterexports-experimental) is `true`.
 
 #### `unstable_conditionNames` <div class="label experimental">Experimental</div>
 
@@ -564,13 +566,13 @@ Transformer options control [transformation](./Concepts.md#transformation): how 
 
 Type: `string`
 
-The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro-runtime/src/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
+The module providing the `asyncRequire` function, which implements [dynamic `import()`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import) at runtime. Defaults to [`metro:runtime/modules/asyncRequire`](https://github.com/react/metro/blob/main/packages/metro-runtime/src/modules/asyncRequire.js).
 
 Using a custom value for bundle splitting, as in older Metro versions, is deprecated in favor of the [`__loadBundleAsync`](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) API.
 
 :::note
 
-The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. With the default value, a compatible `metro-runtime` must be installed in the project's `node_modules`. Use `metro:runtime/modules/asyncRequire` to resolve, from any importer, the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
+The module is [resolved](./Resolution.md) relative to each module containing an `import()` call, including modules in `node_modules`, so it must be resolvable from all of them. The default value resolves, from any importer, to the `metro-runtime` Metro itself depends on, through Metro's built-in [`metro:` scheme resolver](#schemeresolvers).
 
 :::
 
@@ -656,7 +658,9 @@ A file size threshold (in bytes) above which some expensive optimizations are sk
 
 Type: `string`
 
-A prefix for the global names used by Metro's module system, e.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`. Defaults to `''`.
+A prefix for the global names used by Metro's module system, so that several bundles with different prefixes can share one JavaScript realm. E.g. with `'app1'`, each module is wrapped in `app1__d(...)` instead of `__d(...)`, and the bundle runs its entry point with `app1__r(...)`. Defaults to `''`.
+
+The prefix applies to `__d`, `__r`, `__c` and `__registerSegment`, to `__loadBundleAsync`, and in development to `__accept`, `__requireCycleIgnorePatterns`, `__unstable_forceFullRefreshPatterns`, `__ReactRefresh` and `__SYSTRACE`. Code that calls any of these by name, such as a custom [`getRunModuleStatement`](#getrunmodulestatement) or native code that calls `__r`, must apply the same prefix. Each bundle also declares its prefix as the global `__METRO_GLOBAL_PREFIX__`.
 
 #### `allowOptionalDependencies`
 
@@ -752,7 +756,7 @@ Serializer options control [serialization](./Concepts.md#serialization): how tra
 
 Type: `(moduleId: number | string, globalPrefix: string) => string`
 
-Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42`.
+Formats the require statements appended to the end of the bundle: one for each module from [`getModulesRunBeforeMainModule`](#getmodulesrunbeforemainmodule) that is in the bundle, then one for the [entry point](./Concepts.md#entry-point). Defaults to `` `${globalPrefix}__r(${JSON.stringify(moduleId)});` ``, e.g. `__r(42);` for module ID `42` with the default [`globalPrefix`](#globalprefix).
 
 #### `createModuleIdFactory`
 

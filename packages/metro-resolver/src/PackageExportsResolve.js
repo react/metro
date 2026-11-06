@@ -193,6 +193,12 @@ function normalizeExportsField(
     return new Map([['.', exportsField]]);
   }
 
+  if (typeof exportsField !== 'object') {
+    throw createConfigError(
+      'The "exports" field must be a string, an array or an object.',
+    );
+  }
+
   const cachedValue = _normalizedExportsFields.get(exportsField);
   if (cachedValue) {
     return cachedValue;

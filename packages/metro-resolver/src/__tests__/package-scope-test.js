@@ -222,7 +222,7 @@ describe('package scope lookups', () => {
     ]);
   });
 
-  test('package subpath with package exports', () => {
+  test('package subpath with package exports, redirected before "exports"', () => {
     useFileMap({
       ...fileMap,
       [p('/root/node_modules/pkg/package.json')]: JSON.stringify({
@@ -230,7 +230,11 @@ describe('package scope lookups', () => {
         exports: {'./sub': './lib/sub.js'},
       }),
     });
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_applyBrowserSpecAfterExports: false,
+      unstable_enablePackageExports: true,
+    };
     expect(Resolver.resolve(context, 'pkg/sub', 'ios')).toEqual({
       type: 'sourceFile',
       filePath: p('/root/node_modules/pkg/lib/sub.js'),
@@ -268,7 +272,11 @@ describe('package scope lookups', () => {
   });
 
   test('package entry point makes no more lookups from the package root', () => {
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_enablePackageExports: true,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
     Resolver.resolve(context, 'pkg', 'ios');
     const expected = lookedUpPaths();
 
@@ -286,7 +294,11 @@ describe('package scope lookups', () => {
       ...fileMap,
       [p('/root/src/node_modules/unrelated/index.js')]: '',
     });
-    context = {...context, unstable_enablePackageExports: true};
+    context = {
+      ...context,
+      unstable_enablePackageExports: true,
+      unstable_resolveExportsFromPackageRoot: false,
+    };
     Resolver.resolve(context, 'pkg', 'ios');
     const expected = lookedUpPaths();
     expect(expected).toContain(p('/root/src/node_modules/pkg'));

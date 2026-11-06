@@ -163,9 +163,9 @@ Applies [platform-specific extensions](https://reactnative.dev/docs/platform-spe
 
 1. If the path refers to an [asset](#assetexts-readonlysetstring), then
    1. Return [**RESOLVE_ASSET**](#resolve_asset)(_context_, _filePath_, _platform_).
-2. Otherwise, if the path [exists](#doesfileexist-string--boolean-deprecated) as a file, return a [source file resolution](#source-file) for it.
+2. Otherwise, if the path [exists](#filesystemlookup-string--exists-true-type-fd-realpath-string--exists-false) as a file, return a [source file resolution](#source-file) for it.
 3. Otherwise:
-   1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first that [exists](#doesfileexist-string--boolean-deprecated) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try:
+   1. Try all platform and extension variants in sequence. Return a [source file resolution](#source-file) for the first that [exists](#filesystemlookup-string--exists-true-type-fd-realpath-string--exists-false) after applying [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection). For example, if _platform_ is `android` and [`context.sourceExts`](#sourceexts-readonlyarraystring) is `['js', 'jsx']`, try:
       1. _moduleName_ + `'.android.js'`
       2. _moduleName_ + `'.native.js'` (if [`context.preferNativePlatform`](#prefernativeplatform-boolean) is `true`)
       3. _moduleName_ + `'.js'`
@@ -230,10 +230,6 @@ The set of file extensions used to identify asset files. Defaults to [`resolver.
 
 `true` for a development bundle, `false` otherwise.
 
-#### `doesFileExist: string => boolean` <div class="label deprecated">Deprecated</div>
-
-Returns whether the file at the given path exists. The default implementation wraps [`fileSystemLookup`](#filesystemlookup-string--exists-true-type-fd-realpath-string--exists-false); prefer using that directly.
-
 #### `fileSystemLookup: string => {exists: true, type: 'f'|'d', realPath: string} | {exists: false}`
 
 _Added in v0.81.0_
@@ -249,10 +245,6 @@ Paths to check for modules after looking through all `node_modules` directories.
 #### `preferNativePlatform: boolean`
 
 If `true`, try `.native.${ext}` after `.${platform}.${ext}` and before `.${ext}`. Metro sets this to `true`, which is why it picks `Foo.native.js` when there is no `Foo.ios.js` (or other `Foo.${platform}.js`).
-
-#### `redirectModulePath: string => string | false` <div class="label deprecated">Deprecated</div>
-
-Defaults to [**BROWSER_SPEC_REDIRECTION**](#browser_spec_redirection), which Metro's default resolver uses directly instead of calling this function. It is exposed for backwards-compatible use by custom resolvers, and will be removed in a future release.
 
 #### `resolveAsset: (dirPath: string, assetName: string, extension: string) => ?$ReadOnlyArray<string>`
 
@@ -274,7 +266,7 @@ Given the path to a `package.json` file, returns the parsed contents, or `null` 
 
 Given a candidate absolute module path, which need not exist, returns the closest package root (searching upwards, stopping at the nearest `node_modules`), its parsed `package.json`, and the package-relative path, or `null` if there's no `package.json` before the nearest `node_modules`. A path through a symlinked directory checks the link's target, then continues up from the link's parent; a symlinked file is scoped by where the link is. A missing path takes the scope of its deepest existing ancestor, or `null` if the first missing segment is `node_modules`. E.g. `getPackageForModule('/app/node_modules/foo/lib/index.js')` returns `{rootPath: '/app/node_modules/foo', packageJson: {...}, packageRelativePath: 'lib/index.js'}`.
 
-#### `isESMImport?: boolean`
+#### `isESMImport: boolean`
 
 Whether the dependency was declared with an ESM import (`import x from 'y'` or `await import('z')`) rather than `require()`, the criteria Node.js uses to assert the `"import"` rather than the `"require"` [condition](./PackageExports.md#how-metro-applies-importrequire-exports-conditions).
 
@@ -340,6 +332,8 @@ resolveRequest: (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 },
 ```
+
+A custom resolver must delegate any specifier it doesn't handle, including those in the [`metro:` scheme](./Configuration.md#schemeresolvers).
 
 Custom resolvers must follow the [caching](#caching) rules.
 
