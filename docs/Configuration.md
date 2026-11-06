@@ -321,7 +321,7 @@ Directories containing packages (like `node_modules`) to check after all `node_m
 
 Type: [`?CustomResolver`](./Resolution.md#resolverequest-customresolver)
 
-An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath). See [Module Resolution](./Resolution.md).
+An optional function that overrides the default resolution algorithm, e.g. for aliases or custom protocols. It must delegate any specifiers it doesn't handle, including those in Metro's `metro:` scheme, such as the defaults for [`emptyModulePath`](#emptymodulepath) and [`asyncRequireModulePath`](#asyncrequiremodulepath-deprecated). See [Module Resolution](./Resolution.md).
 
 ```javascript
 resolveRequest: (context, moduleName, platform) => {
@@ -558,7 +558,11 @@ Modules that trigger a full reload instead of a Fast Refresh update when changed
 
 Transformer options control [transformation](./Concepts.md#transformation): how each module is compiled (by default, with Babel) and minified, and how assets are handled.
 
-#### `asyncRequireModulePath` <div class="label deprecated">Deprecated</div> {#asyncrequiremodulepath}
+<!-- Keep old links to `asyncRequireModulePath` working -->
+
+<a name="asyncrequiremodulepath"></a>
+
+#### `asyncRequireModulePath` <div class="label deprecated">Deprecated</div>
 
 Type: `string`
 
