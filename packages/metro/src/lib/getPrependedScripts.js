@@ -41,16 +41,27 @@ export default async function getPrependedScripts(
     type: 'script',
   };
 
+  const resolve = await transformHelpers.getResolveDependencyFn(
+    bundler,
+    options.platform,
+    resolverOptions,
+  );
+  const moduleSystem = resolve(`${config.projectRoot}/.`, {
+    name: defaults.moduleSystem,
+    data: {
+      key: defaults.moduleSystem,
+      locs: [],
+      asyncType: null,
+      isESMImport: false,
+    },
+  }).filePath;
+
   const dependencies = await deltaBundler.getDependencies(
-    [defaults.moduleSystem, ...polyfillModuleNames],
+    [moduleSystem, ...polyfillModuleNames],
     {
-      resolve: await transformHelpers.getResolveDependencyFn(
-        bundler,
-        options.platform,
-        resolverOptions,
-      ),
+      resolve,
       transform: await transformHelpers.getTransformFn(
-        [defaults.moduleSystem, ...polyfillModuleNames],
+        [moduleSystem, ...polyfillModuleNames],
         bundler,
         deltaBundler,
         config,
