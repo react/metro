@@ -41,16 +41,36 @@ export default async function getPrependedScripts(
     type: 'script',
   };
 
+  const resolve = await transformHelpers.getResolveDependencyFn(
+    bundler,
+    options.platform,
+    resolverOptions,
+  );
+  const resolveFromProjectRoot = (name: string) =>
+    resolve(`${config.projectRoot}/.`, {
+      name,
+      data: {key: name, locs: [], asyncType: null, isESMImport: false},
+    }).filePath;
+
+  const moduleSystem = resolveFromProjectRoot(defaults.moduleSystem);
+
+  // A bundle with no module system builds successfully but fails at runtime.
+  if (
+    moduleSystem === resolveFromProjectRoot(config.resolver.emptyModulePath)
+  ) {
+    throw new Error(
+      `The module system ('${defaults.moduleSystem}') resolved to an empty ` +
+        'module. A custom `resolver.resolveRequest` must delegate this ' +
+        'specifier to `context.resolveRequest`, or resolve it to a file.',
+    );
+  }
+
   const dependencies = await deltaBundler.getDependencies(
-    [defaults.moduleSystem, ...polyfillModuleNames],
+    [moduleSystem, ...polyfillModuleNames],
     {
-      resolve: await transformHelpers.getResolveDependencyFn(
-        bundler,
-        options.platform,
-        resolverOptions,
-      ),
+      resolve,
       transform: await transformHelpers.getTransformFn(
-        [defaults.moduleSystem, ...polyfillModuleNames],
+        [moduleSystem, ...polyfillModuleNames],
         bundler,
         deltaBundler,
         config,

@@ -174,4 +174,39 @@ describe("Metro's own metro-runtime outside every configured root", () => {
     );
     expect(execBundle(result.code).emptyValue).toEqual({});
   });
+
+  test('resolves the module system through the resolver', async () => {
+    const resolveRequest = jest.fn((context, moduleName, platform) =>
+      context.resolveRequest(context, moduleName, platform),
+    );
+    await Metro.runBuild(
+      {...config, resolver: {...config.resolver, resolveRequest}},
+      {entry: 'metro-runtime/index.js'},
+    );
+    expect(resolveRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'metro:runtime/polyfills/require',
+      expect.anything(),
+    );
+  });
+
+  test('rejects a module system that resolves to an empty module', async () => {
+    await expect(
+      Metro.runBuild(
+        {
+          ...config,
+          resolver: {
+            ...config.resolver,
+            resolveRequest: (context, moduleName, platform) =>
+              moduleName === 'metro:runtime/polyfills/require'
+                ? {type: 'empty'}
+                : context.resolveRequest(context, moduleName, platform),
+          },
+        },
+        {entry: 'metro-runtime/index.js'},
+      ),
+    ).rejects.toThrow(
+      "The module system ('metro:runtime/polyfills/require') resolved to an empty module.",
+    );
+  });
 });
