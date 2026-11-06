@@ -212,7 +212,7 @@ Required. Transforms a module's code. It receives an object with:
 - `options`: Options for this transformation, e.g. `dev`, `platform`, `minify`, `projectRoot`, `customTransformOptions` and `unstable_transformProfile`.
 - `plugins`: Babel plugins that Metro wants applied to the code.
 
-It must return an object with an `ast` key containing the Babel AST of the transformed code, and optionally Babel `metadata`. For example, using Babel:
+It must return an object with an `ast` key containing the Babel AST of the transformed code, and optionally Babel `metadata`. Metro gets function names for stack traces from `metadata`, so apply the `plugins` it passes in and return the resulting `metadata` to keep them. For example, using Babel:
 
 ```js
 const {transformSync} = require('@babel/core');
