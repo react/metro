@@ -16,7 +16,7 @@ import accepts from 'accepts';
 const CRLF = '\r\n';
 const BOUNDARY = '3beqjf3apnqeu3h5jqorms4i';
 type Data = string | Buffer | Uint8Array;
-type Headers = {[string]: string | number};
+type Headers = {[key: string]: string | number};
 
 export default class MultipartResponse {
   static wrapIfSupported(

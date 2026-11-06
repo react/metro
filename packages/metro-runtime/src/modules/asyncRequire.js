@@ -26,7 +26,7 @@ type ReadonlyJsonData =
   | number
   | string
   | ReadonlyArray<ReadonlyJsonData>
-  | Readonly<{[string]: ReadonlyJsonData}>;
+  | Readonly<{[key: string]: ReadonlyJsonData}>;
 
 type DependencyMapPaths = ?Readonly<{
   [moduleID: number | string]: ReadonlyJsonData,

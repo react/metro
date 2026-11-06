@@ -157,9 +157,9 @@ export type RunBuildResult = {
   ...
 };
 
-type BuildCommandOptions = Readonly<{[string]: unknown}> | null;
-type ServeCommandOptions = Readonly<{[string]: unknown}> | null;
-type DependenciesCommandOptions = Readonly<{[string]: unknown}> | null;
+type BuildCommandOptions = Readonly<{[key: string]: unknown}> | null;
+type ServeCommandOptions = Readonly<{[key: string]: unknown}> | null;
+type DependenciesCommandOptions = Readonly<{[key: string]: unknown}> | null;
 
 export {Terminal, JsonReporter, TerminalReporter, getSchemeResolvers};
 

@@ -31,7 +31,7 @@ type EndpointOptions = {
   cert?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   ca?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   params?: URLSearchParams,
-  headers?: {[string]: string},
+  headers?: {[key: string]: string},
   additionalSuccessStatuses?: ReadonlyArray<number>,
   /**
    * Whether to include additional debug information in error messages.
@@ -55,7 +55,7 @@ type Endpoint = {
   port: number,
   agent: http$Agent<tls$TLSSocket> | http$Agent<net$Socket>,
   params: URLSearchParams,
-  headers?: {[string]: string},
+  headers?: {[key: string]: string},
   timeout: number,
   additionalSuccessStatuses: ReadonlySet<number>,
   debug: boolean,

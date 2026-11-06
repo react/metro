@@ -60,7 +60,7 @@ type ChromeTraceEntry = {
 };
 
 type ChromeTrace = {
-  stackFrames: {[string]: ChromeTraceEntry},
+  stackFrames: {[key: string]: ChromeTraceEntry},
 };
 
 type HermesMinidumpCrashInfo = {

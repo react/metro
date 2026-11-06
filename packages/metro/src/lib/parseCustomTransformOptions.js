@@ -18,7 +18,7 @@ export default function parseCustomTransformOptions(
 ): CustomTransformOptions {
   const customTransformOptions: {
     __proto__: null,
-    [string]: unknown,
+    [key: string]: unknown,
     ...
   } = Object.create(null);
 

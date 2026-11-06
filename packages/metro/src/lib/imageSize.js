@@ -38,7 +38,7 @@ const PNG_IDENTIFIER = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-const parsers: {[string]: ImageParser} = {
+const parsers: {[key: string]: ImageParser} = {
   bmp: parseBmp,
   gif: parseGif,
   jpeg: parseJpeg,
@@ -286,7 +286,7 @@ function parsePsd(content: Buffer): ?Dimensions {
   };
 }
 
-const SVG_UNIT_FACTORS: {[string]: number} = {
+const SVG_UNIT_FACTORS: {[key: string]: number} = {
   in: 96,
   cm: 96 / 2.54,
   em: 16,
@@ -313,7 +313,7 @@ function parseSvg(content: Buffer): ?Dimensions {
     return null;
   }
   const root = header.slice(rootStart, rootEnd + 1);
-  const attributes: {[string]: string} = {};
+  const attributes: {[key: string]: string} = {};
   const attributePattern =
     /(?<![\w:-])(width|height|viewBox)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
   let match = attributePattern.exec(root);

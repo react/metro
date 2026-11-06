@@ -16,7 +16,7 @@ const SIZE_LIMIT = 100 * 1024 * 1024; // 100MB
 
 export type JsonData =
   | {
-      [string]: JsonData,
+      [key: string]: JsonData,
     }
   | Array<JsonData>
   | string

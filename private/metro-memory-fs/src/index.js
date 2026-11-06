@@ -87,7 +87,7 @@ const kWritableMustExist = Symbol('kWritableMustExist');
 type InternalOpenFlags = string | typeof kWritableMustExist;
 
 const FLAGS_SPECS: {
-  [InternalOpenFlags]: {
+  [key: InternalOpenFlags]: {
     exclusive?: true,
     mustExist?: true,
     readable?: true,
@@ -293,7 +293,7 @@ class MemoryFs {
     this.promises = PROMISE_FUNC_NAMES.filter(
       // $FlowFixMe[prop-missing]: No indexer
       funcName => typeof this[`${funcName}Sync`] === 'function',
-    ).reduce<{[string]: (...args: Array<any>) => Promise<any>}>(
+    ).reduce<{[key: string]: (...args: Array<any>) => Promise<any>}>(
       (promises, funcName) => {
         promises[funcName] = (...args) =>
           new Promise((resolve, reject) => {
