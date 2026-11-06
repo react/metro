@@ -333,7 +333,7 @@ resolveRequest: (context, moduleName, platform) => {
 },
 ```
 
-A custom resolver must delegate any specifier it doesn't handle, including those in the [`metro:` scheme](./Configuration.md#schemeresolvers). Metro resolves its module system, `metro:runtime/polyfills/require`, through the resolver for every build.
+A custom resolver must delegate any specifier it doesn't handle, including those in the [`metro:` scheme](./Configuration.md#schemeresolvers).
 
 Custom resolvers must follow the [caching](#caching) rules.
 
