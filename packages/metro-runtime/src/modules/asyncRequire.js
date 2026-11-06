@@ -52,12 +52,17 @@ type AsyncRequire = {
 
 declare var __METRO_GLOBAL_PREFIX__: string;
 
+// A later bundle in the same realm (e.g. a Module Federation remote) may
+// reassign `__METRO_GLOBAL_PREFIX__`. Read it once, so that this module keeps
+// using its own bundle's loader.
+const GLOBAL_PREFIX: string = __METRO_GLOBAL_PREFIX__;
+
 function maybeLoadBundle(
   moduleID: number,
   paths: DependencyMapPaths,
 ): void | Promise<void> {
   const loadBundle: (bundlePath: unknown) => Promise<void> =
-    global[`${__METRO_GLOBAL_PREFIX__}__loadBundleAsync`];
+    global[`${GLOBAL_PREFIX}__loadBundleAsync`];
 
   if (loadBundle != null) {
     const stringModuleID = String(moduleID);
