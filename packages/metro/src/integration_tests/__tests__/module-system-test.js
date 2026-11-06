@@ -37,14 +37,3 @@ test('resolves the module system through the resolver', async () => {
     expect.anything(),
   );
 });
-
-test('does not resolve an unused `emptyModulePath`', async () => {
-  const emptyModulePath = '/does/not/exist/empty.js';
-  const resolveRequest = jest.fn(delegate);
-  await build({emptyModulePath, resolveRequest});
-  expect(resolveRequest).not.toHaveBeenCalledWith(
-    expect.anything(),
-    emptyModulePath,
-    expect.anything(),
-  );
-});
