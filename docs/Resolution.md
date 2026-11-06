@@ -266,7 +266,7 @@ Given the path to a `package.json` file, returns the parsed contents, or `null` 
 
 Given a candidate absolute module path, which need not exist, returns the closest package root (searching upwards, stopping at the nearest `node_modules`), its parsed `package.json`, and the package-relative path, or `null` if there's no `package.json` before the nearest `node_modules`. A path through a symlinked directory checks the link's target, then continues up from the link's parent; a symlinked file is scoped by where the link is. A missing path takes the scope of its deepest existing ancestor, or `null` if the first missing segment is `node_modules`. E.g. `getPackageForModule('/app/node_modules/foo/lib/index.js')` returns `{rootPath: '/app/node_modules/foo', packageJson: {...}, packageRelativePath: 'lib/index.js'}`.
 
-#### `isESMImport?: boolean`
+#### `isESMImport: boolean`
 
 Whether the dependency was declared with an ESM import (`import x from 'y'` or `await import('z')`) rather than `require()`, the criteria Node.js uses to assert the `"import"` rather than the `"require"` [condition](./PackageExports.md#how-metro-applies-importrequire-exports-conditions).
 
