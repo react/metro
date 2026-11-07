@@ -35,17 +35,15 @@ test('rejects invalid arguments', () => {
     'Unknown benchmark "Entry.js:ios", expected one of: bundling_speed',
   );
 
-  const badRuns = runScript('bundling_speed', '--runs=1', 'Entry.js:ios');
+  const badRuns = runScript('bundling_speed', '--runs=1');
   expect(badRuns.status).not.toBe(0);
   expect(badRuns.stderr).toContain('--runs must be an integer >= 2, got "1"');
 
-  const noTargets = runScript('bundling_speed');
-  expect(noTargets.status).not.toBe(0);
-  expect(noTargets.stderr).toContain('Missing targets for bundling_speed');
-
-  const noPlatform = runScript('bundling_speed', 'Entry.js');
-  expect(noPlatform.status).not.toBe(0);
-  expect(noPlatform.stderr).toContain('Missing platform in "Entry.js"');
+  const targets = runScript('bundling_speed', 'Entry.js:ios');
+  expect(targets.status).not.toBe(0);
+  expect(targets.stderr).toContain(
+    'bundling_speed takes no targets, got "Entry.js:ios"',
+  );
 });
 
 test('rotates every variant through every position', () => {
