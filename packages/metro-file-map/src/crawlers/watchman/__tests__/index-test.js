@@ -13,12 +13,12 @@ import type {CrawlerOptions} from '../../../flow-types';
 
 import TreeFS from '../../../lib/TreeFS';
 import watchmanCrawl from '../index';
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
 class MockClient extends EventEmitter {
-  command: JestMockFn<$ReadOnlyArray<$FlowFixMe>, mixed> = jest.fn();
+  command: JestMockFn<ReadonlyArray<$FlowFixMe>, unknown> = jest.fn();
   end: JestMockFn<[], void> = jest.fn();
 }
 const mockClient = new MockClient();
@@ -28,11 +28,11 @@ jest.mock('fb-watchman', () => ({
 }));
 
 // /some/path on posix, c:\some\path on Windows
-const systemPath: string => string = filePath =>
+const systemPath: (filePath: string) => string = filePath =>
   watchmanPath(filePath).replace(/\//g, path.sep);
 
 // /some/path on posix, c:/some/path on Windows. Relative unchanged.
-const watchmanPath: string => string = filePath =>
+const watchmanPath: (filePath: string) => string = filePath =>
   filePath.replace(/^\//, 'C:/');
 
 const DEFAULT_OPTIONS: CrawlerOptions = {
@@ -46,14 +46,18 @@ const DEFAULT_OPTIONS: CrawlerOptions = {
   perfLogger: null,
   previousState: {
     clocks: new Map(),
-    fileSystem: new TreeFS({rootDir: systemPath('/roots')}),
+    fileSystem: new TreeFS({
+      rootDir: systemPath('/roots'),
+      processFile: () => {
+        throw new Error('Not implemented');
+      },
+    }),
   },
   rootDir: systemPath('/roots'),
   roots: [
     systemPath('/roots/root1/project1'),
     systemPath('/roots/root2/project2'),
   ],
-  forceNodeFilesystemAPI: false,
 };
 
 const WATCH_PROJECTS = new Map([
@@ -83,7 +87,7 @@ const WATCH_PROJECTS = new Map([
 describe('Watchman crawler', () => {
   let expectedQueries: Map<
     string /* watch root */,
-    $ReadOnly<{query: mixed, result: mixed}>,
+    Readonly<{query: unknown, result: unknown}>,
   >;
   beforeEach(() => {
     expectedQueries = new Map();

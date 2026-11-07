@@ -4,15 +4,19 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  * @oncall react_native
  */
 
-'use strict';
-
 import type {Scope} from '@babel/traverse';
-import type {CallExpression, MemberExpression} from '@babel/types';
+import type {
+  ArgumentPlaceholder,
+  CallExpression,
+  Expression,
+  MemberExpression,
+  SpreadElement,
+} from '@babel/types';
 // Type only import. No runtime dependency
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
@@ -32,7 +36,7 @@ type PlatformChecks = {
   ) => boolean,
 };
 
-function createInlinePlatformChecks(
+export default function createInlinePlatformChecks(
   t: Types,
   requireName: string = 'require',
 ): PlatformChecks {
@@ -76,7 +80,7 @@ function createInlinePlatformChecks(
     isMemberExpression(node.object) &&
     isIdentifier(node.object.property, {name: 'Platform'}) &&
     isImportOrGlobal(
-      // $FlowFixMe[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       node.object.object,
       scope,
       [{name: 'React'}, {name: 'ReactNative'}],
@@ -91,7 +95,7 @@ function createInlinePlatformChecks(
     isMemberExpression(node.callee) &&
     isIdentifier(node.callee.property, {name: 'select'}) &&
     isImportOrGlobal(
-      // $FlowFixMe[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       node.callee.object,
       scope,
       [{name: 'Platform'}],
@@ -108,7 +112,7 @@ function createInlinePlatformChecks(
     isMemberExpression(node.callee.object) &&
     isIdentifier(node.callee.object.property, {name: 'Platform'}) &&
     isImportOrGlobal(
-      // $FlowFixMe[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       // $FlowFixMe[incompatible-use]
       node.callee.object.object,
       scope,
@@ -116,13 +120,8 @@ function createInlinePlatformChecks(
       isWrappedModule,
     );
 
-  // $FlowFixMe[deprecated-type]
-  function isGlobal(binding: mixed): boolean %checks {
-    return !binding;
-  }
-
   const isRequireCall = (
-    node: BabelNodeExpression,
+    node: Expression,
     dependencyId: string,
     scope: Scope,
   ): boolean =>
@@ -131,7 +130,7 @@ function createInlinePlatformChecks(
     checkRequireArgs(node.arguments, dependencyId);
 
   const isImport = (
-    node: BabelNodeExpression,
+    node: Expression,
     scope: Scope,
     patterns: Array<{name: string}>,
   ): boolean =>
@@ -141,7 +140,7 @@ function createInlinePlatformChecks(
     });
 
   const isImportOrGlobal = (
-    node: BabelNodeExpression,
+    node: Expression,
     scope: Scope,
     patterns: Array<{name: string}>,
     isWrappedModule: boolean,
@@ -149,23 +148,34 @@ function createInlinePlatformChecks(
     const identifier = patterns.find((pattern: {name: string}) =>
       isIdentifier(node, pattern),
     );
-    return (
-      (!!identifier &&
-        isToplevelBinding(
-          scope.getBinding(identifier.name),
-          isWrappedModule,
-        )) ||
-      isImport(node, scope, patterns)
-    );
+    if (
+      !!identifier &&
+      isToplevelBinding(scope.getBinding(identifier.name), isWrappedModule)
+    ) {
+      return true;
+    }
+    if (isImport(node, scope, patterns)) {
+      return true;
+    }
+    if (isIdentifier(node)) {
+      const binding = scope.getBinding(node.name);
+      if (
+        binding != null &&
+        isToplevelBinding(binding, isWrappedModule) &&
+        binding.path.isVariableDeclarator()
+      ) {
+        const init = binding.path.node.init;
+        // $FlowFixMe[incompatible-type] Flow doesn't narrow binding.path.node through isVariableDeclarator()
+        if (init != null && isImport(init, scope, patterns)) {
+          return true;
+        }
+      }
+    }
+    return false;
   };
 
   const checkRequireArgs = (
-    args: Array<
-      | BabelNodeExpression
-      | BabelNodeSpreadElement
-      | BabelNodeJSXNamespacedName
-      | BabelNodeArgumentPlaceholder,
-    >,
+    args: Array<Expression | SpreadElement | ArgumentPlaceholder>,
     dependencyId: string,
   ): boolean => {
     const pattern = t.stringLiteral(dependencyId);
@@ -181,7 +191,7 @@ function createInlinePlatformChecks(
     binding: void | $FlowFixMe,
     isWrappedModule: boolean,
   ): boolean =>
-    isGlobal(binding) ||
+    !binding ||
     !binding.scope.parent ||
     (isWrappedModule && !binding.scope.parent.parent);
 
@@ -190,5 +200,3 @@ function createInlinePlatformChecks(
     isPlatformSelectNode,
   };
 }
-
-module.exports = createInlinePlatformChecks;

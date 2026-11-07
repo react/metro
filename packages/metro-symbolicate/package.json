@@ -1,13 +1,19 @@
 {
   "name": "metro-symbolicate",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "🚇 A tool to find the source location from JS bundles and stack traces.",
   "license": "MIT",
   "main": "./src/index.js",
   "bin": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/metro-symbolicate"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
@@ -19,13 +25,12 @@
   "dependencies": {
     "flow-enums-runtime": "^0.0.6",
     "invariant": "^2.2.4",
-    "metro-source-map": "0.80.9",
+    "metro-source-map": "0.88.0",
     "nullthrows": "^1.1.1",
     "source-map": "^0.5.6",
-    "through2": "^2.0.1",
     "vlq": "^1.0.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

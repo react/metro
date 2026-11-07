@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @flow strict-local
- * @noformat - Flow comment syntax
+ * @format
  */
 
 /*
@@ -17,24 +17,16 @@
  * a custom serialization library.
  */
 
-/*::
 import type {HType} from './flow-types';
-*/
 
-'use strict';
-
-const constants/*: HType */ = {
-  /* dependency serialization */
-  DEPENDENCY_DELIM: '\0',
-
+export default {
   /* file map attributes */
-  ID: 0,
-  MTIME: 1,
-  SIZE: 2,
-  VISITED: 3,
-  DEPENDENCIES: 4,
-  SHA1: 5,
-  SYMLINK: 6,
+  MTIME: 0,
+  SIZE: 1,
+  VISITED: 2,
+  SHA1: 3,
+  SYMLINK: 4,
+  PLUGINDATA: 5,
 
   /* module map attributes */
   PATH: 0,
@@ -47,6 +39,4 @@ const constants/*: HType */ = {
   /* platforms */
   GENERIC_PLATFORM: 'g',
   NATIVE_PLATFORM: 'native',
-};
-
-module.exports = constants;
+} as HType;

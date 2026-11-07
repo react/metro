@@ -9,13 +9,12 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {MixedOutput, Options, TransformResultDependency} from '../types';
 
-import type {TransformResultDependency} from '../types.flow';
+import DeltaBundler from '../../DeltaBundler';
+import DeltaCalculator from '../DeltaCalculator';
 
-const DeltaBundler = require('../../DeltaBundler');
-const DeltaCalculator = require('../DeltaCalculator');
-const {EventEmitter} = require('events');
+const {EventEmitter} = require('node:events');
 
 jest.mock('../DeltaCalculator');
 
@@ -30,9 +29,10 @@ describe('DeltaBundler', () => {
     entryPoints: ['/entry'],
   };
 
-  const options = {
+  const options: Options<MixedOutput> = {
     unstable_allowRequireContext: false,
     unstable_enablePackageExports: false,
+    unstable_incrementalResolution: false,
     lazy: false,
     onProgress: null,
     resolve: (from: string, dependency: TransformResultDependency) => {
@@ -45,7 +45,6 @@ describe('DeltaBundler', () => {
     transformOptions: {
       // NOTE: These options are ignored because we mock out the transformer (via DeltaCalculator).
       dev: false,
-      hot: false,
       minify: false,
       platform: null,
       type: 'module',
@@ -57,7 +56,6 @@ describe('DeltaBundler', () => {
     const fileEmitter = new EventEmitter();
     deltaBundler = new DeltaBundler(fileEmitter);
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     DeltaCalculator.prototype.getDelta.mockImplementation(async ({reset}) =>
       Promise.resolve({
         modified: reset ? mockGraph.dependencies : new Map(),
@@ -66,23 +64,21 @@ describe('DeltaBundler', () => {
       }),
     );
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     DeltaCalculator.prototype.getGraph.mockReturnValue(mockGraph);
   });
 
-  it('should create a new graph when buildGraph gets called', async () => {
+  test('should create a new graph when buildGraph gets called', async () => {
     expect(
       await deltaBundler.buildGraph(mockGraph.entryPoints, options),
     ).toEqual(mockGraph);
 
-    // $FlowFixMe[method-unbinding] Jest class mocks and Flow don't mix
     expect(DeltaCalculator.prototype.getDelta.mock.calls[0][0]).toEqual({
       reset: true,
       shallow: false,
     });
   });
 
-  it('should get a delta when getDelta gets called', async () => {
+  test('should get a delta when getDelta gets called', async () => {
     const graph = await deltaBundler.buildGraph(mockGraph.entryPoints, options);
 
     expect(
@@ -94,7 +90,7 @@ describe('DeltaBundler', () => {
     });
   });
 
-  it('should get a reset delta when calling getDelta({reset: true, shallow: false})', async () => {
+  test('should get a reset delta when calling getDelta({reset: true, shallow: false})', async () => {
     const graph = await deltaBundler.buildGraph(mockGraph.entryPoints, options);
 
     expect(
@@ -106,7 +102,7 @@ describe('DeltaBundler', () => {
     });
   });
 
-  it('should throw an error when trying to get the delta of a graph that does not exist', async () => {
+  test('should throw an error when trying to get the delta of a graph that does not exist', async () => {
     const graph = await deltaBundler.buildGraph(mockGraph.entryPoints, options);
 
     deltaBundler.endGraph(graph);
@@ -116,7 +112,7 @@ describe('DeltaBundler', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
-  it('should throw an error when trying to end a graph twice', async () => {
+  test('should throw an error when trying to end a graph twice', async () => {
     const graph = await deltaBundler.buildGraph(mockGraph.entryPoints, options);
 
     deltaBundler.endGraph(graph);

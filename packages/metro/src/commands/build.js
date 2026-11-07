@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
@@ -12,20 +12,21 @@
 import type {RunBuildOptions} from '../index';
 import type {CustomTransformOptions} from 'metro-babel-transformer';
 import type {CustomResolverOptions} from 'metro-resolver';
-import type {ModuleObject} from 'yargs';
+import type {CommandModule} from 'yargs';
 import typeof Yargs from 'yargs';
 
+import {makeAsyncCommand} from '../cli-utils';
 import parseKeyValueParamArray from '../cli/parseKeyValueParamArray';
-
-const {makeAsyncCommand} = require('../cli-utils');
-const TerminalReporter = require('../lib/TerminalReporter');
-const {loadConfig} = require('metro-config');
-const {Terminal} = require('metro-core');
+import TerminalReporter from '../lib/TerminalReporter';
+import {loadConfig} from 'metro-config';
+import {Terminal} from 'metro-core';
 
 const term = new Terminal(process.stdout);
 const updateReporter = new TerminalReporter(term);
 
-type Args = $ReadOnly<{
+type Args = Readonly<{
+  _: unknown,
+  $0: unknown,
   config?: string,
   dev?: boolean,
   entry: string,
@@ -35,18 +36,16 @@ type Args = $ReadOnly<{
   out: string,
   outputType?: string,
   platform?: string,
-  projectRoots?: $ReadOnlyArray<string>,
+  projectRoots?: ReadonlyArray<string>,
   resetCache?: boolean,
   sourceMap?: boolean,
   sourceMapUrl?: string,
   transformOption: CustomTransformOptions,
   resolverOption: CustomResolverOptions,
+  ...
 }>;
 
-module.exports = (): {
-  ...ModuleObject,
-  handler: Function,
-} => ({
+export default (): CommandModule => ({
   command: 'build <entry>',
   desc: 'Generates a JavaScript bundle containing the specified entrypoint and its descendants',
 
@@ -77,7 +76,7 @@ module.exports = (): {
       type: 'string',
       array: true,
       alias: 'transformer-option',
-      coerce: (parseKeyValueParamArray: $FlowFixMe),
+      coerce: parseKeyValueParamArray as $FlowFixMe,
       describe:
         'Custom transform options of the form key=value. URL-encoded. May be specified multiple times.',
     });
@@ -85,7 +84,7 @@ module.exports = (): {
     yargs.option('resolver-option', {
       type: 'string',
       array: true,
-      coerce: (parseKeyValueParamArray: $FlowFixMe),
+      coerce: parseKeyValueParamArray as $FlowFixMe,
       describe:
         'Custom resolver options of the form key=value. URL-encoded. May be specified multiple times.',
     });
@@ -95,6 +94,7 @@ module.exports = (): {
   },
 
   handler: makeAsyncCommand(async (argv: Args) => {
+    // $FlowFixMe[incompatible-type] argv has extra props.
     const config = await loadConfig(argv);
     const options: RunBuildOptions = {
       entry: argv.entry,
@@ -109,6 +109,7 @@ module.exports = (): {
     };
 
     // Inline require() to avoid circular dependency with ../index
+    // eslint-disable-next-line import/no-commonjs
     const MetroApi = require('../index');
 
     await MetroApi.runBuild(config, {

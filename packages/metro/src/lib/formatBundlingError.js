@@ -4,29 +4,25 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow
+ * @format
  */
 
-'use strict';
+import type {FormattedError} from 'metro-runtime/src/modules/types';
 
-import type {FormattedError} from 'metro-runtime/src/modules/types.flow';
-
-const GraphNotFoundError = require('../IncrementalBundler/GraphNotFoundError');
-const ResourceNotFoundError = require('../IncrementalBundler/ResourceNotFoundError');
-const RevisionNotFoundError = require('../IncrementalBundler/RevisionNotFoundError');
-const {
-  UnableToResolveError,
-} = require('../node-haste/DependencyGraph/ModuleResolution');
-const {codeFrameColumns} = require('@babel/code-frame');
-const ErrorStackParser = require('error-stack-parser');
-const fs = require('fs');
-const {AmbiguousModuleResolutionError} = require('metro-core');
-const serializeError = require('serialize-error');
+import GraphNotFoundError from '../IncrementalBundler/GraphNotFoundError';
+import ResourceNotFoundError from '../IncrementalBundler/ResourceNotFoundError';
+import RevisionNotFoundError from '../IncrementalBundler/RevisionNotFoundError';
+import {UnableToResolveError} from '../node-haste/DependencyGraph/ModuleResolution';
+import {codeFrameColumns} from '@babel/code-frame';
+import ErrorStackParser from 'error-stack-parser';
+import {AmbiguousModuleResolutionError} from 'metro-core';
+import fs from 'node:fs';
+import serializeError from 'serialize-error';
 
 export type CustomError = Error &
   interface {
-    type?: string,
+    readonly type?: string,
     filename?: string,
     lineNumber?: number,
     errors?: Array<{
@@ -37,7 +33,9 @@ export type CustomError = Error &
     }>,
   };
 
-function formatBundlingError(error: CustomError): FormattedError {
+export default function formatBundlingError(
+  error: CustomError,
+): FormattedError {
   if (error instanceof AmbiguousModuleResolutionError) {
     const he = error.hasteError;
     const message =
@@ -45,10 +43,7 @@ function formatBundlingError(error: CustomError): FormattedError {
       `${error.fromModulePath}\' tries to require \'${he.hasteName}\', but ` +
       'there are several files providing this module. You can delete or ' +
       'fix them: \n\n' +
-      Object.keys(he.duplicatesSet)
-        .sort()
-        .map(dupFilePath => `${dupFilePath}`)
-        .join('\n\n');
+      [...he.duplicatesSet.keys()].sort().join('\n\n');
 
     return {
       type: 'AmbiguousModuleResolutionError',
@@ -60,35 +55,38 @@ function formatBundlingError(error: CustomError): FormattedError {
   if (
     error instanceof UnableToResolveError ||
     (error instanceof Error &&
+      /* $FlowFixMe[invalid-compare] Error discovered during Constant Condition
+       * roll out. See https://fburl.com/workplace/4oq3zi07. */
       (error.type === 'TransformError' || error.type === 'NotFoundError'))
   ) {
-    error.errors = [
-      {
-        description: error.message,
-        filename: error.filename,
-        lineNumber: error.lineNumber,
-      },
-    ];
-
-    return serializeError(error);
+    return {
+      ...serializeError(error),
+      // Ensure the type is passed to the client.
+      type: error.type,
+      errors: [
+        {
+          description: error.message,
+          // $FlowFixMe[prop-missing]
+          filename: error.filename,
+          lineNumber: error.lineNumber,
+        },
+      ],
+    };
   } else if (error instanceof ResourceNotFoundError) {
     return {
       type: 'ResourceNotFoundError',
-      // $FlowFixMe[incompatible-return]
       errors: [],
       message: error.message,
     };
   } else if (error instanceof GraphNotFoundError) {
     return {
       type: 'GraphNotFoundError',
-      // $FlowFixMe[incompatible-return]
       errors: [],
       message: error.message,
     };
   } else if (error instanceof RevisionNotFoundError) {
     return {
       type: 'RevisionNotFoundError',
-      // $FlowFixMe[incompatible-return]
       errors: [],
       message: error.message,
     };
@@ -117,5 +115,3 @@ function formatBundlingError(error: CustomError): FormattedError {
     };
   }
 }
-
-module.exports = formatBundlingError;

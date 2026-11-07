@@ -9,23 +9,19 @@
  * @oncall react_native
  */
 
-'use strict';
+import writeFile from '../writeFile';
 
-const writeFile = require('../writeFile');
-
-function writeSourcemap(
+export default function writeSourcemap(
   fileName: string,
   contents: string,
   log: (...args: Array<string>) => void,
-): Promise<mixed> {
+): Promise<unknown> {
   if (!fileName) {
     return Promise.resolve();
   }
   log('Writing sourcemap output to:', fileName);
-  const writeMap = writeFile(fileName, contents, null);
+  const writeMap = writeFile(fileName, contents);
   // $FlowFixMe[unused-promise]
   writeMap.then(() => log('Done writing sourcemap output'));
   return writeMap;
 }
-
-module.exports = writeSourcemap;

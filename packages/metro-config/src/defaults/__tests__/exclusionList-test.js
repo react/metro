@@ -9,16 +9,15 @@
  * @oncall react_native
  */
 
-'use strict';
+import exclusionList from '../exclusionList';
 
-const exclusionList = require('../exclusionList');
-const path = require('path');
+const path = require('node:path');
 
 describe('exclusionList', () => {
   let originalSeparator;
 
-  function setPathSeperator(sep: string) {
-    // $FlowFixMe: property sep is not writable.
+  function setPathSeparator(sep: string) {
+    // $FlowFixMe[cannot-write]: property sep is not writable.
     path.sep = sep;
   }
 
@@ -27,21 +26,21 @@ describe('exclusionList', () => {
   });
 
   afterEach(() => {
-    // $FlowFixMe: property sep is not writable.
+    // $FlowFixMe[cannot-write]: property sep is not writable.
     path.sep = originalSeparator;
   });
 
-  it('proves we can write to path.sep for setting up the tests', () => {
-    setPathSeperator('/');
-    expect(require('path').sep).toBe('/');
-    setPathSeperator('\\');
-    expect(require('path').sep).toBe('\\');
+  test('proves we can write to path.sep for setting up the tests', () => {
+    setPathSeparator('/');
+    expect(require('node:path').sep).toBe('/');
+    setPathSeparator('\\');
+    expect(require('node:path').sep).toBe('\\');
   });
 
-  describe('simulate macOS/linux enviornment', () => {
-    beforeEach(() => setPathSeperator('/'));
+  describe('simulate macOS/linux environment', () => {
+    beforeEach(() => setPathSeparator('/'));
 
-    it('converts forward slashes in the RegExp to the OS specific path separator', () => {
+    test('converts forward slashes in the RegExp to the OS specific path separator', () => {
       // Simple case
       expect('a/b/c').toMatch(exclusionList([new RegExp('a/b/c')]));
       expect('a/b/c').toMatch(exclusionList([/a\/b\/c/]));
@@ -52,7 +51,7 @@ describe('exclusionList', () => {
       expect('/foo/bar').toMatch(exclusionList([/.*[/\\]foo[/\\]bar/]));
     });
 
-    it('converts forward slashes in the string to the OS specific path separator', () => {
+    test('converts forward slashes in the string to the OS specific path separator', () => {
       // Simple case
       expect('a/b/c').toMatch(exclusionList(['a/b/c']));
       // Make sure the special characters are escaped properly
@@ -61,7 +60,7 @@ describe('exclusionList', () => {
       );
     });
 
-    it('converts forward slashes in the RegExp to the OS specific path separator in nodejs 10 or below', () => {
+    test('converts forward slashes in the RegExp to the OS specific path separator in nodejs 10 or below', () => {
       // In node version 10 or below, the forward slash in brackets are escaped automatically.
       // eg. /[/\\]/ => /[\/\\]/
       // Ideally this test case should be removed and instead the whole test should run in
@@ -74,10 +73,10 @@ describe('exclusionList', () => {
     });
   });
 
-  describe('simulate windows enviornment', () => {
-    beforeEach(() => setPathSeperator('\\'));
+  describe('simulate windows environment', () => {
+    beforeEach(() => setPathSeparator('\\'));
 
-    it('converts forward slashes in the RegExp to the OS specific path separator', () => {
+    test('converts forward slashes in the RegExp to the OS specific path separator', () => {
       // Simple case
       expect('a\\b\\c').toMatch(exclusionList([new RegExp('a/b/c')]));
       expect('a\\b\\c').toMatch(exclusionList([/a\/b\/c/]));
@@ -88,7 +87,7 @@ describe('exclusionList', () => {
       expect('\\foo\\bar').toMatch(exclusionList([/.*[/\\]foo[/\\]bar/]));
     });
 
-    it('converts forward slashes in the string to the OS specific path separator', () => {
+    test('converts forward slashes in the string to the OS specific path separator', () => {
       // Simple case
       expect('a\\b\\c').toMatch(exclusionList(['a/b/c']));
       // Make sure the special characters are escaped properly
@@ -97,7 +96,7 @@ describe('exclusionList', () => {
       );
     });
 
-    it('converts forward slashes in the RegExp to the OS specific path separator in nodejs 10 or below', () => {
+    test('converts forward slashes in the RegExp to the OS specific path separator in nodejs 10 or below', () => {
       // In node version 10 or below, the forward slash in brackets are escaped automatically.
       // eg. /[/\\]/ => /[\/\\]/
       // Ideally this test case should be removed and instead the whole test should run in

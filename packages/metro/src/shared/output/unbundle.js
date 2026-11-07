@@ -9,8 +9,6 @@
  * @oncall react_native
  */
 
-'use strict';
-
 /* This is for retro-compatibility of React Native with older versions of
  * Metro. Use the `RamBundle` module directly. */
-module.exports = require('./RamBundle');
+export * from './RamBundle';

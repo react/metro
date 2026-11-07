@@ -8,12 +8,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const bundleToString = require('../bundleToString');
+import bundleToString from '../bundleToString';
 
 describe('bundleToString', () => {
-  it('serializes a bundle into a plain JS bundle', () => {
+  test('serializes a bundle into a plain JS bundle', () => {
     expect(
       bundleToString({
         pre: 'console.log("Hello World!");',
@@ -27,7 +25,7 @@ describe('bundleToString', () => {
     `);
   });
 
-  it('modules are sorted by id', () => {
+  test('modules are sorted by id', () => {
     expect(
       bundleToString({
         pre: 'console.log("Hello World!");',
@@ -49,7 +47,7 @@ describe('bundleToString', () => {
     `);
   });
 
-  it("doesn't add extraneous line breaks when either pre, post or modules are absent", () => {
+  test("doesn't add extraneous line breaks when either pre, post or modules are absent", () => {
     expect(
       bundleToString({
         pre: '',

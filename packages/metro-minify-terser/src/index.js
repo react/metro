@@ -9,8 +9,8 @@
  * @oncall react_native
  */
 
-'use strict';
+import minifier from './minifier';
 
-const minifier = require('./minifier');
-
+// CommonJS export for backwards compatibility
+// eslint-disable-next-line import/no-commonjs
 module.exports = minifier;

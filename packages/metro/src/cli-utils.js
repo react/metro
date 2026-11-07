@@ -4,18 +4,16 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  * @oncall react_native
  */
 
-'use strict';
+import fs from 'node:fs';
 
-const fs = require('fs');
-
-exports.watchFile = async function (
+export const watchFile = async function (
   filename: string,
-  callback: () => any,
+  callback: () => unknown,
 ): Promise<void> {
   fs.watchFile(filename, () => {
     callback();
@@ -24,7 +22,7 @@ exports.watchFile = async function (
   await callback();
 };
 
-exports.makeAsyncCommand =
+export const makeAsyncCommand =
   <T>(command: (argv: T) => Promise<void>): ((argv: T) => void) =>
   (argv: T) => {
     Promise.resolve(command(argv)).catch(error => {

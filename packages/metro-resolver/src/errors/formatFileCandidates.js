@@ -9,11 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {FileCandidates} from '../types';
 
-function formatFileCandidates(candidates: FileCandidates): string {
+export default function formatFileCandidates(
+  candidates: FileCandidates,
+): string {
   if (candidates.type === 'asset') {
     return candidates.name;
   }
@@ -23,5 +23,3 @@ function formatFileCandidates(candidates: FileCandidates): string {
   }
   return formatted;
 }
-
-module.exports = formatFileCandidates;

@@ -9,15 +9,29 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {FBSourceFunctionMap} from './source-map';
 import type {PluginObj} from '@babel/core';
 import type {NodePath} from '@babel/traverse';
-import type {Node} from '@babel/types';
+import type {
+  CallExpression as BabelNodeCallExpression,
+  Class as BabelNodeClass,
+  Function as BabelNodeFunction,
+  Identifier as BabelNodeIdentifier,
+  JSXIdentifier as BabelNodeJSXIdentifier,
+  JSXMemberExpression as BabelNodeJSXMemberExpression,
+  MemberExpression as BabelNodeMemberExpression,
+  NewExpression as BabelNodeNewExpression,
+  Node as BabelNode,
+  OptionalCallExpression as BabelNodeOptionalCallExpression,
+  OptionalMemberExpression as BabelNodeOptionalMemberExpression,
+  Program as BabelNodeProgram,
+  SourceLocation as BabelNodeSourceLocation,
+} from '@babel/types';
 import type {MetroBabelFileMetadata} from 'metro-babel-transformer';
 
-import traverse from '@babel/traverse';
+import B64Builder from './B64Builder';
+import {traverse} from '@babel/core';
+import * as t from '@babel/types';
 import {
   isAssignmentExpression,
   isClassBody,
@@ -41,12 +55,9 @@ import {
   isTypeCastExpression,
   isVariableDeclarator,
 } from '@babel/types';
-
-const B64Builder = require('./B64Builder');
-const t = require('@babel/types');
-const invariant = require('invariant');
-const nullthrows = require('nullthrows');
-const fsPath = require('path');
+import invariant from 'invariant';
+import fsPath from 'node:path';
+import nullthrows from 'nullthrows';
 
 type Position = {
   line: number,
@@ -60,16 +71,14 @@ type RangeMapping = {
 };
 type FunctionMapVisitor = {
   enter: (
-    path:
-      | NodePath<BabelNodeProgram>
-      | NodePath<BabelNodeFunction>
-      | NodePath<BabelNodeClass>,
+    path: | NodePath<BabelNodeProgram>
+    | NodePath<BabelNodeFunction>
+    | NodePath<BabelNodeClass>,
   ) => void,
   exit: (
-    path:
-      | NodePath<BabelNodeProgram>
-      | NodePath<BabelNodeFunction>
-      | NodePath<BabelNodeClass>,
+    path: | NodePath<BabelNodeProgram>
+    | NodePath<BabelNodeFunction>
+    | NodePath<BabelNodeClass>,
   ) => void,
 };
 export type Context = {filename?: ?string, ...};
@@ -100,7 +109,7 @@ function generateFunctionMap(
 function generateFunctionMappingsArray(
   ast: BabelNode,
   context?: Context,
-): $ReadOnlyArray<RangeMapping> {
+): ReadonlyArray<RangeMapping> {
   const mappings = [];
   forEachMapping(ast, context, mapping => {
     mappings.push(mapping);
@@ -124,9 +133,7 @@ function functionMapBabelPlugin(): PluginObj<> {
         path && t.isProgram(path.node),
         'path missing or not a program node',
       );
-      // $FlowFixMe[prop-missing] checked above
-      // $FlowFixMe[incompatible-type-arg] checked above
-      const programPath: NodePath<BabelNodeProgram> = path;
+      const programPath: NodePath<BabelNodeProgram> = path as $FlowFixMe;
 
       visitor.enter(programPath);
       programPath.traverse({
@@ -135,7 +142,7 @@ function functionMapBabelPlugin(): PluginObj<> {
       });
       visitor.exit(programPath);
 
-      // $FlowFixMe[prop-missing] Babel `File` is not generically typed
+      // $FlowFixMe[incompatible-type] Babel `File` is not generically typed
       const metroMetadata: MetroBabelFileMetadata = metadata;
 
       const functionMap = encoder.getResult();
@@ -152,11 +159,11 @@ function functionMapBabelPlugin(): PluginObj<> {
 
 function getFunctionMapVisitor(
   context: ?Context,
-  pushMapping: RangeMapping => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ): FunctionMapVisitor {
   const nameStack: Array<{loc: BabelNodeSourceLocation, name: string}> = [];
   let tailPos = {line: 1, column: 0};
-  let tailName = null;
+  let tailName: null | string = null;
 
   function advanceToPos(pos: {column: number, line: number}) {
     if (tailPos && positionGreater(pos, tailPos)) {
@@ -216,16 +223,10 @@ function getFunctionMapVisitor(
 function forEachMapping(
   ast: BabelNode,
   context: ?Context,
-  pushMapping: RangeMapping => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ) {
   const visitor = getFunctionMapVisitor(context, pushMapping);
 
-  // Traversing populates/pollutes the path cache (`traverse.cache.path`) with
-  // values missing the `hub` property needed by Babel transformation, so we
-  // save, clear, and restore the cache around our traversal.
-  // See: https://github.com/facebook/metro/pull/854#issuecomment-1336499395
-  const previousCache = traverse.cache.path;
-  traverse.cache.clearPath();
   traverse(ast, {
     // Our visitor doesn't care about scope
     noScope: true,
@@ -234,7 +235,6 @@ function forEachMapping(
     Program: visitor,
     Class: visitor,
   });
-  traverse.cache.path = previousCache;
 }
 
 const ANONYMOUS_NAME = '<anonymous>';
@@ -252,7 +252,7 @@ function getNameForPath(path: NodePath<>): string {
   let {id}: any = path;
   // has an `id` so we don't need to infer one
   if (node.id) {
-    // $FlowFixMe Flow error uncovered by typing Babel more strictly
+    // $FlowFixMe[incompatible-type] Flow error uncovered by typing Babel more strictly
     return node.id.name;
   }
   let propertyPath;
@@ -287,7 +287,7 @@ function getNameForPath(path: NodePath<>): string {
       // <foo>{function () {}}</foo>
       const openingElement = grandParentNode.openingElement;
       id = t.jsxMemberExpression(
-        // $FlowFixMe Flow error uncovered by typing Babel more strictly
+        // $FlowFixMe[incompatible-type] Flow error uncovered by typing Babel more strictly
         t.jsxMemberExpression(openingElement.name, t.jsxIdentifier('props')),
         t.jsxIdentifier('children'),
       );
@@ -296,9 +296,10 @@ function getNameForPath(path: NodePath<>): string {
       const openingElement = parentPath?.parentPath?.parentPath?.node;
       const prop = grandParentNode;
       id = t.jsxMemberExpression(
-        // $FlowFixMe Flow error uncovered by typing Babel more strictly
+        // $FlowFixMe[incompatible-type]
+        // $FlowFixMe[incompatible-use] Flow error uncovered by typing Babel more strictly
         t.jsxMemberExpression(openingElement.name, t.jsxIdentifier('props')),
-        // $FlowFixMe Flow error uncovered by typing Babel more strictly
+        // $FlowFixMe[incompatible-type] Flow error uncovered by typing Babel more strictly
         prop.name,
       );
     }
@@ -311,6 +312,8 @@ function getNameForPath(path: NodePath<>): string {
     // We couldn't find a name directly. Try the parent in certain cases.
     if (isAnyCallExpression(parent)) {
       // foo(function () {})
+      /* $FlowFixMe[incompatible-type] Error exposed after improved typing of
+       * Array.{includes,indexOf,lastIndexOf} */
       const argIndex = parent.arguments.indexOf(node);
       if (argIndex !== -1) {
         const calleeName = getNameFromId(parent.callee);
@@ -348,7 +351,8 @@ function getNameForPath(path: NodePath<>): string {
   // Annotate members with the name of their containing object/class.
   if (propertyPath) {
     if (isClassBody(propertyPath.parent)) {
-      // $FlowFixMe Discovered when typing babel-traverse
+      // $FlowFixMe[incompatible-type]
+      // $FlowFixMe[incompatible-use] Discovered when typing babel-traverse
       const className = getNameForPath(propertyPath.parentPath.parentPath);
       if (className !== ANONYMOUS_NAME) {
         const separator = propertyPath.node.static ? '.' : '#';
@@ -365,8 +369,12 @@ function getNameForPath(path: NodePath<>): string {
   return name;
 }
 
-// $FlowFixMe[deprecated-type]
-function isAnyCallExpression(node: Node): boolean %checks {
+function isAnyCallExpression(
+  node: BabelNode,
+): node is
+  | BabelNodeNewExpression
+  | BabelNodeCallExpression
+  | BabelNodeOptionalCallExpression {
   return (
     node.type === 'CallExpression' ||
     node.type === 'NewExpression' ||
@@ -374,8 +382,12 @@ function isAnyCallExpression(node: Node): boolean %checks {
   );
 }
 
-// $FlowFixMe[deprecated-type]
-function isAnyMemberExpression(node: Node): boolean %checks {
+function isAnyMemberExpression(
+  node: BabelNode,
+): node is
+  | BabelNodeMemberExpression
+  | BabelNodeJSXMemberExpression
+  | BabelNodeOptionalMemberExpression {
   return (
     node.type === 'MemberExpression' ||
     node.type === 'JSXMemberExpression' ||
@@ -383,12 +395,13 @@ function isAnyMemberExpression(node: Node): boolean %checks {
   );
 }
 
-// $FlowFixMe[deprecated-type]
-function isAnyIdentifier(node: Node): boolean %checks {
+function isAnyIdentifier(
+  node: BabelNode,
+): node is BabelNodeIdentifier | BabelNodeJSXIdentifier {
   return isIdentifier(node) || isJSXIdentifier(node);
 }
 
-function getNameFromId(id: Node): ?string {
+function getNameFromId(id: BabelNode): ?string {
   const parts = getNamePartsFromId(id);
 
   if (!parts.length) {
@@ -408,7 +421,7 @@ function getNameFromId(id: Node): ?string {
   return parts.join('.');
 }
 
-function getNamePartsFromId(id: Node): $ReadOnlyArray<string> {
+function getNamePartsFromId(id: BabelNode): ReadonlyArray<string> {
   if (!id) {
     return [];
   }
@@ -583,7 +596,7 @@ function positionGreater(x: Position, y: Position) {
   return x.line > y.line || (x.line === y.line && x.column > y.column);
 }
 
-module.exports = {
+export {
   functionMapBabelPlugin,
   generateFunctionMap,
   generateFunctionMappingsArray,

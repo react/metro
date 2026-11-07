@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
@@ -13,11 +13,12 @@
 
 const {compare} = require('../__mocks__/test-helpers');
 const inlinePlugin = require('../inline-plugin');
+// $FlowFixMe[untyped-import] @babel/plugin-transform-flow-strip-types (in OSS only)
 const stripFlow = require('@babel/plugin-transform-flow-strip-types');
 
 describe('inline constants', () => {
   describe('__DEV__', () => {
-    it('replaces __DEV__ in the code', () => {
+    test('replaces __DEV__ in the code', () => {
       const code = `
         function a() {
           var a = __DEV__ ? 1 : 2;
@@ -31,7 +32,7 @@ describe('inline constants', () => {
       });
     });
 
-    it("doesn't replace a local __DEV__ variable", () => {
+    test("doesn't replace a local __DEV__ variable", () => {
       const code = `
         function a() {
           var __DEV__ = false;
@@ -42,7 +43,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, code, {dev: false});
     });
 
-    it("doesn't replace __DEV__ in an object property key", () => {
+    test("doesn't replace __DEV__ in an object property key", () => {
       const code = `
         const x = { __DEV__: __DEV__ };
       `;
@@ -54,7 +55,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, expected, {dev: false});
     });
 
-    it("doesn't replace __DEV__ in an object shorthand method name", () => {
+    test("doesn't replace __DEV__ in an object shorthand method name", () => {
       const code = `
         const x = {
           __DEV__() { return __DEV__; },
@@ -70,7 +71,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, expected, {dev: false});
     });
 
-    it("doesn't replace __DEV__ as a label of a block statement", () => {
+    test("doesn't replace __DEV__ as a label of a block statement", () => {
       const code = `
         __DEV__: {
           break __DEV__;
@@ -80,7 +81,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, code, {dev: false});
     });
 
-    it("doesn't replace __DEV__ as the name of a function declaration or call", () => {
+    test("doesn't replace __DEV__ as the name of a function declaration or call", () => {
       const code = `
         function __DEV__() { return false; }
         const isDev = __DEV__();
@@ -89,7 +90,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, code, {dev: false});
     });
 
-    it("doesn't replace __DEV__ as the name of a class method", () => {
+    test("doesn't replace __DEV__ as the name of a class method", () => {
       const code = `
         class Test {
           __DEV__() {}
@@ -99,7 +100,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, code, {dev: false});
     });
 
-    it("doesn't replace __DEV__ as the name of an export alias", () => {
+    test("doesn't replace __DEV__ as the name of an export alias", () => {
       const code = `
         const dev = true;
         export { dev as __DEV__ };
@@ -108,7 +109,7 @@ describe('inline constants', () => {
       compare([inlinePlugin], code, code, {dev: false});
     });
 
-    it("doesn't replace __DEV__ as the name of an optional property access", () => {
+    test("doesn't replace __DEV__ as the name of an optional property access", () => {
       const code = `
         x?.__DEV__;
         x?.__DEV__();
@@ -118,7 +119,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.OS in the code if Platform is a global', () => {
+  test('replaces Platform.OS in the code if Platform is a global', () => {
     const code = `
       function a() {
         var a = Platform.OS;
@@ -132,7 +133,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.OS in the code if Platform is a top level import', () => {
+  test('replaces Platform.OS in the code if Platform is a top level import', () => {
     const code = `
       var Platform = require('Platform');
 
@@ -151,7 +152,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.OS in the code if Platform is a top level import from react-native', () => {
+  test('replaces Platform.OS in the code if Platform is a top level import from react-native', () => {
     const code = `
       var Platform = require('react-native').Platform;
 
@@ -170,7 +171,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces require("Platform").OS in the code', () => {
+  test('replaces require("Platform").OS in the code', () => {
     const code = `
       function a() {
         var a = require('Platform').OS;
@@ -186,7 +187,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces React.Platform.OS in the code if React is a global', () => {
+  test('replaces React.Platform.OS in the code if React is a global', () => {
     const code = `
       function a() {
         var a = React.Platform.OS;
@@ -205,7 +206,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces ReactNative.Platform.OS in the code if ReactNative is a global', () => {
+  test('replaces ReactNative.Platform.OS in the code if ReactNative is a global', () => {
     const code = `
       function a() {
         var a = ReactNative.Platform.OS;
@@ -221,7 +222,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces React.Platform.OS in the code if React is a top level import', () => {
+  test('replaces React.Platform.OS in the code if React is a top level import', () => {
     const code = `
       var React = require('React');
 
@@ -245,7 +246,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces require("React").Platform.OS in the code', () => {
+  test('replaces require("React").Platform.OS in the code', () => {
     const code = `
       function a() {
         var a = require('React').Platform.OS;
@@ -261,7 +262,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces ReactNative.Platform.OS in the code if ReactNative is a top level import', () => {
+  test('replaces ReactNative.Platform.OS in the code if ReactNative is a top level import', () => {
     const code = `
       var ReactNative = require('react-native');
 
@@ -282,7 +283,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces require("react-native").Platform.OS in the code', () => {
+  test('replaces require("react-native").Platform.OS in the code', () => {
     const code = `
       function a() {
         var a = require('react-native').Platform.OS;
@@ -298,7 +299,33 @@ describe('inline constants', () => {
     );
   });
 
-  it('inlines Platform.select in the code if Platform is a global and the argument is an object literal', () => {
+  test('replaces _arbitraryName.Platform.OS when _arbitraryName is bound to require("react-native")', () => {
+    // This pattern is produced by @react-native/babel-preset when transforming:
+    //   import {Platform} from 'react-native';
+    // into:
+    //   var _reactNative = require('react-native');
+    //   _reactNative.Platform.OS
+    const code = `
+      var _reactNative = require('react-native');
+
+      function a() {
+        if (_reactNative.Platform.OS === 'android') {
+          a = function() {};
+        }
+
+        var b = a._reactNative.Platform.OS;
+      }
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_reactNative\.Platform\.OS/, '"ios"'),
+      {inlinePlatform: true, platform: 'ios'},
+    );
+  });
+
+  test('inlines Platform.select in the code if Platform is a global and the argument is an object literal', () => {
     const code = `
       function a() {
         var a = Platform.select({ios: 1, android: 2});
@@ -312,7 +339,7 @@ describe('inline constants', () => {
     });
   });
 
-  it("inlines Platform.select in the code if Platform is a global and the argument doesn't have a target platform in its keys", () => {
+  test("inlines Platform.select in the code if Platform is a global and the argument doesn't have a target platform in its keys", () => {
     const code = `
       function a() {
         var a = Platform.select({ios: 1, default: 2});
@@ -326,7 +353,7 @@ describe('inline constants', () => {
     });
   });
 
-  it("inlines Platform.select in the code if Platform is a global and the argument doesn't have a target platform in its keys but has native", () => {
+  test("inlines Platform.select in the code if Platform is a global and the argument doesn't have a target platform in its keys but has native", () => {
     const code = `
       function a() {
         var a = Platform.select({ios: 1, native: 2});
@@ -340,7 +367,7 @@ describe('inline constants', () => {
     });
   });
 
-  it("doesn't inline Platform.select in the code if Platform is a global and the argument only has an unknown platform in its keys", () => {
+  test("doesn't inline Platform.select in the code if Platform is a global and the argument only has an unknown platform in its keys", () => {
     const code = `
       function a() {
         var a = Platform.select({web: 2});
@@ -359,7 +386,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('inlines Platform.select in the code when using string keys', () => {
+  test('inlines Platform.select in the code when using string keys', () => {
     const code = `
       function a() {
         var a = Platform.select({'ios': 1, 'android': 2});
@@ -372,7 +399,18 @@ describe('inline constants', () => {
     });
   });
 
-  it('inlines Platform.select in the code when using an ObjectMethod', () => {
+  test('uses the last definition when Platform.select has duplicate keys', () => {
+    const code = `
+      var value = Platform.select({ios: 1, ios: 2});
+    `;
+
+    compare([inlinePlugin], code, 'var value = 2;', {
+      inlinePlatform: true,
+      platform: 'ios',
+    });
+  });
+
+  test('inlines Platform.select in the code when using an ObjectMethod', () => {
     const code = `
       function a() {
         var a = Platform.select({
@@ -392,7 +430,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('inlines Platform.select in the code when using an ObjectMethod with string keys', () => {
+  test('inlines Platform.select in the code when using an ObjectMethod with string keys', () => {
     const code = `
       function a() {
         var a = Platform.select({
@@ -412,7 +450,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select in the code when some of the properties are dynamic', () => {
+  test('does not inline Platform.select in the code when some of the properties are dynamic', () => {
     const code = `
       function a() {
         const COMPUTED_IOS = 'ios';
@@ -427,7 +465,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select when all properties are dynamic', () => {
+  test('does not inline Platform.select when all properties are dynamic', () => {
     const code = `
       function a() {
         var a = Platform.select({[COMPUTED_ANDROID]: 1, [COMPUTED_IOS]: 2});
@@ -440,7 +478,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select when ObjectMethod properties are dynamic', () => {
+  test('does not inline Platform.select when ObjectMethod properties are dynamic', () => {
     const code = `
       function a() {
         const COMPUTED_IOS = 'ios';
@@ -455,7 +493,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select when the object has a getter or setter', () => {
+  test('does not inline Platform.select when the object has a getter or setter', () => {
     const code = `
       function a() {
         var a = Platform.select({
@@ -471,7 +509,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select when the object has a spread', () => {
+  test('does not inline Platform.select when the object has a spread', () => {
     const code = `
       function a() {
         var a = Platform.select({
@@ -487,7 +525,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('does not inline Platform.select if it receives a non-object', () => {
+  test('does not inline Platform.select if it receives a non-object', () => {
     const code = `
       function a() {
         var a = Platform.select(foo);
@@ -500,7 +538,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.select in the code if Platform is a top level import', () => {
+  test('replaces Platform.select in the code if Platform is a top level import', () => {
     const code = `
       var Platform = require('Platform');
 
@@ -516,7 +554,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.select in the code if Platform is a top level import from react-native', () => {
+  test('replaces Platform.select in the code if Platform is a top level import from react-native', () => {
     const code = `
       var Platform = require('react-native').Platform;
       function a() {
@@ -531,7 +569,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces require("Platform").select in the code', () => {
+  test('replaces require("Platform").select in the code', () => {
     const code = `
       function a() {
         var a = require('Platform').select({ios: 1, android: 2});
@@ -550,7 +588,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces React.Platform.select in the code if React is a global', () => {
+  test('replaces React.Platform.select in the code if React is a global', () => {
     const code = `
       function a() {
         var a = React.Platform.select({ios: 1, android: 2});
@@ -566,7 +604,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces ReactNative.Platform.select in the code if ReactNative is a global', () => {
+  test('replaces ReactNative.Platform.select in the code if ReactNative is a global', () => {
     const code = `
       function a() {
         var a = ReactNative.Platform.select({ios: 1, android: 2});
@@ -582,7 +620,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces React.Platform.select in the code if React is a top level import', () => {
+  test('replaces React.Platform.select in the code if React is a top level import', () => {
     const code = `
       var React = require('React');
 
@@ -600,7 +638,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces require("React").Platform.select in the code', () => {
+  test('replaces require("React").Platform.select in the code', () => {
     const code = `
       function a() {
         var a = require('React').Platform.select({ios: 1, android: 2});
@@ -616,7 +654,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces ReactNative.Platform.select in the code if ReactNative is a top level import', () => {
+  test('replaces ReactNative.Platform.select in the code if ReactNative is a top level import', () => {
     const code = `
       var ReactNative = require('react-native');
 
@@ -634,7 +672,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces require("react-native").Platform.select in the code', () => {
+  test('replaces require("react-native").Platform.select in the code', () => {
     const code = `
       var a = require('react-native').Platform.select({ios: 1, android: 2});
       var b = a.require('react-native').Platform.select({});
@@ -649,7 +687,27 @@ describe('inline constants', () => {
     );
   });
 
-  it("doesn't replace Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
+  test('replaces _arbitraryName.Platform.select when _arbitraryName is bound to require("react-native")', () => {
+    // This pattern is produced by @react-native/babel-preset when transforming:
+    //   import {Platform} from 'react-native';
+    // into:
+    //   var _reactNative = require('react-native');
+    //   _reactNative.Platform.select({...})
+    const code = `
+      var _reactNative = require('react-native');
+      var a = _reactNative.Platform.select({ios: 1, android: 2});
+      var b = a._reactNative.Platform.select({});
+    `;
+
+    compare(
+      [inlinePlugin],
+      code,
+      code.replace(/_reactNative\.Platform\.select[^;]+/, '1'),
+      {inlinePlatform: true, platform: 'ios'},
+    );
+  });
+
+  test("doesn't replace Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
     const code = `
       function a() {
         Platform.OS = "test"
@@ -662,7 +720,38 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
+  test("doesn't replace Platform.OS in other write targets", () => {
+    const code = `
+      Platform.OS++;
+      delete Platform.OS;
+      [Platform.OS] = values;
+      ({os: Platform.OS} = value);
+      for (Platform.OS in object) {}
+      for ([Platform.OS] in nestedObject) {}
+      for (Platform.OS of values) {}
+      for ([Platform.OS] of nestedValues) {}
+    `;
+
+    compare([inlinePlugin], code, code, {
+      inlinePlatform: true,
+      platform: 'ios',
+    });
+  });
+
+  test('replaces Platform.OS when it is read inside a write target', () => {
+    const code = `
+      target[Platform.OS] = value;
+      [target[Platform.OS]] = values;
+      ({[Platform.OS]: target} = value);
+    `;
+
+    compare([inlinePlugin], code, code.replaceAll('Platform.OS', '"ios"'), {
+      inlinePlatform: true,
+      platform: 'ios',
+    });
+  });
+
+  test('replaces Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
     const code = `
       function a() {
         var a;
@@ -676,7 +765,7 @@ describe('inline constants', () => {
     });
   });
 
-  it("doesn't replace React.Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
+  test("doesn't replace React.Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
     const code = `
       function a() {
         React.Platform.OS = "test"
@@ -689,7 +778,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces React.Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
+  test('replaces React.Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
     const code = `
       function a() {
         var a;
@@ -708,7 +797,7 @@ describe('inline constants', () => {
     );
   });
 
-  it("doesn't replace ReactNative.Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
+  test("doesn't replace ReactNative.Platform.OS in the code if Platform is the left hand side of an assignment expression", () => {
     const code = `
       function a() {
         ReactNative.Platform.OS = "test"
@@ -721,7 +810,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces ReactNative.Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
+  test('replaces ReactNative.Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
     const code = `
       function a() {
         var a;
@@ -736,7 +825,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('doesn\'t replace require("React").Platform.OS in the code if Platform is the left hand side of an assignment expression', () => {
+  test('doesn\'t replace require("React").Platform.OS in the code if Platform is the left hand side of an assignment expression', () => {
     const code = `
       function a() {
         require("React").Platform.OS = "test"
@@ -749,7 +838,7 @@ describe('inline constants', () => {
     });
   });
 
-  it('replaces require("React").Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
+  test('replaces require("React").Platform.OS in the code if Platform is the right hand side of an assignment expression', () => {
     const code = `
       function a() {
         var a;
@@ -765,7 +854,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces non-existing properties with `undefined`', () => {
+  test('replaces non-existing properties with `undefined`', () => {
     const code = `
       var a = Platform.select({ios: 1, android: 2});
     `;
@@ -778,7 +867,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('replaces process.env.NODE_ENV in the code', () => {
+  test('replaces process.env.NODE_ENV in the code', () => {
     const code = `
       function a() {
         if (process.env.NODE_ENV === 'production') {
@@ -797,7 +886,7 @@ describe('inline constants', () => {
     );
   });
 
-  it("doesn't replace process.env.NODE_ENV in the code if NODE_ENV is the right hand side of an assignment expression", () => {
+  test("doesn't replace process.env.NODE_ENV in the code if NODE_ENV is the right hand side of an assignment expression", () => {
     const code = `
       function a() {
         process.env.NODE_ENV = 'production';
@@ -807,7 +896,7 @@ describe('inline constants', () => {
     compare([inlinePlugin], code, code, {dev: false});
   });
 
-  it('replaces process.env.NODE_ENV in the code if NODE_ENV is the right hand side of an assignment expression', () => {
+  test('replaces process.env.NODE_ENV in the code if NODE_ENV is the right hand side of an assignment expression', () => {
     const code = `
       function a() {
         var env;
@@ -823,7 +912,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('can work with wrapped modules', () => {
+  test('can work with wrapped modules', () => {
     const code = `
       __arbitrary(function() {
         var Platform = require('react-native').Platform;
@@ -841,7 +930,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('can work with transformed require calls', () => {
+  test('can work with transformed require calls', () => {
     const code = `
       __arbitrary(require, function(arbitraryMapName) {
         var a = require(arbitraryMapName[123], 'react-native').Platform.OS;
@@ -856,7 +945,7 @@ describe('inline constants', () => {
     );
   });
 
-  it('works with flow-declared variables', () => {
+  test('works with flow-declared variables', () => {
     const code = `
       declare var __DEV__;
 
@@ -870,7 +959,7 @@ describe('inline constants', () => {
     compare([stripFlow, inlinePlugin], code, expected, {dev: false});
   });
 
-  it('works with flow-declared variables in wrapped modules', () => {
+  test('works with flow-declared variables in wrapped modules', () => {
     const code = `
       __d(() => {
         declare var __DEV__;

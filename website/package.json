@@ -12,26 +12,25 @@
     "serve": "docusaurus serve"
   },
   "dependencies": {
-    "@docusaurus/core": "2.4.3",
-    "@docusaurus/preset-classic": "2.4.3",
-    "classnames": "2.2.6",
-    "docusaurus-plugin-internaldocs-fb": "1.16.2",
-    "docusaurus-plugin-sass": "^0.2.1",
-    "react": "17.0.2",
-    "react-dom": "17.0.2",
-    "react-github-btn": "1.1.1",
-    "sass": "^1.46.0"
+    "@docusaurus/core": "^3.10.1",
+    "@docusaurus/preset-classic": "^3.10.1",
+    "@mdx-js/react": "^3.1.0",
+    "classnames": "^2.5.1",
+    "docusaurus-plugin-internaldocs-fb": "1.19.1",
+    "docusaurus-plugin-sass": "^0.2.6",
+    "prism-react-renderer": "^2.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-github-btn": "^1.4.0",
+    "sass": "^1.82.0"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "2.4.3",
-    "prettier": "2.8.8"
+    "@docusaurus/module-type-aliases": "3.10.1",
+    "@docusaurus/types": "3.10.1",
+    "prettier": "3.4.2"
   },
   "resolutions": {
-    "@sideway/formula": "^3.0.1",
-    "got": "^11.8.5",
-    "http-cache-semantics": "^4.1.1",
-    "node-fetch": "^2.0.0",
-    "terser": "^5.14.2",
-    "trim": "^0.0.3"
+    "minimatch": "3.1.4",
+    "serialize-javascript": "^7.0.5"
   }
 }

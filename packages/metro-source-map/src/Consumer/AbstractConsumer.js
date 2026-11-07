@@ -9,24 +9,22 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   GeneratedPositionLookup,
   IConsumer,
   IterationOrder,
   Mapping,
   SourcePosition,
-} from './types.flow';
+} from './types';
 
-const {GENERATED_ORDER, iterationOrderToString} = require('./constants');
-const invariant = require('invariant');
+import {GENERATED_ORDER, iterationOrderToString} from './constants';
+import invariant from 'invariant';
 
 // Implementation details shared between MappingsConsumer and SectionsConsumer
-class AbstractConsumer implements IConsumer {
-  _sourceMap: {+file?: string, ...};
+export default class AbstractConsumer implements IConsumer {
+  _sourceMap: {readonly file?: string, ...};
 
-  constructor(sourceMap: {+file?: string, ...}) {
+  constructor(sourceMap: {readonly file?: string, ...}) {
     this._sourceMap = sourceMap;
   }
 
@@ -41,8 +39,8 @@ class AbstractConsumer implements IConsumer {
   }
 
   eachMapping(
-    callback: (mapping: Mapping) => mixed,
-    context?: mixed = null,
+    callback: (mapping: Mapping) => unknown,
+    context?: unknown = null,
     order?: IterationOrder = GENERATED_ORDER,
   ): void {
     invariant(
@@ -63,5 +61,3 @@ class AbstractConsumer implements IConsumer {
     invariant(false, 'Not implemented');
   }
 }
-
-module.exports = AbstractConsumer;

@@ -9,12 +9,12 @@
  * @oncall react_native
  */
 
-'use strict';
+import symbolicate from '../symbolicate';
 
-const symbolicate = require('../symbolicate');
-const fs = require('fs');
-const path = require('path');
-const {PassThrough} = require('stream');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const {PassThrough} = require('node:stream');
 
 jest.useRealTimers();
 
@@ -53,9 +53,11 @@ const execute = async (
   return stdout.join('');
 };
 
+const TEMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'symbolicate-'));
+const TEMP_FILE = path.resolve(TEMP_DIR, 'testfile.temp.cpuprofile');
 afterAll(() => {
   try {
-    fs.unlinkSync(resolve('testfile.temp.cpuprofile'));
+    fs.rmdirSync(TEMP_DIR);
   } catch (e) {}
 });
 
@@ -208,9 +210,26 @@ test('symbolicating a stack trace', async () =>
     execute([TESTFILE_MAP], read('testfile.stack')),
   ).resolves.toMatchSnapshot());
 
+test('symbolicating a stack trace with Windows absolute paths', async () => {
+  const stack = read('testfile.stack');
+  const windowsStack = stack.replaceAll(
+    /(^|@)(thrower\.min\.js)/gm,
+    '$1C:\\app\\$2',
+  );
+  expect(windowsStack).not.toEqual(stack);
+  expect(await execute([TESTFILE_MAP], windowsStack)).toEqual(
+    await execute([TESTFILE_MAP], stack),
+  );
+});
+
 test('symbolicating a stack trace in Node format', async () =>
   await expect(
     execute([TESTFILE_MAP], read('testfile.node.stack')),
+  ).resolves.toMatchSnapshot());
+
+test('symbolicating a crash reporter stack trace with 0:0 native frames', async () =>
+  await expect(
+    execute([TESTFILE_MAP], read('testfile.crashreporter.stack')),
   ).resolves.toMatchSnapshot());
 
 test('symbolicating a single entry', async () =>
@@ -275,12 +294,12 @@ describe('symbolicating an attribution file specifying unmapped offsets', () => 
       | {
           functionId: number,
           location: {bytecodeSize: number, virtualOffset: number},
-          usage: Array<$FlowFixMeEmpty>,
+          usage: Array<$FlowFixMe>,
         }
       | {
           functionId: number,
           location: {virtualOffset: number},
-          usage: Array<$FlowFixMeEmpty>,
+          usage: Array<$FlowFixMe>,
         },
   ) =>
     (
@@ -400,32 +419,23 @@ describe('symbolicating an attribution file specifying unmapped offsets', () => 
 });
 
 test('symbolicating with a cpuprofile', async () => {
-  fs.copyFileSync(
-    resolve('testfile.cpuprofile'),
-    resolve('testfile.temp.cpuprofile'),
-  );
+  fs.copyFileSync(resolve('testfile.cpuprofile'), TEMP_FILE);
 
-  await execute([
-    resolve('testfile.cpuprofile.map'),
-    resolve('testfile.temp.cpuprofile'),
-  ]);
+  await execute([resolve('testfile.cpuprofile.map'), TEMP_FILE]);
 
-  expect(JSON.parse(read('testfile.temp.cpuprofile'))).toMatchSnapshot();
+  expect(JSON.parse(read(TEMP_FILE))).toMatchSnapshot();
 });
 
 test('symbolicating with a cpuprofile ignoring a function map', async () => {
-  fs.copyFileSync(
-    resolve('testfile.cpuprofile'),
-    resolve('testfile.temp.cpuprofile'),
-  );
+  fs.copyFileSync(resolve('testfile.cpuprofile'), TEMP_FILE);
 
   await execute([
     '--no-function-names',
     resolve('testfile.cpuprofile.map'),
-    resolve('testfile.temp.cpuprofile'),
+    TEMP_FILE,
   ]);
 
-  expect(JSON.parse(read('testfile.temp.cpuprofile'))).toMatchSnapshot();
+  expect(JSON.parse(read(TEMP_FILE))).toMatchSnapshot();
 });
 
 test('symbolicating a stack trace with a function map', async () =>
@@ -447,6 +457,15 @@ test('symbolicating a stack trace ignoring a function map', async () =>
   ).resolves.toMatchSnapshot());
 
 describe('directory context', () => {
+  // Stack frames with absolute paths into the test directory are echoed
+  // verbatim when unmapped. Replace the test directory with a placeholder and
+  // normalize the separators of those paths only, for a portable snapshot.
+  const replaceTestDir = (output: string) =>
+    output
+      .split(__dirname)
+      .join('<testDir>')
+      .replace(/<testDir>[^:\n]*/g, testPath => testPath.replaceAll('\\', '/'));
+
   test('symbolicating a stack trace', async () =>
     await expect(
       execute([resolve('directory')], read('directory/test.stack')),
@@ -455,16 +474,13 @@ describe('directory context', () => {
   test('symbolicating a stack trace with absolute paths', async () => {
     const dirPath = resolve('directory');
     const stack =
-      `someFunc@${dirPath}/foo.js:4:0` +
+      `someFunc@${path.join(dirPath, 'foo.js')}:4:0` +
       '\n' +
-      `someOtherFunc@${dirPath}/subdir1/bar.js:255:6` +
+      `someOtherFunc@${path.join(dirPath, 'subdir1', 'bar.js')}:255:6` +
       '\n' +
-      `fn@${dirPath}/fileThatDoesntExist.js:10:20` +
+      `fn@${path.join(dirPath, 'fileThatDoesntExist.js')}:10:20` +
       '\n';
-    const symbolicated = (await execute([dirPath], stack))
-      // No replaceAll in Node 12.x
-      .split(__dirname)
-      .join('<testDir>');
+    const symbolicated = replaceTestDir(await execute([dirPath], stack));
     expect(symbolicated).toMatchSnapshot();
   });
 
@@ -472,14 +488,11 @@ describe('directory context', () => {
     const dirPath = resolve('directory');
     const parentDirPath = path.resolve(dirPath, '..');
     const stack =
-      `func@${parentDirPath}/testfile.js:1:1` +
+      `func@${path.join(parentDirPath, 'testfile.js')}:1:1` +
       '\n' +
       'func@../testfile.js:1:1' +
       '\n';
-    const symbolicated = (await execute([dirPath], stack))
-      // No replaceAll in Node 12.x
-      .split(__dirname)
-      .join('<testDir>');
+    const symbolicated = replaceTestDir(await execute([dirPath], stack));
     expect(symbolicated).toMatchSnapshot();
   });
 });

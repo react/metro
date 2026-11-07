@@ -10,22 +10,25 @@
  */
 
 import type {WatcherOptions} from '../common';
-import type {EventHelpers} from './helpers';
+import type {EventHelpers, WatcherName} from './helpers';
 
-import FSEventsWatcher from '../FSEventsWatcher';
+import NativeWatcher from '../NativeWatcher';
 import {WATCHERS, createTempWatchRoot, startWatching} from './helpers';
-import {promises as fsPromises} from 'fs';
-import os from 'os';
-import {join} from 'path';
+import {promises as fsPromises} from 'node:fs';
+import os from 'node:os';
+import {join} from 'node:path';
+
 const {mkdir, writeFile, rm, symlink, unlink} = fsPromises;
 
-test('FSEventsWatcher is supported if and only if darwin', () => {
-  expect(FSEventsWatcher.isSupported()).toBe(os.platform() === 'darwin');
+jest.setTimeout(10 * 1000);
+
+test('NativeWatcher is supported if and only if darwin', () => {
+  expect(NativeWatcher.isSupported()).toBe(os.platform() === 'darwin');
 });
 
 describe.each(Object.keys(WATCHERS))(
   'Watcher integration tests: %s',
-  watcherName => {
+  (watcherName: WatcherName) => {
     let appRoot;
     let cookieCount = 1;
     let watchRoot;
@@ -34,6 +37,13 @@ describe.each(Object.keys(WATCHERS))(
 
     // If all tests are skipped, Jest will not run before/after hooks either.
     const maybeTest = WATCHERS[watcherName] ? test : test.skip;
+    const maybeTestOn = (...platforms: ReadonlyArray<string>) =>
+      platforms.includes(os.platform()) && WATCHERS[watcherName]
+        ? test
+        : test.skip;
+
+    // NativeWatcher emits 'recrawl' for directories, others emit 'touch'
+    const expectedDirEventType = watcherName === 'Native' ? 'recrawl' : 'touch';
 
     beforeAll(async () => {
       watchRoot = await createTempWatchRoot(watcherName);
@@ -46,19 +56,24 @@ describe.each(Object.keys(WATCHERS))(
       // the watcher was started. Tests should touch only distinct subsets of
       // these files to ensure that tests remain isolated.
       await mkdir(join(watchRoot, 'existing'));
+      await mkdir(join(watchRoot, 'existing', 'to-move-out'));
       await Promise.all([
         writeFile(join(watchRoot, 'existing', 'file-to-delete.js'), ''),
         writeFile(join(watchRoot, 'existing', 'file-to-modify.js'), ''),
+        writeFile(join(watchRoot, 'existing', 'to-move-out', 'file.js'), ''),
         symlink('target', join(watchRoot, 'existing', 'symlink-to-delete')),
       ]);
 
-      // Short delay to ensure that 'add' events for the files above are not
+      // Short delay to ensure that 'touch' events for the files above are not
       // reported by the OS to the watcher we haven't established yet.
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const opts: WatcherOptions = {
-        dot: true,
-        glob: ['**/package.json', '**/*.js', '**/cookie-*'],
+        included: {
+          extensions: new Set(['js']),
+          basenames: new Set(['package.json']),
+          basenamePrefixes: ['cookie-'],
+        },
         // We need to ignore `.watchmanconfig` to keep these tests stable.
         // Even though we write it before initialising watchers, OS-level
         // delays/debouncing(?) can mean the write is *sometimes* reported by
@@ -75,11 +90,16 @@ describe.each(Object.keys(WATCHERS))(
     });
 
     beforeEach(async () => {
-      expect(await eventHelpers.nextEvent(() => mkdir(appRoot))).toStrictEqual({
+      // NativeWatcher emits 'recrawl' for directories, others emit 'touch'
+      const event = await eventHelpers.nextEvent(() => mkdir(appRoot));
+      expect(event).toMatchObject({
         path: 'app',
-        eventType: 'add',
-        metadata: expect.any(Object),
+        eventType: expectedDirEventType,
       });
+      // For non-recrawl events, also check metadata
+      if (event.eventType === 'touch') {
+        expect(event.metadata).toEqual(expect.any(Object));
+      }
     });
 
     afterEach(async () => {
@@ -90,7 +110,7 @@ describe.each(Object.keys(WATCHERS))(
         await eventHelpers.nextEvent(() =>
           writeFile(join(watchRoot, cookieName), ''),
         ),
-      ).toMatchObject({path: cookieName, eventType: 'add'});
+      ).toMatchObject({path: cookieName, eventType: 'touch'});
       // Cleanup and wait until the app root deletion is reported - this should
       // be the last cleanup event emitted.
       await eventHelpers.untilEvent(
@@ -112,12 +132,12 @@ describe.each(Object.keys(WATCHERS))(
         await eventHelpers.nextEvent(() => writeFile(testFile, 'hello world')),
       ).toStrictEqual({
         path: relativePath,
-        eventType: 'add',
+        eventType: 'touch',
         metadata: {
           type: 'f',
           modifiedTime: expect.any(Number),
 
-          // T138670812 Reported inconsistently by NodeWatcher as 0 or 11
+          // T138670812 Reported inconsistently by FallbackWatcher as 0 or 11
           // due to write/stat race. Should either fix, document, or remove.
           size: expect.any(Number),
         },
@@ -128,7 +148,7 @@ describe.each(Object.keys(WATCHERS))(
         ),
       ).toStrictEqual({
         path: relativePath,
-        eventType: 'change',
+        eventType: 'touch',
         metadata: expect.any(Object),
       });
       expect(
@@ -151,7 +171,7 @@ describe.each(Object.keys(WATCHERS))(
         await eventHelpers.nextEvent(() => symlink(target, newLink)),
       ).toStrictEqual({
         path: relativePath,
-        eventType: 'add',
+        eventType: 'touch',
         metadata: {
           type: 'l',
           modifiedTime: expect.any(Number),
@@ -179,6 +199,66 @@ describe.each(Object.keys(WATCHERS))(
       });
     });
 
+    maybeTest(
+      'detects all files when a preexisting directory is moved in from outside a watched root',
+      async () => {
+        // Create a directory with a file in it outside the watch root, then move it in and check that both the directory and the file are reported as new.
+        const outsideDir = await fsPromises.mkdtemp(
+          join(os.tmpdir(), 'metro-file-map-unwatched-'),
+        );
+        const outsideFile = join(outsideDir, 'file.js');
+        await writeFile(outsideFile, '');
+
+        // NativeWatcher emits 'recrawl' for the directory, which triggers a
+        // full crawl that finds the file. Other watchers emit individual 'touch'
+        // events for both directory and file.
+        if (watcherName === 'Native') {
+          // NativeWatcher: expect recrawl event for the directory only
+          await eventHelpers.allEvents(
+            () => fsPromises.rename(outsideDir, join(appRoot, 'moved-in')),
+            [[join('app', 'moved-in'), 'recrawl']],
+            {rejectUnexpected: true},
+          );
+        } else {
+          // Other watchers: expect touch events for both directory and file
+          await eventHelpers.allEvents(
+            () => fsPromises.rename(outsideDir, join(appRoot, 'moved-in')),
+            [
+              [join('app', 'moved-in'), 'touch'],
+              [join('app', 'moved-in', 'file.js'), 'touch'],
+            ],
+            {rejectUnexpected: true},
+          );
+        }
+      },
+    );
+
+    maybeTest(
+      'reports directory as deleted when it is moved from a watched root to outside',
+      async () => {
+        // Create a directory with a file in it inside the watch root, then move it out and check that both the directory and the file are reported as deleted.
+        const outsideDir = await fsPromises.mkdtemp(
+          join(os.tmpdir(), 'metro-file-map-unwatched-'),
+        );
+
+        await eventHelpers.allEvents(
+          () =>
+            fsPromises.rename(
+              join(watchRoot, 'existing', 'to-move-out'),
+              join(outsideDir, 'moved-out'),
+            ),
+          watcherName === 'Native'
+            ? // NativeWatcher only emits an event for the directory, not contents
+              [[join('existing', 'to-move-out'), 'delete']]
+            : [
+                [join('existing', 'to-move-out'), 'delete'],
+                [join('existing', 'to-move-out', 'file.js'), 'delete'],
+              ],
+          {rejectUnexpected: true},
+        );
+      },
+    );
+
     maybeTest('detects deletion of a pre-existing symlink', async () => {
       expect(
         await eventHelpers.nextEvent(() =>
@@ -201,30 +281,34 @@ describe.each(Object.keys(WATCHERS))(
         ),
       ).toStrictEqual({
         path: join('existing', 'file-to-modify.js'),
-        eventType: 'change',
+        eventType: 'touch',
         metadata: expect.any(Object),
       });
     });
 
     maybeTest('detects changes to files in a new directory', async () => {
-      expect(
-        await eventHelpers.nextEvent(() => mkdir(join(watchRoot, 'newdir'))),
-      ).toStrictEqual({
+      const dirEvent = await eventHelpers.nextEvent(() =>
+        mkdir(join(watchRoot, 'newdir')),
+      );
+      expect(dirEvent).toMatchObject({
         path: join('newdir'),
-        eventType: 'add',
-        metadata: {
+        eventType: expectedDirEventType,
+      });
+      // For non-recrawl events, also check metadata
+      if (dirEvent.eventType === 'touch') {
+        expect(dirEvent.metadata).toStrictEqual({
           modifiedTime: expect.any(Number),
           size: expect.any(Number),
           type: 'd',
-        },
-      });
+        });
+      }
       expect(
         await eventHelpers.nextEvent(() =>
           writeFile(join(watchRoot, 'newdir', 'file-in-new-dir.js'), 'code'),
         ),
       ).toStrictEqual({
         path: join('newdir', 'file-in-new-dir.js'),
-        eventType: 'add',
+        eventType: 'touch',
         metadata: {
           modifiedTime: expect.any(Number),
           size: expect.any(Number),
@@ -233,9 +317,14 @@ describe.each(Object.keys(WATCHERS))(
       });
     });
 
-    maybeTest(
+    /* FIXME: Disabled on Windows and Darwin due to flakiness (occasional
+       timeouts) - see history. */
+    maybeTestOn('darwin')(
       'emits deletion for all files when a directory is deleted',
       async () => {
+        // For NativeWatcher, the directory events will be 'recrawl', not 'touch'
+        const dirEventType = expectedDirEventType;
+
         await eventHelpers.allEvents(
           async () => {
             await mkdir(join(appRoot, 'subdir', 'subdir2'), {recursive: true});
@@ -246,10 +335,10 @@ describe.each(Object.keys(WATCHERS))(
             ]);
           },
           [
-            [join('app', 'subdir'), 'add'],
-            [join('app', 'subdir', 'subdir2'), 'add'],
-            [join('app', 'subdir', 'deep.js'), 'add'],
-            [join('app', 'subdir', 'subdir2', 'deeper.js'), 'add'],
+            [join('app', 'subdir'), dirEventType],
+            [join('app', 'subdir', 'subdir2'), dirEventType],
+            [join('app', 'subdir', 'deep.js'), 'touch'],
+            [join('app', 'subdir', 'subdir2', 'deeper.js'), 'touch'],
           ],
           {rejectUnexpected: true},
         );

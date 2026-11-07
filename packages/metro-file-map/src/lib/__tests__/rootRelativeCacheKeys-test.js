@@ -8,27 +8,25 @@
  * @format
  */
 
-import type {BuildParameters} from '../../flow-types';
-import typeof PathModule from 'path';
+import type {BuildParameters, FileMapPlugin} from '../../flow-types';
+import typeof PathModule from 'node:path';
 
 import rootRelativeCacheKeys from '../rootRelativeCacheKeys';
 
+// $FlowExpectedError[incompatible-type] Partial mock
+const getMockPlugin = (cacheKey: string): FileMapPlugin<> => ({
+  getCacheKey: jest.fn(() => cacheKey),
+});
+
 const buildParameters: BuildParameters = {
-  computeDependencies: false,
   computeSha1: false,
-  dependencyExtractor: null,
-  enableHastePackages: true,
   enableSymlinks: false,
   extensions: ['a'],
-  forceNodeFilesystemAPI: false,
-  hasteImplModulePath: null,
   ignorePattern: /a/,
-  mocksPattern: /a/,
-  platforms: ['a'],
+  plugins: [getMockPlugin('1')],
   retainAllFiles: false,
   rootDir: '/root',
   roots: ['a', 'b'],
-  skipPackageJson: false,
   cacheBreaker: 'a',
 };
 
@@ -61,55 +59,42 @@ jest.mock(
   {virtual: true},
 );
 
-it('returns a distinct cache key for any change', () => {
-  const {
-    hasteImplModulePath: _,
-    dependencyExtractor: __,
-    rootDir: ___,
-    ...simpleParameters
-  } = buildParameters;
+test('returns a distinct cache key for any change', () => {
+  const {rootDir: __, plugins: ___, ...simpleParameters} = buildParameters;
 
-  const varyDefault = <T: $Keys<typeof simpleParameters>>(
+  const varyDefault = <T extends keyof typeof simpleParameters>(
     key: T,
     newVal: BuildParameters[T],
   ): BuildParameters => {
-    // $FlowFixMe[invalid-computed-prop] Can't use a union for a computed prop
+    // $FlowFixMe[incompatible-indexer]
     return {...buildParameters, [key]: newVal};
   };
 
   const configs = Object.keys(simpleParameters).map(key => {
     switch (key) {
       // Boolean
-      case 'computeDependencies':
       case 'computeSha1':
-      case 'enableHastePackages':
       case 'enableSymlinks':
-      case 'forceNodeFilesystemAPI':
       case 'retainAllFiles':
-      case 'skipPackageJson':
         return varyDefault(key, !buildParameters[key]);
       // Strings
       case 'cacheBreaker':
         return varyDefault(key, 'foo');
       // String arrays
       case 'extensions':
-      case 'platforms':
       case 'roots':
         return varyDefault(key, ['foo']);
       // Regexp
-      case 'mocksPattern':
       case 'ignorePattern':
         return varyDefault(key, /foo/);
       default:
-        (key: empty);
+        key as empty;
         throw new Error('Unrecognised key in build parameters: ' + key);
     }
   });
   configs.push(buildParameters);
-  configs.push({...buildParameters, dependencyExtractor: '/extractor/1'});
-  configs.push({...buildParameters, dependencyExtractor: '/extractor/2'});
-  configs.push({...buildParameters, hasteImplModulePath: '/haste/1'});
-  configs.push({...buildParameters, hasteImplModulePath: '/haste/2'});
+  configs.push({...buildParameters, plugins: []});
+  configs.push({...buildParameters, plugins: [getMockPlugin('2')]});
 
   // Generate hashes for each config
   const configHashes = configs.map(
@@ -130,12 +115,12 @@ it('returns a distinct cache key for any change', () => {
 
 describe('cross-platform cache keys', () => {
   afterEach(() => {
-    jest.unmock('path');
+    jest.unmock('node:path');
   });
 
-  it('returns the same cache key for Windows and POSIX path parameters', () => {
+  test('returns the same cache key for Windows and POSIX path parameters', () => {
     let mockPathModule;
-    jest.mock('path', () => mockPathModule);
+    jest.mock('node:path', () => mockPathModule);
 
     jest.resetModules();
     mockPathModule = jest.requireActual<PathModule>('path').posix;

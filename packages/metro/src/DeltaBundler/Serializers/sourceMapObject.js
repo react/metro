@@ -9,19 +9,17 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {Module} from '../types.flow';
+import type {Module} from '../types';
 import type {SourceMapGeneratorOptions} from './sourceMapGenerator';
 import type {MixedSourceMap} from 'metro-source-map';
 
-const {
+import {
   sourceMapGenerator,
   sourceMapGeneratorNonBlocking,
-} = require('./sourceMapGenerator');
+} from './sourceMapGenerator';
 
 function sourceMapObject(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): MixedSourceMap {
   const generator = sourceMapGenerator(modules, options);
@@ -31,7 +29,7 @@ function sourceMapObject(
 }
 
 async function sourceMapObjectNonBlocking(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): Promise<MixedSourceMap> {
   const generator = await sourceMapGeneratorNonBlocking(modules, options);
@@ -40,7 +38,4 @@ async function sourceMapObjectNonBlocking(
   });
 }
 
-module.exports = {
-  sourceMapObject,
-  sourceMapObjectNonBlocking,
-};
+export {sourceMapObject, sourceMapObjectNonBlocking};

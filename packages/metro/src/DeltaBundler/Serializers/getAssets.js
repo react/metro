@@ -9,41 +9,43 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {AssetData} from '../../Assets';
-import type {Module, ReadOnlyDependencies} from '../types.flow';
+import type {Module, ReadOnlyDependencies} from '../types';
 
-const {getAssetData} = require('../../Assets');
-const {getJsOutput, isJsModule} = require('./helpers/js');
-const path = require('path');
+import {getAssetData} from '../../Assets';
+import {getJsOutput, isJsModule} from './helpers/js';
+import path from 'node:path';
 
 type Options = {
-  +processModuleFilter: (module: Module<>) => boolean,
-  assetPlugins: $ReadOnlyArray<string>,
+  readonly processModuleFilter: (module: Module<>) => boolean,
+  assetPlugins: ReadonlyArray<string>,
   platform: ?string,
   projectRoot: string,
   publicPath: string,
 };
 
-async function getAssets(
+export default async function getAssets(
   dependencies: ReadOnlyDependencies<>,
   options: Options,
-): Promise<$ReadOnlyArray<AssetData>> {
+): Promise<ReadonlyArray<AssetData>> {
   const promises = [];
   const {processModuleFilter} = options;
 
   for (const module of dependencies.values()) {
+    if (!isJsModule(module) || !processModuleFilter(module)) {
+      continue;
+    }
+    const output = getJsOutput(module);
+    const projectRelativePath = path.relative(options.projectRoot, module.path);
     if (
-      isJsModule(module) &&
-      processModuleFilter(module) &&
-      getJsOutput(module).type === 'js/module/asset' &&
-      path.relative(options.projectRoot, module.path) !== 'package.json'
+      output.type === 'js/module/asset' &&
+      projectRelativePath !== 'package.json'
     ) {
       promises.push(
         getAssetData(
           module.path,
-          path.relative(options.projectRoot, module.path),
+          // Transformers other than Metro's use the project-relative path.
+          output.data.unstable_assetUrlPath ?? projectRelativePath,
           options.assetPlugins,
           options.platform,
           options.publicPath,
@@ -54,5 +56,3 @@ async function getAssets(
 
   return await Promise.all(promises);
 }
-
-module.exports = getAssets;

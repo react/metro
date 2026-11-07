@@ -4,37 +4,37 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow
+ * @format
+ * @oncall react_native
  */
 
-'use strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const fs = require('fs');
-const path = require('path');
-const rimraf = require('rimraf');
+// Any byte that cannot begin a JSON document, i.e. not whitespace
+// or any of `{["-tfn` or a digit. Nonzero ensures that zero-filled
+// files (e.g. write errors) are treated as cache misses.
+const BINARY_MARKER = 0x01;
+const BINARY_MARKER_BUFFER = Buffer.from([BINARY_MARKER]);
 
-const NULL_BYTE = 0x00;
-const NULL_BYTE_BUFFER = Buffer.from([NULL_BYTE]);
-
-export type Options = {
+export type Options = Readonly<{
   root: string,
-};
+}>;
 
-class FileStore<T> {
-  _root: string;
+export default class FileStore<T> {
+  readonly #root: string;
 
   constructor(options: Options) {
-    this._root = options.root;
-    this._createDirs();
+    this.#root = options.root;
   }
 
   async get(key: Buffer): Promise<?T> {
     try {
-      const data = await fs.promises.readFile(this._getFilePath(key));
+      const data = await fs.promises.readFile(this.#getFilePath(key));
 
-      if (data[0] === NULL_BYTE) {
-        return (data.slice(1): any);
+      if (data[0] === BINARY_MARKER) {
+        return data.slice(1) as any;
       }
 
       return JSON.parse(data.toString('utf8'));
@@ -48,23 +48,23 @@ class FileStore<T> {
   }
 
   async set(key: Buffer, value: T): Promise<void> {
-    const filePath = this._getFilePath(key);
+    const filePath = this.#getFilePath(key);
     try {
-      await this._set(filePath, value);
+      await this.#set(filePath, value);
     } catch (err) {
       if (err.code === 'ENOENT') {
         fs.mkdirSync(path.dirname(filePath), {recursive: true});
-        await this._set(filePath, value);
+        await this.#set(filePath, value);
       } else {
         throw err;
       }
     }
   }
 
-  async _set(filePath: string, value: T): Promise<void> {
+  async #set(filePath: string, value: T): Promise<void> {
     let content;
     if (value instanceof Buffer) {
-      content = Buffer.concat([NULL_BYTE_BUFFER, value]);
+      content = Buffer.concat([BINARY_MARKER_BUFFER, value]);
     } else {
       content = JSON.stringify(value) ?? JSON.stringify(null);
     }
@@ -72,31 +72,23 @@ class FileStore<T> {
   }
 
   clear() {
-    this._removeDirs();
-    this._createDirs();
+    this.#removeDirs();
   }
 
-  _getFilePath(key: Buffer): string {
+  #getFilePath(key: Buffer): string {
     return path.join(
-      this._root,
+      this.#root,
       key.slice(0, 1).toString('hex'),
       key.slice(1).toString('hex'),
     );
   }
 
-  _createDirs() {
+  #removeDirs() {
     for (let i = 0; i < 256; i++) {
-      fs.mkdirSync(path.join(this._root, ('0' + i.toString(16)).slice(-2)), {
+      fs.rmSync(path.join(this.#root, ('0' + i.toString(16)).slice(-2)), {
+        force: true,
         recursive: true,
       });
     }
   }
-
-  _removeDirs() {
-    for (let i = 0; i < 256; i++) {
-      rimraf.sync(path.join(this._root, ('0' + i.toString(16)).slice(-2)));
-    }
-  }
 }
-
-module.exports = FileStore;

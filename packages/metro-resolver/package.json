@@ -1,11 +1,17 @@
 {
   "name": "metro-resolver",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "🚇 Implementation of Metro's resolution logic.",
-  "main": "src",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/metro-resolver"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
@@ -13,10 +19,10 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   },
   "devDependencies": {
-    "metro": "0.80.9"
+    "metro": "0.88.0"
   },
   "dependencies": {
     "flow-enums-runtime": "^0.0.6"

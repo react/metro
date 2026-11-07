@@ -9,6 +9,8 @@
  * @oncall react_native
  */
 
+/* eslint-disable import/no-commonjs */
+
 'use strict';
 
 /*::
@@ -16,12 +18,15 @@ import type {BabelCoreOptions} from '@babel/core';
 */
 
 const escapeRegExp = require('escape-string-regexp');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
-let _only /*: $ReadOnlyArray<RegExp | string> */ = [];
+let _only /*: ReadonlyArray<RegExp | string> */ = [];
 
-function register(onlyList /*: $ReadOnlyArray<RegExp | string> */) {
+function register(
+  onlyList /*: ReadonlyArray<RegExp | string> */,
+  opts /*: ?Readonly<{earlyPlugins?: BabelCoreOptions['plugins']}> */ = {},
+) {
   // NB: `require('@babel/register')` registers Babel as a side-effect, and
   // also returns a register function that overrides the first registration
   // when called.
@@ -34,7 +39,7 @@ function register(onlyList /*: $ReadOnlyArray<RegExp | string> */) {
   // these plugins to be compiled with an arbitrary Babel config, we must
   // prepare the config object before calling `require('@babel/register')`.
   const registerConfig = {
-    ...config(onlyList),
+    ...config(onlyList, opts),
     extensions: [
       '.ts',
       '.tsx',
@@ -47,13 +52,16 @@ function register(onlyList /*: $ReadOnlyArray<RegExp | string> */) {
     ],
   };
 
+  /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+   * https://fburl.com/gdoc/y8dn025u */
   require('@babel/register')(registerConfig);
 }
 
 function config(
-  onlyList /*: $ReadOnlyArray<RegExp | string> */,
-  options /*: ?$ReadOnly<{
+  onlyList /*: ReadonlyArray<RegExp | string> */,
+  options /*: ?Readonly<{
     lazy?: boolean,
+    earlyPlugins?: BabelCoreOptions['plugins'],
   }> */,
 ) /*: BabelCoreOptions */ {
   _only = _only.concat(onlyList);
@@ -66,6 +74,7 @@ function config(
     ignore: [/\/node_modules\//],
     only: [..._only],
     plugins: [
+      ...(options?.earlyPlugins ?? []),
       [require('@babel/plugin-proposal-export-namespace-from').default],
       [
         require('@babel/plugin-transform-modules-commonjs').default,
@@ -81,7 +90,7 @@ function config(
       {
         test: /\.js$/,
         plugins: [
-          [require('babel-plugin-syntax-hermes-parser').default],
+          [require('flow-parser/babel-plugin')],
           [require('babel-plugin-transform-flow-enums')],
           [require('@babel/plugin-transform-flow-strip-types').default],
         ],
@@ -115,8 +124,8 @@ function config(
  */
 function buildRegExps(
   basePath /*: string */,
-  dirPaths /*: $ReadOnlyArray<RegExp | string> */,
-) /*: $ReadOnlyArray<RegExp> */ {
+  dirPaths /*: ReadonlyArray<RegExp | string> */,
+) /*: ReadonlyArray<RegExp> */ {
   return dirPaths.map(folderPath =>
     // Babel cares about Windows/Unix paths since v7b44
     // https://github.com/babel/babel/issues/8184
@@ -174,8 +183,9 @@ function registerForMetroMonorepo() {
   isRegisteredForMetroMonorepo = true;
 }
 
-register.config = config;
-register.buildRegExps = buildRegExps;
-register.unstable_registerForMetroMonorepo = registerForMetroMonorepo;
-
-module.exports = register;
+module.exports = {
+  register,
+  config,
+  buildRegExps,
+  unstable_registerForMetroMonorepo: registerForMetroMonorepo,
+};

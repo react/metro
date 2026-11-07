@@ -14,4 +14,4 @@ import type DoesNotExistT from './does-not-exist';
 // $FlowExpectedError[cannot-resolve-module]
 const DoesNotExist = require('./does-not-exist');
 
-global.x = (DoesNotExist: DoesNotExistT);
+global.x = DoesNotExist as DoesNotExistT;

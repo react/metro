@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-class ResourceNotFoundError extends Error {
+export default class ResourceNotFoundError extends Error {
   resourcePath: string;
 
   constructor(resourcePath: string) {
@@ -19,5 +17,3 @@ class ResourceNotFoundError extends Error {
     this.resourcePath = resourcePath;
   }
 }
-
-module.exports = ResourceNotFoundError;

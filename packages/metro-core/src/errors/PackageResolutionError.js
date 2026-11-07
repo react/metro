@@ -9,21 +9,19 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {InvalidPackageError} from 'metro-resolver';
 
-const {formatFileCandidates} = require('metro-resolver');
+import {formatFileCandidates} from 'metro-resolver';
 
-class PackageResolutionError extends Error {
+export default class PackageResolutionError extends Error {
   originModulePath: string;
   packageError: InvalidPackageError;
   targetModuleName: string;
 
   constructor(opts: {
-    +originModulePath: string,
-    +packageError: InvalidPackageError,
-    +targetModuleName: string,
+    readonly originModulePath: string,
+    readonly packageError: InvalidPackageError,
+    readonly targetModuleName: string,
   }) {
     const perr = opts.packageError;
     super(
@@ -36,8 +34,7 @@ class PackageResolutionError extends Error {
         `  * ${formatFileCandidates(perr.fileCandidates)}\n` +
         `  * ${formatFileCandidates(perr.indexCandidates)}`,
     );
+    // $FlowFixMe[unsafe-object-assign]
     Object.assign(this, opts);
   }
 }
-
-module.exports = PackageResolutionError;

@@ -9,30 +9,24 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {CustomResolverOptions} from '../../../metro-resolver/src/types';
-
-const nullthrows = require('nullthrows');
+import type {CustomResolverOptions} from 'metro-resolver';
 
 const PREFIX = 'resolver.';
 
-module.exports = function parseCustomResolverOptions(urlObj: {
-  +query?: {[string]: string, ...},
-  ...
-}): CustomResolverOptions {
+export default function parseCustomResolverOptions(
+  searchParams: URLSearchParams,
+): CustomResolverOptions {
   const customResolverOptions: {
     __proto__: null,
-    [string]: mixed,
+    [key: string]: unknown,
     ...
   } = Object.create(null);
-  const query = nullthrows(urlObj.query);
 
-  Object.keys(query).forEach((key: string) => {
+  searchParams.forEach((value: string, key: string) => {
     if (key.startsWith(PREFIX)) {
-      customResolverOptions[key.substr(PREFIX.length)] = query[key];
+      customResolverOptions[key.substring(PREFIX.length)] = value;
     }
   });
 
   return customResolverOptions;
-};
+}

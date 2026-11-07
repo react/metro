@@ -9,17 +9,15 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   BasicSourceMap,
   FBSourceFunctionMap,
   FBSourceMetadata,
 } from './source-map';
 
-const B64Builder = require('./B64Builder');
+import B64Builder from './B64Builder';
 
-type FileFlags = $ReadOnly<{
+type FileFlags = Readonly<{
   addToIgnoreList?: boolean,
 }>;
 
@@ -34,7 +32,7 @@ type FileFlags = $ReadOnly<{
  *
  * Mappings have to be passed in the order appearance in the generated source.
  */
-class Generator {
+export default class Generator {
   builder: B64Builder;
   last: {
     generatedColumn: number,
@@ -201,7 +199,7 @@ class Generator {
         }
       : {};
 
-    return ({
+    return {
       version: 3,
       file,
       sources: this.sources.slice(),
@@ -210,7 +208,7 @@ class Generator {
       ...ignoreList,
       names: this.names.items(),
       mappings: this.builder.toString(),
-    }: BasicSourceMap);
+    } as BasicSourceMap;
   }
 
   /**
@@ -291,5 +289,3 @@ class IndexedSet {
     return Array.from(this.map.keys());
   }
 }
-
-module.exports = Generator;

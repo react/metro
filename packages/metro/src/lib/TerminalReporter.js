@@ -4,23 +4,28 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
 
-'use strict';
-
 import type {BundleDetails, ReportableEvent} from './reporting';
 import type {Terminal} from 'metro-core';
 import type {HealthCheckResult, WatcherStatus} from 'metro-file-map';
+import type {BackgroundColors, ForegroundColors, Modifiers} from 'node:util';
 
-const logToConsole = require('./logToConsole');
-const reporting = require('./reporting');
-const chalk = require('chalk');
-const throttle = require('lodash.throttle');
-const {AmbiguousModuleResolutionError} = require('metro-core');
-const path = require('path');
+import {calculateBundleProgressRatio} from './bundleProgressUtils';
+import logToConsole from './logToConsole';
+import * as reporting from './reporting';
+import {AmbiguousModuleResolutionError} from 'metro-core';
+import path from 'node:path';
+import util from 'node:util';
+
+type StyleFormat = ReadonlyArray<
+  ForegroundColors | BackgroundColors | Modifiers,
+>;
+const style = (format: StyleFormat, text: string): string =>
+  util.styleText(format, text);
 
 type BundleProgress = {
   bundleDetails: BundleDetails,
@@ -34,30 +39,39 @@ type BundleProgress = {
 export type TerminalReportableEvent =
   | ReportableEvent
   | {
-      buildID: string,
-      type: 'bundle_transform_progressed_throttled',
-      transformedFileCount: number,
-      totalFileCount: number,
+      type: 'unstable_server_log',
+      level: 'info' | 'warn' | 'error',
+      data: string | Array<unknown>,
+      ...
+    }
+  | {
+      type: 'unstable_server_menu_updated',
+      message: string,
+      ...
+    }
+  | {
+      type: 'unstable_server_menu_cleared',
       ...
     };
 
 type BuildPhase = 'in_progress' | 'done' | 'failed';
 
-type SnippetError = ErrnoError &
-  interface {
-    filename?: string,
-    snippet?: string,
-  };
+interface SnippetError extends Error {
+  code?: string;
+  filename?: string;
+  snippet?: string;
+}
 
 const DARK_BLOCK_CHAR = '\u2593';
 const LIGHT_BLOCK_CHAR = '\u2591';
 const MAX_PROGRESS_BAR_CHAR_WIDTH = 16;
+const PROGRESS_STATUS_INTERVAL_MS = 100;
 
 /**
  * We try to print useful information to the terminal for interactive builds.
  * This implements the `Reporter` interface from the './reporting' module.
  */
-class TerminalReporter {
+export default class TerminalReporter {
   /**
    * The bundle builds for which we are actively maintaining the status on the
    * terminal, ie. showing a progress bar. There can be several bundles being
@@ -65,24 +79,17 @@ class TerminalReporter {
    */
   _activeBundles: Map<string, BundleProgress>;
 
-  _scheduleUpdateBundleProgress: {
-    (data: {
-      buildID: string,
-      transformedFileCount: number,
-      totalFileCount: number,
-      ...
-    }): void,
-    cancel(): void,
-  };
+  _interactionStatus: ?string;
+
+  _lastProgressStatusTime: number;
+
   _prevHealthCheckResult: ?HealthCheckResult;
 
-  +terminal: Terminal;
+  readonly terminal: Terminal;
 
   constructor(terminal: Terminal) {
     this._activeBundles = new Map();
-    this._scheduleUpdateBundleProgress = throttle(data => {
-      this.update({...data, type: 'bundle_transform_progressed_throttled'});
-    }, 100);
+    this._lastProgressStatusTime = -Infinity;
     this.terminal = terminal;
   }
 
@@ -102,35 +109,30 @@ class TerminalReporter {
     }: BundleProgress,
     phase: BuildPhase,
   ): string {
-    if (isPrefetch) {
-      bundleType = 'PREBUNDLE';
-    }
-
     const localPath = path.relative('.', entryFile);
     const filledBar = Math.floor(ratio * MAX_PROGRESS_BAR_CHAR_WIDTH);
-    const bundleTypeColor =
-      phase === 'done'
-        ? chalk.green
-        : phase === 'failed'
-          ? chalk.red
-          : chalk.yellow;
+    const bundleTypeColor: StyleFormat =
+      phase === 'done' ? ['green'] : phase === 'failed' ? ['red'] : ['yellow'];
     const progress =
       phase === 'in_progress'
-        ? chalk.green.bgGreen(DARK_BLOCK_CHAR.repeat(filledBar)) +
-          chalk.bgWhite.white(
+        ? style(['green', 'bgGreen'], DARK_BLOCK_CHAR.repeat(filledBar)) +
+          style(
+            ['bgWhite', 'white'],
             LIGHT_BLOCK_CHAR.repeat(MAX_PROGRESS_BAR_CHAR_WIDTH - filledBar),
           ) +
-          chalk.bold(` ${(100 * ratio).toFixed(1)}% `) +
-          chalk.dim(`(${transformedFileCount}/${totalFileCount})`)
+          style(['bold'], ` ${Math.floor(100 * ratio)}% `) +
+          style(['dim'], `(${transformedFileCount}/${totalFileCount})`)
         : '';
 
     return (
-      bundleTypeColor.inverse.bold(` ${bundleType.toUpperCase()} `) +
-      chalk.reset.dim(` ${path.dirname(localPath)}/`) +
-      chalk.bold(path.basename(localPath)) +
+      style(
+        [...bundleTypeColor, 'inverse', 'bold'],
+        ` ${isPrefetch === true ? 'PREBUNDLE' : bundleType.toUpperCase()} `,
+      ) +
+      style(['reset', 'dim'], ` ${path.dirname(localPath)}/`) +
+      style(['bold'], path.basename(localPath)) +
       ' ' +
-      progress +
-      '\n'
+      progress
     );
   }
 
@@ -177,31 +179,37 @@ class TerminalReporter {
       '',
     ];
 
-    const color = hasReducedPerformance ? chalk.red : chalk.blue;
-    this.terminal.log(color(logo.join('\n')));
+    const color: StyleFormat = hasReducedPerformance ? ['red'] : ['blue'];
+    this.terminal.log(style(color, logo.join('\n')));
   }
 
   _logInitializingFailed(port: number, error: SnippetError): void {
     if (error.code === 'EADDRINUSE') {
       this.terminal.log(
-        chalk.bgRed.bold(' ERROR '),
-        chalk.red("Metro can't listen on port", chalk.bold(String(port))),
+        style(['bgRed', 'bold'], ' ERROR '),
+        style(
+          ['red'],
+          `Metro can't listen on port ${style(['bold'], String(port))}`,
+        ),
       );
       this.terminal.log(
         'Most likely another process is already using this port',
       );
       this.terminal.log('Run the following command to find out which process:');
-      this.terminal.log('\n  ', chalk.bold('lsof -i :' + port), '\n');
+      this.terminal.log('\n  ', style(['bold'], 'lsof -i :' + port), '\n');
       this.terminal.log('Then, you can either shut down the other process:');
-      this.terminal.log('\n  ', chalk.bold('kill -9 <PID>'), '\n');
+      this.terminal.log('\n  ', style(['bold'], 'kill -9 <PID>'), '\n');
       this.terminal.log('or run Metro on different port.');
     } else {
-      this.terminal.log(chalk.bgRed.bold(' ERROR '), chalk.red(error.message));
+      this.terminal.log(
+        style(['bgRed', 'bold'], ' ERROR '),
+        style(['red'], error.message),
+      );
       const errorAttributes = JSON.stringify(error);
       if (errorAttributes !== '{}') {
-        this.terminal.log(chalk.red(errorAttributes));
+        this.terminal.log(style(['red'], errorAttributes));
       }
-      this.terminal.log(chalk.red(error.stack));
+      this.terminal.log(style(['red'], String(error.stack)));
     }
   }
 
@@ -219,6 +227,9 @@ class TerminalReporter {
         break;
       case 'bundle_build_done':
         this._logBundleBuildDone(event.buildID);
+        break;
+      case 'bundle_save_log':
+        this.terminal.log('LOG:' + event.message);
         break;
       case 'bundle_build_failed':
         this._logBundleBuildFailed(event.buildID);
@@ -242,21 +253,38 @@ class TerminalReporter {
         this._logHmrClientError(event.error);
         break;
       case 'client_log':
-        logToConsole(this.terminal, event.level, event.mode, ...event.data);
+        logToConsole(this.terminal, event.level, ...event.data);
+        break;
+      case 'unstable_server_log':
+        const logFn = {
+          info: reporting.logInfo,
+          warn: reporting.logWarning,
+          error: reporting.logError,
+        }[event.level];
+        const [format, ...args] = [].concat(event.data);
+        logFn(this.terminal, String(format), ...args);
         break;
       case 'dep_graph_loading':
-        const color = event.hasReducedPerformance ? chalk.red : chalk.blue;
+        const color: StyleFormat = event.hasReducedPerformance
+          ? ['red']
+          : ['blue'];
+        // eslint-disable-next-line import/no-commonjs
+        // $FlowFixMe[untyped-import] package.json
         const version = 'v' + require('../../package.json').version;
         this.terminal.log(
-          color.bold(
-            ' '.repeat(19 - version.length / 2),
-            'Welcome to Metro ' + chalk.white(version) + '\n',
-          ) + chalk.dim('              Fast - Scalable - Integrated\n\n'),
+          style(
+            [...color, 'bold'],
+            ' '.repeat(19 - version.length / 2) +
+              ' Welcome to Metro ' +
+              style(['white'], version) +
+              '\n',
+          ) + style(['dim'], '              Fast - Scalable - Integrated\n\n'),
         );
 
         if (event.hasReducedPerformance) {
           this.terminal.log(
-            chalk.red(
+            style(
+              ['red'],
               'Metro is operating with reduced performance.\n' +
                 'Please fix the problem above and restart Metro.\n\n',
             ),
@@ -286,7 +314,7 @@ class TerminalReporter {
         `${error.fromModulePath}\` tries to require \`${he.hasteName}\`, ` +
         'but there are several files providing this module. You can delete ' +
         'or fix them: \n\n' +
-        Object.keys(he.duplicatesSet)
+        [...he.duplicatesSet.keys()]
           .sort()
           .map(dupFilePath => `  * \`${dupFilePath}\`\n`)
           .join('');
@@ -304,9 +332,9 @@ class TerminalReporter {
       }
     }
 
-    if (error.filename && !message.includes(error.filename)) {
-      // $FlowFixMe[incompatible-type]
-      message += ` [${error.filename}]`;
+    const filename = error.filename;
+    if (filename?.length && !message.includes(filename)) {
+      message += ` [${filename}]`;
     }
 
     if (error.snippet != null) {
@@ -325,11 +353,6 @@ class TerminalReporter {
     });
   }
 
-  /**
-   * We use Math.pow(ratio, 2) to as a conservative measure of progress because
-   * we know the `totalCount` is going to progressively increase as well. We
-   * also prevent the ratio from going backwards.
-   */
   _updateBundleProgress({
     buildID,
     transformedFileCount,
@@ -344,9 +367,14 @@ class TerminalReporter {
     if (currentProgress == null) {
       return;
     }
-    const rawRatio = transformedFileCount / totalFileCount;
-    const conservativeRatio = Math.pow(rawRatio, 2);
-    const ratio = Math.max(conservativeRatio, currentProgress.ratio);
+
+    const ratio = calculateBundleProgressRatio(
+      transformedFileCount,
+      totalFileCount,
+      currentProgress.ratio,
+    );
+
+    // $FlowFixMe[unsafe-object-assign]
     Object.assign(currentProgress, {
       ratio,
       transformedFileCount,
@@ -375,8 +403,14 @@ class TerminalReporter {
         this._activeBundles.set(event.buildID, bundleProgress);
         break;
 
-      case 'bundle_transform_progressed_throttled':
+      case 'bundle_transform_progressed':
         this._updateBundleProgress(event);
+        break;
+      case 'unstable_server_menu_updated':
+        this._interactionStatus = event.message;
+        break;
+      case 'unstable_server_menu_cleared':
+        this._interactionStatus = null;
         break;
     }
   }
@@ -391,7 +425,8 @@ class TerminalReporter {
       .map(([_, progress]: [string, BundleProgress]) =>
         this._getBundleStatusMessage(progress, 'in_progress'),
       )
-      .filter((str: null | string) => str != null)
+      .concat([this._interactionStatus])
+      .filter((str: ?string) => str != null)
       .join('\n');
   }
 
@@ -424,7 +459,7 @@ class TerminalReporter {
           // Only report success after a prior failure.
           if (this._prevHealthCheckResult) {
             this.terminal.log(
-              chalk.green(`Watcher ${watcherName} is now healthy.`),
+              style(['green'], `Watcher ${watcherName} is now healthy.`),
             );
           }
           break;
@@ -464,7 +499,8 @@ class TerminalReporter {
         break;
       case 'watchman_slow_command':
         this.terminal.log(
-          chalk.dim(
+          style(
+            ['dim'],
             `Waiting for Watchman \`${status.command}\` (${Math.round(
               status.timeElapsed / 1000,
             )}s)...`,
@@ -473,7 +509,8 @@ class TerminalReporter {
         break;
       case 'watchman_slow_command_complete':
         this.terminal.log(
-          chalk.green(
+          style(
+            ['green'],
             `Watchman \`${status.command}\` finished after ${(
               status.timeElapsed / 1000
             ).toFixed(1)}s.`,
@@ -486,17 +523,19 @@ class TerminalReporter {
   /**
    * Single entry point for reporting events. That allows us to implement the
    * corresponding JSON reporter easily and have a consistent reporting.
+   * Bundle transform progress updates the status at most every
+   * PROGRESS_STATUS_INTERVAL_MS.
    */
   update(event: TerminalReportableEvent): void {
-    if (event.type === 'bundle_transform_progressed') {
-      this._scheduleUpdateBundleProgress(event);
-      return;
-    }
-
     this._log(event);
     this._updateState(event);
+    if (event.type === 'bundle_transform_progressed') {
+      const now = performance.now();
+      if (now - this._lastProgressStatusTime < PROGRESS_STATUS_INTERVAL_MS) {
+        return;
+      }
+      this._lastProgressStatusTime = now;
+    }
     this.terminal.status(this._getStatusMessage());
   }
 }
-
-module.exports = TerminalReporter;

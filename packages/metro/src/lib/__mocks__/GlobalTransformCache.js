@@ -15,4 +15,4 @@ function get(): null {
   return null;
 }
 
-module.exports = {get};
+export {get};

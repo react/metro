@@ -9,15 +9,17 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {InputConfigT} from '../types';
 
-module.exports = (async () => {
-  const defaultConfig = await require('./index')('/path/to/project');
+export default async function validConfig(): Promise<InputConfigT> {
+  const defaultConfig = await require('./index').default('/path/to/project');
   const validConfig = {
     ...defaultConfig,
     resolver: {
       ...defaultConfig.resolver,
-      resolveRequest: function CustomResolver() {},
+      resolveRequest: function CustomResolver() {
+        throw new Error('Not implemented');
+      },
       hasteImplModulePath: './path',
     },
     server: {
@@ -26,13 +28,17 @@ module.exports = (async () => {
     },
     transformer: {
       ...defaultConfig.transformer,
-      getTransformOptions: function getTransformOptions() {},
+      getTransformOptions: function getTransformOptions() {
+        throw new Error('Not implemented');
+      },
     },
     serializer: {
       ...defaultConfig.serializer,
-      customSerializer: function customSerializer() {},
+      customSerializer: function customSerializer() {
+        throw new Error('Not implemented');
+      },
     },
   };
 
   return validConfig;
-}: () => any);
+}

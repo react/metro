@@ -4,36 +4,29 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict-local
+ * @format
  */
 
 /* eslint-disable no-console */
 
-'use strict';
-
 import type {Terminal} from 'metro-core';
+import type {BackgroundColors, ForegroundColors, Modifiers} from 'node:util';
 
-const chalk = require('chalk');
-const util = require('util');
+import util from 'node:util';
 
 const groupStack = [];
 let collapsedGuardTimer;
 
-module.exports = (
-  terminal: Terminal,
-  level: string,
-  mode: 'BRIDGE' | 'NOBRIDGE',
-  ...data: Array<mixed>
-) => {
-  // $FlowFixMe[invalid-computed-prop]
+export default (terminal: Terminal, level: string, ...data: Array<unknown>) => {
+  // $FlowFixMe[prop-missing]
   const logFunction = console[level] && level !== 'trace' ? level : 'log';
-  const color =
+  const color: ReadonlyArray<ForegroundColors | BackgroundColors | Modifiers> =
     level === 'error'
-      ? chalk.inverse.red
+      ? ['inverse', 'red']
       : level === 'warn'
-        ? chalk.inverse.yellow
-        : chalk.inverse.white;
+        ? ['inverse', 'yellow']
+        : ['inverse', 'white'];
 
   if (level === 'group') {
     groupStack.push(level);
@@ -44,7 +37,7 @@ module.exports = (
     collapsedGuardTimer = setTimeout(() => {
       if (groupStack.includes('groupCollapsed')) {
         terminal.log(
-          chalk.inverse.yellow.bold(' WARN '),
+          util.styleText(['inverse', 'yellow', 'bold'], ' WARN '),
           'Expected `console.groupEnd` to be called after `console.groupCollapsed`.',
         );
         groupStack.length = 0;
@@ -66,15 +59,13 @@ module.exports = (
       data[data.length - 1] = lastItem.trimEnd();
     }
 
-    const modePrefix =
-      !mode || mode == 'BRIDGE' ? '' : `(${mode.toUpperCase()}) `;
     terminal.log(
-      color.bold(` ${modePrefix}${logFunction.toUpperCase()} `) +
+      util.styleText([...color, 'bold'], ` ${logFunction.toUpperCase()} `) +
         ''.padEnd(groupStack.length * 2, ' '),
       // `util.format` actually accepts any arguments.
       // If the first argument is a string, it tries to format it.
       // Otherwise, it just concatenates all arguments.
-      // $FlowIssue[incompatible-call] util.format expected the first argument to be a string
+      // $FlowFixMe[incompatible-type] util.format expected the first argument to be a string
       util.format(...data),
     );
   }

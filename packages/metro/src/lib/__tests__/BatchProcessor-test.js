@@ -13,7 +13,7 @@
 
 jest.useRealTimers();
 
-const BatchProcessor = require('../BatchProcessor');
+import BatchProcessor from '../BatchProcessor';
 
 describe('BatchProcessor', () => {
   const options = {
@@ -22,7 +22,7 @@ describe('BatchProcessor', () => {
     concurrency: 2,
   };
 
-  it('aggregate items concurrently', async () => {
+  test('aggregate items concurrently', async () => {
     const input = [...Array(9).keys()].slice(1);
     const transform = (e: number) => e * 10;
     const batches = [];
@@ -31,7 +31,7 @@ describe('BatchProcessor', () => {
     const bp = new BatchProcessor<number, number>(
       options,
       (items: Array<number>) =>
-        // $FlowFixMe[incompatible-call] Found when updating Promise type definition
+        // $FlowFixMe[incompatible-type] Found when updating Promise type definition
         new Promise((resolve: (result?: Array<number>) => void) => {
           ++concurrency;
           expect(concurrency).toBeLessThanOrEqual(options.concurrency);
@@ -64,7 +64,7 @@ describe('BatchProcessor', () => {
     expect(results).toEqual(input.map(transform));
   });
 
-  it('report errors', async () => {
+  test('report errors', async () => {
     const error = new Error('oh noes');
     const bp = new BatchProcessor(
       options,

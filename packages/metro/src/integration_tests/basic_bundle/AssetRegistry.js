@@ -11,7 +11,7 @@
 'use strict';
 
 module.exports = {
-  registerAsset(data: mixed): mixed {
+  registerAsset(data: unknown): unknown {
     return data;
   },
 };

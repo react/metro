@@ -14,11 +14,10 @@ import {copyContextToObject} from './utils';
 
 declare var require: RequireWithContext;
 
-function main(): mixed {
+function main(): unknown {
   return copyContextToObject(
-    // $FlowFixMe[underconstrained-implicit-instantiation]
-    require.context('./subdir', undefined, undefined, 'sync'),
+    require.context<unknown>('./subdir', undefined, undefined, 'sync'),
   );
 }
 
-module.exports = (main(): mixed);
+module.exports = main() as unknown;

@@ -11,8 +11,10 @@
 
 'use strict';
 
-const Consumer = require('../Consumer');
-const {add0, add1} = require('ob1');
+import type {MixedSourceMap} from '../source-map';
+
+import Consumer from '../Consumer';
+import {add0, add1} from 'ob1';
 
 const {objectContaining} = expect;
 
@@ -54,7 +56,7 @@ describe('basic maps', () => {
       expect(empty1).not.toBe(empty2);
       expect(() => {
         empty1.name = 'foo';
-        // $FlowIgnore[prop-missing]
+        // $FlowFixMe[prop-missing]
         empty1.someProp = 'bar';
       }).not.toThrow();
     });
@@ -130,6 +132,33 @@ describe('basic maps', () => {
           "source": "source0",
         }
       `);
+    });
+
+    test('a column before the first mapping on its line is unmapped', () => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings: 'AAAA;KAAC',
+        names: [],
+        sources: ['source0'],
+      });
+      expect(
+        consumer.originalPositionFor({line: add1(1), column: add0(4)}),
+      ).toEqual({source: null, name: null, line: null, column: null});
+      expect(
+        consumer.originalPositionFor({line: add1(1), column: add0(5)}),
+      ).toEqual({source: 'source0', name: null, line: 1, column: 1});
+    });
+
+    test('mappings at the same generated column resolve to the last', () => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings: 'AAAA,AACA',
+        names: [],
+        sources: ['source0'],
+      });
+      expect(
+        consumer.originalPositionFor({line: add1(0), column: add0(0)}),
+      ).toEqual({source: 'source0', name: null, line: 2, column: 0});
     });
   });
 
@@ -215,6 +244,64 @@ describe('basic maps', () => {
         ]
       `);
     });
+
+    test('multi-digit and negative deltas, empty segments and lines', () => {
+      expect([
+        ...new Consumer({
+          version: 3,
+          mappings: 'AAAU,gBCoBHC,,w+B;;KDjBg9D',
+          names: ['name0', 'name1'],
+          sources: ['source0', 'source1'],
+        }).generatedMappings(),
+      ]).toEqual([
+        {
+          generatedLine: 1,
+          generatedColumn: 0,
+          source: 'source0',
+          name: null,
+          originalLine: 1,
+          originalColumn: 10,
+        },
+        {
+          generatedLine: 1,
+          generatedColumn: 16,
+          source: 'source1',
+          name: 'name1',
+          originalLine: 21,
+          originalColumn: 7,
+        },
+        {
+          generatedLine: 1,
+          generatedColumn: 1016,
+          source: null,
+          name: null,
+          originalLine: null,
+          originalColumn: null,
+        },
+        {
+          generatedLine: 3,
+          generatedColumn: 5,
+          source: 'source0',
+          name: null,
+          originalLine: 4,
+          originalColumn: 2007,
+        },
+      ]);
+    });
+
+    test.each([
+      ['AA', 'Invalid original line delta'],
+      ['AAAA,AAA', 'Invalid original column delta'],
+      ['AAAA,A!AA', undefined],
+    ])('throws on malformed mappings %s', (mappings, message) => {
+      const consumer = new Consumer({
+        version: 3,
+        mappings,
+        names: [],
+        sources: ['source0'],
+      });
+      expect(() => [...consumer.generatedMappings()]).toThrow(message);
+    });
   });
 
   describe('sourceContentFor', () => {
@@ -297,7 +384,7 @@ describe('indexed (sectioned) maps', () => {
       expect(empty1).not.toBe(empty2);
       expect(() => {
         empty1.name = 'foo';
-        // $FlowIgnore[prop-missing]
+        // $FlowFixMe[prop-missing]
         empty1.someProp = 'bar';
       }).not.toThrow();
     });
@@ -525,6 +612,48 @@ describe('indexed (sectioned) maps', () => {
     });
   });
 
+  describe('generatedMappings()', () => {
+    test('applies the section offset to generated positions', () => {
+      const consumer = new Consumer({
+        version: 3,
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              names: [],
+              sources: ['section0_source0'],
+              mappings: 'AAAA',
+            },
+          },
+          {
+            offset: {line: 0, column: 4},
+            map: {
+              version: 3,
+              names: [],
+              sources: ['section1_source0'],
+              mappings: 'CAAA;AACA',
+            },
+          },
+        ],
+      });
+      expect(
+        [...consumer.generatedMappings()].map(mapping => [
+          mapping.generatedLine,
+          mapping.generatedColumn,
+          mapping.source,
+        ]),
+      ).toEqual([
+        [1, 0, 'section0_source0'],
+        // Unmapped from the start of section 1 until its first mapping
+        [1, 4, null],
+        [1, 5, 'section1_source0'],
+        // The column offset only applies to the first line of a section
+        [2, 0, 'section1_source0'],
+      ]);
+    });
+  });
+
   describe('sourceContentFor', () => {
     test('empty map', () => {
       const consumer = new Consumer({
@@ -657,16 +786,16 @@ describe('source path normalization', () => {
 });
 
 describe('known bugs in source-map', () => {
-  it('accepts mappings without sources in an indexed map', () => {
-    const map = {
+  test('accepts mappings without sources in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
           offset: {line: 0, column: 0},
           map: {
             version: 3,
-            names: ([]: Array<string>),
-            sources: ([]: Array<string>),
+            names: [] as Array<string>,
+            sources: [] as Array<string>,
             mappings: 'A',
           },
         },
@@ -689,15 +818,15 @@ describe('known bugs in source-map', () => {
     ]);
   });
 
-  it('accepts mappings without names in an indexed map', () => {
-    const map = {
+  test('accepts mappings without names in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
           offset: {line: 0, column: 0},
           map: {
             version: 3,
-            names: ([]: Array<string>),
+            names: [] as Array<string>,
             sources: ['foo.js'],
             mappings: 'AAAA',
           },
@@ -720,8 +849,8 @@ describe('known bugs in source-map', () => {
     ]);
   });
 
-  it('accepts mappings to the first name entry in an indexed map', () => {
-    const map = {
+  test('accepts mappings to the first name entry in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -751,8 +880,8 @@ describe('known bugs in source-map', () => {
     ]);
   });
 
-  it('processes sources correctly in an indexed map', () => {
-    const map = {
+  test('processes sources correctly in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -789,8 +918,8 @@ describe('known bugs in source-map', () => {
     ]);
   });
 
-  it('supports unmapped sections in an indexed map', () => {
-    const map = {
+  test('supports unmapped sections in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -806,8 +935,8 @@ describe('known bugs in source-map', () => {
           offset: {line: 0, column: 2},
           map: {
             version: 3,
-            names: ([]: Array<string>),
-            sources: ([]: Array<string>),
+            names: [] as Array<string>,
+            sources: [] as Array<string>,
             mappings: '',
           },
         },
@@ -826,8 +955,8 @@ describe('known bugs in source-map', () => {
     );
   });
 
-  it('performs lookup correctly in an indexed map', () => {
-    const map = {
+  test('performs lookup correctly in an indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -865,8 +994,8 @@ describe('known bugs in source-map', () => {
     ).toEqual(objectContaining({source: 'quux.js', line: 2, column: 1}));
   });
 
-  it('performs lookup correctly in a non-indexed map', () => {
-    const map = {
+  test('performs lookup correctly in a non-indexed map', () => {
+    const map: MixedSourceMap = {
       version: 3,
       names: ['first', 'second'],
       sources: ['foo.js', 'bar.js'],

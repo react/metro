@@ -8,6 +8,9 @@
  * @flow strict
  */
 
+// Imported directly in CJS workers - must be CommonJS
+/* eslint-disable import/no-commonjs */
+
 // This list is compiled after the MDN list of the most common MIME types (see
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/
 // Complete_list_of_MIME_types).
@@ -20,7 +23,7 @@
 
 'use strict';
 
-const extensions /*: $ReadOnlySet<string> */ = new Set([
+const extensions /*: ReadonlySet<string> */ = new Set([
   // JSONs are never haste modules, except for "package.json", which is handled.
   '.json',
 

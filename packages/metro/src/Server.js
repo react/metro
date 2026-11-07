@@ -9,82 +9,84 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {AssetData} from './Assets';
 import type {ExplodedSourceMap} from './DeltaBundler/Serializers/getExplodedSourceMap';
 import type {RamBundleInfo} from './DeltaBundler/Serializers/getRamBundleInfo';
 import type {
   MixedOutput,
   Module,
+  ReadOnlyDependencies,
   ReadOnlyGraph,
   TransformInputOptions,
   TransformResult,
-} from './DeltaBundler/types.flow';
+} from './DeltaBundler/types';
 import type {RevisionId} from './IncrementalBundler';
 import type {GraphId} from './lib/getGraphId';
+import type {JsonData} from './lib/parseJsonBody';
 import type {Reporter} from './lib/reporting';
-import type {StackFrameOutput} from './Server/symbolicate';
+import type {StackFrameInput, StackFrameOutput} from './Server/symbolicate';
 import type {
+  BuildOptions,
   BundleOptions,
   GraphOptions,
   ResolverInputOptions,
   SplitBundleOptions,
-} from './shared/types.flow';
+} from './shared/types';
 import type {IncomingMessage} from 'connect';
-import type {ServerResponse} from 'http';
 import type {CacheStore} from 'metro-cache';
-import type {ConfigT, RootPerfLogger} from 'metro-config/src/configTypes.flow';
+import type {ConfigT, RootPerfLogger} from 'metro-config';
 import type {
   ActionLogEntryData,
   ActionStartLogEntry,
-  LogEntry,
-} from 'metro-core/src/Logger';
-import type {CustomResolverOptions} from 'metro-resolver/src/types';
+} from 'metro-core/private/Logger';
+import type {CustomResolverOptions} from 'metro-resolver/private/types';
 import type {CustomTransformOptions} from 'metro-transform-worker';
+import type {ServerResponse} from 'node:http';
 
-import {SourcePathsMode} from './shared/types.flow';
+import {getAsset} from './Assets';
+import baseJSBundle from './DeltaBundler/Serializers/baseJSBundle';
+import getAllFiles from './DeltaBundler/Serializers/getAllFiles';
+import getAssets from './DeltaBundler/Serializers/getAssets';
+import {getExplodedSourceMap} from './DeltaBundler/Serializers/getExplodedSourceMap';
+import getRamBundleInfo from './DeltaBundler/Serializers/getRamBundleInfo';
+import {sourceMapStringNonBlocking} from './DeltaBundler/Serializers/sourceMapString';
+import IncrementalBundler from './IncrementalBundler';
+import ResourceNotFoundError from './IncrementalBundler/ResourceNotFoundError';
+import {calculateBundleProgressRatio} from './lib/bundleProgressUtils';
+import bundleToString from './lib/bundleToString';
+import formatBundlingError from './lib/formatBundlingError';
+import getGraphId from './lib/getGraphId';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+  isVirtualModuleUrl,
+} from './lib/modulePath';
+import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
+import parseJsonBody from './lib/parseJsonBody';
+import {RESERVED_STRING} from './lib/reservedString';
+import RootUrlMap from './lib/RootUrlMap';
+import splitBundleOptions from './lib/splitBundleOptions';
+import * as transformHelpers from './lib/transformHelpers';
+import {UnableToResolveError} from './node-haste/DependencyGraph/ModuleResolution';
+import parsePlatformFilePath from './node-haste/lib/parsePlatformFilePath';
+import MultipartResponse from './Server/MultipartResponse';
+import symbolicate from './Server/symbolicate';
+import {SourcePathsMode} from './shared/types';
+import {codeFrameColumns} from '@babel/code-frame';
+import debugModule from 'debug';
+import * as jscSafeUrl from 'jsc-safe-url';
+import {Logger} from 'metro-core';
+import mime from 'mime-types';
+import fs from 'node:fs';
+import path from 'node:path';
+import {performance} from 'node:perf_hooks';
+import querystring from 'node:querystring';
+import nullthrows from 'nullthrows';
 
-const {getAsset} = require('./Assets');
-const baseJSBundle = require('./DeltaBundler/Serializers/baseJSBundle');
-const getAllFiles = require('./DeltaBundler/Serializers/getAllFiles');
-const getAssets = require('./DeltaBundler/Serializers/getAssets');
-const {
-  getExplodedSourceMap,
-} = require('./DeltaBundler/Serializers/getExplodedSourceMap');
-const getRamBundleInfo = require('./DeltaBundler/Serializers/getRamBundleInfo');
-const {
-  sourceMapStringNonBlocking,
-} = require('./DeltaBundler/Serializers/sourceMapString');
-const IncrementalBundler = require('./IncrementalBundler');
-const ResourceNotFoundError = require('./IncrementalBundler/ResourceNotFoundError');
-const bundleToString = require('./lib/bundleToString');
-const formatBundlingError = require('./lib/formatBundlingError');
-const getGraphId = require('./lib/getGraphId');
-const parseOptionsFromUrl = require('./lib/parseOptionsFromUrl');
-const splitBundleOptions = require('./lib/splitBundleOptions');
-const transformHelpers = require('./lib/transformHelpers');
-const {
-  UnableToResolveError,
-} = require('./node-haste/DependencyGraph/ModuleResolution');
-const parsePlatformFilePath = require('./node-haste/lib/parsePlatformFilePath');
-const MultipartResponse = require('./Server/MultipartResponse');
-const symbolicate = require('./Server/symbolicate');
-const {codeFrameColumns} = require('@babel/code-frame');
-const debug = require('debug')('Metro:Server');
-const fs = require('graceful-fs');
-const invariant = require('invariant');
-const jscSafeUrl = require('jsc-safe-url');
-const {
-  Logger,
-  Logger: {createActionStartEntry, createActionEndEntry, log},
-} = require('metro-core');
-const mime = require('mime-types');
-const nullthrows = require('nullthrows');
-const path = require('path');
-const {performance} = require('perf_hooks');
-const querystring = require('querystring');
-const url = require('url');
+const debug = debugModule('Metro:Server');
+
+const {createActionStartEntry, createActionEndEntry, log} = Logger;
 
 const noopLogger: RootPerfLogger = {
   start: () => {},
@@ -94,7 +96,7 @@ const noopLogger: RootPerfLogger = {
   end: () => {},
 };
 
-export type SegmentLoadData = {[number]: [Array<number>, ?number], ...};
+export type SegmentLoadData = {[key: number]: [Array<number>, ?number], ...};
 export type BundleMetadata = {
   hash: string,
   otaBuildNumber: ?string,
@@ -105,30 +107,30 @@ export type BundleMetadata = {
 };
 
 type ProcessStartContext = {
-  +buildNumber: number,
-  +bundleOptions: BundleOptions,
-  +graphId: GraphId,
-  +graphOptions: GraphOptions,
-  +mres: MultipartResponse | ServerResponse,
-  +req: IncomingMessage,
-  +revisionId?: ?RevisionId,
-  +bundlePerfLogger: RootPerfLogger,
-  +requestStartTimestamp: number,
   ...SplitBundleOptions,
+  readonly buildNumber: number,
+  readonly bundleOptions: BundleOptions,
+  readonly graphId: GraphId,
+  readonly graphOptions: GraphOptions,
+  readonly mres: MultipartResponse | ServerResponse,
+  readonly req: IncomingMessage,
+  readonly revisionId?: ?RevisionId,
+  readonly bundlePerfLogger: RootPerfLogger,
+  readonly requestStartTimestamp: number,
 };
 
 type ProcessDeleteContext = {
-  +graphId: GraphId,
-  +req: IncomingMessage,
-  +res: ServerResponse,
+  readonly graphId: GraphId,
+  readonly req: IncomingMessage,
+  readonly res: ServerResponse,
 };
 
 type ProcessEndContext<T> = {
   ...ProcessStartContext,
-  +result: T,
+  readonly result: T,
 };
 
-export type ServerOptions = $ReadOnly<{
+export type ServerOptions = Readonly<{
   hasReducedPerformance?: boolean,
   onBundleBuilt?: (bundlePath: string) => void,
   watch?: boolean,
@@ -137,7 +139,14 @@ export type ServerOptions = $ReadOnly<{
 const DELTA_ID_HEADER = 'X-Metro-Delta-ID';
 const FILES_CHANGED_COUNT_HEADER = 'X-Metro-Files-Changed-Count';
 
-class Server {
+type FetchTiming = {
+  graphId: GraphId,
+  startTime: number,
+  endTime: number | null,
+  isPrefetch: boolean,
+};
+
+export default class Server {
   _bundler: IncrementalBundler;
   _config: ConfigT;
   _createModuleId: (path: string) => number;
@@ -147,10 +156,10 @@ class Server {
   _platforms: Set<string>;
   _reporter: Reporter;
   _serverOptions: ServerOptions | void;
-  _allowedSuffixesForSourceRequests: $ReadOnlyArray<string>;
-  _sourceRequestRoutingMap: $ReadOnlyArray<
-    [pathnamePrefix: string, normalizedRootDir: string],
-  >;
+  _allowedSuffixesForSourceRequests: ReadonlyArray<string>;
+  _rootUrlMap: RootUrlMap;
+  _fetchTimings: Array<FetchTiming>;
+  _activeFetchCount: number;
 
   constructor(config: ConfigT, options?: ServerOptions) {
     this._config = config;
@@ -175,14 +184,12 @@ class Server {
         ].map(ext => '.' + ext),
       ),
     ];
-    this._sourceRequestRoutingMap = [
-      ['/[metro-project]/', path.resolve(this._config.projectRoot)],
-      ...this._config.watchFolders.map((watchFolder, index) => [
-        `/[metro-watchFolders]/${index}/`,
-        path.resolve(watchFolder),
-      ]),
-    ];
+    this._rootUrlMap = new RootUrlMap(config, () =>
+      this._bundler.getBundler().getDynamicRoots(),
+    );
     this._isEnded = false;
+    this._fetchTimings = [];
+    this._activeFetchCount = 0;
 
     // TODO(T34760917): These two properties should eventually be instantiated
     // elsewhere and passed as parameters, since they are also needed by
@@ -196,9 +203,9 @@ class Server {
     this._nextBundleBuildNumber = 1;
   }
 
-  end() {
+  async end() {
     if (!this._isEnded) {
-      this._bundler.end();
+      await this._bundler.end();
       this._isEnded = true;
     }
   }
@@ -211,30 +218,22 @@ class Server {
     return this._createModuleId;
   }
 
-  async build(options: BundleOptions): Promise<{
-    code: string,
-    map: string,
-    ...
-  }> {
+  async _serializeGraph({
+    splitOptions,
+    prepend,
+    graph,
+  }: Readonly<{
+    splitOptions: SplitBundleOptions,
+    prepend: ReadonlyArray<Module<>>,
+    graph: ReadOnlyGraph<>,
+  }>): Promise<{code: string, map: string}> {
     const {
       entryFile,
       graphOptions,
-      onProgress,
       resolverOptions,
       serializerOptions,
       transformOptions,
-    } = splitBundleOptions(options);
-
-    const {prepend, graph} = await this._bundler.buildGraph(
-      entryFile,
-      transformOptions,
-      resolverOptions,
-      {
-        onProgress,
-        shallow: graphOptions.shallow,
-        lazy: graphOptions.lazy,
-      },
-    );
+    } = splitOptions;
 
     const entryPoint = this._getEntryPointAbsolutePath(entryFile);
 
@@ -250,10 +249,12 @@ class Server {
       processModuleFilter: this._config.serializer.processModuleFilter,
       createModuleId: this._createModuleId,
       getRunModuleStatement: this._config.serializer.getRunModuleStatement,
+      globalPrefix: this._config.transformer.globalPrefix,
       dev: transformOptions.dev,
       includeAsyncPaths: graphOptions.lazy,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -262,12 +263,15 @@ class Server {
       sourceMapUrl: serializerOptions.sourceMapUrl,
       sourceUrl: serializerOptions.sourceUrl,
       inlineSourceMap: serializerOptions.inlineSourceMap,
-      serverRoot:
-        this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+      serverRoot: this._rootUrlMap.serverRootDir,
       shouldAddToIgnoreList: (module: Module<>) =>
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
         this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+      dependencyMapReservedName:
+        this._config.transformer.unstable_dependencyMapReservedName,
+      unstable_inlineDependencyMap:
+        this._config.serializer.unstable_inlineDependencyMap,
     };
     let bundleCode = null;
     let bundleMap = null;
@@ -307,15 +311,24 @@ class Server {
     };
   }
 
-  async getRamBundleInfo(options: BundleOptions): Promise<RamBundleInfo> {
+  async build(
+    bundleOptions: BundleOptions,
+    buildOptions: BuildOptions = {},
+  ): Promise<{
+    code: string,
+    map: string,
+    assets?: ReadonlyArray<AssetData>,
+    ...
+  }> {
+    const splitOptions = splitBundleOptions(bundleOptions);
+    const {withAssets} = buildOptions;
     const {
       entryFile,
       graphOptions,
       onProgress,
       resolverOptions,
-      serializerOptions,
       transformOptions,
-    } = splitBundleOptions(options);
+    } = splitOptions;
 
     const {prepend, graph} = await this._bundler.buildGraph(
       entryFile,
@@ -328,7 +341,49 @@ class Server {
       },
     );
 
+    const [{code, map}, assets] = await Promise.all([
+      this._serializeGraph({
+        splitOptions,
+        prepend,
+        graph,
+      }),
+      withAssets
+        ? this._getAssetsFromDependencies(
+            graph.dependencies,
+            bundleOptions.platform,
+          )
+        : null,
+    ]);
+
+    return {
+      code,
+      map,
+      ...(withAssets ? {assets: nullthrows(assets)} : null),
+    };
+  }
+
+  async getRamBundleInfo(options: BundleOptions): Promise<RamBundleInfo> {
+    const {
+      entryFile,
+      graphOptions,
+      onProgress,
+      resolverOptions,
+      serializerOptions,
+      transformOptions,
+    } = splitBundleOptions(options);
+
     const entryPoint = this._getEntryPointAbsolutePath(entryFile);
+
+    const {prepend, graph} = await this._bundler.buildGraph(
+      entryFile,
+      transformOptions,
+      resolverOptions,
+      {
+        onProgress,
+        shallow: graphOptions.shallow,
+        lazy: graphOptions.lazy,
+      },
+    );
 
     return await getRamBundleInfo(entryPoint, prepend, graph, {
       asyncRequireModulePath: await this._resolveRelativePath(
@@ -345,10 +400,12 @@ class Server {
       excludeSource: serializerOptions.excludeSource,
       getRunModuleStatement: this._config.serializer.getRunModuleStatement,
       getTransformOptions: this._config.transformer.getTransformOptions,
+      globalPrefix: this._config.transformer.globalPrefix,
       includeAsyncPaths: graphOptions.lazy,
       platform: transformOptions.platform,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -357,16 +414,19 @@ class Server {
       sourceMapUrl: serializerOptions.sourceMapUrl,
       sourceUrl: serializerOptions.sourceUrl,
       inlineSourceMap: serializerOptions.inlineSourceMap,
-      serverRoot:
-        this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+      serverRoot: this._rootUrlMap.serverRootDir,
       shouldAddToIgnoreList: (module: Module<>) =>
         this._shouldAddModuleToIgnoreList(module),
       getSourceUrl: (module: Module<>) =>
         this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+      dependencyMapReservedName:
+        this._config.transformer.unstable_dependencyMapReservedName,
+      unstable_inlineDependencyMap:
+        this._config.serializer.unstable_inlineDependencyMap,
     });
   }
 
-  async getAssets(options: BundleOptions): Promise<$ReadOnlyArray<AssetData>> {
+  async getAssets(options: BundleOptions): Promise<ReadonlyArray<AssetData>> {
     const {entryFile, onProgress, resolverOptions, transformOptions} =
       splitBundleOptions(options);
 
@@ -377,20 +437,30 @@ class Server {
       {onProgress, shallow: false, lazy: false},
     );
 
+    return this._getAssetsFromDependencies(
+      dependencies,
+      transformOptions.platform,
+    );
+  }
+
+  async _getAssetsFromDependencies(
+    dependencies: ReadOnlyDependencies<>,
+    platform: ?string,
+  ): Promise<ReadonlyArray<AssetData>> {
     return await getAssets(dependencies, {
       processModuleFilter: this._config.serializer.processModuleFilter,
       assetPlugins: this._config.transformer.assetPlugins,
-      platform: transformOptions.platform,
-      projectRoot: this._getServerRootDir(),
+      platform,
+      projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
     });
   }
 
   async getOrderedDependencyPaths(options: {
-    +dev: boolean,
-    +entryFile: string,
-    +minify: boolean,
-    +platform: ?string,
+    readonly dev: boolean,
+    readonly entryFile: string,
+    readonly minify: boolean,
+    readonly platform: ?string,
     ...
   }): Promise<Array<string>> {
     const {
@@ -398,13 +468,12 @@ class Server {
       onProgress,
       resolverOptions,
       transformOptions,
-      /* $FlowFixMe(>=0.122.0 site=react_native_fb) This comment suppresses an
+      /* $FlowFixMe[cannot-spread-inexact](>=0.122.0 site=react_native_fb) This comment suppresses an
        * error found when Flow v0.122.0 was deployed. To see the error, delete
        * this comment and run Flow. */
     } = splitBundleOptions({
       ...Server.DEFAULT_BUNDLE_OPTIONS,
       ...options,
-      bundleType: 'bundle',
     });
 
     const {prepend, graph} = await this._bundler.buildGraph(
@@ -418,7 +487,7 @@ class Server {
       transformOptions.platform ||
       parsePlatformFilePath(entryFile, this._platforms).platform;
 
-    // $FlowFixMe[incompatible-return]
+    // $FlowFixMe[incompatible-type]
     return await getAllFiles(prepend, graph, {
       platform,
       processModuleFilter: this._config.serializer.processModuleFilter,
@@ -457,19 +526,36 @@ class Server {
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
-    const urlObj = url.parse(decodeURI(req.url), true);
-    let [, assetPath] =
-      (urlObj &&
-        urlObj.pathname &&
-        urlObj.pathname.match(/^\/assets\/(.+)$/)) ||
-      [];
+    debug('Processing single asset request: %s', req.url);
+    if (!URL.canParse(req.url, 'resolve://')) {
+      throw new Error('Could not parse URL', {cause: req.url});
+    }
 
-    if (!assetPath && urlObj && urlObj.query && urlObj.query.unstable_path) {
+    const urlObj = new URL(req.url, 'resolve://');
+    const formattedUrl = urlObj.toString();
+    if (req.url !== formattedUrl) {
+      debug('Formatted as:    %s', formattedUrl);
+    }
+
+    // using this Metro particular convention for decoding URL paths into file paths
+    let [, assetPath] =
+      urlObj.pathname
+        .split('/')
+        .map(segment => decodeURIComponent(segment))
+        .join('/')
+        .match(/^\/assets\/(.+)$/) || [];
+    if (!assetPath && urlObj.searchParams.get('unstable_path')) {
       const [, actualPath, secondaryQuery] = nullthrows(
-        urlObj.query.unstable_path.match(/^([^?]*)\??(.*)$/),
+        (urlObj.searchParams.get('unstable_path') || '').match(
+          /^([^?]*)\??(.*)$/,
+        ),
       );
       if (secondaryQuery) {
-        Object.assign(urlObj.query, querystring.parse(secondaryQuery));
+        Object.entries(querystring.parse(secondaryQuery)).forEach(
+          ([key, value]) => {
+            urlObj.searchParams.set(key, value);
+          },
+        );
       }
       assetPath = actualPath;
     }
@@ -486,20 +572,23 @@ class Server {
     );
 
     try {
+      const depGraph = await this._bundler.getBundler().getDependencyGraph();
       const data = await getAsset(
-        assetPath,
+        this._rootUrlMap.filePathOfUrlDecodedPathname(assetPath) ?? assetPath,
         this._config.projectRoot,
         this._config.watchFolders,
-        urlObj.query.platform,
+        urlObj.searchParams.get('platform'),
         this._config.resolver.assetExts,
+        filePath => depGraph.doesFileExist(filePath),
       );
       // Tell clients to cache this for 1 year.
       // This is safe as the asset url contains a hash of the asset.
-      // $FlowFixMe[incompatible-type]
+      /* $FlowFixMe[invalid-compare] Error discovered during Constant Condition
+       * roll out. See https://fburl.com/workplace/4oq3zi07. */
       if (process.env.REACT_NATIVE_ENABLE_ASSET_CACHING === true) {
         res.setHeader('Cache-Control', 'max-age=31536000');
       }
-      res.setHeader('Content-Type', mime.lookup(path.basename(assetPath)));
+      res.setHeader('Content-Type', mime.contentType(path.basename(assetPath)));
       res.end(this._rangeRequestMiddleware(req, res, data, assetPath));
       process.nextTick(() => {
         log(createActionEndEntry(processingAssetRequestLogEntry));
@@ -512,19 +601,24 @@ class Server {
   }
 
   processRequest: (
-    IncomingMessage,
-    ServerResponse,
-    ((e: ?Error) => void),
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: (e: ?Error) => void,
   ) => void = (
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (error: ?Error) => void,
   ) => {
     this._processRequest(req, res, next).catch(next);
   };
 
   _parseOptions(url: string): BundleOptions {
-    return parseOptionsFromUrl(url, new Set(this._config.resolver.platforms));
+    const {bundleType: _bundleType, ...bundleOptions} =
+      parseBundleOptionsFromBundleRequestUrl(
+        url,
+        new Set(this._config.resolver.platforms),
+      );
+    return bundleOptions;
   }
 
   _rewriteAndNormalizeUrl(requestUrl: string): string {
@@ -536,22 +630,45 @@ class Server {
   async _processRequest(
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
-  ) {
+    next: (error: ?Error) => void,
+  ): Promise<void> {
     const originalUrl = req.url;
+    debug('Handling request:    %s', originalUrl);
     req.url = this._rewriteAndNormalizeUrl(req.url);
-    const urlObj = url.parse(req.url, true);
-    const {host} = req.headers;
-    debug(
-      `Handling request: ${host ? 'http://' + host : ''}${req.url}` +
-        (originalUrl !== req.url ? ` (rewritten from ${originalUrl})` : ''),
-    );
-    const formattedUrl = url.format({
-      ...urlObj,
-      host,
-      protocol: 'http',
-    });
+    if (req.url !== originalUrl) {
+      debug('Rewritten to:    %s', req.url);
+    }
+    const reqHost = req.headers['x-forwarded-host'] || req.headers['host'];
+    debug('Request host is:    %s', req.headers['host']);
+    if (req.headers['x-forwarded-host']) {
+      debug(
+        'Request x-forwarded-host is:    %s',
+        req.headers['x-forwarded-host'],
+      );
+    }
+    if (!reqHost) {
+      throw new Error('No host header was found.');
+    }
+
+    const reqProtocol =
+      req.headers['x-forwarded-proto'] ||
+      // $FlowFixMe[prop-missing] not missing for https requests
+      (req.socket?.encrypted === true ? 'https' : 'http');
+    const urlObj = new URL(req.url, reqProtocol + '://' + reqHost);
+
+    const formattedUrl = urlObj.toString();
+    if (req.url !== formattedUrl) {
+      debug('Formatted as:    %s', formattedUrl);
+    }
+
     const pathname = urlObj.pathname || '';
+
+    // using this Metro particular convention for decoding URL paths into file paths
+    const filePathname = pathname
+      .split('/')
+      .map(segment => decodeURIComponent(segment))
+      .join('/');
+
     const buildNumber = this.getNewBuildNumber();
     if (pathname.endsWith('.bundle')) {
       const options = this._parseOptions(formattedUrl);
@@ -564,7 +681,7 @@ class Server {
       });
 
       if (this._serverOptions && this._serverOptions.onBundleBuilt) {
-        this._serverOptions.onBundleBuilt(pathname);
+        this._serverOptions.onBundleBuilt(filePathname);
       }
     } else if (pathname.endsWith('.map')) {
       // Chrome dev tools may need to access the source maps.
@@ -593,39 +710,33 @@ class Server {
     } else if (pathname === '/symbolicate') {
       await this._symbolicate(req, res);
     } else {
-      let handled = false;
-      for (const [pathnamePrefix, normalizedRootDir] of this
-        ._sourceRequestRoutingMap) {
-        if (pathname.startsWith(pathnamePrefix)) {
-          await this._processSourceRequest(
-            req,
-            res,
-            pathnamePrefix,
-            normalizedRootDir,
-          );
-          handled = true;
-          break;
-        }
+      let sourceFilePath =
+        this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
+      if (
+        sourceFilePath == null &&
+        filePathname.startsWith('/[metro-watchFolders]/')
+      ) {
+        // The id may belong to a root added before the bundler is ready.
+        await this._bundler.getBundler().ready();
+        sourceFilePath =
+          this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
       }
-      if (!handled) {
+      // Virtual modules aren't served by URL yet.
+      if (sourceFilePath != null && !isVirtualModuleUrl(urlObj.searchParams)) {
+        await this._processSourceRequest(sourceFilePath, res);
+      } else {
         next();
       }
     }
   }
 
   async _processSourceRequest(
-    req: IncomingMessage,
+    filePath: string,
     res: ServerResponse,
-    pathnamePrefix: string,
-    rootDir: string,
   ): Promise<void> {
-    const urlObj = url.parse(req.url, true);
-    const relativePathname = nullthrows(urlObj.pathname).substr(
-      pathnamePrefix.length,
-    );
     if (
       !this._allowedSuffixesForSourceRequests.some(suffix =>
-        relativePathname.endsWith(suffix),
+        filePath.endsWith(suffix),
       )
     ) {
       res.writeHead(404);
@@ -633,15 +744,14 @@ class Server {
       return;
     }
     const depGraph = await this._bundler.getBundler().getDependencyGraph();
-    const filePath = path.join(rootDir, relativePathname);
     try {
-      depGraph.getSha1(filePath);
+      await depGraph.getOrComputeSha1(filePath);
     } catch {
       res.writeHead(404);
       res.end();
       return;
     }
-    const mimeType = mime.lookup(path.basename(relativePathname));
+    const mimeType = mime.contentType(path.basename(filePath));
     res.setHeader('Content-Type', mimeType);
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -657,34 +767,40 @@ class Server {
   }
 
   _createRequestProcessor<T>({
+    bundleType,
     createStartEntry,
     createEndEntry,
     build,
     delete: deleteFn,
     finish,
   }: {
-    +createStartEntry: (context: ProcessStartContext) => ActionLogEntryData,
-    +createEndEntry: (
+    readonly bundleType: 'assets' | 'bundle' | 'map',
+    readonly createStartEntry: (
+      context: ProcessStartContext,
+    ) => ActionLogEntryData,
+    readonly createEndEntry: (
       context: ProcessEndContext<T>,
-    ) => $Rest<ActionStartLogEntry, LogEntry>,
-    +build: (context: ProcessStartContext) => Promise<T>,
-    +delete?: (context: ProcessDeleteContext) => Promise<void>,
-    +finish: (context: ProcessEndContext<T>) => void,
+    ) => Partial<ActionStartLogEntry>,
+    readonly build: (context: ProcessStartContext) => Promise<T>,
+    readonly delete?: (context: ProcessDeleteContext) => Promise<void>,
+    readonly finish: (context: ProcessEndContext<T>) => void,
   }): (
     req: IncomingMessage,
     res: ServerResponse,
     bundleOptions: BundleOptions,
-    buildContext: $ReadOnly<{
+    buildContext: Readonly<{
       buildNumber: number,
       bundlePerfLogger: RootPerfLogger,
     }>,
   ) => Promise<void> {
+    /* $FlowFixMe[incompatible-type] Error exposed after fixing this typing
+     * unsoundness in flow */
     return async function requestProcessor(
       this: Server,
       req: IncomingMessage,
       res: ServerResponse,
       bundleOptions: BundleOptions,
-      buildContext: $ReadOnly<{
+      buildContext: Readonly<{
         buildNumber: number,
         bundlePerfLogger: RootPerfLogger,
       }>,
@@ -752,25 +868,23 @@ class Server {
       const mres = MultipartResponse.wrapIfSupported(req, res);
 
       let onProgress = null;
-      let lastProgress = -1;
+      let lastRatio = -1;
       if (this._config.reporter) {
         onProgress = (transformedFileCount: number, totalFileCount: number) => {
-          const currentProgress = parseInt(
-            (transformedFileCount / totalFileCount) * 100,
-            10,
+          const newRatio = calculateBundleProgressRatio(
+            transformedFileCount,
+            totalFileCount,
+            lastRatio,
           );
 
-          // We want to throttle the updates so that we only show meaningful
-          // UI updates slow enough for the client to actually handle them. For
-          // that, we check the percentage, and only send percentages that are
-          // actually different and that have increased from the last one we sent.
-          if (currentProgress > lastProgress || totalFileCount < 10) {
+          if (newRatio > lastRatio) {
             if (mres instanceof MultipartResponse) {
               mres.writeChunk(
                 {'Content-Type': 'application/json'},
                 JSON.stringify({
                   done: transformedFileCount,
                   total: totalFileCount,
+                  percent: Math.floor(newRatio * 100),
                 }),
               );
             }
@@ -781,12 +895,11 @@ class Server {
             // is not actually sent in the response until after bundling is complete. This
             // would defeat the purpose of sending progress, so we `uncork` the stream now
             // which will force the response to flush to the client immediately.
-            // $FlowFixMe[method-unbinding] added when improving typing for this parameters
             if (res.socket != null && res.socket.uncork != null) {
               res.socket.uncork();
             }
 
-            lastProgress = currentProgress;
+            lastRatio = newRatio;
           }
 
           this._reporter.update({
@@ -801,7 +914,7 @@ class Server {
       this._reporter.update({
         buildID: getBuildID(buildNumber),
         bundleDetails: {
-          bundleType: bundleOptions.bundleType,
+          bundleType,
           customResolverOptions: bundleOptions.customResolverOptions,
           customTransformOptions: bundleOptions.customTransformOptions,
           dev: transformOptions.dev,
@@ -813,7 +926,7 @@ class Server {
         type: 'bundle_build_started',
       });
 
-      const startContext = {
+      const startContext: ProcessStartContext = {
         buildNumber,
         bundleOptions,
         entryFile: resolvedEntryFilePath,
@@ -832,8 +945,18 @@ class Server {
         createActionStartEntry(createStartEntry(startContext)),
       );
 
+      const fetchTiming: FetchTiming = {
+        graphId,
+        startTime: requestStartTimestamp,
+        endTime: null,
+        isPrefetch: req.method === 'HEAD',
+      };
+
       let result;
       try {
+        this._fetchTimings.push(fetchTiming);
+        this._activeFetchCount++;
+
         result = await build(startContext);
       } catch (error) {
         const formattedError = formatBundlingError(error);
@@ -866,9 +989,36 @@ class Server {
         buildContext.bundlePerfLogger.end('FAIL');
 
         return;
+      } finally {
+        fetchTiming.endTime = performance.timeOrigin + performance.now();
+
+        if (!fetchTiming.isPrefetch) {
+          buildContext.bundlePerfLogger.annotate({
+            bool: {
+              had_competing_prefetch: this._fetchTimings
+                // fetching the same bundle as a prefetch don't compete, since they resolve a shared promise for the same graph id
+                .filter(t => t.isPrefetch && t.graphId !== graphId)
+                .some(prefetch => {
+                  const prefetchEndTime =
+                    prefetch.endTime ?? Number.MAX_SAFE_INTEGER;
+                  const fetchEndTime =
+                    fetchTiming.endTime ?? Number.MAX_SAFE_INTEGER;
+                  return (
+                    prefetch.startTime < fetchEndTime &&
+                    prefetchEndTime > fetchTiming.startTime
+                  );
+                }),
+            },
+          });
+        }
+
+        this._activeFetchCount--;
+        if (this._activeFetchCount === 0) {
+          this._fetchTimings = [];
+        }
       }
 
-      const endContext = {
+      const endContext: ProcessEndContext<T> = {
         ...startContext,
         result,
       };
@@ -880,7 +1030,7 @@ class Server {
       });
 
       log(
-        /* $FlowFixMe(>=0.122.0 site=react_native_fb) This comment suppresses
+        /* $FlowFixMe[cannot-spread-inexact](>=0.122.0 site=react_native_fb) This comment suppresses
          * an error found when Flow v0.122.0 was deployed. To see the error,
          * delete this comment and run Flow. */
         createActionEndEntry({
@@ -895,15 +1045,17 @@ class Server {
     req: IncomingMessage,
     res: ServerResponse,
     bundleOptions: BundleOptions,
-    buildContext: $ReadOnly<{
+    buildContext: Readonly<{
       buildNumber: number,
       bundlePerfLogger: RootPerfLogger,
     }>,
   ) => Promise<void> = this._createRequestProcessor({
+    bundleType: 'bundle',
     createStartEntry(context: ProcessStartContext) {
       return {
         action_name: 'Requesting bundle',
         bundle_url: context.req.url,
+        bundle_original_url: context.req.originalUrl ?? 'unknown',
         entry_point: context.entryFile,
         bundler: 'delta',
         build_id: getBuildID(context.buildNumber),
@@ -994,10 +1146,12 @@ class Server {
           processModuleFilter: this._config.serializer.processModuleFilter,
           createModuleId: this._createModuleId,
           getRunModuleStatement: this._config.serializer.getRunModuleStatement,
+          globalPrefix: this._config.transformer.globalPrefix,
           includeAsyncPaths: graphOptions.lazy,
           dev: transformOptions.dev,
           projectRoot: this._config.projectRoot,
           modulesOnly: serializerOptions.modulesOnly,
+          reservedString: RESERVED_STRING,
           runBeforeMainModule:
             this._config.serializer.getModulesRunBeforeMainModule(
               path.relative(this._config.projectRoot, entryFile),
@@ -1006,12 +1160,15 @@ class Server {
           sourceMapUrl: serializerOptions.sourceMapUrl,
           sourceUrl: serializerOptions.sourceUrl,
           inlineSourceMap: serializerOptions.inlineSourceMap,
-          serverRoot:
-            this._config.server.unstable_serverRoot ?? this._config.projectRoot,
+          serverRoot: this._rootUrlMap.serverRootDir,
           shouldAddToIgnoreList: (module: Module<>) =>
             this._shouldAddModuleToIgnoreList(module),
           getSourceUrl: (module: Module<>) =>
             this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+          dependencyMapReservedName:
+            this._config.transformer.unstable_dependencyMapReservedName,
+          unstable_inlineDependencyMap:
+            this._config.serializer.unstable_inlineDependencyMap,
         },
       );
       bundlePerfLogger.point('serializingBundle_end');
@@ -1028,10 +1185,11 @@ class Server {
       };
     },
     finish({req, mres, serializerOptions, result, bundlePerfLogger}) {
+      const bundleByteLength = Buffer.byteLength(result.bundle);
       bundlePerfLogger.annotate({
         int: {
           bundle_length: result.bundle.length,
-          bundle_byte_length: Buffer.byteLength(result.bundle),
+          bundle_byte_length: bundleByteLength,
         },
       });
       mres.once('error', () => {
@@ -1071,10 +1229,7 @@ class Server {
         }
         mres.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
         mres.setHeader('Last-Modified', result.lastModifiedDate.toUTCString());
-        mres.setHeader(
-          'Content-Length',
-          String(Buffer.byteLength(result.bundle)),
-        );
+        mres.setHeader('Content-Length', String(bundleByteLength));
         mres.end(result.bundle);
       }
     },
@@ -1087,7 +1242,7 @@ class Server {
 
   // This function ensures that modules in source maps are sorted in the same
   // order as in a plain JS bundle.
-  _getSortedModules(graph: ReadOnlyGraph<>): $ReadOnlyArray<Module<>> {
+  _getSortedModules(graph: ReadOnlyGraph<>): ReadonlyArray<Module<>> {
     const modules = [...graph.dependencies.values()];
     // Assign IDs to modules in a consistent order
     for (const module of modules) {
@@ -1104,11 +1259,12 @@ class Server {
     req: IncomingMessage,
     res: ServerResponse,
     bundleOptions: BundleOptions,
-    buildContext: $ReadOnly<{
+    buildContext: Readonly<{
       buildNumber: number,
       bundlePerfLogger: RootPerfLogger,
     }>,
   ) => Promise<void> = this._createRequestProcessor({
+    bundleType: 'map',
     createStartEntry(context: ProcessStartContext) {
       return {
         action_name: 'Requesting sourcemap',
@@ -1224,11 +1380,12 @@ class Server {
     req: IncomingMessage,
     res: ServerResponse,
     bundleOptions: BundleOptions,
-    buildContext: $ReadOnly<{
+    buildContext: Readonly<{
       buildNumber: number,
       bundlePerfLogger: RootPerfLogger,
     }>,
   ) => Promise<void> = this._createRequestProcessor({
+    bundleType: 'assets',
     createStartEntry(context: ProcessStartContext) {
       return {
         action_name: 'Requesting assets',
@@ -1237,7 +1394,7 @@ class Server {
         bundler: 'delta',
       };
     },
-    createEndEntry(context: ProcessEndContext<$ReadOnlyArray<AssetData>>) {
+    createEndEntry(context: ProcessEndContext<ReadonlyArray<AssetData>>) {
       return {
         bundler: 'delta',
       };
@@ -1255,13 +1412,10 @@ class Server {
         {onProgress, shallow: false, lazy: false},
       );
 
-      return await getAssets(dependencies, {
-        processModuleFilter: this._config.serializer.processModuleFilter,
-        assetPlugins: this._config.transformer.assetPlugins,
-        platform: transformOptions.platform,
-        publicPath: this._config.transformer.publicPath,
-        projectRoot: this._config.projectRoot,
-      });
+      return await this._getAssetsFromDependencies(
+        dependencies,
+        transformOptions.platform,
+      );
     },
     finish({mres, result}) {
       mres.setHeader('Content-Type', 'application/json');
@@ -1269,23 +1423,58 @@ class Server {
     },
   });
 
-  async _symbolicate(req: IncomingMessage, res: ServerResponse) {
+  async _symbolicate(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const depGraph = await this._bundler.getBundler().getDependencyGraph();
+
+    // A frame's file may be a virtual-prefixed path from a source map with
+    // server URL source paths, whose segments are percent-encoded. One that
+    // does not decode is taken as it is.
+    const filePathOfVirtualPathname = (file: string): ?string => {
+      try {
+        return this._rootUrlMap.filePathOfUrlPathname(file);
+      } catch {
+        return this._rootUrlMap.filePathOfUrlDecodedPathname(file);
+      }
+    };
+
     const getCodeFrame = (
       urls: Set<string>,
-      symbolicatedStack: $ReadOnlyArray<StackFrameOutput>,
+      symbolicatedStack: ReadonlyArray<StackFrameOutput>,
     ) => {
+      const allFramesCollapsed = symbolicatedStack.every(
+        ({collapse}) => collapse,
+      );
+
       for (let i = 0; i < symbolicatedStack.length; i++) {
         const {collapse, column, file, lineNumber} = symbolicatedStack[i];
 
         if (
-          collapse ||
+          // If all the frames are collapsed then we should ignore the collapse flag
+          // and always show the first valid frame.
+          (!allFramesCollapsed && collapse) ||
           lineNumber == null ||
           (file != null && urls.has(file))
         ) {
           continue;
         }
 
-        const fileAbsolute = path.resolve(this._config.projectRoot, file ?? '');
+        const fileAbsolute =
+          file != null
+            ? (filePathOfVirtualPathname(file) ??
+              (path.isAbsolute(file)
+                ? file
+                : path.resolve(this._config.projectRoot, file)))
+            : null;
+        if (fileAbsolute == null) {
+          continue;
+        }
+        if (!depGraph.doesFileExist(fileAbsolute)) {
+          debug(
+            'Skipping code frame for file not in dependency graph.',
+            fileAbsolute,
+          );
+          continue;
+        }
         try {
           return {
             content: codeFrameColumns(
@@ -1304,43 +1493,93 @@ class Server {
             fileName: file,
           };
         } catch (error) {
-          console.error(error);
+          debug(
+            'Generating code frame failed on file read.',
+            fileAbsolute,
+            error,
+          );
         }
       }
 
       return null;
     };
 
+    let inputValidated = false;
     try {
       const symbolicatingLogEntry = log(
         createActionStartEntry('Symbolicating'),
       );
       debug('Start symbolication');
-      /* $FlowFixMe: where is `rawBody` defined? Is it added by the `connect` framework? */
-      const body = await req.rawBody;
-      const parsedBody = JSON.parse(body);
 
-      const rewriteAndNormalizeStackFrame = <T>(
-        frame: T,
-        lineNumber: number,
-      ): T => {
-        invariant(
-          frame != null && typeof frame === 'object',
-          'Bad stack frame at line %d, expected object, received: %s',
-          lineNumber,
-          typeof frame,
-        );
-        const frameFile = frame.file;
-        if (typeof frameFile === 'string' && frameFile.includes('://')) {
-          return {
-            ...frame,
-            file: this._rewriteAndNormalizeUrl(frameFile),
-          };
-        }
-        return frame;
+      const parsedBody = await parseJsonBody(req, {strict: false});
+
+      let validatedBody: {
+        stack: ReadonlyArray<JsonData>,
+        extraData?: JsonData,
       };
 
-      const stack = parsedBody.stack.map(rewriteAndNormalizeStackFrame);
+      if (
+        parsedBody != null &&
+        typeof parsedBody === 'object' &&
+        !Array.isArray(parsedBody) &&
+        Array.isArray(parsedBody['stack'])
+      ) {
+        const maybeStack: Array<JsonData> = parsedBody['stack'];
+        const extraData = parsedBody['extraData'];
+        validatedBody = {
+          stack: maybeStack,
+          extraData,
+        };
+      } else {
+        throw new Error(
+          `Bad symbolication input, expected object with stack array, got: ${JSON.stringify(parsedBody)}`,
+        );
+      }
+
+      const validateAndNormalizeStackFrame = (
+        frame: JsonData,
+      ): StackFrameInput => {
+        if (
+          frame == null ||
+          typeof frame !== 'object' ||
+          Array.isArray(frame)
+        ) {
+          throw new Error('Expected frame to be a JSON object');
+        }
+        if (frame.file != null && typeof frame.file !== 'string') {
+          throw new Error('Expected file to be string or nullish');
+        }
+        let frameFile = frame.file;
+        if (frameFile != null && frameFile.includes('://')) {
+          frameFile = this._rewriteAndNormalizeUrl(frameFile);
+        }
+        if (frame.methodName != null && typeof frame.methodName !== 'string') {
+          throw new Error('Expected methodName to be string or nullish');
+        }
+        if (frame.lineNumber != null && typeof frame.lineNumber !== 'number') {
+          throw new Error('Expected lineNumber to be number or nullish');
+        }
+        if (frame.column != null && typeof frame.column !== 'number') {
+          throw new Error('Expected column to be number or nullish');
+        }
+        return {
+          ...frame,
+          file: frameFile,
+          lineNumber: frame.lineNumber,
+          column: frame.column,
+          methodName: frame.methodName,
+        };
+      };
+
+      const stack = validatedBody.stack.map((frame, lineNumber) => {
+        try {
+          return validateAndNormalizeStackFrame(frame);
+        } catch (e) {
+          throw new Error(`Bad frame at line ${lineNumber}: ${e.message}`);
+        }
+      });
+
+      inputValidated = true;
       // In case of multiple bundles / HMR, some stack frames can have different URLs from others
       const urls = new Set<string>();
 
@@ -1372,7 +1611,7 @@ class Server {
         stack,
         zip(urls.values(), sourceMaps),
         this._config,
-        parsedBody.extraData ?? {},
+        validatedBody.extraData ?? {},
       );
 
       debug('Symbolication done');
@@ -1386,8 +1625,8 @@ class Server {
         log(createActionEndEntry(symbolicatingLogEntry));
       });
     } catch (error) {
-      console.error(error.stack || error);
-      res.statusCode = 500;
+      debug('Symbolication failed', error.stack || error);
+      res.statusCode = inputValidated ? 500 : 400;
       res.end(JSON.stringify({error: error.message}));
     }
   }
@@ -1457,7 +1696,7 @@ class Server {
       relativeTo,
       resolverOptions,
       transformOptions,
-    }: $ReadOnly<{
+    }: Readonly<{
       relativeTo: 'project' | 'server',
       resolverOptions: ResolverInputOptions,
       transformOptions: TransformInputOptions,
@@ -1468,13 +1707,25 @@ class Server {
       transformOptions.platform,
       resolverOptions,
     );
-    const rootDir =
-      relativeTo === 'server'
-        ? this._getServerRootDir()
-        : this._config.projectRoot;
+    let rootDir;
+    let resolvedFilePath;
+    if (relativeTo === 'project') {
+      rootDir = this._config.projectRoot;
+      resolvedFilePath = filePath;
+    } else {
+      const absolutePath =
+        this._rootUrlMap.filePathOfUrlDecodedPathname(filePath);
+      rootDir = absolutePath != null ? '/' : this._rootUrlMap.serverRootDir;
+      resolvedFilePath = absolutePath ?? filePath;
+    }
     return resolutionFn(`${rootDir}/.`, {
-      name: filePath,
-      data: {key: filePath, locs: [], asyncType: null},
+      name: resolvedFilePath,
+      data: {
+        key: resolvedFilePath,
+        locs: [],
+        asyncType: null,
+        isESMImport: false,
+      },
     }).filePath;
   }
 
@@ -1482,26 +1733,24 @@ class Server {
     return this._nextBundleBuildNumber++;
   }
 
-  getPlatforms(): $ReadOnlyArray<string> {
+  getPlatforms(): ReadonlyArray<string> {
     return this._config.resolver.platforms;
   }
 
-  getWatchFolders(): $ReadOnlyArray<string> {
+  getWatchFolders(): ReadonlyArray<string> {
     return this._config.watchFolders;
   }
 
-  static DEFAULT_GRAPH_OPTIONS: $ReadOnly<{
+  static DEFAULT_GRAPH_OPTIONS: Readonly<{
     customResolverOptions: CustomResolverOptions,
     customTransformOptions: CustomTransformOptions,
     dev: boolean,
-    hot: boolean,
     minify: boolean,
     unstable_transformProfile: 'default',
   }> = {
     customResolverOptions: Object.create(null),
     customTransformOptions: Object.create(null),
     dev: true,
-    hot: false,
     minify: false,
     unstable_transformProfile: 'default',
   };
@@ -1532,12 +1781,8 @@ class Server {
     sourcePaths: SourcePathsMode.Absolute,
   };
 
-  _getServerRootDir(): string {
-    return this._config.server.unstable_serverRoot ?? this._config.projectRoot;
-  }
-
   _getEntryPointAbsolutePath(entryFile: string): string {
-    return path.resolve(this._getServerRootDir(), entryFile);
+    return path.resolve(this._rootUrlMap.serverRootDir, entryFile);
   }
 
   // Wait for the server to finish initializing.
@@ -1561,24 +1806,14 @@ class Server {
   // eslint-disable-next-line consistent-return
   _getModuleSourceUrl(module: Module<>, mode: SourcePathsMode): string {
     switch (mode) {
-      case SourcePathsMode.ServerUrl:
-        for (const [pathnamePrefix, normalizedRootDir] of this
-          ._sourceRequestRoutingMap) {
-          if (module.path.startsWith(normalizedRootDir + path.sep)) {
-            const relativePath = module.path.slice(
-              normalizedRootDir.length + 1,
-            );
-            const relativePathPosix = relativePath.split(path.sep).join('/');
-            return pathnamePrefix + encodeURI(relativePathPosix);
-          }
-        }
-        // Ordinarily all files should match one of the roots above. If they
-        // don't, try to preserve useful information, even if fetching the path
-        // from Metro might fail.
-        const modulePathPosix = module.path.split(path.sep).join('/');
-        return modulePathPosix.startsWith('/')
-          ? encodeURI(modulePathPosix)
-          : '/' + encodeURI(modulePathPosix);
+      case SourcePathsMode.ServerUrl: {
+        const pathname = this._rootUrlMap.urlPathnameOfFilePath(
+          getModuleSourcePath(module.path),
+        );
+        return isVirtualModulePath(module.path)
+          ? `${pathname}?${VIRTUAL_MODULE_URL_PARAM}=true`
+          : pathname;
+      }
       case SourcePathsMode.Absolute:
         return module.path;
     }
@@ -1586,7 +1821,7 @@ class Server {
 }
 
 function* zip<X, Y>(xs: Iterable<X>, ys: Iterable<Y>): Iterable<[X, Y]> {
-  //$FlowIssue #9324959
+  //$FlowFixMe[incompatible-type] #9324959
   const ysIter: Iterator<Y> = ys[Symbol.iterator]();
   for (const x of xs) {
     const y = ysIter.next();
@@ -1600,5 +1835,3 @@ function* zip<X, Y>(xs: Iterable<X>, ys: Iterable<Y>): Iterable<[X, Y]> {
 function getBuildID(buildNumber: number): string {
   return buildNumber.toString(36);
 }
-
-module.exports = Server;

@@ -9,22 +9,20 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import Resolver from '../index';
-import {createResolutionContext} from './utils';
-import path from 'path';
+import * as Resolver from '../index';
+import {createResolutionContext, posixToSystemPath as p} from './utils';
+import path from 'node:path';
 
 describe('asset resolutions', () => {
   const baseContext = {
     ...createResolutionContext({
-      '/root/project/index.js': '',
-      '/root/project/src/data.json': '',
-      '/root/project/assets/example.asset.json': '',
-      '/root/project/assets/icon.png': '',
-      '/root/project/assets/icon@2x.png': '',
+      [p('/root/project/index.js')]: '',
+      [p('/root/project/src/data.json')]: '',
+      [p('/root/project/assets/example.asset.json')]: '',
+      [p('/root/project/assets/icon.png')]: '',
+      [p('/root/project/assets/icon@2x.png')]: '',
     }),
-    originModulePath: '/root/project/index.js',
+    originModulePath: p('/root/project/index.js'),
   };
   const assetResolutions = ['1', '2'];
   const resolveAsset = (
@@ -40,7 +38,9 @@ describe('asset resolutions', () => {
       ),
     ];
 
-    assets = assets.filter(candidate => baseContext.doesFileExist(candidate));
+    assets = assets.filter(
+      candidate => baseContext.fileSystemLookup(candidate).exists,
+    );
 
     return assets.length ? assets : null;
   };
@@ -55,8 +55,8 @@ describe('asset resolutions', () => {
     expect(Resolver.resolve(context, './assets/icon.png', null)).toEqual({
       type: 'assetFiles',
       filePaths: [
-        '/root/project/assets/icon.png',
-        '/root/project/assets/icon@2x.png',
+        p('/root/project/assets/icon.png'),
+        p('/root/project/assets/icon@2x.png'),
       ],
     });
   });
@@ -72,7 +72,7 @@ describe('asset resolutions', () => {
     // Source file matching `sourceExts`
     expect(Resolver.resolve(context, './src/data.json', null)).toEqual({
       type: 'sourceFile',
-      filePath: '/root/project/src/data.json',
+      filePath: p('/root/project/src/data.json'),
     });
 
     // Asset file matching more specific asset ext
@@ -80,7 +80,7 @@ describe('asset resolutions', () => {
       Resolver.resolve(context, './assets/example.asset.json', null),
     ).toEqual({
       type: 'assetFiles',
-      filePaths: ['/root/project/assets/example.asset.json'],
+      filePaths: [p('/root/project/assets/example.asset.json')],
     });
   });
 });

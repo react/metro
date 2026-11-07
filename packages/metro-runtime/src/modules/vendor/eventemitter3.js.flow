@@ -9,7 +9,7 @@
  */
 'use strict';
 
-declare type ListenerFn = (...args: any[]) => mixed;
+declare type ListenerFn = (...args: any[]) => unknown;
 declare class EventEmitter {
   static constructor(): EventEmitter;
   static prefixed: string | boolean;

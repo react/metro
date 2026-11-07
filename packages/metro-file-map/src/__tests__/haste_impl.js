@@ -8,9 +8,12 @@
  * @oncall react_native
  */
 
+/* eslint-disable import/no-commonjs */
+
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
+
 let cacheKey;
 
 module.exports = {

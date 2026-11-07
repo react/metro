@@ -16,10 +16,10 @@ import type {
 } from 'fb-watchman';
 
 import WatchmanWatcher from '../WatchmanWatcher';
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 
 class MockClient extends EventEmitter {
-  command: JestMockFn<$ReadOnlyArray<$FlowFixMe>, mixed> = jest.fn();
+  command: JestMockFn<ReadonlyArray<$FlowFixMe>, unknown> = jest.fn();
 }
 const mockClient = new MockClient();
 
@@ -28,32 +28,51 @@ const cmdCallback = <T>(err: ?Error, result: Partial<T>): void => {
   mockClient.command.mock.lastCall[1](err, result);
 };
 
+// Convenience function to write paths with posix separators but convert them
+// to system separators, and prepend a mock drive letter to absolute paths on
+// Windows.
+const p: (filePath: string) => string = filePath =>
+  process.platform === 'win32'
+    ? filePath.replaceAll('/', '\\').replace(/^\\/, 'C:\\')
+    : filePath;
+
+// Format a posix path as a Watchman-native path on the current platform, i.e.,
+// on Windows, drive letters on absolute paths, but posix-style separators.
+// This should be used for mocking Watchman *output*.
+const wp: (filePath: string) => string = filePath =>
+  process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
+
 jest.mock('fb-watchman', () => ({
   Client: jest.fn().mockImplementation(() => mockClient),
 }));
 
 describe('WatchmanWatcher', () => {
   test('initializes with watch-project, clock, subscribe', () => {
-    const watchmanWatcher = new WatchmanWatcher('/project/subdir/js', {
-      dot: true,
-      ignored: false,
-      glob: ['**/*.js'],
+    const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+      ignored: null,
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
       watchmanDeferStates: ['busy'],
     });
-    const readyListener = jest.fn();
-    watchmanWatcher.on('ready', readyListener);
+    let isSettled = false;
+    const startPromise = watchmanWatcher
+      .startWatching()
+      .finally(() => (isSettled = true));
 
     expect(mockClient.command).toHaveBeenCalledWith(
-      ['watch-project', '/project/subdir/js'],
+      ['watch-project', p('/project/subdir/js')],
       expect.any(Function),
     );
     cmdCallback<WatchmanWatchResponse>(null, {
-      watch: '/project',
-      relative_path: 'subdir/js',
+      watch: wp('/project'),
+      relative_path: wp('subdir/js'),
     });
 
     expect(mockClient.command).toHaveBeenCalledWith(
-      ['clock', '/project'],
+      ['clock', p('/project')],
       expect.any(Function),
     );
     cmdCallback<WatchmanClockResponse>(null, {
@@ -63,38 +82,197 @@ describe('WatchmanWatcher', () => {
     expect(mockClient.command).toHaveBeenCalledWith(
       [
         'subscribe',
-        '/project',
+        p('/project'),
         watchmanWatcher.subscriptionName,
         {
           defer: ['busy'],
           fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
-          relative_root: 'subdir/js',
+          relative_root: p('subdir/js'),
           since: 'c:1629095304.251049',
         },
       ],
       expect.any(Function),
     );
 
-    expect(readyListener).not.toHaveBeenCalled();
+    // Promise should not settle until we get a subscribe response.
+    expect(isSettled).toBe(false);
+
     cmdCallback<WatchmanSubscribeResponse>(null, {});
-    expect(readyListener).toHaveBeenCalled();
+
+    // Return to assert promise resolves, not rejects
+    return startPromise;
+  });
+
+  test('subscribes since a supplied clock instead of fetching a fresh one', () => {
+    const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+      ignored: null,
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      watchmanDeferStates: ['busy'],
+      clocks: new Map([[wp('/project'), 'c:crawl-clock:1']]),
+    });
+    const startPromise = watchmanWatcher.startWatching();
+
+    cmdCallback<WatchmanWatchResponse>(null, {
+      watch: wp('/project'),
+      relative_path: wp('subdir/js'),
+    });
+
+    // With a clock for the watch root, there's no need for a `clock` command -
+    // the subscription is made `since` the supplied clock directly.
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      [
+        'subscribe',
+        p('/project'),
+        watchmanWatcher.subscriptionName,
+        {
+          defer: ['busy'],
+          fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
+          relative_root: p('subdir/js'),
+          since: 'c:crawl-clock:1',
+        },
+      ],
+      expect.any(Function),
+    );
+
+    cmdCallback<WatchmanSubscribeResponse>(null, {});
+    return startPromise;
+  });
+
+  test('fetches a fresh clock when no supplied clock matches the watch root', () => {
+    const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+      ignored: null,
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      watchmanDeferStates: ['busy'],
+      clocks: new Map([[wp('/other'), 'c:crawl-clock:1']]),
+    });
+    const startPromise = watchmanWatcher.startWatching();
+
+    cmdCallback<WatchmanWatchResponse>(null, {
+      watch: wp('/project'),
+      relative_path: wp('subdir/js'),
+    });
+
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      ['clock', p('/project')],
+      expect.any(Function),
+    );
+    cmdCallback<WatchmanClockResponse>(null, {
+      clock: 'c:fresh-clock:1',
+    });
+
+    expect(mockClient.command).toHaveBeenLastCalledWith(
+      [
+        'subscribe',
+        p('/project'),
+        watchmanWatcher.subscriptionName,
+        {
+          defer: ['busy'],
+          fields: ['name', 'exists', 'new', 'type', 'size', 'mtime_ms'],
+          relative_root: p('subdir/js'),
+          since: 'c:fresh-clock:1',
+        },
+      ],
+      expect.any(Function),
+    );
+
+    cmdCallback<WatchmanSubscribeResponse>(null, {});
+    return startPromise;
+  });
+
+  describe('change handling', () => {
+    let watchmanWatcher: WatchmanWatcher;
+    beforeEach(async () => {
+      watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+        ignored: null,
+        included: {
+          extensions: new Set(['js']),
+          basenames: new Set(),
+          basenamePrefixes: [],
+        },
+        watchmanDeferStates: ['busy'],
+      });
+      const startPromise = watchmanWatcher.startWatching();
+      cmdCallback<WatchmanWatchResponse>(null, {
+        watch: wp('/project'),
+        relative_path: wp('subdir/js'),
+      });
+      cmdCallback<WatchmanClockResponse>(null, {
+        clock: 'c:123',
+      });
+      cmdCallback<WatchmanSubscribeResponse>(null, {
+        'asserted-states': [],
+      });
+      return startPromise;
+    });
+
+    test('calls back onFileEvent when client emits subscription events', () => {
+      const handler = jest.fn();
+      watchmanWatcher.onFileEvent(handler);
+      mockClient.emit('subscription', {
+        since: 'c:123',
+        unilateral: true,
+        is_fresh_instance: false,
+        files: [
+          {
+            name: 'Foo.js',
+            type: 'f',
+            exists: true,
+            new: false,
+            mtime_ms: 1,
+            size: 10,
+          },
+        ],
+        clock: 'c:124',
+        root: '/project',
+        subscription: watchmanWatcher.subscriptionName,
+      });
+      expect(handler).toHaveBeenCalledWith({
+        event: 'touch',
+        relativePath: p('Foo.js'),
+        root: p('/project/subdir/js'),
+        clock: [p('/project'), 'c:124'],
+        metadata: expect.any(Object),
+      });
+    });
   });
 
   describe('getPauseReason', () => {
     let watchmanWatcher: WatchmanWatcher;
+    let startPromise: Promise<void>;
 
-    beforeEach(() => {
-      watchmanWatcher = new WatchmanWatcher('/project/subdir/js', {
-        dot: true,
-        ignored: false,
-        glob: ['**/*.js'],
+    beforeEach(async () => {
+      watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
+        ignored: null,
+        included: {
+          extensions: new Set(['js']),
+          basenames: new Set(),
+          basenamePrefixes: [],
+        },
         watchmanDeferStates: ['busy'],
       });
-      cmdCallback<WatchmanWatchResponse>(null, {});
-      cmdCallback<WatchmanClockResponse>(null, {});
+      startPromise = watchmanWatcher.startWatching();
+      cmdCallback<WatchmanWatchResponse>(null, {
+        watch: wp('/project'),
+        relative_path: wp('subdir/js'),
+      });
+      cmdCallback<WatchmanClockResponse>(null, {
+        clock: 'c:123',
+      });
     });
 
-    test('subscribe response is initally deferred', () => {
+    afterEach(() => {
+      return startPromise;
+    });
+
+    test('subscribe response is initially deferred', () => {
       cmdCallback<WatchmanSubscribeResponse>(null, {
         'asserted-states': ['busy'],
       });

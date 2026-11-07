@@ -4,14 +4,13 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  * @oncall react_native
  */
 
-'use strict';
-
-const invariant = require('invariant');
+import invariant from 'invariant';
+import {clearTimeout, setTimeout} from 'node:timers';
 
 type ProcessBatch<TItem, TResult> = (
   batch: Array<TItem>,
@@ -26,8 +25,8 @@ type BatchProcessorOptions = {
 
 type QueueItem<TItem, TResult> = {
   item: TItem,
-  reject: (error: mixed) => mixed,
-  resolve: (result: TResult) => mixed,
+  reject: (error: unknown) => unknown,
+  resolve: (result: TResult) => unknown,
   ...
 };
 
@@ -38,12 +37,12 @@ type QueueItem<TItem, TResult> = {
  * if we have many items pending in a short amount of time, we can start
  * processing right away.
  */
-class BatchProcessor<TItem, TResult> {
+export default class BatchProcessor<TItem, TResult> {
   _currentProcessCount: number;
   _options: BatchProcessorOptions;
   _processBatch: ProcessBatch<TItem, TResult>;
   _queue: Array<QueueItem<TItem, TResult>>;
-  _timeoutHandle: ?TimeoutID;
+  _timeoutHandle: ?ReturnType<typeof setTimeout>;
 
   constructor(
     options: BatchProcessorOptions,
@@ -54,8 +53,6 @@ class BatchProcessor<TItem, TResult> {
     this._queue = [];
     this._timeoutHandle = null;
     this._currentProcessCount = 0;
-    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-    (this: any)._processQueue = this._processQueue.bind(this);
   }
 
   _onBatchFinished(): void {
@@ -74,7 +71,7 @@ class BatchProcessor<TItem, TResult> {
     this._onBatchFinished();
   }
 
-  _onBatchError(jobs: Array<QueueItem<TItem, TResult>>, error: mixed): void {
+  _onBatchError(jobs: Array<QueueItem<TItem, TResult>>, error: unknown): void {
     for (let i = 0; i < jobs.length; ++i) {
       jobs[i].reject(error);
     }
@@ -90,25 +87,23 @@ class BatchProcessor<TItem, TResult> {
       this._processBatch(
         jobs.map((job: QueueItem<TItem, TResult>) => job.item),
       ).then(
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-        this._onBatchResults.bind(this, jobs),
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-        this._onBatchError.bind(this, jobs),
+        results => this._onBatchResults(jobs, results),
+        error => this._onBatchError(jobs, error),
       );
     }
   }
 
   _processQueueOnceReady(): void {
     if (this._queue.length >= this._options.maximumItems) {
-      clearTimeout(this._timeoutHandle);
-      // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-      process.nextTick(this._processQueue);
+      if (this._timeoutHandle != null) {
+        clearTimeout(this._timeoutHandle);
+      }
+      process.nextTick(() => this._processQueue());
       return;
     }
     if (this._timeoutHandle == null) {
       this._timeoutHandle = setTimeout(
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-        this._processQueue,
+        () => this._processQueue(),
         this._options.maximumDelayMs,
       );
     }
@@ -117,14 +112,16 @@ class BatchProcessor<TItem, TResult> {
   queue(item: TItem): Promise<TResult> {
     return new Promise(
       (
-        resolve: (result: TResult) => mixed,
-        reject: (error: mixed) => mixed,
+        resolve: (result: TResult) => unknown,
+        reject: (error: unknown) => unknown,
       ) => {
         this._queue.push({item, resolve, reject});
         this._processQueueOnceReady();
       },
     );
   }
-}
 
-module.exports = BatchProcessor;
+  getQueueLength(): number {
+    return this._queue.length;
+  }
+}

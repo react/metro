@@ -4,33 +4,43 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow
+ * @format
  */
 
-'use strict';
-
+import type {ReadonlySourceLocation} from '../../shared/types';
 import type {NodePath} from '@babel/traverse';
-import type {CallExpression, Identifier, StringLiteral} from '@babel/types';
+import type {
+  ArgumentPlaceholder,
+  CallExpression,
+  Expression,
+  File,
+  Identifier,
+  Node,
+  Program,
+  SpreadElement,
+  StringLiteral,
+} from '@babel/types';
 import type {
   AllowOptionalDependencies,
   AsyncDependencyType,
-} from 'metro/src/DeltaBundler/types.flow.js';
+} from 'metro/private/DeltaBundler/types';
 
-const generate = require('@babel/generator').default;
-const template = require('@babel/template').default;
-const traverse = require('@babel/traverse').default;
-const types = require('@babel/types');
-const crypto = require('crypto');
-const nullthrows = require('nullthrows');
+import {traverse} from '@babel/core';
+import generate from '@babel/generator';
+import template from '@babel/template';
+import * as types from '@babel/types';
+import {isImport, isProgram} from '@babel/types';
+import invariant from 'invariant';
+import crypto from 'node:crypto';
+import nullthrows from 'nullthrows';
 
-const {isImport} = types;
-
-type ImportDependencyOptions = $ReadOnly<{
+type ImportDependencyOptions = Readonly<{
   asyncType: AsyncDependencyType,
+  isESMImport: boolean,
 }>;
 
-export type Dependency = $ReadOnly<{
+export type Dependency = Readonly<{
   data: DependencyData,
   name: string,
 }>;
@@ -38,37 +48,42 @@ export type Dependency = $ReadOnly<{
 // TODO: Convert to a Flow enum
 export type ContextMode = 'sync' | 'eager' | 'lazy' | 'lazy-once';
 
-type ContextFilter = $ReadOnly<{pattern: string, flags: string}>;
+type ContextFilter = Readonly<{pattern: string, flags: string}>;
 
-export type RequireContextParams = $ReadOnly<{
+export type RequireContextParams = Readonly<{
   /* Should search for files recursively. Optional, default `true` when `require.context` is used */
   recursive: boolean,
   /* Filename filter pattern for use in `require.context`. Optional, default `.*` (any file) when `require.context` is used */
-  filter: $ReadOnly<ContextFilter>,
+  filter: Readonly<ContextFilter>,
   /** Mode for resolving dynamic dependencies. Defaults to `sync` */
   mode: ContextMode,
 }>;
 
-type DependencyData = $ReadOnly<{
+type DependencyData = Readonly<{
   // A locally unique key for this dependency within the current module.
   key: string,
   // If null, then the dependency is synchronous.
   // (ex. `require('foo')`)
   asyncType: AsyncDependencyType | null,
+  // If true, the dependency is declared using an ESM import, e.g.
+  // "import x from 'y'" or "await import('z')". A resolver should typically
+  // use this to assert either "import" or "require" for conditional exports
+  // and subpath imports.
+  isESMImport: boolean,
   isOptional?: boolean,
-  locs: $ReadOnlyArray<BabelSourceLocation>,
+  locs: ReadonlyArray<ReadonlySourceLocation>,
   /** Context for requiring a collection of modules. */
   contextParams?: RequireContextParams,
 }>;
 
 export type MutableInternalDependency = {
   ...DependencyData,
-  locs: Array<BabelSourceLocation>,
+  locs: Array<ReadonlySourceLocation>,
   index: number,
   name: string,
 };
 
-export type InternalDependency = $ReadOnly<MutableInternalDependency>;
+export type InternalDependency = Readonly<MutableInternalDependency>;
 
 export type State = {
   asyncRequireModulePathStringLiteral: ?StringLiteral,
@@ -81,24 +96,26 @@ export type State = {
   allowOptionalDependencies: AllowOptionalDependencies,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
+  unstable_isESMImportAtSource: ?(location: ReadonlySourceLocation) => boolean,
 };
 
-export type Options = $ReadOnly<{
+export type Options = Readonly<{
   asyncRequireModulePath: string,
   dependencyMapName: ?string,
   dynamicRequires: DynamicRequiresBehavior,
-  inlineableCalls: $ReadOnlyArray<string>,
+  inlineableCalls: ReadonlyArray<string>,
   keepRequireNames: boolean,
   allowOptionalDependencies: AllowOptionalDependencies,
   dependencyTransformer?: DependencyTransformer,
   /** Enable `require.context` statements which can be used to import multiple files in a directory. */
   unstable_allowRequireContext: boolean,
+  unstable_isESMImportAtSource?: ?(location: ReadonlySourceLocation) => boolean,
 }>;
 
-export type CollectedDependencies = $ReadOnly<{
-  ast: BabelNodeFile,
+export type CollectedDependencies = Readonly<{
+  ast: File,
   dependencyMapName: string,
-  dependencies: $ReadOnlyArray<Dependency>,
+  dependencies: ReadonlyArray<Dependency>,
 }>;
 
 export interface DependencyTransformer {
@@ -108,6 +125,11 @@ export interface DependencyTransformer {
     state: State,
   ): void;
   transformImportCall(
+    path: NodePath<>,
+    dependency: InternalDependency,
+    state: State,
+  ): void;
+  transformImportMaybeSyncCall(
     path: NodePath<>,
     dependency: InternalDependency,
     state: State,
@@ -131,11 +153,11 @@ export type DynamicRequiresBehavior = 'throwAtRuntime' | 'reject';
  *
  * The second argument is only provided for debugging purposes.
  */
-function collectDependencies(
-  ast: BabelNodeFile,
+export default function collectDependencies(
+  ast: File,
   options: Options,
 ): CollectedDependencies {
-  const visited = new WeakSet<BabelNodeCallExpression>();
+  const visited = new WeakSet<CallExpression>();
 
   const state: State = {
     asyncRequireModulePathStringLiteral: null,
@@ -148,13 +170,11 @@ function collectDependencies(
     keepRequireNames: options.keepRequireNames,
     allowOptionalDependencies: options.allowOptionalDependencies,
     unstable_allowRequireContext: options.unstable_allowRequireContext,
+    unstable_isESMImportAtSource: options.unstable_isESMImportAtSource ?? null,
   };
 
   const visitor = {
-    CallExpression(
-      path: NodePath<BabelNodeCallExpression>,
-      state: State,
-    ): void {
+    CallExpression(path: NodePath<CallExpression>, state: State): void {
       if (visited.has(path.node)) {
         return;
       }
@@ -165,6 +185,7 @@ function collectDependencies(
       if (isImport(callee)) {
         processImportCall(path, state, {
           asyncType: 'async',
+          isESMImport: true,
         });
         return;
       }
@@ -172,6 +193,7 @@ function collectDependencies(
       if (name === '__prefetchImport' && !path.scope.getBinding(name)) {
         processImportCall(path, state, {
           asyncType: 'prefetch',
+          isESMImport: true,
         });
         return;
       }
@@ -214,6 +236,30 @@ function collectDependencies(
         return;
       }
 
+      // Match `require.unstable_importMaybeSync`
+      if (
+        callee.type === 'MemberExpression' &&
+        // `require`
+        callee.object.type === 'Identifier' &&
+        callee.object.name === 'require' &&
+        // `unstable_importMaybeSync`
+        callee.property.type === 'Identifier' &&
+        callee.property.name === 'unstable_importMaybeSync' &&
+        !callee.computed &&
+        // Ensure `require` refers to the global and not something else.
+        !path.scope.getBinding('require')
+      ) {
+        processImportCall(path, state, {
+          asyncType: 'maybeSync',
+          // Treat require.unstable_importMaybeSync as an ESM import, like its
+          // async "await import()" counterpart. Subject to change while
+          // unstable_.
+          isESMImport: true,
+        });
+        visited.add(path.node);
+        return;
+      }
+
       if (
         name != null &&
         state.dependencyCalls.has(name) &&
@@ -228,7 +274,7 @@ function collectDependencies(
     ExportNamedDeclaration: collectImports,
     ExportAllDeclaration: collectImports,
 
-    Program(path: NodePath<BabelNodeProgram>, state: State) {
+    Program(path: NodePath<Program>, state: State) {
       state.asyncRequireModulePathStringLiteral = types.stringLiteral(
         options.asyncRequireModulePath,
       );
@@ -382,6 +428,7 @@ function processRequireContextCall(
       // Capture the matching context
       contextParams,
       asyncType: null,
+      isESMImport: false,
       optional: isOptionalDependency(directory, path, state),
     },
     path,
@@ -407,6 +454,7 @@ function processResolveWeakCall(
     {
       name,
       asyncType: 'weak',
+      isESMImport: false,
       optional: isOptionalDependency(name, path, state),
     },
     path,
@@ -421,11 +469,18 @@ function processResolveWeakCall(
 
 function collectImports(path: NodePath<>, state: State): void {
   if (path.node.source) {
+    invariant(
+      path.node.source.type === 'StringLiteral',
+      `Expected import source to be a string. Maybe you're using 'createImportExpressions', which is not currently supported.
+See: https://github.com/react/metro/pull/1343`,
+    );
+
     registerDependency(
       state,
       {
         name: path.node.source.value,
         asyncType: null,
+        isESMImport: true,
         optional: false,
       },
       path,
@@ -449,6 +504,7 @@ function processImportCall(
     {
       name,
       asyncType: options.asyncType,
+      isESMImport: options.isESMImport,
       optional: isOptionalDependency(name, path, state),
     },
     path,
@@ -456,10 +512,21 @@ function processImportCall(
 
   const transformer = state.dependencyTransformer;
 
-  if (options.asyncType === 'async') {
-    transformer.transformImportCall(path, dep, state);
-  } else {
-    transformer.transformPrefetch(path, dep, state);
+  switch (options.asyncType) {
+    case 'async':
+      transformer.transformImportCall(path, dep, state);
+      break;
+    case 'maybeSync':
+      transformer.transformImportMaybeSyncCall(path, dep, state);
+      break;
+    case 'prefetch':
+      transformer.transformPrefetch(path, dep, state);
+      break;
+    case 'weak':
+      throw new Error('Unreachable');
+    default:
+      options.asyncType as empty;
+      throw new Error('Unreachable');
   }
 }
 
@@ -480,11 +547,21 @@ function processRequireCall(
     return;
   }
 
+  let isESMImport = false;
+  if (state.unstable_isESMImportAtSource) {
+    const isImport = state.unstable_isESMImportAtSource;
+    const loc = getNearestLocFromPath(path);
+    if (loc) {
+      isESMImport = isImport(loc);
+    }
+  }
+
   const dep = registerDependency(
     state,
     {
       name,
       asyncType: null,
+      isESMImport,
       optional: isOptionalDependency(name, path, state),
     },
     path,
@@ -493,25 +570,30 @@ function processRequireCall(
   transformer.transformSyncRequire(path, dep, state);
 }
 
-function getNearestLocFromPath(path: NodePath<>): ?BabelSourceLocation {
-  let current: ?(NodePath<> | NodePath<BabelNode>) = path;
+function getNearestLocFromPath(path: NodePath<>): ?ReadonlySourceLocation {
+  let current: ?(NodePath<> | NodePath<Node>) = path;
   while (
     current &&
     !current.node.loc &&
-    // $FlowIgnore[prop-missing] METRO_INLINE_REQUIRES_INIT_LOC is Metro-specific and not typed
+    // $FlowFixMe[prop-missing] METRO_INLINE_REQUIRES_INIT_LOC is Metro-specific and not typed
     !current.node.METRO_INLINE_REQUIRES_INIT_LOC
   ) {
     current = current.parentPath;
   }
+  // Do not use the location of the `Program` node
+  if (current && isProgram(current.node)) {
+    current = null;
+  }
   return (
-    // $FlowIgnore[prop-missing] METRO_INLINE_REQUIRES_INIT_LOC is Metro-specific and not typed
+    // $FlowFixMe[prop-missing] METRO_INLINE_REQUIRES_INIT_LOC is Metro-specific and not typed
     current?.node.METRO_INLINE_REQUIRES_INIT_LOC ?? current?.node.loc
   );
 }
 
-export type ImportQualifier = $ReadOnly<{
+export type ImportQualifier = Readonly<{
   name: string,
   asyncType: AsyncDependencyType | null,
+  isESMImport: boolean,
   optional: boolean,
   contextParams?: RequireContextParams,
 }>;
@@ -550,9 +632,18 @@ function isOptionalDependency(
     return false;
   }
 
+  // Treat dynamic imports as optional when a rejection handler is attached
+  // close to the import call, e.g.
+  //   import('x').catch(handler)
+  //   import('x').then(handler, onReject)
+  //   import('x').then(...).catch(handler)
+  if (isInPromiseChainWithRejectionHandler(path)) {
+    return true;
+  }
+
   // Valid statement stack for single-level try-block: expressionStatement -> blockStatement -> tryStatement
   let sCount = 0;
-  let p: ?(NodePath<> | NodePath<BabelNode>) = path;
+  let p: ?(NodePath<> | NodePath<Node>) = path;
   while (p && sCount < 3) {
     if (p.isStatement()) {
       if (p.node.type === 'BlockStatement') {
@@ -570,6 +661,64 @@ function isOptionalDependency(
   }
 
   return false;
+}
+
+// Walk up a chain of `.then(...)` / `.catch(...)` member calls starting from
+// `path` (typically an `import()` CallExpression) and return true if any
+// chained call provides a rejection handler — either `.catch(handler)` or
+// `.then(_, handler)`. The chain must be unbroken: as soon as the parent is
+// not a member call applied to the previous expression, we stop. This keeps
+// the heuristic local to the import, matching the behaviour of the
+// try/catch heuristic above.
+function isInPromiseChainWithRejectionHandler(path: NodePath<>): boolean {
+  let current: NodePath<> = path;
+  while (current.parentPath != null) {
+    const member = current.parentPath;
+    if (
+      member.node.type !== 'MemberExpression' ||
+      member.node.object !== current.node ||
+      member.node.computed ||
+      member.node.property.type !== 'Identifier' ||
+      member.parentPath == null
+    ) {
+      return false;
+    }
+    const call = member.parentPath;
+    if (
+      call.node.type !== 'CallExpression' ||
+      call.node.callee !== member.node
+    ) {
+      return false;
+    }
+    const propertyName = member.node.property.name;
+    const args = call.node.arguments;
+    if (
+      propertyName === 'catch' &&
+      args.length >= 1 &&
+      isNonNullishCallbackArg(args[0])
+    ) {
+      return true;
+    }
+    if (
+      propertyName === 'then' &&
+      args.length >= 2 &&
+      isNonNullishCallbackArg(args[1])
+    ) {
+      return true;
+    }
+    current = call;
+  }
+  return false;
+}
+
+function isNonNullishCallbackArg(arg: Node): boolean {
+  if (arg.type === 'NullLiteral') {
+    return false;
+  }
+  if (arg.type === 'Identifier' && arg.name === 'undefined') {
+    return false;
+  }
+  return true;
 }
 
 function getModuleNameFromCallArgs(path: NodePath<CallExpression>): ?string {
@@ -639,6 +788,14 @@ const makeAsyncPrefetchTemplateWithName = template.expression(`
   require(ASYNC_REQUIRE_MODULE_PATH).prefetch(MODULE_ID, DEPENDENCY_MAP.paths, MODULE_NAME)
 `);
 
+const makeAsyncImportMaybeSyncTemplate = template.expression(`
+  require(ASYNC_REQUIRE_MODULE_PATH).unstable_importMaybeSync(MODULE_ID, DEPENDENCY_MAP.paths)
+`);
+
+const makeAsyncImportMaybeSyncTemplateWithName = template.expression(`
+  require(ASYNC_REQUIRE_MODULE_PATH).unstable_importMaybeSync(MODULE_ID, DEPENDENCY_MAP.paths, MODULE_NAME)
+`);
+
 const makeResolveWeakTemplate = template.expression(`
   MODULE_ID
 `);
@@ -650,15 +807,14 @@ const DefaultDependencyTransformer: DependencyTransformer = {
     state: State,
   ): void {
     const moduleIDExpression = createModuleIDExpression(dependency, state);
-    path.node.arguments = ([moduleIDExpression]: Array<
-      | BabelNodeExpression
-      | BabelNodeSpreadElement
-      | BabelNodeJSXNamespacedName
-      | BabelNodeArgumentPlaceholder,
-    >);
+    path.node.arguments = [moduleIDExpression] as Array<
+      Expression | SpreadElement | ArgumentPlaceholder,
+    >;
     // Always add the debug name argument last
     if (state.keepRequireNames) {
-      path.node.arguments.push(types.stringLiteral(dependency.name));
+      path.node.arguments.push(
+        types.stringLiteral(getDebugName(dependency.name)),
+      );
     }
   },
 
@@ -680,6 +836,31 @@ const DefaultDependencyTransformer: DependencyTransformer = {
         ? {MODULE_NAME: createModuleNameLiteral(dependency)}
         : null),
     };
+    /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+     * https://fburl.com/gdoc/y8dn025u */
+    path.replaceWith(makeNode(opts));
+  },
+
+  transformImportMaybeSyncCall(
+    path: NodePath<>,
+    dependency: InternalDependency,
+    state: State,
+  ): void {
+    const makeNode = state.keepRequireNames
+      ? makeAsyncImportMaybeSyncTemplateWithName
+      : makeAsyncImportMaybeSyncTemplate;
+    const opts = {
+      ASYNC_REQUIRE_MODULE_PATH: nullthrows(
+        state.asyncRequireModulePathStringLiteral,
+      ),
+      MODULE_ID: createModuleIDExpression(dependency, state),
+      DEPENDENCY_MAP: nullthrows(state.dependencyMapIdentifier),
+      ...(state.keepRequireNames
+        ? {MODULE_NAME: createModuleNameLiteral(dependency)}
+        : null),
+    };
+    /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+     * https://fburl.com/gdoc/y8dn025u */
     path.replaceWith(makeNode(opts));
   },
 
@@ -701,6 +882,8 @@ const DefaultDependencyTransformer: DependencyTransformer = {
         ? {MODULE_NAME: createModuleNameLiteral(dependency)}
         : null),
     };
+    /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+     * https://fburl.com/gdoc/y8dn025u */
     path.replaceWith(makeNode(opts));
   },
 
@@ -716,7 +899,7 @@ const DefaultDependencyTransformer: DependencyTransformer = {
 function createModuleIDExpression(
   dependency: InternalDependency,
   state: State,
-): BabelNodeExpression {
+): Expression {
   return types.memberExpression(
     nullthrows(state.dependencyMapIdentifier),
     types.numericLiteral(dependency.index),
@@ -725,18 +908,41 @@ function createModuleIDExpression(
 }
 
 function createModuleNameLiteral(dependency: InternalDependency) {
-  return types.stringLiteral(dependency.name);
+  return types.stringLiteral(getDebugName(dependency.name));
+}
+
+const INLINE_MODULE_PREFIX = 'metro:inline';
+
+/**
+ * The name shown beside a dependency in development output. An inline module
+ * specifier carries a whole module in its payload, so only its header is kept.
+ */
+function getDebugName(name: string): string {
+  if (
+    name.length > INLINE_MODULE_PREFIX.length &&
+    name.slice(0, INLINE_MODULE_PREFIX.length).toLowerCase() ===
+      INLINE_MODULE_PREFIX
+  ) {
+    const commaIndex = name.indexOf(',');
+    if (commaIndex !== -1) {
+      return name.slice(0, commaIndex + 1) + '...';
+    }
+  }
+  return name;
 }
 
 /**
  * Given an import qualifier, return a key used to register the dependency.
- * Generally this return the `ImportQualifier.name` property, but more
- * attributes can be appended to distinguish various combinations that would
- * otherwise conflict.
+ * Attributes can be appended to distinguish various combinations that would
+ * otherwise be considered the same dependency edge.
  *
- * For example, the following case would have collision issues if they all utilized the `name` property:
+ * For example, the following dependencies would collapse into a single edge
+ * if they simply utilized the `name` property:
+ *
  * ```
  * require('./foo');
+ * import foo from './foo'
+ * await import('./foo')
  * require.context('./foo');
  * require.context('./foo', true, /something/);
  * require.context('./foo', false, /something/);
@@ -746,14 +952,13 @@ function createModuleNameLiteral(dependency: InternalDependency) {
  * This method should be utilized by `registerDependency`.
  */
 function getKeyForDependency(qualifier: ImportQualifier): string {
-  let key = qualifier.name;
+  const {asyncType, contextParams, isESMImport, name} = qualifier;
 
-  const {asyncType} = qualifier;
-  if (asyncType) {
-    key += ['', asyncType].join('\0');
+  let key = [name, isESMImport ? 'import' : 'require'].join('\0');
+  if (asyncType != null) {
+    key += '\0' + asyncType;
   }
 
-  const {contextParams} = qualifier;
   // Add extra qualifiers when using `require.context` to prevent collisions.
   if (contextParams) {
     // NOTE(EvanBacon): Keep this synchronized with `RequireContextParams`, if any other properties are added
@@ -783,6 +988,7 @@ class DependencyRegistry {
       const newDependency: MutableInternalDependency = {
         name: qualifier.name,
         asyncType: qualifier.asyncType,
+        isESMImport: qualifier.isESMImport,
         locs: [],
         index: this._dependencies.size,
         key: crypto.createHash('sha1').update(key).digest('base64'),
@@ -816,5 +1022,3 @@ class DependencyRegistry {
     return Array.from(this._dependencies.values());
   }
 }
-
-module.exports = collectDependencies;

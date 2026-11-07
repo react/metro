@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const crypto = require('crypto');
+import crypto from 'node:crypto';
 
 const isUTF8 = (encoding: 'ascii' | 'utf16le' | 'utf8') =>
   /^utf-?8$/i.test(encoding);
@@ -25,7 +23,7 @@ const constantFor = (encoding: 'ascii' | 'utf16le' | 'utf8') =>
         ? 3
         : 0;
 
-module.exports = function (
+export default function meta(
   code: Buffer | string,
   encoding: 'ascii' | 'utf16le' | 'utf8' = 'utf8',
 ): Buffer {
@@ -40,7 +38,7 @@ module.exports = function (
     signature.length - 1,
   );
   return signature;
-};
+}
 
 function tryAsciiPromotion(
   buffer: Buffer,

@@ -9,32 +9,31 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {RamBundleInfo} from '../../DeltaBundler/Serializers/getRamBundleInfo';
-import type {OutputOptions, RequestOptions} from '../types.flow';
+import type {OutputOptions, RequestOptions} from '../types';
 
-const Server = require('../../Server');
-const asAssets = require('./RamBundle/as-assets');
-const asIndexedFile = require('./RamBundle/as-indexed-file').save;
+import Server from '../../Server';
+import asAssets from './RamBundle/as-assets';
+import {save as asIndexedFile} from './RamBundle/as-indexed-file';
 
-async function build(
+export async function build(
   packagerClient: Server,
   requestOptions: RequestOptions,
 ): Promise<RamBundleInfo> {
   const options = {
     ...Server.DEFAULT_BUNDLE_OPTIONS,
     ...requestOptions,
-    bundleType: 'ram',
   };
+  /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+   * https://fburl.com/gdoc/y8dn025u */
   return await packagerClient.getRamBundleInfo(options);
 }
 
-function save(
+export function save(
   bundle: RamBundleInfo,
   options: OutputOptions,
   log: (x: string) => void,
-): Promise<mixed> {
+): Promise<unknown> {
   // We fork here depending on the platform: while Android is pretty good at
   // loading individual assets, iOS has a large overhead when reading hundreds
   // of assets from disk.
@@ -43,6 +42,4 @@ function save(
     : asIndexedFile(bundle, options, log);
 }
 
-exports.build = build;
-exports.save = save;
-exports.formatName = 'bundle';
+export const formatName = 'bundle';

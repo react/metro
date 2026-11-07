@@ -9,30 +9,35 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {TransformerConfig} from './Worker';
 import type {JsTransformerConfig} from 'metro-transform-worker';
 
+import {getCacheKey} from 'metro-cache-key';
+import crypto from 'node:crypto';
+
+// eslint-disable-next-line import/no-commonjs
 const VERSION = require('../../package.json').version;
-const crypto = require('crypto');
-const getCacheKey = require('metro-cache-key');
 
 type CacheKeyProvider = {
-  getCacheKey?: JsTransformerConfig => string,
+  getCacheKey?: (
+    config: JsTransformerConfig,
+    opts?: Readonly<{projectRoot: string}>,
+  ) => string,
 };
 
-function getTransformCacheKey(opts: {
-  +cacheVersion: string,
-  +projectRoot: string,
-  +transformerConfig: TransformerConfig,
+export default function getTransformCacheKey(opts: {
+  readonly cacheVersion: string,
+  readonly projectRoot: string,
+  readonly transformerConfig: TransformerConfig,
 }): string {
   const {transformerPath, transformerConfig} = opts.transformerConfig;
 
   // eslint-disable-next-line no-useless-call
   const Transformer: CacheKeyProvider = require.call(null, transformerPath);
   const transformerKey = Transformer.getCacheKey
-    ? Transformer.getCacheKey(transformerConfig)
+    ? Transformer.getCacheKey(transformerConfig, {
+        projectRoot: opts.projectRoot,
+      })
     : '';
 
   return crypto
@@ -49,5 +54,3 @@ function getTransformCacheKey(opts: {
     )
     .digest('hex');
 }
-
-module.exports = getTransformCacheKey;

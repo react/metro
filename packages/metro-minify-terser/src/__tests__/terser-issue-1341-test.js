@@ -8,6 +8,8 @@
  * @format
  */
 
+import type {MinifierOptions} from 'metro-transform-worker';
+
 import minify from '../minifier';
 
 const config = {
@@ -28,7 +30,7 @@ const config = {
   },
 };
 
-const BAR = {
+const BAR: MinifierOptions = {
   filename: '',
   code: '__d(function(global,_$$_REQUIRE,_$$_IMPORT_DEFAULT,_$$_IMPORT_ALL,module,exports,_$$_METRO_DEPENDENCY_MAP){"use strict";function bar(){return new Promise(function(resolve){return resolve(_$$_REQUIRE(_$$_METRO_DEPENDENCY_MAP[0]));}).then(function onGlo(glo){makeItThrow(glo);});}function makeItThrow(glo){makeItThrowInner(glo);}function makeItThrowInner(glo){glo.throwSmth();}module.exports=bar;});',
   map: {
@@ -58,7 +60,7 @@ const BAR = {
   config,
 };
 
-const GLO = {
+const GLO: MinifierOptions = {
   filename: '',
   code: '__d(function(global,_$$_REQUIRE,_$$_IMPORT_DEFAULT,_$$_IMPORT_ALL,module,exports,_$$_METRO_DEPENDENCY_MAP){"use strict";var biz=_$$_REQUIRE(_$$_METRO_DEPENDENCY_MAP[0]);module.exports={throwSmth:function throwSmth(){return biz.throwSmthInner();}};});',
   map: {

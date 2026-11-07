@@ -9,28 +9,47 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {OutputOptions, RequestOptions} from '../types.flow';
+import type {AssetData} from '../../Assets';
+import type {BuildOptions, OutputOptions, RequestOptions} from '../types';
 import type {MixedSourceMap} from 'metro-source-map';
 
-const relativizeSourceMapInline = require('../../lib/relativizeSourceMap');
-const Server = require('../../Server');
-const writeFile = require('./writeFile');
+import relativizeSourceMapInline from '../../lib/relativizeSourceMap';
+import Server from '../../Server';
+import writeFile from './writeFile';
 
-function buildBundle(
+const DEFAULTS = Server.DEFAULT_BUNDLE_OPTIONS;
+
+export function build(
   packagerClient: Server,
   requestOptions: RequestOptions,
+  buildOptions?: BuildOptions = {},
 ): Promise<{
   code: string,
   map: string,
+  assets?: ReadonlyArray<AssetData>,
   ...
 }> {
-  return packagerClient.build({
-    ...Server.DEFAULT_BUNDLE_OPTIONS,
-    ...requestOptions,
-    bundleType: 'bundle',
-  });
+  return packagerClient.build(
+    {
+      ...DEFAULTS,
+      ...requestOptions,
+      ...{
+        customResolverOptions:
+          requestOptions.customResolverOptions ??
+          DEFAULTS.customResolverOptions,
+        customTransformOptions:
+          requestOptions.customTransformOptions ??
+          DEFAULTS.customTransformOptions,
+        dev: requestOptions.dev ?? DEFAULTS.dev,
+        inlineSourceMap:
+          requestOptions.inlineSourceMap ?? DEFAULTS.inlineSourceMap,
+        unstable_transformProfile:
+          requestOptions.unstable_transformProfile ??
+          DEFAULTS.unstable_transformProfile,
+      },
+    },
+    buildOptions,
+  );
 }
 
 function relativateSerializedMap(
@@ -42,15 +61,15 @@ function relativateSerializedMap(
   return JSON.stringify(sourceMap);
 }
 
-async function saveBundleAndMap(
+export async function save(
   bundle: {
     code: string,
     map: string,
     ...
   },
   options: OutputOptions,
-  log: (...args: Array<string>) => void,
-): Promise<mixed> {
+  log: (message: string) => void,
+): Promise<unknown> {
   const {
     bundleOutput,
     bundleEncoding: encoding,
@@ -61,7 +80,7 @@ async function saveBundleAndMap(
   const writeFns = [];
 
   writeFns.push(async () => {
-    log('Writing bundle output to:', bundleOutput);
+    log(`Writing bundle output to: ${bundleOutput}`);
     await writeFile(bundleOutput, bundle.code, encoding);
     log('Done writing bundle output');
   });
@@ -75,16 +94,14 @@ async function saveBundleAndMap(
     }
 
     writeFns.push(async () => {
-      log('Writing sourcemap output to:', sourcemapOutput);
-      await writeFile(sourcemapOutput, map, null);
+      log(`Writing sourcemap output to: ${sourcemapOutput}`);
+      await writeFile(sourcemapOutput, map);
       log('Done writing sourcemap output');
     });
   }
 
   // Wait until everything is written to disk.
-  await Promise.all(writeFns.map((cb: void => mixed) => cb()));
+  await Promise.all(writeFns.map((cb: () => unknown) => cb()));
 }
 
-exports.build = buildBundle;
-exports.save = saveBundleAndMap;
-exports.formatName = 'bundle';
+export const formatName = 'bundle';

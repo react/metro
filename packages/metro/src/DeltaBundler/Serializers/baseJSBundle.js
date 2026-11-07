@@ -9,22 +9,20 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   MixedOutput,
   Module,
   ReadOnlyGraph,
   SerializerOptions,
-} from '../types.flow';
-import type {Bundle} from 'metro-runtime/src/modules/types.flow';
+} from '../types';
+import type {Bundle} from 'metro-runtime/src/modules/types';
 
-const getAppendScripts = require('../../lib/getAppendScripts');
-const processModules = require('./helpers/processModules');
+import getAppendScripts from '../../lib/getAppendScripts';
+import processModules from './helpers/processModules';
 
-function baseJSBundle(
+export default function baseJSBundle(
   entryPoint: string,
-  preModules: $ReadOnlyArray<Module<>>,
+  preModules: ReadonlyArray<Module<>>,
   graph: ReadOnlyGraph<>,
   options: SerializerOptions,
 ): Bundle {
@@ -37,9 +35,13 @@ function baseJSBundle(
     createModuleId: options.createModuleId,
     dev: options.dev,
     includeAsyncPaths: options.includeAsyncPaths,
+    platform: graph.transformOptions.platform,
     projectRoot: options.projectRoot,
     serverRoot: options.serverRoot,
     sourceUrl: options.sourceUrl,
+    dependencyMapReservedName: options.dependencyMapReservedName,
+    unstable_inlineDependencyMap: options.unstable_inlineDependencyMap,
+    unstable_getAsyncDependencyPath: options.unstable_getAsyncDependencyPath,
   };
 
   // Do not prepend polyfills or the require runtime when only modules are requested
@@ -61,7 +63,9 @@ function baseJSBundle(
       asyncRequireModulePath: options.asyncRequireModulePath,
       createModuleId: options.createModuleId,
       getRunModuleStatement: options.getRunModuleStatement,
+      globalPrefix: options.globalPrefix,
       inlineSourceMap: options.inlineSourceMap,
+      processModuleFilter: options.processModuleFilter,
       runBeforeMainModule: options.runBeforeMainModule,
       runModule: options.runModule,
       shouldAddToIgnoreList: options.shouldAddToIgnoreList,
@@ -83,5 +87,3 @@ function baseJSBundle(
     ).map(([module, code]) => [options.createModuleId(module.path), code]),
   };
 }
-
-module.exports = baseJSBundle;

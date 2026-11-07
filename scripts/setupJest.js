@@ -12,3 +12,13 @@
 
 // Make sure nothing registers Babel on top of Jest's setup during tests.
 require('metro-babel-register').unstable_registerForMetroMonorepo = () => {};
+
+/**
+ * Prettier v3 uses import (cjs/mjs) file formats that jest-runtime does not
+ * support. To work around this we need to bypass the jest module system by
+ * using the original node `require` function.
+ */
+jest.mock('prettier', () => {
+  const module = jest.requireActual('node:module');
+  return module.prototype.require(require.resolve('prettier'));
+});

@@ -9,33 +9,28 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {TransformResult} from './types.flow';
-import type {LogEntry} from 'metro-core/src/Logger';
+import type {TransformResult} from './types';
+import type {LogEntry} from 'metro-core/private/Logger';
 import type {
   JsTransformerConfig,
   JsTransformOptions,
 } from 'metro-transform-worker';
 
-const traverse = require('@babel/traverse').default;
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import {traverse} from '@babel/core';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export type {JsTransformOptions as TransformOptions} from 'metro-transform-worker';
 
-export type Worker = {
-  +transform: typeof transform,
-};
-
 type TransformerInterface = {
   transform(
-    JsTransformerConfig,
-    string,
-    string,
-    Buffer,
-    JsTransformOptions,
+    config: JsTransformerConfig,
+    projectRoot: string,
+    projectRelativePath: string,
+    data: Buffer,
+    options: JsTransformOptions,
+    assetUrlPath: ?string,
   ): Promise<TransformResult<>>,
 };
 
@@ -45,12 +40,18 @@ export type TransformerConfig = {
   ...
 };
 
-type Data = $ReadOnly<{
+type Data = Readonly<{
   result: TransformResult<>,
   sha1: string,
   transformFileStartLogEntry: LogEntry,
   transformFileEndLogEntry: LogEntry,
 }>;
+
+// jest-worker assigns the ID of the worker to JEST_WORKER_ID in a worker thread,
+// regardless of the `env` it is given. Transform output must not depend on the
+// worker that produced it, and a Babel plugin may inline any environment
+// variable.
+delete process.env.JEST_WORKER_ID;
 
 /**
  * When the `Buffer` is sent over the worker thread it gets serialized into a JSON object.
@@ -66,16 +67,20 @@ function asDeserializedBuffer(value: any): Buffer | null {
   if (value && value.type === 'Buffer') {
     return Buffer.from(value.data);
   }
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
   return null;
 }
 
-async function transform(
+export const transform = (
   filename: string,
   transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
   fileBuffer?: Buffer,
-): Promise<Data> {
+  assetUrlPath?: string,
+): Promise<Data> => {
   let data;
 
   const fileBufferObject = asDeserializedBuffer(fileBuffer);
@@ -90,15 +95,21 @@ async function transform(
     transformOptions,
     projectRoot,
     transformerConfig,
+    assetUrlPath,
   );
-}
+};
+
+export type Worker = {
+  readonly transform: typeof transform,
+};
 
 async function transformFile(
-  filename: string,
+  projectRelativePath: string,
   data: Buffer,
   transformOptions: JsTransformOptions,
   projectRoot: string,
   transformerConfig: TransformerConfig,
+  assetUrlPath?: string,
 ): Promise<Data> {
   // eslint-disable-next-line no-useless-call
   const Transformer: TransformerInterface = require.call(
@@ -106,10 +117,10 @@ async function transformFile(
     transformerConfig.transformerPath,
   );
 
-  const transformFileStartLogEntry = {
+  const transformFileStartLogEntry: LogEntry = {
     action_name: 'Transforming file',
     action_phase: 'start',
-    file_name: filename,
+    file_name: projectRelativePath,
     log_entry_label: 'Transforming file',
     start_timestamp: process.hrtime(),
   };
@@ -119,14 +130,15 @@ async function transformFile(
   const result = await Transformer.transform(
     transformerConfig.transformerConfig,
     projectRoot,
-    filename,
+    projectRelativePath,
     data,
     transformOptions,
+    assetUrlPath,
   );
 
-  // The babel cache caches scopes and pathes for already traversed AST nodes.
+  // The babel cache caches scopes and paths for already traversed AST nodes.
   // Clearing the cache here since the nodes of the transformed file are no longer referenced.
-  // This isn't stritcly necessary since the cache uses a WeakMap. However, WeakMap only permit
+  // This isn't strictly necessary since the cache uses a WeakMap. However, WeakMaps only permit
   // that unreferenced keys are collected but the values still hold references to the Scope and NodePaths.
   // Manually clearing the cache allows the GC to collect the Scope and NodePaths without checking if there
   // exist any other references to the keys.
@@ -134,7 +146,7 @@ async function transformFile(
 
   const transformFileEndLogEntry = getEndLogEntry(
     transformFileStartLogEntry,
-    filename,
+    projectRelativePath,
   );
 
   return {
@@ -157,7 +169,3 @@ function getEndLogEntry(startLogEntry: LogEntry, filename: string): LogEntry {
     log_entry_label: 'Transforming file',
   };
 }
-
-module.exports = ({
-  transform,
-}: Worker);

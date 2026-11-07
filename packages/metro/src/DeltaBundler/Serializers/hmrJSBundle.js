@@ -9,21 +9,25 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {DeltaResult, Module, ReadOnlyGraph} from '../types';
+import type {HmrModule} from 'metro-runtime/src/modules/types';
 
-import type {EntryPointURL} from '../../HmrServer';
-import type {DeltaResult, Module, ReadOnlyGraph} from '../types.flow';
-import type {HmrModule} from 'metro-runtime/src/modules/types.flow';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+} from '../../lib/modulePath';
+import {isJsModule, wrapModule} from './helpers/js';
+import debugModule from 'debug';
+import * as jscSafeUrl from 'jsc-safe-url';
+import {addParamsToDefineCall} from 'metro-transform-plugins';
+import path from 'node:path';
 
-const {isJsModule, wrapModule} = require('./helpers/js');
-const jscSafeUrl = require('jsc-safe-url');
-const {addParamsToDefineCall} = require('metro-transform-plugins');
-const path = require('path');
-const url = require('url');
+const debug = debugModule('Metro:HMR');
 
-type Options = $ReadOnly<{
-  clientUrl: EntryPointURL,
-  createModuleId: string => number,
+type Options = Readonly<{
+  clientUrl: URL,
+  createModuleId: (absolutePath: string) => number,
   includeAsyncPaths: boolean,
   projectRoot: string,
   serverRoot: string,
@@ -34,27 +38,50 @@ function generateModules(
   sourceModules: Iterable<Module<>>,
   graph: ReadOnlyGraph<>,
   options: Options,
-): $ReadOnlyArray<HmrModule> {
+): ReadonlyArray<HmrModule> {
   const modules = [];
 
   for (const module of sourceModules) {
     if (isJsModule(module)) {
-      // Construct a bundle URL for this specific module only
-      const getURL = (extension: 'bundle' | 'map') => {
-        options.clientUrl.pathname = path.relative(
-          options.serverRoot ?? options.projectRoot,
-          path.join(
-            path.dirname(module.path),
-            path.basename(module.path, path.extname(module.path)) +
-              '.' +
-              extension,
-          ),
+      const sourcePath = getModuleSourcePath(module.path);
+      const getPathname = (extension: 'bundle' | 'map') => {
+        return (
+          path
+            .relative(
+              options.serverRoot ?? options.projectRoot,
+              // Keep the file extension, as for async bundle paths, so that the
+              // server resolves the URL to this exact file.
+              sourcePath + '.' + extension,
+            )
+            .split(path.sep)
+            // using this Metro particular convention for encoding file paths as URL paths.
+            .map(segment => encodeURIComponent(segment))
+            .join('/')
         );
-        return url.format(options.clientUrl);
       };
 
-      const sourceMappingURL = getURL('map');
-      const sourceURL = jscSafeUrl.toJscSafeUrl(getURL('bundle'));
+      const clientUrl = new URL(options.clientUrl);
+      clientUrl.searchParams.delete('excludeSource');
+      if (graph.transformOptions.platform != null) {
+        clientUrl.searchParams.set('platform', graph.transformOptions.platform);
+      }
+      if (isVirtualModulePath(module.path)) {
+        clientUrl.searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
+      }
+
+      clientUrl.pathname = getPathname('map');
+      const sourceMappingURL = clientUrl.toString();
+
+      clientUrl.pathname = getPathname('bundle');
+      const sourceURL = jscSafeUrl.toJscSafeUrl(clientUrl.toString());
+
+      debug(
+        'got sourceMappingURL: %s\nand sourceURL: %s\nfor module: %s',
+        sourceMappingURL,
+        sourceURL,
+        module.path,
+      );
+
       const code =
         prepareModule(module, graph, options) +
         `\n//# sourceMappingURL=${sourceMappingURL}\n` +
@@ -78,7 +105,8 @@ function prepareModule(
 ): string {
   const code = wrapModule(module, {
     ...options,
-    sourceUrl: url.format(options.clientUrl),
+    platform: graph.transformOptions.platform,
+    sourceUrl: options.clientUrl.toString(),
     dev: true,
   });
 
@@ -86,7 +114,6 @@ function prepareModule(
   // Transform the inverse dependency paths to ids.
   const inverseDependenciesById = Object.create(null);
   Object.keys(inverseDependencies).forEach((path: string) => {
-    // $FlowFixMe[prop-missing]
     // $FlowFixMe[invalid-computed-prop]
     inverseDependenciesById[options.createModuleId(path)] = inverseDependencies[
       path
@@ -96,7 +123,7 @@ function prepareModule(
 }
 
 /**
- * Instead of adding the whole inverseDependncies object into each changed
+ * Instead of adding the whole inverseDependencies object into each changed
  * module (which can be really huge if the dependency graph is big), we only
  * add the needed inverseDependencies for each changed module (we do this by
  * traversing upwards the dependency graph).
@@ -106,7 +133,7 @@ function getInverseDependencies(
   graph: ReadOnlyGraph<>,
   inverseDependencies: {[key: string]: Array<string>, ...} = {},
 ): {[key: string]: Array<string>, ...} {
-  // Dependency alredy traversed.
+  // Dependency already traversed.
   if (path in inverseDependencies) {
     return inverseDependencies;
   }
@@ -125,14 +152,14 @@ function getInverseDependencies(
   return inverseDependencies;
 }
 
-function hmrJSBundle(
+export default function hmrJSBundle(
   delta: DeltaResult<>,
   graph: ReadOnlyGraph<>,
   options: Options,
 ): {
-  +added: $ReadOnlyArray<HmrModule>,
-  +deleted: $ReadOnlyArray<number>,
-  +modified: $ReadOnlyArray<HmrModule>,
+  readonly added: ReadonlyArray<HmrModule>,
+  readonly deleted: ReadonlyArray<number>,
+  readonly modified: ReadonlyArray<HmrModule>,
 } {
   return {
     added: generateModules(delta.added.values(), graph, options),
@@ -142,5 +169,3 @@ function hmrJSBundle(
     ),
   };
 }
-
-module.exports = hmrJSBundle;

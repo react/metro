@@ -9,9 +9,8 @@
  */
 
 import TreeFS from '../../lib/TreeFS';
-import {AbortController} from 'node-abort-controller';
 
-const path = require('path');
+const path = require('node:path');
 
 jest.useRealTimers();
 
@@ -77,7 +76,7 @@ const createMap = obj => new Map(Object.keys(obj).map(key => [key, obj[key]]));
 
 describe('watchman watch', () => {
   beforeEach(() => {
-    watchmanCrawl = require('../watchman');
+    watchmanCrawl = require('../watchman').default;
 
     watchman = require('fb-watchman');
 
@@ -119,9 +118,9 @@ describe('watchman watch', () => {
     };
 
     mockFiles = createMap({
-      [MELON_RELATIVE]: ['', 33, 43, 0, '', null, 0],
-      [STRAWBERRY_RELATIVE]: ['', 30, 40, 0, '', null, 0],
-      [TOMATO_RELATIVE]: ['', 31, 41, 0, '', null, 0],
+      [MELON_RELATIVE]: [33, 43, 0, null, 0],
+      [STRAWBERRY_RELATIVE]: [30, 40, 0, null, 0],
+      [TOMATO_RELATIVE]: [31, 41, 0, null, 0],
     });
   });
 
@@ -224,7 +223,7 @@ describe('watchman watch', () => {
 
     expect(changedFiles).toEqual(
       createMap({
-        [KIWI_RELATIVE]: ['', 42, 40, 0, '', null, 0],
+        [KIWI_RELATIVE]: [42, 40, 0, null, 0],
       }),
     );
 
@@ -266,9 +265,9 @@ describe('watchman watch', () => {
       'watch-project': WATCH_PROJECT_MOCK,
     };
 
-    const mockBananaMetadata = ['Banana', 41, 51, 1, ['Raspberry'], null, 0];
+    const mockBananaMetadata = [41, 51, 1, null, 0, 'Banana'];
     mockFiles.set(BANANA_RELATIVE, mockBananaMetadata);
-    const mockTomatoMetadata = ['Tomato', 31, 41, 1, [], mockTomatoSha1, 0];
+    const mockTomatoMetadata = [31, 41, 1, mockTomatoSha1, 0, 'Tomato'];
     mockFiles.set(TOMATO_RELATIVE, mockTomatoMetadata);
 
     const {changedFiles, clocks, removedFiles} = await watchmanCrawl({
@@ -297,8 +296,8 @@ describe('watchman watch', () => {
     // banana is not included because it is unchanged
     expect(changedFiles).toEqual(
       createMap({
-        [KIWI_RELATIVE]: ['', 42, 52, 0, '', null, 0],
-        [TOMATO_RELATIVE]: ['Tomato', 76, 41, 1, [], mockTomatoSha1, 0],
+        [KIWI_RELATIVE]: [42, 52, 0, null, 0],
+        [TOMATO_RELATIVE]: [76, 41, 1, mockTomatoSha1, 0, 'Tomato'],
       }),
     );
 
@@ -374,7 +373,7 @@ describe('watchman watch', () => {
     // Melon is not included because it is unchanged.
     expect(changedFiles).toEqual(
       createMap({
-        [KIWI_RELATIVE]: ['', 42, 52, 0, '', null, 0],
+        [KIWI_RELATIVE]: [42, 52, 0, null, 0],
       }),
     );
 
@@ -543,18 +542,18 @@ describe('watchman watch', () => {
 
     expect(changedFiles).toEqual(
       createMap({
-        [KIWI_RELATIVE]: ['', 42, 40, 0, '', null, 0],
+        [KIWI_RELATIVE]: [42, 40, 0, null, 0],
       }),
     );
 
     expect(removedFiles).toEqual(new Set([TOMATO_RELATIVE]));
   });
 
-  it('aborts the crawl on pre-aborted signal', async () => {
+  test('aborts the crawl on pre-aborted signal', async () => {
     const err = new Error('aborted for test');
     await expect(
       watchmanCrawl({
-        abortSignal: abortSignalWithReason(err),
+        abortSignal: AbortSignal.abort(err),
         previousState: {
           clocks: new Map(),
           files: new Map(),
@@ -567,7 +566,7 @@ describe('watchman watch', () => {
     ).rejects.toThrow(err);
   });
 
-  it('aborts the crawl if signalled after start', async () => {
+  test('aborts the crawl if signalled after start', async () => {
     const err = new Error('aborted for test');
     const abortController = new AbortController();
 
@@ -600,10 +599,3 @@ describe('watchman watch', () => {
     ).rejects.toThrow(err);
   });
 });
-
-function abortSignalWithReason(reason) {
-  // TODO: use AbortSignal.abort when node-abort-controller supports it
-  const controller = new AbortController();
-  controller.abort(reason);
-  return controller.signal;
-}

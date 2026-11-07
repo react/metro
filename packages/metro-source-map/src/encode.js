@@ -45,11 +45,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * @copyright
+ *
+ * Associate this with the THIRD_PARTY_LICENCE type to ensure it isn't
+ * stripped by flow-api-translator.
  */
+export type THIRD_PARTY_LICENSE = unknown;
 
 /* eslint-disable no-bitwise */
-
-'use strict';
 
 // A map of values to characters for the b64 encoding
 const CHAR_MAP = [
@@ -102,7 +104,11 @@ function toVLQSigned(value: number) {
  * DON'T ADD MORE COMMENTS TO THIS FUNCTION TO KEEP ITS LENGTH SHORT ENOUGH FOR
  * V8 OPTIMIZATION!
  */
-function encode(value: number, buffer: Buffer, position: number): number {
+export default function encode(
+  value: number,
+  buffer: Buffer,
+  position: number,
+): number {
   let vlq = toVLQSigned(value);
   let digit;
   do {
@@ -118,5 +124,3 @@ function encode(value: number, buffer: Buffer, position: number): number {
 
   return position;
 }
-
-module.exports = encode;

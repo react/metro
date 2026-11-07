@@ -5,20 +5,24 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @format
+ * @flow strict
  * @oncall react_native
  */
 
 'use strict';
 
+import type {BabelCoreOptions, EntryOptions, PluginEntry} from '@babel/core';
+import type {File as BabelNodeFile, Node as BabelNode} from '@babel/types';
+
 const {transformSync} = require('@babel/core');
 const generate = require('@babel/generator').default;
 const t = require('@babel/types');
+const nullthrows = require('nullthrows');
 
-opaque type Code = string;
-opaque type Plugin = () => {};
-opaque type Options = {};
-
-function makeTransformOptions(plugins, options) {
+function makeTransformOptions<OptionsT extends ?EntryOptions>(
+  plugins: ReadonlyArray<PluginEntry>,
+  options: OptionsT,
+): BabelCoreOptions {
   return {
     ast: true,
     babelrc: false,
@@ -33,9 +37,9 @@ function makeTransformOptions(plugins, options) {
   };
 }
 
-function validateOutputAst(ast) {
-  const seenNodes = new Set();
-  t.traverseFast(ast, function enter(node) {
+function validateOutputAst(ast: BabelNode) {
+  const seenNodes = new Set<BabelNode>();
+  t.traverseFast(nullthrows(ast), function enter(node) {
     if (seenNodes.has(node)) {
       throw new Error(
         'Found a duplicate ' +
@@ -48,29 +52,33 @@ function validateOutputAst(ast) {
   });
 }
 
-function transformToAst(
-  plugins: $ReadOnlyArray<Plugin>,
-  code: Code,
-  options: Options = {},
-) {
-  const ast = transformSync(code, makeTransformOptions(plugins, options)).ast;
+function transformToAst<T extends ?EntryOptions>(
+  plugins: ReadonlyArray<PluginEntry>,
+  code: string,
+  options: T,
+): BabelNodeFile {
+  const transformResult = transformSync(
+    code,
+    makeTransformOptions(plugins, options),
+  );
+  const ast = nullthrows(transformResult.ast);
   validateOutputAst(ast);
   return ast;
 }
 
 function transform(
-  code: Code,
-  plugins: $ReadOnlyArray<Plugin>,
-  options: Options,
+  code: string,
+  plugins: ReadonlyArray<PluginEntry>,
+  options: ?EntryOptions,
 ) {
   return generate(transformToAst(plugins, code, options)).code;
 }
 
 exports.compare = function (
-  plugins: $ReadOnlyArray<Plugin>,
-  code: Code,
-  expected: Code,
-  options: Options = {},
+  plugins: ReadonlyArray<PluginEntry>,
+  code: string,
+  expected: string,
+  options: ?EntryOptions = {},
 ) {
   expect(transform(code, plugins, options)).toBe(transform(expected, [], {}));
 };

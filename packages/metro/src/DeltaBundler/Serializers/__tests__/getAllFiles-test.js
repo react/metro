@@ -8,12 +8,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
 jest.mock('../../../Assets');
 
-const {getAssetFiles} = require('../../../Assets');
-const getAllFiles = require('../getAllFiles');
+import {getAssetFiles} from '../../../Assets';
+import getAllFiles from '../getAllFiles';
 
 describe('getOrderedDependencyPaths', () => {
   beforeEach(() => {
@@ -23,7 +21,7 @@ describe('getOrderedDependencyPaths', () => {
     ]);
   });
 
-  it('Should return all module dependencies correctly', async () => {
+  test('Should return all module dependencies correctly', async () => {
     const graph = {
       dependencies: new Map([
         [
@@ -104,7 +102,26 @@ describe('getOrderedDependencyPaths', () => {
     ]);
   });
 
-  it('Should add assets data dependencies correctly', async () => {
+  test('Should exclude virtual modules, which have no file', async () => {
+    const jsOutput = [
+      {
+        type: 'js/module',
+        data: {code: '//', lineCount: 1, map: [], functionMap: null},
+      },
+    ];
+    const graph = {
+      dependencies: new Map([
+        [1, {path: '/tmp/1.js', output: jsOutput}],
+        [2, {path: 'virtual:/tmp/1.generated.js', output: jsOutput}],
+      ]),
+    };
+
+    expect(
+      await getAllFiles([], graph, {processModuleFilter: () => true}),
+    ).toEqual(['/tmp/1.js']);
+  });
+
+  test('Should add assets data dependencies correctly', async () => {
     const graph = {
       dependencies: new Map([
         [

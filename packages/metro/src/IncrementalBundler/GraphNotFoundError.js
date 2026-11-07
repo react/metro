@@ -9,11 +9,9 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {GraphId} from '../lib/getGraphId';
 
-class GraphNotFoundError extends Error {
+export default class GraphNotFoundError extends Error {
   graphId: GraphId;
 
   constructor(graphId: GraphId) {
@@ -21,5 +19,3 @@ class GraphNotFoundError extends Error {
     this.graphId = graphId;
   }
 }
-
-module.exports = GraphNotFoundError;

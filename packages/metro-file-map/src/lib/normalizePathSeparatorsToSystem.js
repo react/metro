@@ -4,13 +4,13 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict
+ * @format
  */
 
-import * as path from 'path';
+import * as path from 'node:path';
 
-let normalizePathSeparatorsToSystem: (string: string) => string;
+let normalizePathSeparatorsToSystem;
 if (path.sep === '/') {
   normalizePathSeparatorsToSystem = (filePath: string): string => filePath;
 } else {
@@ -18,4 +18,4 @@ if (path.sep === '/') {
     filePath.replace(/\//g, path.sep);
 }
 
-export default normalizePathSeparatorsToSystem;
+export default normalizePathSeparatorsToSystem as (filePath: string) => string;

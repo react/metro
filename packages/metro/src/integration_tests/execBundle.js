@@ -9,11 +9,9 @@
  * @oncall react_native
  */
 
-'use strict';
+import vm from 'node:vm';
 
-const vm = require('vm');
-
-module.exports = function execBundle(code: string, context: any = {}): mixed {
+module.exports = function execBundle(code: string, context: any = {}): unknown {
   if (vm.isContext(context)) {
     return vm.runInContext(code, context);
   }

@@ -11,8 +11,8 @@
 
 import type {PackageInfo, PackageJson, ResolutionContext} from './types';
 
-import toPosixPath from './utils/toPosixPath';
-import path from 'path';
+import {systemToPosixPath} from './utils/paths';
+import path from 'node:path';
 
 /**
  * Resolve the main entry point subpath for a package.
@@ -69,11 +69,9 @@ export function getPackageEntryPoint(
  *
  * Implements legacy (non-exports) package resolution behaviour based on the
  * ["browser" field spec](https://github.com/defunctzombie/package-browser-field-spec).
- *
- * This is the default implementation of `context.redirectModulePath`.
  */
 export function redirectModulePath(
-  context: $ReadOnly<{
+  context: Readonly<{
     getPackageForModule: ResolutionContext['getPackageForModule'],
     mainFields: ResolutionContext['mainFields'],
     originModulePath: ResolutionContext['originModulePath'],
@@ -85,7 +83,7 @@ export function redirectModulePath(
    *
    * - A relative specifier (beginning with '.'), which may be redirected by a
    *   `package.json` file local to `context.originModulePath`.
-   *     - Note: A path begining with '/' is treated as an absolute specifier
+   *     - Note: A path beginning with '/' is treated as an absolute specifier
    *       (non-standard).
    * - A bare specifier (e.g. 'some-pkg', 'some-pkg/foo'), which may be
    *   redirected by `package.json` rules in the containing package.
@@ -108,8 +106,6 @@ export function redirectModulePath(
     return modulePath;
   }
 
-  let redirectedPath;
-
   if (modulePath.startsWith('.') || isModulePathAbsolute) {
     const packageRelativeModulePath = isModulePathAbsolute
       ? // If the module path is absolute, containingPackage is relative to it
@@ -122,36 +118,66 @@ export function redirectModulePath(
           path.dirname(containingPackage.packageRelativePath),
           modulePath,
         );
-
-    redirectedPath = matchSubpathFromMainFields(
-      // Use prefixed POSIX path for lookup in package.json
-      './' + toPosixPath(packageRelativeModulePath),
-      containingPackage.packageJson,
-      mainFields,
-    );
-
-    if (typeof redirectedPath === 'string') {
-      // BRITTLE ASSUMPTION: This is always treated as a package-relative path
-      // and is converted back, even if the redirected path is a specifier
-      // referring to another package.
-      redirectedPath = path.resolve(containingPackage.rootPath, redirectedPath);
-    }
-  } else {
-    // Otherwise, `modulePath` may be an unprefixed relative path or a bare
-    // specifier (can also be an absolute specifier prefixed with a URL scheme).
-    // This is used only by the "browser" spec.
-    redirectedPath = matchSubpathFromMainFields(
+    return redirectPackageSubpath(
+      context,
       modulePath,
-      containingPackage.packageJson,
-      mainFields,
+      containingPackage,
+      packageRelativeModulePath,
     );
   }
+
+  // Otherwise, `modulePath` may be an unprefixed relative path or a bare
+  // specifier (can also be an absolute specifier prefixed with a URL scheme).
+  // This is used only by the "browser" spec.
+  const redirectedPath = matchSubpathFromMainFields(
+    modulePath,
+    containingPackage.packageJson,
+    mainFields,
+  );
 
   if (redirectedPath != null) {
     return redirectedPath;
   }
 
   return modulePath;
+}
+
+/**
+ * `redirectModulePath` for a module path whose containing package is already
+ * known. `packageRelativePath` is the path of the module relative to the
+ * package root, with system separators. Returns `false` if the module should
+ * be ignored, and `modulePath` if no `package.json` mapping is matched.
+ */
+export function redirectPackageSubpath(
+  context: Readonly<{
+    mainFields: ResolutionContext['mainFields'],
+    ...
+  }>,
+  modulePath: string,
+  containingPackage: Readonly<{
+    packageJson: PackageInfo['packageJson'],
+    rootPath: PackageInfo['rootPath'],
+    ...
+  }>,
+  packageRelativePath: string,
+): string | false {
+  const redirectedPath = matchSubpathFromMainFields(
+    // Use prefixed POSIX path for lookup in package.json
+    './' + systemToPosixPath(packageRelativePath),
+    containingPackage.packageJson,
+    context.mainFields,
+  );
+
+  if (typeof redirectedPath === 'string') {
+    // BRITTLE ASSUMPTION: This is always treated as a package-relative path
+    // and is converted back, even if the redirected path is a specifier
+    // referring to another package.
+    return path.isAbsolute(redirectedPath)
+      ? path.normalize(redirectedPath)
+      : path.join(containingPackage.rootPath, redirectedPath);
+  }
+
+  return redirectedPath === false ? false : modulePath;
 }
 
 /**
@@ -164,33 +190,46 @@ export function redirectModulePath(
  * - `false`, indicating the module should be ignored.
  * - `null` when there is no entry for the subpath.
  */
-function matchSubpathFromMainFields(
+export function matchSubpathFromMainFields(
   /**
    * The subpath, or set of subpath variants, to match. Can be either a
    * package-relative subpath (beginning with '.') or a bare import specifier
    * which may replace a module in another package.
    */
-  subpath: string | $ReadOnlyArray<string>,
+  subpath: string | ReadonlyArray<string>,
   pkg: PackageJson,
-  mainFields: $ReadOnlyArray<string>,
+  mainFields: ReadonlyArray<string>,
 ): string | false | null {
-  const fieldValues = mainFields
+  // Merge object-valued main fields ("browser"-style maps) into a single
+  // replacement map. We iterate `mainFields` in reverse so that, on a key
+  // conflict, earlier `mainFields` win, equivalent to
+  // `Object.assign({}, ...fieldValues.reverse())`, but avoiding any allocation
+  // in the most common case (no object-valued field, e.g. only a string
+  // "main"/"browser").
+  let replacements: {[key: string]: string | false} | null = null;
+  for (let i = mainFields.length - 1; i >= 0; i--) {
     // $FlowFixMe[invalid-computed-prop]
-    .map(name => pkg[name])
-    .filter(value => value != null && typeof value !== 'string');
+    const value = pkg[mainFields[i]];
+    if (value != null && typeof value !== 'string') {
+      if (replacements == null) {
+        replacements = {};
+      }
+      replacements = {...replacements, ...value};
+    }
+  }
 
-  if (!fieldValues.length) {
+  if (replacements == null) {
     return null;
   }
 
-  const replacements = Object.assign({}, ...fieldValues.reverse());
+  // The list of subpath variants is only built in this rare matched case (a
+  // single subpath is expanded to its "browser"-spec variants; a pre-expanded
+  // array is matched as-is).
   const variants = Array.isArray(subpath)
     ? subpath
     : expandSubpathVariants(subpath);
-
   for (const variant of variants) {
     const replacement = replacements[variant];
-
     if (replacement != null) {
       return replacement;
     }

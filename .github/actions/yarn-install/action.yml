@@ -1,0 +1,24 @@
+name: Install Dependencies
+inputs:
+  node-version:
+    type: string
+    required: false
+    default: '24.x'
+  no-lockfile:
+    type: string
+    required: false
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+  - uses: actions/setup-node@v4
+    name: Setup Node With Yarn Cache
+    with:
+      node-version: ${{ inputs.node-version }}
+      check-latest: true
+      cache: ${{ inputs.no-lockfile == 'false' && 'yarn' || '' }}
+      cache-dependency-path: ${{ inputs.no-lockfile == 'false' && 'yarn.lock' || '' }}
+  - name: Install Dependencies
+    run: yarn install ${{ inputs.no-lockfile == 'false' && '--frozen-lockfile' || '--no-lockfile' }} --non-interactive --ignore-scripts
+    shell: bash

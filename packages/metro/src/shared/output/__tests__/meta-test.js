@@ -11,8 +11,8 @@
 
 'use strict';
 
-const meta = require('../meta');
+import meta from '../meta';
 
-it('exports the block list creator', () => {
+test('exports the block list creator', () => {
   expect(meta('some formatted code', 'utf8')).toMatchSnapshot();
 });

@@ -9,48 +9,46 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {DeltaResult, Graph, MixedOutput, Module} from './DeltaBundler';
 import type {
   Options as DeltaBundlerOptions,
   ReadOnlyDependencies,
   TransformInputOptions,
-} from './DeltaBundler/types.flow';
+} from './DeltaBundler/types';
 import type {GraphId} from './lib/getGraphId';
-import type {ResolverInputOptions} from './shared/types.flow';
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
+import type {ResolverInputOptions} from './shared/types';
+import type {ConfigT} from 'metro-config';
 
-const Bundler = require('./Bundler');
-const DeltaBundler = require('./DeltaBundler');
-const ResourceNotFoundError = require('./IncrementalBundler/ResourceNotFoundError');
-const getGraphId = require('./lib/getGraphId');
-const getPrependedScripts = require('./lib/getPrependedScripts');
-const transformHelpers = require('./lib/transformHelpers');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+import Bundler from './Bundler';
+import DeltaBundler from './DeltaBundler';
+import ResourceNotFoundError from './IncrementalBundler/ResourceNotFoundError';
+import getGraphId from './lib/getGraphId';
+import getPrependedScripts from './lib/getPrependedScripts';
+import * as transformHelpers from './lib/transformHelpers';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export opaque type RevisionId: string = string;
 
 export type OutputGraph = Graph<>;
 
-type OtherOptions = $ReadOnly<{
-  onProgress: $PropertyType<DeltaBundlerOptions<>, 'onProgress'>,
+type OtherOptions = Readonly<{
+  onProgress: DeltaBundlerOptions<>['onProgress'],
   shallow: boolean,
   lazy: boolean,
 }>;
 
 export type GraphRevision = {
   // Identifies the last computed revision.
-  +id: RevisionId,
-  +date: Date,
-  +graphId: GraphId,
-  +graph: OutputGraph,
-  +prepend: $ReadOnlyArray<Module<>>,
+  readonly id: RevisionId,
+  readonly date: Date,
+  readonly graphId: GraphId,
+  readonly graph: OutputGraph,
+  readonly prepend: ReadonlyArray<Module<>>,
 };
 
-export type IncrementalBundlerOptions = $ReadOnly<{
+export type IncrementalBundlerOptions = Readonly<{
   hasReducedPerformance?: boolean,
   watch?: boolean,
 }>;
@@ -63,7 +61,7 @@ function revisionIdFromString(str: string): RevisionId {
   return str;
 }
 
-class IncrementalBundler {
+export default class IncrementalBundler {
   _config: ConfigT;
   _bundler: Bundler;
   _deltaBundler: DeltaBundler<>;
@@ -79,10 +77,9 @@ class IncrementalBundler {
     this._deltaBundler = new DeltaBundler(this._bundler.getWatcher());
   }
 
-  end(): void {
+  async end(): Promise<void> {
     this._deltaBundler.end();
-    // $FlowFixMe[unused-promise]
-    this._bundler.end();
+    await this._bundler.end();
   }
 
   getBundler(): Bundler {
@@ -102,7 +99,7 @@ class IncrementalBundler {
   }
 
   async buildGraphForEntries(
-    entryFiles: $ReadOnlyArray<string>,
+    entryFiles: ReadonlyArray<string>,
     transformOptions: TransformInputOptions,
     resolverOptions: ResolverInputOptions,
     otherOptions?: OtherOptions = {
@@ -134,6 +131,8 @@ class IncrementalBundler {
         this._config.transformer.unstable_allowRequireContext,
       unstable_enablePackageExports:
         this._config.resolver.unstable_enablePackageExports,
+      unstable_incrementalResolution:
+        this._config.resolver.unstable_incrementalResolution,
       shallow: otherOptions.shallow,
     });
 
@@ -148,7 +147,7 @@ class IncrementalBundler {
   }
 
   async getDependencies(
-    entryFiles: $ReadOnlyArray<string>,
+    entryFiles: ReadonlyArray<string>,
     transformOptions: TransformInputOptions,
     resolverOptions: ResolverInputOptions,
     otherOptions?: OtherOptions = {
@@ -182,6 +181,8 @@ class IncrementalBundler {
           this._config.transformer.unstable_allowRequireContext,
         unstable_enablePackageExports:
           this._config.resolver.unstable_enablePackageExports,
+        unstable_incrementalResolution:
+          this._config.resolver.unstable_incrementalResolution,
         shallow: otherOptions.shallow,
       },
     );
@@ -198,7 +199,10 @@ class IncrementalBundler {
       shallow: false,
       lazy: false,
     },
-  ): Promise<{+graph: OutputGraph, +prepend: $ReadOnlyArray<Module<>>}> {
+  ): Promise<{
+    readonly graph: OutputGraph,
+    readonly prepend: ReadonlyArray<Module<>>,
+  }> {
     const graph = await this.buildGraphForEntries(
       [entryFile],
       transformOptions,
@@ -333,8 +337,8 @@ class IncrementalBundler {
   }
 
   async _getAbsoluteEntryFiles(
-    entryFiles: $ReadOnlyArray<string>,
-  ): Promise<$ReadOnlyArray<string>> {
+    entryFiles: ReadonlyArray<string>,
+  ): Promise<ReadonlyArray<string>> {
     const absoluteEntryFiles = entryFiles.map((entryFile: string) =>
       path.resolve(
         this._config.server.unstable_serverRoot ?? this._config.projectRoot,
@@ -345,17 +349,19 @@ class IncrementalBundler {
     await Promise.all(
       absoluteEntryFiles.map(
         (entryFile: string) =>
-          new Promise((resolve: void => void, reject: mixed => mixed) => {
-            // This should throw an error if the file doesn't exist.
-            // Using this instead of fs.exists to account for SimLinks.
-            fs.realpath(entryFile, err => {
-              if (err) {
-                reject(new ResourceNotFoundError(entryFile));
-              } else {
-                resolve();
-              }
-            });
-          }),
+          new Promise(
+            (resolve: () => void, reject: (reason: unknown) => unknown) => {
+              // This should throw an error if the file doesn't exist.
+              // Using this instead of fs.exists to account for SimLinks.
+              fs.realpath(entryFile, err => {
+                if (err) {
+                  reject(new ResourceNotFoundError(entryFile));
+                } else {
+                  resolve();
+                }
+              });
+            },
+          ),
       ),
     );
 
@@ -367,5 +373,3 @@ class IncrementalBundler {
     await this._bundler.ready();
   }
 }
-
-module.exports = IncrementalBundler;

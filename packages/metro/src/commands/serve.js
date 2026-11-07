@@ -4,38 +4,37 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
 
-'use strict';
-
-import type {ModuleObject} from 'yargs';
+import type {ServerOptions as HttpsServerOptions} from 'node:https';
+import type {CommandModule} from 'yargs';
 import typeof Yargs from 'yargs';
 
-const {makeAsyncCommand, watchFile} = require('../cli-utils');
-const {loadConfig, resolveConfig} = require('metro-config');
-const {promisify} = require('util');
+import {makeAsyncCommand, watchFile} from '../cli-utils';
+import {loadConfig, resolveConfig} from 'metro-config';
+import {promisify} from 'node:util';
 
-type Args = $ReadOnly<{
-  projectRoots?: $ReadOnlyArray<string>,
+type Args = Readonly<{
+  _: unknown,
+  $0: unknown,
+  projectRoots?: ReadonlyArray<string>,
   host: string,
   port: number,
   maxWorkers?: number,
   secure?: boolean,
   secureKey?: string,
   secureCert?: string,
-  secureServerOptions?: string,
+  secureServerOptions?: HttpsServerOptions,
   hmrEnabled?: boolean,
   config?: string,
   resetCache?: boolean,
+  ...
 }>;
 
-module.exports = (): {
-  ...ModuleObject,
-  handler: Function,
-} => ({
+export default (): CommandModule => ({
   command: 'serve',
   aliases: ['start'],
   desc: 'Starts Metro on the given port, building bundles on the fly',
@@ -89,16 +88,19 @@ module.exports = (): {
       if (server) {
         // eslint-disable-next-line no-console
         console.log('Configuration changed. Restarting the server...');
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
         await promisify(server.close).call(server);
       }
 
+      // $FlowFixMe[incompatible-type] argv has extra props.
       const config = await loadConfig(argv);
 
       // Inline require() to avoid circular dependency with ../index
+      // eslint-disable-next-line import/no-commonjs
       const MetroApi = require('../index');
 
       const {
+        _,
+        $0: _0,
         config: _config,
         hmrEnabled: _hmrEnabled,
         maxWorkers: _maxWorkers,
@@ -107,7 +109,11 @@ module.exports = (): {
         resetCache: _resetCache,
         ...runServerOptions
       } = argv;
-      server = await MetroApi.runServer(config, runServerOptions);
+      ({httpServer: server} = await MetroApi.runServer(
+        config,
+        // $FlowFixMe[incompatible-exact] argv has extra props.
+        runServerOptions,
+      ));
 
       restarting = false;
     }

@@ -9,32 +9,30 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const addParamsToDefineCall = require('../addParamsToDefineCall');
+import addParamsToDefineCall from '../addParamsToDefineCall';
 
 describe('addParamsToDefineCall', () => {
   const input = '__d(function() {}); // SourceMapUrl=something';
 
-  it('adds a simple parameter', () => {
+  test('adds a simple parameter', () => {
     expect(addParamsToDefineCall(input, 10)).toEqual(
       '__d(function() {},10); // SourceMapUrl=something',
     );
   });
 
-  it('adds several parameters', () => {
+  test('adds several parameters', () => {
     expect(addParamsToDefineCall(input, 10, {foo: 'bar'})).toEqual(
       '__d(function() {},10,{"foo":"bar"}); // SourceMapUrl=something',
     );
   });
 
-  it('adds null parameters', () => {
+  test('adds null parameters', () => {
     expect(addParamsToDefineCall(input, null, 10)).toEqual(
       '__d(function() {},null,10); // SourceMapUrl=something',
     );
   });
 
-  it('adds undefined parameters', () => {
+  test('adds undefined parameters', () => {
     expect(addParamsToDefineCall(input, null, 10)).toEqual(
       '__d(function() {},null,10); // SourceMapUrl=something',
     );

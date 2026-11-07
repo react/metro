@@ -9,12 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const debounceAsyncQueue = require('../debounceAsyncQueue');
+import debounceAsyncQueue from '../debounceAsyncQueue';
 
 describe('debounceAsyncQueue', () => {
-  it('debounces calls', async () => {
+  test('debounces calls', async () => {
     const fn = jest.fn();
     const debounced = debounceAsyncQueue<void>(fn, 50);
     // $FlowFixMe[unused-promise]
@@ -29,7 +27,7 @@ describe('debounceAsyncQueue', () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a Promise to the eventual return value', async () => {
+  test('returns a Promise to the eventual return value', async () => {
     const fn = jest.fn(() => Promise.resolve('foo'));
     const debounced = debounceAsyncQueue(fn, 50);
     const pro1 = debounced();
@@ -42,10 +40,11 @@ describe('debounceAsyncQueue', () => {
     expect(await pro3).toBe('foo');
   });
 
-  it('queues calls that happen while the previous call is still executing', async () => {
+  test('queues calls that happen while the previous call is still executing', async () => {
     let finishExecuting:
-      | ((result?: Promise<string>) => void)
-      | ((result: string) => void) = (result: string) => {};
+      ((result?: Promise<string>) => void) | ((result: string) => void) = (
+      result: string,
+    ) => {};
     const fn = jest.fn(
       () =>
         new Promise((resolve: (result?: Promise<string>) => void) => {
@@ -58,11 +57,11 @@ describe('debounceAsyncQueue', () => {
     await Promise.resolve();
     const pro2 = debounced();
     const pro3 = debounced();
-    // $FlowFixMe[incompatible-call]
+    // $FlowFixMe[incompatible-type]
     finishExecuting('foo');
     jest.runAllTimers();
     await Promise.resolve();
-    // $FlowFixMe[incompatible-call]
+    // $FlowFixMe[incompatible-type]
     finishExecuting('bar');
     expect(await pro1).toBe('foo');
     expect(await pro2).toBe('bar');

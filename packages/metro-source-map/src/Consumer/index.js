@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
 // Implements an API-compatible subset of source-map's `SourceMapConsumer`.
-const DelegatingConsumer = require('./DelegatingConsumer');
+import DelegatingConsumer from './DelegatingConsumer';
 
-module.exports = DelegatingConsumer;
+export default DelegatingConsumer;

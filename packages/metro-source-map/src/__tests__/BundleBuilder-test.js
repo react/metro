@@ -13,6 +13,7 @@
 const {BundleBuilder} = require('../BundleBuilder');
 const {Consumer} = require('../source-map');
 const {add0, add1} = require('ob1');
+
 const {objectContaining} = expect;
 
 let builder;
@@ -21,7 +22,7 @@ beforeEach(() => {
 });
 
 describe('BundleBuilder', () => {
-  it('empty', () => {
+  test('empty', () => {
     expect(builder.getCode()).toBe('');
     expect(builder.getMap()).toMatchInlineSnapshot(`
       Object {
@@ -32,7 +33,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('single empty region', () => {
+  test('single empty region', () => {
     builder.append('');
     expect(builder.getCode()).toBe('');
     expect(builder.getMap()).toMatchInlineSnapshot(`
@@ -44,7 +45,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('single unmapped region', () => {
+  test('single unmapped region', () => {
     builder.append('abcdef');
     expect(builder.getCode()).toBe('abcdef');
     expect(builder.getMap()).toMatchInlineSnapshot(`
@@ -56,7 +57,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('single unmapped region ending in newline', () => {
+  test('single unmapped region ending in newline', () => {
     builder.append('abcdef\n');
     expect(builder.getCode()).toBe('abcdef\n');
     expect(builder.getMap()).toMatchInlineSnapshot(`
@@ -68,7 +69,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('two unmapped regions in one line', () => {
+  test('two unmapped regions in one line', () => {
     builder.append('abc').append('def');
     expect(builder.getCode()).toBe('abcdef');
     expect(builder.getMap()).toMatchInlineSnapshot(`
@@ -80,7 +81,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('two mapped regions in one line', () => {
+  test('two mapped regions in one line', () => {
     builder
       .append('abc', {version: 3, mappings: 'A', names: [], sources: []})
       .append('def', {version: 3, mappings: 'A,C', names: [], sources: []});
@@ -131,7 +132,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('two mapped regions with newlines', () => {
+  test('two mapped regions with newlines', () => {
     builder
       .append('abc\n', {
         version: 3,
@@ -192,7 +193,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('unmapped columns before a mapped region', () => {
+  test('unmapped columns before a mapped region', () => {
     builder.append('abc').append('def\n', {
       version: 3,
       mappings: 'A',
@@ -234,7 +235,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('CR newlines', () => {
+  test('CR newlines', () => {
     builder.append('\r\r').append('abc', {
       version: 3,
       mappings: 'A',
@@ -276,7 +277,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('LF newlines', () => {
+  test('LF newlines', () => {
     builder.append('\n\n').append('abc', {
       version: 3,
       mappings: 'A',
@@ -318,7 +319,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('CRLF newlines', () => {
+  test('CRLF newlines', () => {
     builder.append('\r\n\r\n').append('abc', {
       version: 3,
       mappings: 'A',
@@ -360,7 +361,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('mapped, unmapped, mapped', () => {
+  test('mapped, unmapped, mapped', () => {
     builder
       .append('abc\n', {
         version: 3,
@@ -434,7 +435,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('mapped, unmapped', () => {
+  test('mapped, unmapped', () => {
     builder
       .append('abc\n', {
         version: 3,
@@ -478,12 +479,12 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('getMap is idempotent', () => {
+  test('getMap is idempotent', () => {
     const abcMap = {
       version: 3,
       mappings: 'A',
-      names: ([]: Array<string>),
-      sources: ([]: Array<string>),
+      names: [] as Array<string>,
+      sources: [] as Array<string>,
     };
 
     const builderBase = new BundleBuilder('bundle.js');
@@ -497,7 +498,7 @@ describe('BundleBuilder', () => {
     expect(builder.getMap()).toEqual(builderBase.getMap());
   });
 
-  it('mapped, unmapped, partially mapped', () => {
+  test('mapped, unmapped, partially mapped', () => {
     builder
       .append('abc\n', {
         version: 3,
@@ -571,7 +572,7 @@ describe('BundleBuilder', () => {
     `);
   });
 
-  it('encodes unmapped regions correctly', () => {
+  test('encodes unmapped regions correctly', () => {
     const builder = new BundleBuilder('bundle.js');
     builder
       .append('abc\n', {

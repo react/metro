@@ -9,82 +9,105 @@
  * @oncall react_native
  */
 
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
+import type {ConfigT} from 'metro-config';
+import type {HasteMap, InputFileMapPlugin} from 'metro-file-map';
 
-import MetroFileMap, {DiskCacheManager} from 'metro-file-map';
+import MetroFileMap, {
+  DependencyPlugin,
+  DiskCacheManager,
+  HastePlugin,
+} from 'metro-file-map';
 
-const ci = require('ci-info');
-
-function getIgnorePattern(config: ConfigT): RegExp {
-  // For now we support both options
-  const {blockList, blacklistRE} = config.resolver;
-  const ignorePattern = blacklistRE || blockList;
-
-  // If neither option has been set, use default pattern
-  if (!ignorePattern) {
-    return / ^/;
+const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
+  if (!Array.isArray(regexes)) {
+    return regexes;
   }
+  return new RegExp(
+    regexes
+      .map((regex, index) => {
+        if (regex.flags !== regexes[0].flags) {
+          throw new Error(
+            'Cannot combine blockList patterns, because they have different flags:\n' +
+              ' - Pattern 0: ' +
+              regexes[0].toString() +
+              '\n' +
+              ` - Pattern ${index}: ` +
+              regexes[index].toString(),
+          );
+        }
+        return '(' + regex.source + ')';
+      })
+      .join('|'),
+    regexes[0]?.flags ?? '',
+  );
+};
 
-  const combine = (regexes: Array<RegExp>) =>
-    new RegExp(
-      regexes
-        .map((regex, index) => {
-          if (regex.flags !== regexes[0].flags) {
-            throw new Error(
-              'Cannot combine blockList patterns, because they have different flags:\n' +
-                ' - Pattern 0: ' +
-                regexes[0].toString() +
-                '\n' +
-                ` - Pattern ${index}: ` +
-                regexes[index].toString(),
-            );
-          }
-          return '(' + regex.source + ')';
-        })
-        .join('|'),
-      regexes[0]?.flags ?? '',
-    );
-
-  // If ignorePattern is an array, merge it into one
-  if (Array.isArray(ignorePattern)) {
-    return combine(ignorePattern);
-  }
-
-  return ignorePattern;
+function isCIEnv() {
+  const CI = process.env.CI;
+  return typeof CI === 'string' && CI !== '' && CI !== '0' && CI !== 'false';
 }
 
-function createFileMap(
+export default function createFileMap(
   config: ConfigT,
-  options?: $ReadOnly<{
+  options?: Readonly<{
     extractDependencies?: boolean,
     watch?: boolean,
     throwOnModuleCollision?: boolean,
     cacheFilePrefix?: string,
   }>,
-): MetroFileMap {
-  const dependencyExtractor =
-    options?.extractDependencies === false
-      ? null
-      : config.resolver.dependencyExtractor;
-  const computeDependencies = dependencyExtractor != null;
+): {
+  fileMap: MetroFileMap,
+  hasteMap: HasteMap,
+  dependencyPlugin: ?DependencyPlugin,
+} {
+  const watch = options?.watch ?? !isCIEnv();
+  const {enabled: autoSaveEnabled, ...autoSaveOpts} =
+    config.watcher.unstable_autoSaveCache ?? {};
+  const autoSave = watch && autoSaveEnabled ? autoSaveOpts : false;
 
-  return MetroFileMap.create({
+  const plugins: Array<InputFileMapPlugin> = [
+    ...(config.unstable_fileMapPlugins ?? []),
+  ];
+
+  let dependencyPlugin = null;
+  // Add DependencyPlugin if dependencies should be extracted
+  if (
+    config.resolver.dependencyExtractor != null &&
+    options?.extractDependencies !== false
+  ) {
+    dependencyPlugin = new DependencyPlugin({
+      dependencyExtractor: config.resolver.dependencyExtractor,
+      computeDependencies: true,
+    });
+    plugins.push(dependencyPlugin);
+  }
+
+  const hasteMap = new HastePlugin({
+    platforms: new Set([
+      ...config.resolver.platforms,
+      MetroFileMap.H.NATIVE_PLATFORM,
+    ]),
+    hasteImplModulePath: config.resolver.hasteImplModulePath,
+    enableHastePackages: config.resolver.enableGlobalPackages,
+    rootDir: config.projectRoot,
+    failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
+  });
+
+  plugins.push(hasteMap);
+
+  const fileMap = new MetroFileMap({
     cacheManagerFactory:
       config?.unstable_fileMapCacheManagerFactory ??
-      (buildParameters =>
-        new DiskCacheManager({
-          buildParameters,
+      (factoryParams =>
+        new DiskCacheManager(factoryParams, {
           cacheDirectory:
             config.fileMapCacheDirectory ?? config.hasteMapCacheDirectory,
           cacheFilePrefix: options?.cacheFilePrefix,
+          autoSave,
         })),
     perfLoggerFactory: config.unstable_perfLoggerFactory,
-    computeDependencies,
-    computeSha1: true,
-    dependencyExtractor: config.resolver.dependencyExtractor,
-    enableHastePackages: config?.resolver.enableGlobalPackages,
-    enableSymlinks: config.resolver.unstable_enableSymlinks,
-    enableWorkerThreads: config.watcher.unstable_workerThreads,
+    computeSha1: !config.watcher.unstable_lazySha1,
+    enableSymlinks: true,
     extensions: Array.from(
       new Set([
         ...config.resolver.sourceExts,
@@ -92,22 +115,17 @@ function createFileMap(
         ...config.watcher.additionalExts,
       ]),
     ),
-    forceNodeFilesystemAPI: !config.resolver.useWatchman,
-    hasteImplModulePath: config.resolver.hasteImplModulePath,
     healthCheck: config.watcher.healthCheck,
-    ignorePattern: getIgnorePattern(config),
+    ignorePattern: flattenBlockList(config.resolver.blockList),
     maxWorkers: config.maxWorkers,
-    mocksPattern: '',
-    platforms: [...config.resolver.platforms, MetroFileMap.H.NATIVE_PLATFORM],
+    plugins,
     retainAllFiles: true,
     resetCache: config.resetCache,
     rootDir: config.projectRoot,
     roots: config.watchFolders,
-    throwOnModuleCollision: options?.throwOnModuleCollision ?? true,
     useWatchman: config.resolver.useWatchman,
-    watch: options?.watch == null ? !ci.isCI : options.watch,
+    watch,
     watchmanDeferStates: config.watcher.watchman.deferStates,
   });
+  return {fileMap, hasteMap, dependencyPlugin};
 }
-
-module.exports = createFileMap;

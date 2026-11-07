@@ -9,34 +9,37 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {Module} from '../../types.flow';
+import type {Module} from '../../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
-const {getJsOutput} = require('./js');
+import {getJsOutput} from './js';
 
-function getSourceMapInfo(
+export default function getSourceMapInfo(
   module: Module<>,
   options: {
-    +excludeSource: boolean,
-    +shouldAddToIgnoreList: (Module<>) => boolean,
+    readonly excludeSource: boolean,
+    readonly shouldAddToIgnoreList: (module: Module<>) => boolean,
     getSourceUrl: ?(module: Module<>) => string,
   },
 ): {
-  +map: Array<MetroSourceMapSegmentTuple>,
-  +functionMap: ?FBSourceFunctionMap,
-  +code: string,
-  +path: string,
-  +source: string,
-  +lineCount: number,
-  +isIgnored: boolean,
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+  readonly functionMap: ?FBSourceFunctionMap,
+  readonly code: string,
+  readonly path: string,
+  readonly source: string,
+  readonly lineCount: number,
+  readonly isIgnored: boolean,
 } {
+  const {code, functionMap, lineCount, map} = getJsOutput(module).data;
   return {
-    ...getJsOutput(module).data,
+    code,
+    functionMap,
+    lineCount,
+    map,
     isIgnored: options.shouldAddToIgnoreList(module),
     path: options?.getSourceUrl?.(module) ?? module.path,
     source: options.excludeSource ? '' : getModuleSource(module),
@@ -50,5 +53,3 @@ function getModuleSource(module: Module<>): string {
 
   return module.getSource().toString();
 }
-
-module.exports = getSourceMapInfo;

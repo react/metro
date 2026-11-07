@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const invariant = require('invariant');
+import invariant from 'invariant';
 
 type RawBuffer = Array<number | RawBuffer>;
 
@@ -49,13 +47,13 @@ const CHILDREN_FIELD_TYPE = '__CHILDREN__';
 // Care is taken to adhere to the self-describing heap snapshot schema, but
 // we make some additional assumptions based on what Chrome hardcodes (where
 // the format leaves us no other choice).
-class ChromeHeapSnapshotProcessor {
+export class ChromeHeapSnapshotProcessor {
   // The raw snapshot data provided to this processor. Mutable.
-  +_snapshotData: ChromeHeapSnapshot;
+  readonly _snapshotData: ChromeHeapSnapshot;
 
   // An adapter for the global string table in the raw snapshot data.
   // This is shared across all the iterators we will create.
-  +_globalStringTable: ChromeHeapSnapshotStringTable;
+  readonly _globalStringTable: ChromeHeapSnapshotStringTable;
 
   constructor(snapshotData: ChromeHeapSnapshot) {
     this._snapshotData = snapshotData;
@@ -67,7 +65,7 @@ class ChromeHeapSnapshotProcessor {
   traceFunctionInfos(): ChromeHeapSnapshotRecordIterator {
     return new ChromeHeapSnapshotRecordIterator(
       // Flow is being conservative here, but we'll never change a number into RawBuffer or vice versa.
-      // $FlowIgnore[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       this._snapshotData.trace_function_infos,
       this._snapshotData.snapshot.meta.trace_function_info_fields,
       {name: 'string', script_name: 'string'},
@@ -79,7 +77,7 @@ class ChromeHeapSnapshotProcessor {
   locations(): ChromeHeapSnapshotRecordIterator {
     return new ChromeHeapSnapshotRecordIterator(
       // Flow is being conservative here, but we'll never change a number into RawBuffer or vice versa.
-      // $FlowIgnore[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       this._snapshotData.locations,
       this._snapshotData.snapshot.meta.location_fields,
       null,
@@ -91,7 +89,7 @@ class ChromeHeapSnapshotProcessor {
   nodes(): ChromeHeapSnapshotRecordIterator {
     return new ChromeHeapSnapshotRecordIterator(
       // Flow is being conservative here, but we'll never change a number into RawBuffer or vice versa.
-      // $FlowIgnore[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       this._snapshotData.nodes,
       this._snapshotData.snapshot.meta.node_fields,
       this._snapshotData.snapshot.meta.node_types,
@@ -103,7 +101,7 @@ class ChromeHeapSnapshotProcessor {
   edges(): ChromeHeapSnapshotRecordIterator {
     return new ChromeHeapSnapshotRecordIterator(
       // Flow is being conservative here, but we'll never change a number into RawBuffer or vice versa.
-      // $FlowIgnore[incompatible-call]
+      // $FlowFixMe[incompatible-type]
       this._snapshotData.edges,
       this._snapshotData.snapshot.meta.edge_fields,
       this._snapshotData.snapshot.meta.edge_types,
@@ -132,8 +130,8 @@ class ChromeHeapSnapshotProcessor {
 // 2. The string table array is always mutated in-place rather than being
 //    copied / replaced with a new array in its containing object.
 class ChromeHeapSnapshotStringTable {
-  +_strings: Array<string>;
-  +_indexCache: Map<string, number>;
+  readonly _strings: Array<string>;
+  readonly _indexCache: Map<string, number>;
 
   constructor(strings: Array<string>) {
     this._strings = strings;
@@ -187,8 +185,8 @@ type ChromeHeapSnapshotFieldType =
   | string;
 
 // The input type to functions that accept record objects.
-type DenormalizedRecordInput = $ReadOnly<{
-  [field: string]: string | number | $ReadOnlyArray<DenormalizedRecordInput>,
+type DenormalizedRecordInput = Readonly<{
+  [field: string]: string | number | ReadonlyArray<DenormalizedRecordInput>,
 }>;
 
 // A cursor pointing to a record-aligned position in a 1D array of N records
@@ -204,18 +202,18 @@ type DenormalizedRecordInput = $ReadOnly<{
 class ChromeHeapSnapshotRecordAccessor {
   // Fast lookup tables from field names to their offsets (required) and types
   // (optional). These are shared with any child iterators.
-  +_fieldToOffset: $ReadOnlyMap<string, number>;
-  +_fieldToType: $ReadOnlyMap<string, ChromeHeapSnapshotFieldType>;
+  readonly _fieldToOffset: ReadonlyMap<string, number>;
+  readonly _fieldToType: ReadonlyMap<string, ChromeHeapSnapshotFieldType>;
 
   // The number of fields in every record (i.e. K).
-  +_recordSize: number;
+  readonly _recordSize: number;
 
   // The raw buffer. Mutable.
-  +_buffer: RawBuffer;
+  readonly _buffer: RawBuffer;
 
   // The global string table. Mutable in the ways allowed by the string table
   // class.
-  +_globalStringTable: ChromeHeapSnapshotStringTable;
+  readonly _globalStringTable: ChromeHeapSnapshotStringTable;
 
   // The current position in the raw buffer.
   _position: number;
@@ -232,8 +230,8 @@ class ChromeHeapSnapshotRecordAccessor {
     // Fields with unknown types are assumed to be numeric.
     recordTypes:
       | Array<ChromeHeapSnapshotFieldType>
-      | $ReadOnly<{
-          [string]: ChromeHeapSnapshotFieldType,
+      | Readonly<{
+          [key: string]: ChromeHeapSnapshotFieldType,
         }>
       | null,
     globalStringTable: ChromeHeapSnapshotStringTable,
@@ -262,7 +260,7 @@ class ChromeHeapSnapshotRecordAccessor {
           ]),
         );
       } else {
-        // $FlowIssue[incompatible-type-arg] Object.entries is incompletely typed
+        // $FlowFixMe[incompatible-type] Object.entries is incompletely typed
         this._fieldToType = new Map(Object.entries(recordTypes || {}));
       }
     }
@@ -390,7 +388,8 @@ class ChromeHeapSnapshotRecordAccessor {
     let didResizeBuffer = false;
     try {
       for (const field of this._fieldToOffset.keys()) {
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
+        /* $FlowFixMe[invalid-this-arg] Error exposed after fixing this typing
+         * unsoundness in flow */
         if (!Object.prototype.hasOwnProperty.call(record, field)) {
           throw new Error('Missing value for field: ' + field);
         }
@@ -482,7 +481,7 @@ class ChromeHeapSnapshotRecordAccessor {
   // based on the runtime type of `value`.
   _set(
     field: string,
-    value: string | number | $ReadOnlyArray<DenormalizedRecordInput>,
+    value: string | number | ReadonlyArray<DenormalizedRecordInput>,
   ): void {
     if (typeof value === 'string') {
       this.setString(field, value);
@@ -499,7 +498,7 @@ class ChromeHeapSnapshotRecordAccessor {
   // a new buffer using `append()`s semantics.
   _setChildren(
     field: string,
-    value: $ReadOnlyArray<DenormalizedRecordInput>,
+    value: ReadonlyArray<DenormalizedRecordInput>,
   ): void {
     const fieldType = this._fieldToType.get(field);
     if (fieldType !== CHILDREN_FIELD_TYPE) {
@@ -554,9 +553,7 @@ class ChromeHeapSnapshotRecordAccessor {
     if (this._buffer.length - position < this._recordSize) {
       if (!(allowEnd && this._buffer.length === position)) {
         throw new Error(
-          `Record at position ${position} is truncated: expected ${
-            this._recordSize
-          } fields but found ${this._buffer.length - position}`,
+          `Record at position ${position} is truncated: expected ${this._recordSize} fields but found ${this._buffer.length - position}`,
         );
       }
     }
@@ -569,7 +566,6 @@ class ChromeHeapSnapshotRecordAccessor {
   }
 }
 
-// $FlowIssue[prop-missing] Flow doesn't see that we implement the iteration protocol
 class ChromeHeapSnapshotRecordIterator
   extends ChromeHeapSnapshotRecordAccessor
   implements Iterable<ChromeHeapSnapshotRecordAccessor>
@@ -579,8 +575,8 @@ class ChromeHeapSnapshotRecordIterator
     recordFields: Array<string>,
     recordTypes:
       | Array<ChromeHeapSnapshotFieldType>
-      | $ReadOnly<{
-          [string]: ChromeHeapSnapshotFieldType,
+      | Readonly<{
+          [key: string]: ChromeHeapSnapshotFieldType,
         }>
       | null,
     globalStringTable: ChromeHeapSnapshotStringTable,
@@ -602,16 +598,16 @@ class ChromeHeapSnapshotRecordIterator
   }
 
   // JS Iterator protocol
-  next(): {done: boolean, +value: this} {
+  next(): IteratorResult<ChromeHeapSnapshotRecordIterator, void> {
     this.protectedTryMoveNext();
-    return {done: !this.protectedHasNext(), value: this};
+    const done = !this.protectedHasNext();
+    // $FlowFixMe[incompatible-type]
+    return done ? {done} : {done, value: this};
   }
 
   // JS Iterable protocol
-  // $FlowIssue[unsupported-syntax]
-  [Symbol.iterator](): this {
+  // $FlowFixMe[incompatible-type]
+  [Symbol.iterator](): ChromeHeapSnapshotRecordIterator {
     return this;
   }
 }
-
-module.exports = {ChromeHeapSnapshotProcessor};

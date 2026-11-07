@@ -9,129 +9,112 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   BundlerResolution,
   TransformResultDependency,
-} from '../../DeltaBundler/types.flow';
+} from '../../DeltaBundler/types';
 import type {Reporter} from '../../lib/reporting';
-import type {ResolverInputOptions} from '../../shared/types.flow';
+import type {ResolverInputOptions} from '../../shared/types';
 import type {
   CustomResolver,
-  DoesFileExist,
   FileCandidates,
-  GetRealPath,
+  FileSystemLookup,
   Resolution,
   ResolveAsset,
 } from 'metro-resolver';
-import type {PackageForModule, PackageJson} from 'metro-resolver/src/types';
+import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
-const {codeFrameColumns} = require('@babel/code-frame');
-const fs = require('fs');
-const invariant = require('invariant');
-const Resolver = require('metro-resolver');
-const createDefaultContext = require('metro-resolver/src/createDefaultContext');
-const path = require('path');
-const util = require('util');
+import {deriveVirtualModulePath} from '../../lib/modulePath';
+import {codeFrameColumns} from '@babel/code-frame';
+import invariant from 'invariant';
+import * as Resolver from 'metro-resolver';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import util from 'node:util';
 
-export type DirExistsFn = (filePath: string) => boolean;
-
-export type Packageish = interface {
-  path: string,
-  read(): PackageJson,
-};
-
-export type Moduleish = interface {
-  +path: string,
-  getPackage(): ?Packageish,
-};
-
-export type ModuleishCache<TPackage> = interface {
-  getPackage(
-    name: string,
-    platform?: string,
-    supportsNativePlatform?: boolean,
-  ): TPackage,
-  getPackageOf(absolutePath: string): ?{
-    pkg: TPackage,
-    packageRelativePath: string,
-  },
-};
-
-type Options<TPackage> = $ReadOnly<{
-  assetExts: $ReadOnlySet<string>,
-  dirExists: DirExistsFn,
+type Options = Readonly<{
+  assetExts: ReadonlySet<string>,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
   emptyModulePath: string,
-  extraNodeModules: ?Object,
+  extraNodeModules: ?any,
+  fileSystemLookup: FileSystemLookup,
   getHasteModulePath: (name: string, platform: ?string) => ?string,
   getHastePackagePath: (name: string, platform: ?string) => ?string,
-  mainFields: $ReadOnlyArray<string>,
-  moduleCache: ModuleishCache<TPackage>,
-  nodeModulesPaths: $ReadOnlyArray<string>,
+  mainFields: ReadonlyArray<string>,
+  getPackage: (packageJsonPath: string) => ?PackageJson,
+  getPackageForModule: (absolutePath: string) => ?PackageForModule,
+  nodeModulesPaths: ReadonlyArray<string>,
   preferNativePlatform: boolean,
   projectRoot: string,
   reporter: Reporter,
   resolveAsset: ResolveAsset,
   resolveRequest: ?CustomResolver,
-  sourceExts: $ReadOnlyArray<string>,
-  unstable_conditionNames: $ReadOnlyArray<string>,
-  unstable_conditionsByPlatform: $ReadOnly<{
-    [platform: string]: $ReadOnlyArray<string>,
+  schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
+  sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
+  unstable_applyBrowserSpecAfterExports: boolean,
+  unstable_conditionNames: ReadonlyArray<string>,
+  unstable_conditionsByPlatform: Readonly<{
+    [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
-  unstable_getRealPath: ?GetRealPath,
+  unstable_incrementalResolution: boolean,
+  unstable_resolveExportsFromPackageRoot: boolean,
 }>;
 
-class ModuleResolver<TPackage: Packageish> {
-  _options: Options<TPackage>;
+export class ModuleResolver {
+  _options: Options;
   // A module representing the project root, used as the origin when resolving `emptyModulePath`.
-  _projectRootFakeModule: Moduleish;
+  _projectRootFakeModulePath: string;
   // An empty module, the result of resolving `emptyModulePath` from the project root.
   _cachedEmptyModule: ?BundlerResolution;
+  _isResolvingEmptyModule: boolean = false;
 
-  constructor(options: Options<TPackage>) {
+  constructor(options: Options) {
     this._options = options;
-    const {projectRoot, moduleCache} = this._options;
-    this._projectRootFakeModule = {
-      path: path.join(projectRoot, '_'),
-      getPackage: () =>
-        moduleCache.getPackageOf(this._projectRootFakeModule.path)?.pkg,
-      isHaste() {
-        throw new Error('not implemented');
-      },
-      getName() {
-        throw new Error('not implemented');
-      },
-    };
+    const {projectRoot} = this._options;
+    this._projectRootFakeModulePath = path.join(projectRoot, '_');
   }
 
   _getEmptyModule(): BundlerResolution {
     let emptyModule = this._cachedEmptyModule;
     if (!emptyModule) {
-      emptyModule = this.resolveDependency(
-        this._projectRootFakeModule,
-        {
-          name: this._options.emptyModulePath,
-          data: {
-            key: this._options.emptyModulePath,
-            asyncType: null,
-            locs: [],
+      const {emptyModulePath} = this._options;
+      if (this._isResolvingEmptyModule) {
+        throw new Error(
+          `\`resolver.emptyModulePath\` ('${emptyModulePath}') resolved to an ` +
+            'empty module. A custom `resolver.resolveRequest` must delegate ' +
+            'this specifier to `context.resolveRequest`, or resolve it to a file.',
+        );
+      }
+      this._isResolvingEmptyModule = true;
+      try {
+        emptyModule = this.resolveDependency(
+          this._projectRootFakeModulePath,
+          {
+            data: {
+              asyncType: null,
+              isESMImport: false,
+              key: emptyModulePath,
+              locs: [],
+            },
+            name: emptyModulePath,
           },
-        },
-        false,
-        null,
-        /* resolverOptions */ {dev: false},
-      );
+          false,
+          null,
+          /* resolverOptions */ {dev: false},
+        );
+      } finally {
+        this._isResolvingEmptyModule = false;
+      }
       this._cachedEmptyModule = emptyModule;
     }
     return emptyModule;
   }
 
   resolveDependency(
-    fromModule: Moduleish,
+    originModulePath: string,
     dependency: TransformResultDependency,
     allowHaste: boolean,
     platform: string | null,
@@ -140,53 +123,57 @@ class ModuleResolver<TPackage: Packageish> {
     const {
       assetExts,
       disableHierarchicalLookup,
-      doesFileExist,
       extraNodeModules,
+      fileSystemLookup,
+      getPackage,
+      getPackageForModule,
       mainFields,
       nodeModulesPaths,
       preferNativePlatform,
       resolveAsset,
       resolveRequest,
+      schemeResolvers,
       sourceExts,
+      unstable_applyBrowserSpecAfterExports,
       unstable_conditionNames,
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
-      unstable_getRealPath,
+      unstable_resolveExportsFromPackageRoot,
     } = this._options;
 
     try {
       const result = Resolver.resolve(
-        createDefaultContext(
-          {
-            allowHaste,
-            assetExts,
-            dev: resolverOptions.dev,
-            disableHierarchicalLookup,
-            doesFileExist,
-            extraNodeModules,
-            mainFields,
-            nodeModulesPaths,
-            preferNativePlatform,
-            resolveAsset,
-            resolveRequest,
-            sourceExts,
-            unstable_conditionNames,
-            unstable_conditionsByPlatform,
-            unstable_enablePackageExports,
-            unstable_getRealPath,
-            unstable_logWarning: this._logWarning,
-            customResolverOptions: resolverOptions.customResolverOptions ?? {},
-            originModulePath: fromModule.path,
-            resolveHasteModule: (name: string) =>
-              this._options.getHasteModulePath(name, platform),
-            resolveHastePackage: (name: string) =>
-              this._options.getHastePackagePath(name, platform),
-            getPackage: this._getPackage,
-            getPackageForModule: (absoluteModulePath: string) =>
-              this._getPackageForModule(absoluteModulePath),
-          },
+        {
+          allowHaste,
+          assetExts,
+          customResolverOptions: resolverOptions.customResolverOptions ?? {},
           dependency,
-        ),
+          dev: resolverOptions.dev,
+          disableHierarchicalLookup,
+          extraNodeModules,
+          fileSystemLookup,
+          getPackage,
+          getPackageForModule,
+          isESMImport: dependency.data.isESMImport,
+          mainFields,
+          nodeModulesPaths,
+          originModulePath,
+          preferNativePlatform,
+          resolveAsset,
+          resolveHasteModule: (name: string) =>
+            this._options.getHasteModulePath(name, platform),
+          resolveHastePackage: (name: string) =>
+            this._options.getHastePackagePath(name, platform),
+          resolveRequest,
+          schemeResolvers,
+          sourceExts,
+          unstable_applyBrowserSpecAfterExports,
+          unstable_conditionNames,
+          unstable_conditionsByPlatform,
+          unstable_enablePackageExports,
+          unstable_resolveExportsFromPackageRoot,
+          unstable_logWarning: this._logWarning,
+        },
         dependency.name,
         platform,
       );
@@ -195,35 +182,47 @@ class ModuleResolver<TPackage: Packageish> {
       if (error instanceof Resolver.FailedToResolvePathError) {
         const {candidates} = error;
         throw new UnableToResolveError(
-          fromModule.path,
+          originModulePath,
           dependency.name,
-          [
-            '\n\nNone of these files exist:',
-            `  * ${Resolver.formatFileCandidates(
-              this._removeRoot(candidates.file),
-            )}`,
-            `  * ${Resolver.formatFileCandidates(
-              this._removeRoot(candidates.dir),
-            )}`,
-          ].join('\n'),
+          '\n\nNone of these files exist:\n' +
+            [candidates.file, candidates.dir]
+              .filter(Boolean)
+              .map(
+                candidates =>
+                  `  * ${Resolver.formatFileCandidates(
+                    this._removeRoot(candidates),
+                  )}`,
+              )
+              .join('\n'),
           {
             cause: error,
             dependency,
           },
         );
-      }
-      if (error instanceof Resolver.FailedToResolveNameError) {
+      } else if (error instanceof Resolver.FailedToResolveUnsupportedError) {
+        throw new UnableToResolveError(
+          originModulePath,
+          dependency.name,
+          error.message,
+          {cause: error, dependency},
+        );
+      } else if (error instanceof Resolver.FailedToResolveNameError) {
         const dirPaths = error.dirPaths;
         const extraPaths = error.extraPaths;
         const displayDirPaths = dirPaths
-          .filter((dirPath: string) => this._options.dirExists(dirPath))
+          .filter((dirPath: string) => {
+            // Report only the directories resolution actually considered -
+            // `resolveFromNodeModulesPath` gates candidates on this same test.
+            const lookupResult = this._options.fileSystemLookup(dirPath);
+            return lookupResult.exists && lookupResult.type === 'd';
+          })
           .map(dirPath => path.relative(this._options.projectRoot, dirPath))
           .concat(extraPaths);
 
         const hint = displayDirPaths.length ? ' or in these directories:' : '';
 
         throw new UnableToResolveError(
-          fromModule.path,
+          originModulePath,
           dependency.name,
           [
             `${dependency.name} could not be found within the project${
@@ -241,36 +240,6 @@ class ModuleResolver<TPackage: Packageish> {
     }
   }
 
-  _getPackage = (packageJsonPath: string): ?PackageJson => {
-    try {
-      return this._options.moduleCache.getPackage(packageJsonPath).read();
-    } catch (e) {
-      // Do nothing. The standard module cache does not trigger any error, but
-      // the ModuleGraph one does, if the module does not exist.
-    }
-
-    return null;
-  };
-
-  _getPackageForModule = (absolutePath: string): ?PackageForModule => {
-    let result;
-
-    try {
-      result = this._options.moduleCache.getPackageOf(absolutePath);
-    } catch (e) {
-      // Do nothing. The standard module cache does not trigger any error, but
-      // the ModuleGraph one does, if the module does not exist.
-    }
-
-    return result != null
-      ? {
-          rootPath: path.dirname(result.pkg.path),
-          packageJson: result.pkg.read(),
-          packageRelativePath: result.packageRelativePath,
-        }
-      : null;
-  };
-
   /**
    * TODO: Return Resolution instead of coercing to BundlerResolution here
    */
@@ -283,19 +252,45 @@ class ModuleResolver<TPackage: Packageish> {
         // not just an arbitrary item!
         const arbitrary = getArrayLowestItem(resolution.filePaths);
         invariant(arbitrary != null, 'invalid asset resolution');
-        return {type: 'sourceFile', filePath: arbitrary};
+        return {filePath: arbitrary, type: 'sourceFile'};
       case 'empty':
         return this._getEmptyModule();
+      case 'virtualModule':
+        if (!this._options.unstable_allowVirtualModules) {
+          throw new Error(
+            'Virtual modules are not enabled. Set ' +
+              '`resolver.unstable_allowVirtualModules` to `true` in your ' +
+              'Metro config to enable them.',
+          );
+        }
+        // A module with no base needs its dependencies resolved with a null
+        // `originModulePath`, which `ResolutionContext` does not allow yet.
+        // Lifting this is a breaking change to the resolver contract.
+        const {virtualPath} = resolution;
+        invariant(
+          virtualPath != null,
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+        const source =
+          typeof resolution.source === 'string'
+            ? Buffer.from(resolution.source, 'utf8')
+            : resolution.source;
+        return {
+          type: 'virtualModule',
+          filePath: deriveVirtualModulePath(virtualPath),
+          source,
+          sha1: crypto.createHash('sha1').update(source).digest('hex'),
+        };
       default:
-        (resolution.type: empty);
+        resolution.type as empty;
         throw new Error('invalid type');
     }
   }
 
   _logWarning = (message: string): void => {
     this._options.reporter.update({
-      type: 'resolver_warning',
       message,
+      type: 'resolver_warning',
     });
   };
 
@@ -310,7 +305,7 @@ class ModuleResolver<TPackage: Packageish> {
   }
 }
 
-function getArrayLowestItem(a: $ReadOnlyArray<string>): string | void {
+function getArrayLowestItem(a: ReadonlyArray<string>): string | void {
   if (a.length === 0) {
     return undefined;
   }
@@ -323,7 +318,8 @@ function getArrayLowestItem(a: $ReadOnlyArray<string>): string | void {
   return lowest;
 }
 
-class UnableToResolveError extends Error {
+// $FlowFixMe[incompatible-type]
+export class UnableToResolveError extends Error {
   /**
    * File path of the module that tried to require a module, ex. `/js/foo.js`.
    */
@@ -337,12 +333,16 @@ class UnableToResolveError extends Error {
    * Original error that causes this error
    */
   cause: ?Error;
+  /**
+   * Fixed type field in common with other Metro build errors.
+   */
+  readonly type: 'UnableToResolveError' = 'UnableToResolveError';
 
   constructor(
     originModulePath: string,
     targetModuleName: string,
     message: string,
-    options?: $ReadOnly<{
+    options?: Readonly<{
       dependency?: ?TransformResultDependency,
       cause?: Error,
     }>,
@@ -410,6 +410,11 @@ function refineDependencyLocation(
   // Note that module names may not always be found in the source code verbatim,
   // whether because of escaping or because of exotic dependency APIs.
   for (let line = loc.end.line - 1; line >= loc.start.line - 1; line--) {
+    // The error occurred in code that was added by a transform, then it
+    // won't be present in the original source code.
+    if (lines[line] == null) {
+      continue;
+    }
     const maxColumn =
       line === loc.end.line ? loc.end.column + 2 : lines[line].length;
     const minColumn = line === loc.start.line ? loc.start.column - 1 : 0;
@@ -428,8 +433,8 @@ function refineDependencyLocation(
       if (isQuote(maybeQuoteBefore) && maybeQuoteBefore === maybeQuoteAfter) {
         return {
           start: {
-            line: line + 1,
             column: minColumn + offset + 1,
+            line: line + 1,
           },
         };
       }
@@ -438,13 +443,13 @@ function refineDependencyLocation(
   // Otherwise, if this is a single-line loc, return it exactly, as a range.
   if (loc.start.line === loc.end.line) {
     return {
-      start: {
-        line: loc.start.line,
-        column: loc.start.column + 1,
-      },
       end: {
-        line: loc.end.line,
         column: loc.end.column + 1,
+        line: loc.end.line,
+      },
+      start: {
+        column: loc.start.column + 1,
+        line: loc.start.line,
       },
     };
   }
@@ -452,8 +457,8 @@ function refineDependencyLocation(
   // much unnecessary context.
   return {
     start: {
-      line: loc.start.line,
       column: loc.start.column + 1,
+      line: loc.start.line,
     },
   };
 }
@@ -481,8 +486,3 @@ function guessDependencyLocation(
 function isQuote(str: ?string): boolean {
   return str === '"' || str === "'" || str === '`';
 }
-
-module.exports = {
-  ModuleResolver,
-  UnableToResolveError,
-};

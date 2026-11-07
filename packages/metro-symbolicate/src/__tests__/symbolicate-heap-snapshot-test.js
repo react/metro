@@ -9,13 +9,13 @@
  * @oncall react_native
  */
 
-'use strict';
+import symbolicate from '../symbolicate';
 
 const {ChromeHeapSnapshotProcessor} = require('../ChromeHeapSnapshot');
-const symbolicate = require('../symbolicate');
-const fs = require('fs');
-const path = require('path');
-const {PassThrough} = require('stream');
+const fs = require('node:fs');
+const path = require('node:path');
+const {PassThrough} = require('node:stream');
+
 const resolve = (fileName: string) =>
   path.resolve(__dirname, '__fixtures__', fileName);
 const read = (fileName: string) => fs.readFileSync(resolve(fileName), 'utf8');

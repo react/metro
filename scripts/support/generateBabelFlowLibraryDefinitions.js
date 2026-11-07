@@ -20,12 +20,10 @@ import * as prettier from 'prettier';
 export default async function main(): Promise<
   Map<string /* absolute file path */, string /* new content */>,
 > {
-  const babelTraverseFlowDefinitionPath = require.resolve(
-    '../../flow-typed/npm/babel-traverse_v7.x.x.js',
-  );
-  const babelTypesFlowDefinitionPath = require.resolve(
-    '../../flow-typed/npm/babel-types_v7.x.x.js',
-  );
+  const babelTraverseFlowDefinitionPath =
+    require.resolve('../../flow-typed/npm/babel-traverse_v7.x.x.js');
+  const babelTypesFlowDefinitionPath =
+    require.resolve('../../flow-typed/npm/babel-types_v7.x.x.js');
 
   const intermediates = [
     [
@@ -39,7 +37,7 @@ export default async function main(): Promise<
     await Promise.all(
       intermediates.map(async ([fileName, rawContent]) => [
         fileName,
-        prettier.format(rawContent, {
+        await prettier.format(rawContent, {
           ...(await prettier.resolveConfig(fileName)),
           filepath: fileName,
         }),

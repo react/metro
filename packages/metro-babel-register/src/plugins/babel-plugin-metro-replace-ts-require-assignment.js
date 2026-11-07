@@ -8,6 +8,8 @@
  * @oncall react_native
  */
 
+/* eslint-disable import/no-commonjs */
+
 'use strict';
 
 // Replace `import thing = require('thing')` with `const thing = require('thing')` which allows us to keep CJS semantics

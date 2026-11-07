@@ -1,21 +1,27 @@
 {
   "name": "metro-babel-register",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "🚇 babel/register configuration for Metro.",
   "main": "src/babel-register.js",
+  "exports": {
+    ".": "./src/babel-register.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/metro-babel-register"
   },
   "dependencies": {
-    "@babel/core": "^7.20.0",
+    "@babel/core": "^7.25.2",
     "@babel/plugin-proposal-export-namespace-from": "^7.18.9",
-    "@babel/plugin-transform-flow-strip-types": "^7.20.0",
-    "@babel/plugin-transform-modules-commonjs": "^7.0.0",
-    "@babel/preset-typescript": "^7.18.0",
-    "@babel/register": "^7.0.0",
+    "@babel/plugin-transform-flow-strip-types": "^7.25.2",
+    "@babel/plugin-transform-modules-commonjs": "^7.24.8",
+    "@babel/preset-typescript": "^7.24.7",
+    "@babel/register": "^7.24.6",
     "babel-plugin-replace-ts-export-assignment": "^0.0.2",
-    "babel-plugin-syntax-hermes-parser": "0.21.1",
+    "flow-parser": "0.336.0",
     "babel-plugin-transform-flow-enums": "^0.0.2",
     "escape-string-regexp": "^1.0.5",
     "flow-enums-runtime": "^0.0.6"
@@ -26,6 +32,6 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

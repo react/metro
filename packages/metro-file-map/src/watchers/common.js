@@ -14,136 +14,93 @@
  * https://github.com/amasad/sane/blob/64ff3a870c42e84f744086884bf55a4f9c22d376/src/common.js
  */
 
-'use strict';
+import type {
+  ChangeEventMetadata,
+  WatcherIncludedFiles,
+  WatchmanClockSpec,
+} from '../flow-types';
+import type {Stats} from 'node:fs';
 
-import type {ChangeEventMetadata} from '../flow-types';
-import type {Stats} from 'fs';
-
-// $FlowFixMe[untyped-import] - Write libdefs for `anymatch`
-const anymatch = require('anymatch');
-// $FlowFixMe[untyped-import] - Write libdefs for `micromatch`
-const micromatch = require('micromatch');
-const platform = require('os').platform();
-const path = require('path');
-// $FlowFixMe[untyped-import] - Write libdefs for `walker`
-const walker = require('walker');
+import path from 'node:path';
 
 /**
  * Constants
  */
-export const CHANGE_EVENT = 'change';
 export const DELETE_EVENT = 'delete';
-export const ADD_EVENT = 'add';
+export const TOUCH_EVENT = 'touch';
+export const RECRAWL_EVENT = 'recrawl';
 export const ALL_EVENT = 'all';
 
-export type WatcherOptions = $ReadOnly<{
-  glob: $ReadOnlyArray<string>,
-  dot: boolean,
-  ignored: boolean | RegExp,
-  watchmanDeferStates: $ReadOnlyArray<string>,
-  watchman?: mixed,
+export type WatcherOptions = Readonly<{
+  // Clocks captured by the crawl, keyed by absolute Watchman watch root.
+  // Only consumed by WatchmanWatcher, which subscribes `since` the clock for
+  // its root rather than a fresh one, so that changes made while the crawl
+  // result is applied and persisted are not missed.
+  clocks?: ?Map<string, WatchmanClockSpec>,
+  included: ?WatcherIncludedFiles,
+  ignored: ?RegExp,
+  watchmanDeferStates: ReadonlyArray<string>,
+  watchman?: unknown,
   watchmanPath?: string,
 }>;
 
-interface Watcher {
-  doIgnore: string => boolean;
-  dot: boolean;
-  globs: $ReadOnlyArray<string>;
-  ignored?: ?(boolean | RegExp);
-  watchmanDeferStates: $ReadOnlyArray<string>;
-  watchmanPath?: ?string;
-}
-
 /**
- * Assigns options to the watcher.
+ * Whether a watcher should report a change at the given relative path. Only
+ * regular files are checked against `included`, and every file is included
+ * when it is null.
  *
- * @param {NodeWatcher|PollWatcher|WatchmanWatcher} watcher
- * @param {?object} opts
- * @return {boolean}
- * @public
- */
-export const assignOptions = function (
-  watcher: Watcher,
-  opts: WatcherOptions,
-): WatcherOptions {
-  watcher.globs = opts.glob ?? [];
-  watcher.dot = opts.dot ?? false;
-  watcher.ignored = opts.ignored ?? false;
-  watcher.watchmanDeferStates = opts.watchmanDeferStates;
-
-  if (!Array.isArray(watcher.globs)) {
-    watcher.globs = [watcher.globs];
-  }
-  watcher.doIgnore =
-    opts.ignored != null && opts.ignored !== false
-      ? anymatch(opts.ignored)
-      : () => false;
-
-  if (opts.watchman == true && opts.watchmanPath != null) {
-    watcher.watchmanPath = opts.watchmanPath;
-  }
-
-  return opts;
-};
-
-/**
- * Checks a file relative path against the globs array.
+ * A file matches an extension when its basename ends with `.` followed by
+ * that extension, so `.env` matches `env` and `foo.d.ts` matches `d.ts`.
  */
 export function isIncluded(
   type: ?('f' | 'l' | 'd'),
-  globs: $ReadOnlyArray<string>,
-  dot: boolean,
-  doIgnore: string => boolean,
+  included: ?WatcherIncludedFiles,
   relativePath: string,
 ): boolean {
-  if (doIgnore(relativePath)) {
-    return false;
+  if (included == null || type !== 'f') {
+    return true;
   }
-  // For non-regular files or if there are no glob matchers, just respect the
-  // `dot` option to filter dotfiles if dot === false.
-  if (globs.length === 0 || type !== 'f') {
-    return dot || micromatch.some(relativePath, '**/*');
+  const basename = path.basename(relativePath);
+  return (
+    hasIncludedExtension(included.extensions, basename) ||
+    included.basenames.has(basename) ||
+    included.basenamePrefixes.some(prefix => basename.startsWith(prefix))
+  );
+}
+
+function hasIncludedExtension(
+  extensions: ReadonlySet<string>,
+  basename: string,
+): boolean {
+  for (
+    let i = basename.indexOf('.');
+    i !== -1;
+    i = basename.indexOf('.', i + 1)
+  ) {
+    if (extensions.has(basename.slice(i + 1))) {
+      return true;
+    }
   }
-  return micromatch.some(relativePath, globs, {dot});
+  return false;
 }
 
 /**
- * Traverse a directory recursively calling `callback` on every directory.
+ * Whether the given filePath matches the given RegExp, after converting
+ * (on Windows only) system separators to posix separators.
+ *
+ * Conversion to posix is for backwards compatibility with the previous
+ * anymatch matcher, which normalises all inputs[1]. This may not be consistent
+ * with other parts of metro-file-map.
+ *
+ * [1]: https://github.com/micromatch/anymatch/blob/3.1.1/index.js#L50
  */
-export function recReaddir(
-  dir: string,
-  dirCallback: (string, Stats) => void,
-  fileCallback: (string, Stats) => void,
-  symlinkCallback: (string, Stats) => void,
-  endCallback: () => void,
-  errorCallback: Error => void,
-  ignored: ?(boolean | RegExp),
-) {
-  walker(dir)
-    .filterDir(currentDir => !anymatch(ignored, currentDir))
-    .on('dir', normalizeProxy(dirCallback))
-    .on('file', normalizeProxy(fileCallback))
-    .on('symlink', normalizeProxy(symlinkCallback))
-    .on('error', errorCallback)
-    .on('end', () => {
-      if (platform === 'win32') {
-        setTimeout(endCallback, 1000);
-      } else {
-        endCallback();
-      }
-    });
-}
-
-/**
- * Returns a callback that when called will normalize a path and call the
- * original callback
- */
-function normalizeProxy<T>(
-  callback: (filepath: string, stats: Stats) => T,
-): (string, Stats) => T {
-  return (filepath: string, stats: Stats) =>
-    callback(path.normalize(filepath), stats);
-}
+export const posixPathMatchesPattern: (
+  pattern: RegExp,
+  filePath: string,
+) => boolean =
+  path.sep === '/'
+    ? (pattern, filePath) => pattern.test(filePath)
+    : (pattern, filePath) => pattern.test(filePath.replaceAll(path.sep, '/'));
 
 export function typeFromStat(stat: Stats): ?ChangeEventMetadata['type'] {
   // Note: These tests are not mutually exclusive - a symlink passes isFile

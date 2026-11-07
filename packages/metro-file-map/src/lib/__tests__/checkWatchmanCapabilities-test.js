@@ -11,7 +11,7 @@
 import checkWatchmanCapabilities from '../checkWatchmanCapabilities';
 
 const mockExecFile = jest.fn();
-jest.mock('child_process', () => ({
+jest.mock('node:child_process', () => ({
   execFile: (...args) => mockExecFile(...args),
 }));
 
@@ -20,7 +20,7 @@ const mockSuccessResponse = JSON.stringify({
   capabilities: ['c1', 'c2'],
 });
 
-function setMockExecFileResponse(err: mixed, stdout?: mixed) {
+function setMockExecFileResponse(err: unknown, stdout?: unknown) {
   mockExecFile.mockImplementation((file, args, cb) => {
     expect(file).toBe('watchman');
     cb(err, err == null ? {stdout} : null);
@@ -32,7 +32,7 @@ describe('checkWatchmanCapabilities', () => {
     jest.clearAllMocks();
   });
 
-  it('executes watchman list-capabilities and resolves on success', async () => {
+  test('executes watchman list-capabilities and resolves on success', async () => {
     setMockExecFileResponse(null, mockSuccessResponse);
     await expect(checkWatchmanCapabilities(['c1', 'c2'])).resolves.toEqual({
       version: 'v123',
@@ -49,7 +49,7 @@ describe('checkWatchmanCapabilities', () => {
     );
   });
 
-  it('rejects when execFile reports ENOENT', async () => {
+  test('rejects when execFile reports ENOENT', async () => {
     setMockExecFileResponse({code: 'ENOENT'});
     await expect(checkWatchmanCapabilities([])).rejects.toMatchInlineSnapshot(
       `[Error: Watchman is not installed or not available on PATH]`,
@@ -57,7 +57,7 @@ describe('checkWatchmanCapabilities', () => {
     expect(mockExecFile).toHaveBeenCalled();
   });
 
-  it('rejects when execFile fails', async () => {
+  test('rejects when execFile fails', async () => {
     setMockExecFileResponse(new Error('execFile error'));
     await expect(checkWatchmanCapabilities([])).rejects.toMatchInlineSnapshot(
       `[Error: execFile error]`,
@@ -65,7 +65,7 @@ describe('checkWatchmanCapabilities', () => {
     expect(mockExecFile).toHaveBeenCalled();
   });
 
-  it('rejects when the response is not JSON', async () => {
+  test('rejects when the response is not JSON', async () => {
     setMockExecFileResponse(null, 'not json');
     await expect(checkWatchmanCapabilities([])).rejects.toMatchInlineSnapshot(
       `[Error: Failed to parse response from \`watchman list-capabilities\`]`,
@@ -73,7 +73,7 @@ describe('checkWatchmanCapabilities', () => {
     expect(mockExecFile).toHaveBeenCalled();
   });
 
-  it('rejects when we are missing a required capability', async () => {
+  test('rejects when we are missing a required capability', async () => {
     setMockExecFileResponse(null, mockSuccessResponse);
     await expect(
       checkWatchmanCapabilities(['c1', 'other-cap']),

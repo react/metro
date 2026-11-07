@@ -17,7 +17,7 @@ type _Input =
 
 type _Options = {
   // https://github.com/mishoo/UglifyJS2/tree/harmony#compress-options
-  compress?: false | Object,
+  compress?: false | any,
   ie8?: boolean,
   mangle?:
     | boolean
@@ -31,10 +31,10 @@ type _Options = {
               debug?: boolean,
               keep_quoted?: boolean,
               regex?: RegExp,
-              reserved?: $ReadOnlyArray<string>,
+              reserved?: ReadonlyArray<string>,
               ...
             },
-        reserved?: $ReadOnlyArray<string>,
+        reserved?: ReadonlyArray<string>,
         safari10?: boolean,
         toplevel?: boolean,
         ...
@@ -110,5 +110,21 @@ declare module 'terser' {
   declare function minify(
     code: _Input,
     options: {..._Options, sourceMap: _SourceMapOptions, ...},
-  ): _Error | {..._Result, map: string};
+  ):
+    | _Error
+    | {
+        ..._Result,
+        map: string,
+        decoded_map?: ?{
+          mappings: Array<
+            Array<
+              | [number]
+              | [number, number, number, number]
+              | [number, number, number, number, number],
+            >,
+          >,
+          names: Array<string>,
+          ...
+        },
+      };
 }

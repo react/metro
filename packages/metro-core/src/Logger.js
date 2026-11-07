@@ -9,13 +9,13 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {BundleOptions} from 'metro/private/shared/types';
 
-import type {BundleOptions} from 'metro/src/shared/types.flow';
+import EventEmitter from 'node:events';
+import os from 'node:os';
 
+// eslint-disable-next-line import/no-commonjs
 const VERSION = require('../package.json').version;
-const {EventEmitter} = require('events');
-const os = require('os');
 
 export type ActionLogEntryData = {
   action_name: string,
@@ -35,8 +35,10 @@ export type ActionStartLogEntry = {
 export type LogEntry = {
   action_name?: string,
   action_phase?: string,
+  action_result?: string,
   duration_ms?: number,
   entry_point?: string,
+  file_name?: string,
   log_entry_label: string,
   log_session?: string,
   start_timestamp?: [number, number],
@@ -45,6 +47,8 @@ export type LogEntry = {
   bundle_options?: BundleOptions,
   bundle_hash?: string,
   build_id?: string,
+  error_message?: string,
+  error_stack?: string,
   ...
 };
 
@@ -79,7 +83,10 @@ function createActionStartEntry(data: ActionLogEntryData | string): LogEntry {
   });
 }
 
-function createActionEndEntry(logEntry: ActionStartLogEntry): LogEntry {
+function createActionEndEntry(
+  logEntry: ActionStartLogEntry,
+  error?: ?Error,
+): LogEntry {
   const {action_name, action_phase, start_timestamp} = logEntry;
 
   if (action_phase !== 'start' || !Array.isArray(start_timestamp)) {
@@ -90,11 +97,14 @@ function createActionEndEntry(logEntry: ActionStartLogEntry): LogEntry {
   const duration_ms = Math.round((timeDelta[0] * 1e9 + timeDelta[1]) / 1e6);
 
   return createEntry({
-    log_entry_label: (action_name: ?string),
+    log_entry_label: action_name as ?string,
     ...logEntry,
     action_name,
     action_phase: 'end',
     duration_ms,
+    ...(error != null
+      ? {error_message: error.message, error_stack: error.stack}
+      : null),
   });
 }
 
@@ -103,10 +113,4 @@ function log(logEntry: LogEntry): LogEntry {
   return logEntry;
 }
 
-module.exports = {
-  on,
-  createEntry,
-  createActionStartEntry,
-  createActionEndEntry,
-  log,
-};
+export {on, createEntry, createActionStartEntry, createActionEndEntry, log};

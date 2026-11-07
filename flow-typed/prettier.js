@@ -43,7 +43,6 @@ declare module 'prettier' {
   declare export type BuiltInParser = (text: string, options?: any) => AST;
   declare export type BuiltInParserName =
     | 'angular'
-    | 'babel-flow'
     | 'babel-ts'
     | 'babel'
     | 'css'
@@ -73,7 +72,7 @@ declare module 'prettier' {
   ) => AST;
 
   declare export type Options = Partial<RequiredOptions>;
-  declare export type RequiredOptions = {
+  declare export type RequiredOptions = Readonly<{
     ...DocPrinterOptions,
     /**
      * Print semicolons at the ends of statements.
@@ -188,7 +187,7 @@ declare module 'prettier' {
      * @default 'auto'
      */
     embeddedLanguageFormatting: 'auto' | 'off',
-  };
+  }>;
 
   declare export type PrettierParserOptions<T = any> = {
     ...RequiredOptions,
@@ -216,8 +215,7 @@ declare module 'prettier' {
     locStart: (node: T) => number,
     locEnd: (node: T) => number,
     preprocess?:
-      | ((text: string, options: PrettierParserOptions<T>) => string)
-      | void,
+      ((text: string, options: PrettierParserOptions<T>) => string) | void,
   };
 
   declare export type Printer<T = any> = {
@@ -278,15 +276,15 @@ declare module 'prettier' {
     } | void,
   };
 
-  declare export type CursorOptions = {
+  declare export type CursorOptions = Readonly<{
     ...Options,
     /**
      * Specify where the cursor is.
      */
     cursorOffset: number,
-    rangeStart?: mixed,
-    rangeEnd?: mixed,
-  };
+    rangeStart?: unknown,
+    rangeEnd?: unknown,
+  }>;
 
   declare export type CursorResult = {
     formatted: string,
@@ -296,13 +294,19 @@ declare module 'prettier' {
   /**
    * `format` is used to format text using Prettier. [Options](https://prettier.io/docs/en/options.html) may be provided to override the defaults.
    */
-  declare export function format(source: string, options?: Options): string;
+  declare export function format(
+    source: string,
+    options?: Options,
+  ): Promise<string>;
 
   /**
    * `check` checks to see if the file has been formatted with Prettier given those options and returns a `Boolean`.
    * This is similar to the `--list-different` parameter in the CLI and is useful for running Prettier in CI scenarios.
    */
-  declare export function check(source: string, options?: Options): boolean;
+  declare export function check(
+    source: string,
+    options?: Options,
+  ): Promise<boolean>;
 
   /**
    * `formatWithCursor` both formats the code, and translates a cursor position from unformatted code to formatted code.
@@ -313,7 +317,7 @@ declare module 'prettier' {
   declare export function formatWithCursor(
     source: string,
     options: CursorOptions,
-  ): CursorResult;
+  ): Promise<CursorResult>;
 
   declare export type ResolveConfigOptions = {
     /**
@@ -400,8 +404,8 @@ declare module 'prettier' {
 
   declare export type SupportOptionType = 'int' | 'boolean' | 'choice' | 'path';
 
-  declare export type BaseSupportOption<Type: SupportOptionType> = {
-    +name?: string | void,
+  declare export type BaseSupportOption<Type extends SupportOptionType> = {
+    readonly name?: string | void,
     since: string,
     /**
      * Usually you can use {@link CoreCategoryType}
@@ -736,7 +740,7 @@ declare module 'prettier' {
       /** @see [align](https://github.com/prettier/prettier/blob/main/commands.md#align) */
       align(widthOrString: Align['n'], doc: Doc): Align,
       /** @see [breakParent](https://github.com/prettier/prettier/blob/main/commands.md#breakparent) */
-      +breakParent: BreakParent,
+      readonly breakParent: BreakParent,
       /**
        * @see [concat](https://github.com/prettier/prettier/blob/main/commands.md#deprecated-concat)
        * @deprecated use `Doc[]` instead
@@ -753,9 +757,9 @@ declare module 'prettier' {
       /** @see [group](https://github.com/prettier/prettier/blob/main/commands.md#group) */
       group(doc: Doc, opts?: GroupOptions): Group,
       /** @see [hardline](https://github.com/prettier/prettier/blob/main/commands.md#hardline) */
-      +hardline: Concat,
+      readonly hardline: Concat,
       /** @see [hardlineWithoutBreakParent](https://github.com/prettier/prettier/blob/main/commands.md#hardlinewithoutbreakparent-and-literallinewithoutbreakparent) */
-      +hardlineWithoutBreakParent: HardlineWithoutBreakParent,
+      readonly hardlineWithoutBreakParent: HardlineWithoutBreakParent,
       /** @see [ifBreak](https://github.com/prettier/prettier/blob/main/commands.md#ifbreak) */
       ifBreak(
         ifBreak: Doc,
@@ -774,23 +778,23 @@ declare module 'prettier' {
       /** @see [label](https://github.com/prettier/prettier/blob/main/commands.md#label) */
       label(label: string, doc: Doc): Label,
       /** @see [line](https://github.com/prettier/prettier/blob/main/commands.md#line) */
-      +line: Line,
+      readonly line: Line,
       /** @see [lineSuffix](https://github.com/prettier/prettier/blob/main/commands.md#linesuffix) */
       lineSuffix(suffix: Doc): LineSuffix,
       /** @see [lineSuffixBoundary](https://github.com/prettier/prettier/blob/main/commands.md#linesuffixboundary) */
-      +lineSuffixBoundary: LineSuffixBoundary,
+      readonly lineSuffixBoundary: LineSuffixBoundary,
       /** @see [literalline](https://github.com/prettier/prettier/blob/main/commands.md#literalline) */
-      +literalline: Concat,
+      readonly literalline: Concat,
       /** @see [literallineWithoutBreakParent](https://github.com/prettier/prettier/blob/main/commands.md#hardlinewithoutbreakparent-and-literallinewithoutbreakparent) */
-      +literallineWithoutBreakParent: LiterallineWithoutBreakParent,
+      readonly literallineWithoutBreakParent: LiterallineWithoutBreakParent,
       /** @see [markAsRoot](https://github.com/prettier/prettier/blob/main/commands.md#markasroot) */
       markAsRoot(doc: Doc): Align,
       /** @see [softline](https://github.com/prettier/prettier/blob/main/commands.md#softline) */
-      +softline: Softline,
+      readonly softline: Softline,
       /** @see [trim](https://github.com/prettier/prettier/blob/main/commands.md#trim) */
-      +trim: Trim,
+      readonly trim: Trim,
       /** @see [cursor](https://github.com/prettier/prettier/blob/main/commands.md#cursor) */
-      +cursor: Cursor,
+      readonly cursor: Cursor,
     },
     debug: {
       printDocToDebug(doc: Doc): string,

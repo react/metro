@@ -22,7 +22,7 @@ const t = require('@babel/types');
 const NODE_PREFIX = 'BabelNode';
 const AT = '@';
 
-const TEMPLATE = `/**
+const HEADER = `/**
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
@@ -31,8 +31,11 @@ const TEMPLATE = `/**
  * See <metro>/scripts/updateBabelTypesFlowTypes.js.
  * ${AT}flow strict
  */
+`;
 
-declare type ${NODE_PREFIX}BaseComment = {
+// Node type declarations, emitted inside the `declare module "@babel/types"`
+// block (see main) so they are module-local.
+const BASE_TYPES = `declare type ${NODE_PREFIX}BaseComment = {
   value: string;
   start: number;
   end: number;
@@ -65,7 +68,7 @@ declare type ${NODE_PREFIX}SourceLocation = {
 \n\n`;
 
 function main() {
-  let code = TEMPLATE;
+  let typeDecls = BASE_TYPES;
 
   const lines = [];
 
@@ -111,8 +114,8 @@ function main() {
       });
 
     // Flow seems to deoptimize the union type if another type is spread into the node declaration.
-    // Defining the base props over and over again significantely speeds up the type checking.
-    code += `declare type ${NODE_PREFIX}${type} = {
+    // Defining the base props over and over again significantly speeds up the type checking.
+    typeDecls += `declare type ${NODE_PREFIX}${type} = {
   leadingComments?: Array<${NODE_PREFIX}Comment>;
   innerComments?: Array<${NODE_PREFIX}Comment>;
   trailingComments?: Array<${NODE_PREFIX}Comment>;
@@ -142,7 +145,18 @@ function main() {
 
   for (let i = 0; i < t.TYPES.length; i++) {
     const type = t.TYPES[i];
-    let decl = `declare export function is${type}(node: ?Object, opts?: ?Object):`;
+    const nodeType = [
+      'ClassProperty',
+      'ClassPrivateProperty',
+      'TSPropertySignature',
+      'TSIndexSignature',
+      'TSEnumMember',
+      'Function',
+    ].includes(type)
+      ? 'any'
+      : 'Object';
+    const optsType = type === 'ImportDefaultSpecifier' ? 'any' : 'Object';
+    let decl = `declare export function is${type}(node: ?${nodeType}, opts?: ?${optsType}):`;
 
     const realName = t.DEPRECATED_KEYS[type] ?? type;
 
@@ -181,14 +195,14 @@ function main() {
     // comments/
     `declare type CommentTypeShorthand = 'leading' | 'inner' | 'trailing'`,
     // eslint-disable-next-line max-len
-    `declare export function addComment<T: Node>(node: T, type: CommentTypeShorthand, content: string, line?: boolean): T`,
+    `declare export function addComment<T extends Node>(node: T, type: CommentTypeShorthand, content: string, line?: boolean): T`,
     // eslint-disable-next-line max-len
-    `declare export function addComments<T: Node>(node: T, type: CommentTypeShorthand, comments: Array<Comment>): T`,
+    `declare export function addComments<T extends Node>(node: T, type: CommentTypeShorthand, comments: Array<Comment>): T`,
     `declare export function inheritInnerComments(node: Node, parent: Node): void`,
     `declare export function inheritLeadingComments(node: Node, parent: Node): void`,
-    `declare export function inheritsComments<T: Node>(node: T, parent: Node): void`,
+    `declare export function inheritsComments<T extends Node>(node: T, parent: Node): void`,
     `declare export function inheritTrailingComments(node: Node, parent: Node): void`,
-    `declare export function removeComments<T: Node>(node: T): T`,
+    `declare export function removeComments<T extends Node>(node: T): T`,
 
     // converters/
     `declare export function ensureBlock(node: ${NODE_PREFIX}, key: string): ${NODE_PREFIX}BlockStatement`,
@@ -213,7 +227,7 @@ function main() {
     // eslint-disable-next-line max-len
     `declare export function appendToMemberExpression(member: ${NODE_PREFIX}MemberExpression, append: ${NODE_PREFIX}, computed?: boolean): ${NODE_PREFIX}MemberExpression`,
     // eslint-disable-next-line max-len
-    `declare export function inherits<T: Node>(child: T, parent: ${NODE_PREFIX} | null | void): T`,
+    `declare export function inherits<T extends Node>(child: T, parent: ${NODE_PREFIX} | null | void): T`,
     // eslint-disable-next-line max-len
     `declare export function prependToMemberExpression(member: ${NODE_PREFIX}MemberExpression, prepend: ${NODE_PREFIX}Expression): ${NODE_PREFIX}MemberExpression`,
     `declare export function removeProperties<T>(n: T, opts: ?{}): void;`,
@@ -221,9 +235,9 @@ function main() {
 
     // retrievers/
     // eslint-disable-next-line max-len
-    `declare export function getBindingIdentifiers(node: ${NODE_PREFIX}, duplicates: boolean, outerOnly?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
+    `declare export function getBindingIdentifiers(node: ${NODE_PREFIX}, duplicates?: boolean, outerOnly?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
     // eslint-disable-next-line max-len
-    `declare export function getOuterBindingIdentifiers(node: Node, duplicates: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
+    `declare export function getOuterBindingIdentifiers(node: Node, duplicates?: boolean): { [key: string]: ${NODE_PREFIX}Identifier | Array<${NODE_PREFIX}Identifier> }`,
 
     // traverse/
     `declare export type TraversalAncestors = Array<{
@@ -237,7 +251,7 @@ function main() {
     exit?: TraversalHandler<T>,
   };`.replace(/(^|\n) {2}/g, '$1'),
     // eslint-disable-next-line
-    `declare export function traverse<T>(n: BabelNode, TraversalHandler<T> | TraversalHandlers<T>, state?: T): void;`,
+    `declare export function traverse<T>(n: BabelNode, handler: TraversalHandler<T> | TraversalHandlers<T>, state?: T): void;`,
     `declare export function traverseFast<T>(n: Node, h: TraversalHandler<T>, state?: T): void;`,
 
     // utils/
@@ -265,16 +279,16 @@ function main() {
     `declare export function isVar(node: BabelNode): node is VariableDeclaration`,
     // eslint-disable-next-line max-len
     `declare export function matchesPattern(node: ?BabelNode, match: string | Array<string>, allowPartial?: boolean): boolean`,
-    `declare export function validate(n: BabelNode, key: string, value: mixed): void;`,
+    `declare export function validate(n: BabelNode, key: string, value: unknown): void;`,
   );
 
-  code += `declare type ${NODE_PREFIX} = ${Object.keys(t.NODE_FIELDS)
+  typeDecls += `declare type ${NODE_PREFIX} = ${Object.keys(t.NODE_FIELDS)
     .map(type => `${NODE_PREFIX}${type}`)
     .join(' | ')};\n`;
 
   for (const type in t.FLIPPED_ALIAS_KEYS) {
     const types = t.FLIPPED_ALIAS_KEYS[type];
-    code += `declare type ${NODE_PREFIX}${type} = ${types
+    typeDecls += `declare type ${NODE_PREFIX}${type} = ${types
       .map(type => `${NODE_PREFIX}${type}`)
       .join(' | ')};\n`;
   }
@@ -295,8 +309,13 @@ function main() {
     ),
   );
 
-  code += `\ndeclare module "@babel/types" {
-  ${lines.join('\n').replace(/\n/g, '\n  ').trim()}
+  // Node type declarations, kept module-local. The exported aliases and
+  // function signatures below reference them by their `BabelNode`-prefixed name.
+  const moduleInner = typeDecls + '\n' + lines.join('\n');
+  const code =
+    HEADER +
+    `\ndeclare module "@babel/types" {
+  ${moduleInner.replace(/^(?=.)/gm, '  ').trim()}
 }\n`;
 
   return code;

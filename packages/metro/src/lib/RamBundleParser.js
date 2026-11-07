@@ -4,13 +4,12 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict
+ * @format
  */
 
-'use strict';
+import MAGIC_NUMBER from '../shared/output/RamBundle/magic-number';
 
-const MAGIC_NUMBER = require('../shared/output/RamBundle/magic-number');
 const SIZEOF_UINT32 = 4;
 const HEADER_SIZE = 3;
 
@@ -23,7 +22,7 @@ const HEADER_SIZE = 3;
  * getStartupCode(): returns the runtime and the startup code of the bundle.
  * getModule(): returns the code for the specified module.
  */
-class RamBundleParser {
+export default class RamBundleParser {
   _buffer: Buffer;
   _numModules: number;
   _startupCodeLength: number;
@@ -65,5 +64,3 @@ class RamBundleParser {
     return this._buffer.toString('utf8', start, end);
   }
 }
-
-module.exports = RamBundleParser;

@@ -9,26 +9,26 @@
  * @oncall react_native
  */
 
-'use strict';
-
-function getPreludeCode({
+export default function getPreludeCode({
   extraVars,
   isDev,
   globalPrefix,
   requireCycleIgnorePatterns,
+  unstable_forceFullRefreshPatterns,
 }: {
-  +extraVars?: {[string]: mixed, ...},
-  +isDev: boolean,
-  +globalPrefix: string,
-  +requireCycleIgnorePatterns: $ReadOnlyArray<RegExp>,
+  readonly extraVars?: {[key: string]: unknown, ...},
+  readonly isDev: boolean,
+  readonly globalPrefix: string,
+  readonly requireCycleIgnorePatterns: ReadonlyArray<RegExp>,
+  readonly unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>,
 }): string {
   const vars = [
     // Ensure these variable names match the ones referenced in metro-runtime
     // require.js
-    '__BUNDLE_START_TIME__=this.nativePerformanceNow?nativePerformanceNow():Date.now()',
+    '__BUNDLE_START_TIME__=globalThis.nativePerformanceNow?nativePerformanceNow():Date.now()',
     `__DEV__=${String(isDev)}`,
     ...formatExtraVars(extraVars),
-    'process=this.process||{}',
+    'process=globalThis.process||{}',
     `__METRO_GLOBAL_PREFIX__='${globalPrefix}'`,
   ];
 
@@ -37,6 +37,11 @@ function getPreludeCode({
     // require.js
     vars.push(
       `${globalPrefix}__requireCycleIgnorePatterns=[${requireCycleIgnorePatterns
+        .map(regex => regex.toString())
+        .join(',')}]`,
+    );
+    vars.push(
+      `${globalPrefix}__unstable_forceFullRefreshPatterns=[${unstable_forceFullRefreshPatterns
         .map(regex => regex.toString())
         .join(',')}]`,
     );
@@ -49,12 +54,14 @@ function getPreludeCode({
 
 const excluded = new Set(['__BUNDLE_START_TIME__', '__DEV__', 'process']);
 
-function formatExtraVars(extraVars: ?{[string]: mixed, ...}): Array<string> {
+function formatExtraVars(
+  extraVars: ?{[key: string]: unknown, ...},
+): Array<string> {
   const assignments = [];
 
   for (const key in extraVars) {
     if (extraVars.hasOwnProperty(key) && !excluded.has(key)) {
-      /* $FlowFixMe(>=0.95.0 site=react_native_fb) This comment suppresses an
+      /* $FlowFixMe[incompatible-type](>=0.95.0 site=react_native_fb) This comment suppresses an
        * error found when Flow v0.95 was deployed. To see the error, delete
        * this comment and run Flow. */
       assignments.push(`${key}=${JSON.stringify(extraVars[key])}`);
@@ -69,5 +76,3 @@ function processEnv(nodeEnv: string): string {
     nodeEnv,
   )};`;
 }
-
-module.exports = getPreludeCode;

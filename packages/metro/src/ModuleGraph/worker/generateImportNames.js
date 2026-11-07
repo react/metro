@@ -4,20 +4,20 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict-local
+ * @format
  */
 
-'use strict';
+import type {Node} from '@babel/types';
 
-const traverse = require('@babel/traverse').default;
-const nullthrows = require('nullthrows');
+import {traverse} from '@babel/core';
+import nullthrows from 'nullthrows';
 
 /**
  * Select unused names for "metroImportDefault" and "metroImportAll", by
  * calling "generateUid".
  */
-function generateImportNames(ast: BabelNode): {
+export default function generateImportNames(ast: Node): {
   importAll: string,
   importDefault: string,
 } {
@@ -38,5 +38,3 @@ function generateImportNames(ast: BabelNode): {
     importDefault: nullthrows(importDefault),
   };
 }
-
-module.exports = generateImportNames;

@@ -1,11 +1,17 @@
 {
   "name": "metro-babel-transformer",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "🚇 Base Babel transformer for Metro.",
   "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/metro-babel-transformer"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
@@ -17,12 +23,13 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@babel/core": "^7.20.0",
+    "@babel/core": "^7.25.2",
     "flow-enums-runtime": "^0.0.6",
-    "hermes-parser": "0.21.1",
+    "flow-parser": "0.336.0",
+    "metro-cache-key": "0.88.0",
     "nullthrows": "^1.1.1"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

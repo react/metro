@@ -9,8 +9,6 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   BasicSourceMap,
   FBSourceFunctionMap,
@@ -20,23 +18,26 @@ import type {
   MixedSourceMap,
 } from 'metro-source-map';
 
-const {normalizeSourcePath} = require('metro-source-map');
-const vlq = require('vlq');
+import {normalizeSourcePath} from 'metro-source-map';
+import * as vlq from 'vlq';
 
 const METADATA_FIELD_FUNCTIONS = 0;
 
 type Position = {
-  +line: number,
-  +column: number,
+  readonly line: number,
+  readonly column: number,
   ...
 };
 type FunctionMapping = {
-  +line: number,
-  +column: number,
-  +name: string,
+  readonly line: number,
+  readonly column: number,
+  readonly name: string,
   ...
 };
-type SourceNameNormalizer = (string, {+sourceRoot?: ?string, ...}) => string;
+type SourceNameNormalizer = (
+  sourceInput: string,
+  map: {readonly sourceRoot?: ?string, ...},
+) => string;
 type MetadataMap = {[source: string]: ?FBSourceMetadata, ...};
 
 /**
@@ -53,7 +54,7 @@ type MetadataMap = {[source: string]: ?FBSourceMetadata, ...};
  *
  *     new SourceMetadataMapConsumer(map, source => source) // Don't normalize
  */
-class SourceMetadataMapConsumer {
+export default class SourceMetadataMapConsumer {
   constructor(
     map: MixedSourceMap,
     normalizeSourceFn: SourceNameNormalizer = normalizeSourcePath,
@@ -64,7 +65,7 @@ class SourceMetadataMapConsumer {
   }
 
   _sourceMap: MixedSourceMap;
-  _decodedFunctionMapCache: Map<string, ?$ReadOnlyArray<FunctionMapping>>;
+  _decodedFunctionMapCache: Map<string, ?ReadonlyArray<FunctionMapping>>;
   _normalizeSource: SourceNameNormalizer;
   _metadataBySource: ?MetadataMap;
 
@@ -80,7 +81,7 @@ class SourceMetadataMapConsumer {
     line,
     column,
     source,
-  }: Position & {+source: ?string, ...}): ?string {
+  }: Position & {readonly source: ?string, ...}): ?string {
     if (source && line != null && column != null) {
       const mappings = this._getFunctionMappings(source);
       if (mappings) {
@@ -100,7 +101,7 @@ class SourceMetadataMapConsumer {
    * This array can be used as the `x_facebook_sources` field of a map whose
    * `sources` field is the array that was passed into this method.
    */
-  toArray(sources: $ReadOnlyArray<string>): FBSourcesArray {
+  toArray(sources: ReadonlyArray<string>): FBSourcesArray {
     const metadataBySource = this._getMetadataBySource();
     const encoded = [];
     for (const source of sources) {
@@ -126,13 +127,14 @@ class SourceMetadataMapConsumer {
    * Decodes the function name mappings for the given source if needed, and
    * retrieves a sorted, searchable array of mappings.
    */
-  _getFunctionMappings(source: string): ?$ReadOnlyArray<FunctionMapping> {
+  _getFunctionMappings(source: string): ?ReadonlyArray<FunctionMapping> {
     if (this._decodedFunctionMapCache.has(source)) {
       return this._decodedFunctionMapCache.get(source);
     }
     let parsedFunctionMap = null;
     const metadataBySource = this._getMetadataBySource();
-    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
+    /* $FlowFixMe[invalid-this-arg] Error exposed after fixing this typing
+     * unsoundness in flow */
     if (Object.prototype.hasOwnProperty.call(metadataBySource, source)) {
       const metadata = metadataBySource[source] || [];
       parsedFunctionMap = decodeFunctionMap(metadata[METADATA_FIELD_FUNCTIONS]);
@@ -154,6 +156,7 @@ class SourceMetadataMapConsumer {
     // eslint-disable-next-line lint/strictly-null
     if (map.mappings === undefined) {
       const indexMap: IndexMap = map;
+      // $FlowFixMe[unsafe-object-assign]
       return Object.assign(
         {},
         ...indexMap.sections.map(section =>
@@ -165,7 +168,7 @@ class SourceMetadataMapConsumer {
     if ('x_facebook_sources' in map) {
       const basicMap: BasicSourceMap = map;
       return (basicMap.x_facebook_sources || []).reduce<{
-        [string]: ?FBSourceMetadata,
+        [key: string]: ?FBSourceMetadata,
       }>((acc, metadata, index) => {
         let source = basicMap.sources[index];
         if (source != null) {
@@ -181,7 +184,7 @@ class SourceMetadataMapConsumer {
 
 function decodeFunctionMap(
   functionMap: ?FBSourceFunctionMap,
-): $ReadOnlyArray<FunctionMapping> {
+): ReadonlyArray<FunctionMapping> {
   if (!functionMap) {
     return [];
   }
@@ -202,7 +205,7 @@ function decodeFunctionMap(
 }
 
 function findEnclosingMapping(
-  mappings: $ReadOnlyArray<FunctionMapping>,
+  mappings: ReadonlyArray<FunctionMapping>,
   target: Position,
 ): ?FunctionMapping {
   let first = 0;
@@ -229,5 +232,3 @@ function comparePositions(a: Position, b: Position): number {
   }
   return a.line - b.line;
 }
-
-module.exports = SourceMetadataMapConsumer;

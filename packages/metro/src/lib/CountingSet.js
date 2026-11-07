@@ -11,8 +11,7 @@
 
 export interface ReadOnlyCountingSet<T> extends Iterable<T> {
   has(item: T): boolean;
-  @@iterator(): Iterator<T>;
-  +size: number;
+  readonly size: number;
   count(item: T): number;
   forEach<ThisT>(
     callbackFn: (
@@ -20,7 +19,7 @@ export interface ReadOnlyCountingSet<T> extends Iterable<T> {
       value: T,
       key: T,
       set: ReadOnlyCountingSet<T>,
-    ) => mixed,
+    ) => unknown,
 
     // NOTE: Should be optional, but Flow seems happy to infer undefined here
     // which is what we want.
@@ -66,35 +65,27 @@ export default class CountingSet<T> implements ReadOnlyCountingSet<T> {
     }
   }
 
-  keys(): Iterator<T> {
+  keys(): IteratorObject<T> {
     return this.#map.keys();
   }
 
-  values(): Iterator<T> {
+  values(): IteratorObject<T> {
     return this.#map.keys();
   }
 
-  *entries(): Iterator<[T, T]> {
+  *entries(): IteratorObject<[T, T]> {
     for (const item of this) {
       yield [item, item];
     }
   }
 
   // Iterate over unique entries
-  // $FlowIssue[unsupported-syntax]
   [Symbol.iterator](): Iterator<T> {
     return this.values();
   }
 
-  /*::
-  // For Flow's benefit
-  @@iterator(): Iterator<T> {
-    return this.values();
-  }
-  */
-
   // Number of unique entries
-  // $FlowIssue[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get size(): number {
     return this.#map.size;
   }
@@ -108,10 +99,11 @@ export default class CountingSet<T> implements ReadOnlyCountingSet<T> {
   }
 
   forEach<ThisT>(
-    callbackFn: (this: ThisT, value: T, key: T, set: CountingSet<T>) => mixed,
+    callbackFn: (this: ThisT, value: T, key: T, set: CountingSet<T>) => unknown,
     thisArg: ThisT,
   ): void {
     for (const item of this) {
+      // $FlowFixMe[invalid-this-arg]
       callbackFn.call(thisArg, item, item, this);
     }
   }
@@ -121,7 +113,7 @@ export default class CountingSet<T> implements ReadOnlyCountingSet<T> {
   // extend to custom collection classes. Instead let's assume values are
   // sortable ( = strings) and make this look like an array with some stable
   // order.
-  toJSON(): mixed {
+  toJSON(): unknown {
     return [...this].sort();
   }
 }

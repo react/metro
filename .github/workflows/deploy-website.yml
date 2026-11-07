@@ -18,18 +18,18 @@ jobs:
       contents: write # to deploy
     runs-on: ubuntu-latest
 
-    if: github.repository == 'facebook/metro'
+    if: github.repository == 'react/metro'
 
     env:
       working-directory: website
-      node-version: 16.x
+      node-version: lts/*
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v7
 
       - name: Use Node.js ${{ env.node-version }}
-        uses: actions/setup-node@v4.0.1
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.node-version }}
 
@@ -38,7 +38,7 @@ jobs:
         run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
       - name: Restore yarn cache
-        uses: actions/cache@v3.3.2
+        uses: actions/cache@v6
         with:
           path: ${{ steps.yarn.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles(format('{0}{1}', github.workspace, '/website/yarn.lock')) }}

@@ -9,30 +9,42 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {PluginObj} from '@babel/core';
 import type {NodePath, VisitNode, Visitor} from '@babel/traverse';
 import typeof Traverse from '@babel/traverse';
+import type {
+  ArrowFunctionExpression as BabelNodeArrowFunctionExpression,
+  AssignmentExpression as BabelNodeAssignmentExpression,
+  BinaryExpression as BabelNodeBinaryExpression,
+  CallExpression as BabelNodeCallExpression,
+  ConditionalExpression as BabelNodeConditionalExpression,
+  FunctionDeclaration as BabelNodeFunctionDeclaration,
+  FunctionExpression as BabelNodeFunctionExpression,
+  IfStatement as BabelNodeIfStatement,
+  LogicalExpression as BabelNodeLogicalExpression,
+  OptionalCallExpression as BabelNodeOptionalCallExpression,
+  Program as BabelNodeProgram,
+  UnaryExpression as BabelNodeUnaryExpression,
+} from '@babel/types';
 // This is only a typeof import, no runtime dependency exists
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
 type State = {stripped: boolean};
 
-function constantFoldingPlugin(context: {
+export default function constantFoldingPlugin(context: {
   types: Types,
   traverse: Traverse,
   ...
 }): PluginObj<State> {
   const t = context.types;
-  const {isVariableDeclarator} = t;
+  const {isLiteral, isVariableDeclarator, isUnaryExpression} = t;
 
   const traverse = context.traverse;
 
   const evaluate = function (path: NodePath<>): {
     confident: boolean,
-    value: mixed,
+    value: unknown,
   } {
     const state = {safe: true};
     const unsafe = (
@@ -44,6 +56,18 @@ function constantFoldingPlugin(context: {
     ) => {
       state.safe = false;
     };
+
+    if (isUnaryExpression(path.node) && path.node.operator === 'void') {
+      // Void expressions always evaluate to undefined but would rarely be used
+      // to express a constant (with the exception of `void 0`). More often,
+      // they are used to discard the value of a side-effectful expression, so
+      // are unsafe to fold. Conservatively, evaluate to undefined only if the
+      // argument is a literal.
+      if (isLiteral(path.node.argument)) {
+        return {confident: true, value: undefined};
+      }
+      return {confident: false, value: null};
+    }
 
     path.traverse(
       {
@@ -118,8 +142,9 @@ function constantFoldingPlugin(context: {
           state.stripped = true;
 
           if (result.value || node.alternate) {
-            // $FlowFixMe Flow error uncovered by typing Babel more strictly
-            path.replaceWith(result.value ? node.consequent : node.alternate);
+            const valueIsTruthy = Boolean(result.value);
+            // $FlowFixMe[incompatible-type]
+            path.replaceWith(valueIsTruthy ? node.consequent : node.alternate);
           } else if (!result.value) {
             path.remove();
           }
@@ -178,7 +203,7 @@ function constantFoldingPlugin(context: {
         {
           ArrowFunctionExpression: FunctionExpression,
           ConditionalExpression: Conditional,
-          // $FlowFixMe[incompatible-call]
+          // $FlowFixMe[incompatible-type]
           FunctionDeclaration,
           FunctionExpression,
           IfStatement: Conditional,
@@ -209,5 +234,3 @@ function constantFoldingPlugin(context: {
 
   return {visitor};
 }
-
-module.exports = constantFoldingPlugin;

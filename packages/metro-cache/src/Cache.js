@@ -9,11 +9,9 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {CacheStore} from './types';
 
-import type {CacheStore} from 'metro-cache';
-
-const {Logger} = require('metro-core');
+import {Logger} from 'metro-core';
 
 /**
  * Main cache class. Receives an array of cache instances, and sequentially
@@ -22,23 +20,22 @@ const {Logger} = require('metro-core');
  *
  * All get/set operations are logged via Metro's logger.
  */
-class Cache<T> {
-  _stores: $ReadOnlyArray<CacheStore<T>>;
+export default class Cache<T> {
+  readonly #stores: ReadonlyArray<CacheStore<T>>;
+  readonly #hits: WeakMap<Buffer, CacheStore<T>> = new WeakMap();
 
-  _hits: WeakMap<Buffer, CacheStore<T>>;
-
-  constructor(stores: $ReadOnlyArray<CacheStore<T>>) {
-    this._hits = new WeakMap();
-    this._stores = stores;
+  constructor(stores: ReadonlyArray<CacheStore<T>>) {
+    this.#stores = stores;
   }
 
   async get(key: Buffer): Promise<?T> {
-    const stores = this._stores;
+    const stores = this.#stores;
     const length = stores.length;
 
     for (let i = 0; i < length; i++) {
       const store = stores[i];
-      const name = store.constructor.name + '::' + key.toString('hex');
+      const storeName = store.name ?? store.constructor.name;
+      const name = storeName + '::' + key.toString('hex');
       let value = null;
 
       const logStart = Logger.log(
@@ -51,24 +48,30 @@ class Cache<T> {
       try {
         const valueOrPromise = store.get(key);
 
-        // $FlowFixMe[method-unbinding] added when improving typing for this parameters
         if (valueOrPromise && typeof valueOrPromise.then === 'function') {
           value = await valueOrPromise;
         } else {
           value = valueOrPromise;
         }
       } finally {
-        Logger.log(Logger.createActionEndEntry(logStart));
+        const hitOrMiss = value != null ? 'hit' : 'miss';
+        Logger.log({
+          ...Logger.createActionEndEntry(logStart),
+          action_result: hitOrMiss,
+        });
 
+        // Deprecated - will be removed () - use 'Cache get' and action_result
+        // (above) instead.
+        // TODO: T196506422
         Logger.log(
           Logger.createEntry({
-            action_name: 'Cache ' + (value == null ? 'miss' : 'hit'),
+            action_name: 'Cache ' + hitOrMiss,
             log_entry_label: name,
           }),
         );
 
         if (value != null) {
-          this._hits.set(key, store);
+          this.#hits.set(key, store);
 
           return value;
         }
@@ -79,34 +82,58 @@ class Cache<T> {
   }
 
   async set(key: Buffer, value: T): Promise<void> {
-    const stores = this._stores;
-    const stop = this._hits.get(key);
+    const stores = this.#stores;
+    const stop = this.#hits.get(key);
     const length = stores.length;
+    if (length === 0 || stores[0] === stop) {
+      return;
+    }
+
     const promises = [];
+    const writeErrors = [];
+    const storesWithErrors = new Set<string>();
 
     for (let i = 0; i < length && stores[i] !== stop; i++) {
       const store = stores[i];
-      const name = store.constructor.name + '::' + key.toString('hex');
+      const storeName = store.name ?? store.constructor.name;
+      const name = storeName + '::' + key.toString('hex');
 
-      Logger.log(
-        Logger.createEntry({
+      const logStart = Logger.log(
+        Logger.createActionStartEntry({
           action_name: 'Cache set',
           log_entry_label: name,
         }),
       );
 
-      promises.push(stores[i].set(key, value));
+      promises.push(
+        (async () => {
+          try {
+            await stores[i].set(key, value);
+            Logger.log(Logger.createActionEndEntry(logStart));
+          } catch (e) {
+            Logger.log(Logger.createActionEndEntry(logStart, e));
+            storesWithErrors.add(storeName);
+            writeErrors.push(
+              new Error(`Cache write failed for ${name}`, {cause: e}),
+            );
+          }
+        })(),
+      );
     }
 
-    await Promise.all(promises);
+    await Promise.allSettled(promises);
+    if (writeErrors.length > 0) {
+      throw new AggregateError(
+        writeErrors,
+        `Cache write failed for store(s): ${Array.from(storesWithErrors).join(', ')}`,
+      );
+    }
   }
 
   // Returns true if the current configuration disables the cache, such that
   // writing to the cache is a no-op and reading from the cache will always
   // return null.
   get isDisabled(): boolean {
-    return this._stores.length === 0;
+    return this.#stores.length === 0;
   }
 }
-
-module.exports = Cache;

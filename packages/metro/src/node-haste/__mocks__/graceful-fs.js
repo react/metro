@@ -8,6 +8,4 @@
  * @flow strict
  */
 
-'use strict';
-
-module.exports = require('fs');
+export * from 'fs';

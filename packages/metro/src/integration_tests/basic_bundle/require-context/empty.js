@@ -23,4 +23,4 @@ function main() {
   return null;
 }
 
-module.exports = (main(): mixed);
+module.exports = main() as unknown;

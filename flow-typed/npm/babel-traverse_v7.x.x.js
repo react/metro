@@ -6,7 +6,6 @@
  *
  * @flow
  * @format
- * @oncall react_native
  */
 
 // The sections between BEGIN GENERATED and END GENERATED are generated
@@ -16,6 +15,316 @@
 'use strict';
 
 declare module '@babel/traverse' {
+  // BEGIN GENERATED BABEL TYPE IMPORTS
+  import type {
+    Node as BabelNode,
+    Accessor as BabelNodeAccessor,
+    AnyTypeAnnotation as BabelNodeAnyTypeAnnotation,
+    ArgumentPlaceholder as BabelNodeArgumentPlaceholder,
+    ArrayExpression as BabelNodeArrayExpression,
+    ArrayPattern as BabelNodeArrayPattern,
+    ArrayTypeAnnotation as BabelNodeArrayTypeAnnotation,
+    ArrowFunctionExpression as BabelNodeArrowFunctionExpression,
+    AssignmentExpression as BabelNodeAssignmentExpression,
+    AssignmentPattern as BabelNodeAssignmentPattern,
+    AwaitExpression as BabelNodeAwaitExpression,
+    BigIntLiteral as BabelNodeBigIntLiteral,
+    Binary as BabelNodeBinary,
+    BinaryExpression as BabelNodeBinaryExpression,
+    BindExpression as BabelNodeBindExpression,
+    Block as BabelNodeBlock,
+    BlockParent as BabelNodeBlockParent,
+    BlockStatement as BabelNodeBlockStatement,
+    BooleanLiteral as BabelNodeBooleanLiteral,
+    BooleanLiteralTypeAnnotation as BabelNodeBooleanLiteralTypeAnnotation,
+    BooleanTypeAnnotation as BabelNodeBooleanTypeAnnotation,
+    BreakStatement as BabelNodeBreakStatement,
+    CallExpression as BabelNodeCallExpression,
+    CatchClause as BabelNodeCatchClause,
+    Class as BabelNodeClass,
+    ClassAccessorProperty as BabelNodeClassAccessorProperty,
+    ClassBody as BabelNodeClassBody,
+    ClassDeclaration as BabelNodeClassDeclaration,
+    ClassExpression as BabelNodeClassExpression,
+    ClassImplements as BabelNodeClassImplements,
+    ClassMethod as BabelNodeClassMethod,
+    ClassPrivateMethod as BabelNodeClassPrivateMethod,
+    ClassPrivateProperty as BabelNodeClassPrivateProperty,
+    ClassProperty as BabelNodeClassProperty,
+    Comment as BabelNodeComment,
+    CompletionStatement as BabelNodeCompletionStatement,
+    Conditional as BabelNodeConditional,
+    ConditionalExpression as BabelNodeConditionalExpression,
+    ContinueStatement as BabelNodeContinueStatement,
+    DebuggerStatement as BabelNodeDebuggerStatement,
+    DecimalLiteral as BabelNodeDecimalLiteral,
+    Declaration as BabelNodeDeclaration,
+    DeclareClass as BabelNodeDeclareClass,
+    DeclareExportAllDeclaration as BabelNodeDeclareExportAllDeclaration,
+    DeclareExportDeclaration as BabelNodeDeclareExportDeclaration,
+    DeclareFunction as BabelNodeDeclareFunction,
+    DeclareInterface as BabelNodeDeclareInterface,
+    DeclareModule as BabelNodeDeclareModule,
+    DeclareModuleExports as BabelNodeDeclareModuleExports,
+    DeclareOpaqueType as BabelNodeDeclareOpaqueType,
+    DeclareTypeAlias as BabelNodeDeclareTypeAlias,
+    DeclareVariable as BabelNodeDeclareVariable,
+    DeclaredPredicate as BabelNodeDeclaredPredicate,
+    Decorator as BabelNodeDecorator,
+    Directive as BabelNodeDirective,
+    DirectiveLiteral as BabelNodeDirectiveLiteral,
+    DoExpression as BabelNodeDoExpression,
+    DoWhileStatement as BabelNodeDoWhileStatement,
+    EmptyStatement as BabelNodeEmptyStatement,
+    EmptyTypeAnnotation as BabelNodeEmptyTypeAnnotation,
+    EnumBody as BabelNodeEnumBody,
+    EnumBooleanBody as BabelNodeEnumBooleanBody,
+    EnumBooleanMember as BabelNodeEnumBooleanMember,
+    EnumDeclaration as BabelNodeEnumDeclaration,
+    EnumDefaultedMember as BabelNodeEnumDefaultedMember,
+    EnumMember as BabelNodeEnumMember,
+    EnumNumberBody as BabelNodeEnumNumberBody,
+    EnumNumberMember as BabelNodeEnumNumberMember,
+    EnumStringBody as BabelNodeEnumStringBody,
+    EnumStringMember as BabelNodeEnumStringMember,
+    EnumSymbolBody as BabelNodeEnumSymbolBody,
+    ExistsTypeAnnotation as BabelNodeExistsTypeAnnotation,
+    ExportAllDeclaration as BabelNodeExportAllDeclaration,
+    ExportDeclaration as BabelNodeExportDeclaration,
+    ExportDefaultDeclaration as BabelNodeExportDefaultDeclaration,
+    ExportDefaultSpecifier as BabelNodeExportDefaultSpecifier,
+    ExportNamedDeclaration as BabelNodeExportNamedDeclaration,
+    ExportNamespaceSpecifier as BabelNodeExportNamespaceSpecifier,
+    ExportSpecifier as BabelNodeExportSpecifier,
+    Expression as BabelNodeExpression,
+    ExpressionStatement as BabelNodeExpressionStatement,
+    ExpressionWrapper as BabelNodeExpressionWrapper,
+    Flow as BabelNodeFlow,
+    FlowBaseAnnotation as BabelNodeFlowBaseAnnotation,
+    FlowDeclaration as BabelNodeFlowDeclaration,
+    FlowPredicate as BabelNodeFlowPredicate,
+    FlowType as BabelNodeFlowType,
+    For as BabelNodeFor,
+    ForInStatement as BabelNodeForInStatement,
+    ForOfStatement as BabelNodeForOfStatement,
+    ForStatement as BabelNodeForStatement,
+    ForXStatement as BabelNodeForXStatement,
+    Function as BabelNodeFunction,
+    FunctionDeclaration as BabelNodeFunctionDeclaration,
+    FunctionExpression as BabelNodeFunctionExpression,
+    FunctionParameter as BabelNodeFunctionParameter,
+    FunctionParent as BabelNodeFunctionParent,
+    FunctionTypeAnnotation as BabelNodeFunctionTypeAnnotation,
+    FunctionTypeParam as BabelNodeFunctionTypeParam,
+    GenericTypeAnnotation as BabelNodeGenericTypeAnnotation,
+    Identifier as BabelNodeIdentifier,
+    IfStatement as BabelNodeIfStatement,
+    Immutable as BabelNodeImmutable,
+    Import as BabelNodeImport,
+    ImportAttribute as BabelNodeImportAttribute,
+    ImportDeclaration as BabelNodeImportDeclaration,
+    ImportDefaultSpecifier as BabelNodeImportDefaultSpecifier,
+    ImportExpression as BabelNodeImportExpression,
+    ImportNamespaceSpecifier as BabelNodeImportNamespaceSpecifier,
+    ImportOrExportDeclaration as BabelNodeImportOrExportDeclaration,
+    ImportSpecifier as BabelNodeImportSpecifier,
+    IndexedAccessType as BabelNodeIndexedAccessType,
+    InferredPredicate as BabelNodeInferredPredicate,
+    InterfaceDeclaration as BabelNodeInterfaceDeclaration,
+    InterfaceExtends as BabelNodeInterfaceExtends,
+    InterfaceTypeAnnotation as BabelNodeInterfaceTypeAnnotation,
+    InterpreterDirective as BabelNodeInterpreterDirective,
+    IntersectionTypeAnnotation as BabelNodeIntersectionTypeAnnotation,
+    JSX as BabelNodeJSX,
+    JSXAttribute as BabelNodeJSXAttribute,
+    JSXClosingElement as BabelNodeJSXClosingElement,
+    JSXClosingFragment as BabelNodeJSXClosingFragment,
+    JSXElement as BabelNodeJSXElement,
+    JSXEmptyExpression as BabelNodeJSXEmptyExpression,
+    JSXExpressionContainer as BabelNodeJSXExpressionContainer,
+    JSXFragment as BabelNodeJSXFragment,
+    JSXIdentifier as BabelNodeJSXIdentifier,
+    JSXMemberExpression as BabelNodeJSXMemberExpression,
+    JSXNamespacedName as BabelNodeJSXNamespacedName,
+    JSXOpeningElement as BabelNodeJSXOpeningElement,
+    JSXOpeningFragment as BabelNodeJSXOpeningFragment,
+    JSXSpreadAttribute as BabelNodeJSXSpreadAttribute,
+    JSXSpreadChild as BabelNodeJSXSpreadChild,
+    JSXText as BabelNodeJSXText,
+    LVal as BabelNodeLVal,
+    LabeledStatement as BabelNodeLabeledStatement,
+    Literal as BabelNodeLiteral,
+    LogicalExpression as BabelNodeLogicalExpression,
+    Loop as BabelNodeLoop,
+    MemberExpression as BabelNodeMemberExpression,
+    MetaProperty as BabelNodeMetaProperty,
+    Method as BabelNodeMethod,
+    Miscellaneous as BabelNodeMiscellaneous,
+    MixedTypeAnnotation as BabelNodeMixedTypeAnnotation,
+    ModuleDeclaration as BabelNodeModuleDeclaration,
+    ModuleExpression as BabelNodeModuleExpression,
+    ModuleSpecifier as BabelNodeModuleSpecifier,
+    NewExpression as BabelNodeNewExpression,
+    Noop as BabelNodeNoop,
+    NullLiteral as BabelNodeNullLiteral,
+    NullLiteralTypeAnnotation as BabelNodeNullLiteralTypeAnnotation,
+    NullableTypeAnnotation as BabelNodeNullableTypeAnnotation,
+    NumberLiteralTypeAnnotation as BabelNodeNumberLiteralTypeAnnotation,
+    NumberTypeAnnotation as BabelNodeNumberTypeAnnotation,
+    NumericLiteral as BabelNodeNumericLiteral,
+    ObjectExpression as BabelNodeObjectExpression,
+    ObjectMember as BabelNodeObjectMember,
+    ObjectMethod as BabelNodeObjectMethod,
+    ObjectPattern as BabelNodeObjectPattern,
+    ObjectProperty as BabelNodeObjectProperty,
+    ObjectTypeAnnotation as BabelNodeObjectTypeAnnotation,
+    ObjectTypeCallProperty as BabelNodeObjectTypeCallProperty,
+    ObjectTypeIndexer as BabelNodeObjectTypeIndexer,
+    ObjectTypeInternalSlot as BabelNodeObjectTypeInternalSlot,
+    ObjectTypeProperty as BabelNodeObjectTypeProperty,
+    ObjectTypeSpreadProperty as BabelNodeObjectTypeSpreadProperty,
+    OpaqueType as BabelNodeOpaqueType,
+    OptionalCallExpression as BabelNodeOptionalCallExpression,
+    OptionalIndexedAccessType as BabelNodeOptionalIndexedAccessType,
+    OptionalMemberExpression as BabelNodeOptionalMemberExpression,
+    ParenthesizedExpression as BabelNodeParenthesizedExpression,
+    Pattern as BabelNodePattern,
+    PatternLike as BabelNodePatternLike,
+    PipelineBareFunction as BabelNodePipelineBareFunction,
+    PipelinePrimaryTopicReference as BabelNodePipelinePrimaryTopicReference,
+    PipelineTopicExpression as BabelNodePipelineTopicExpression,
+    Placeholder as BabelNodePlaceholder,
+    Private as BabelNodePrivate,
+    PrivateName as BabelNodePrivateName,
+    Program as BabelNodeProgram,
+    Property as BabelNodeProperty,
+    Pureish as BabelNodePureish,
+    QualifiedTypeIdentifier as BabelNodeQualifiedTypeIdentifier,
+    RecordExpression as BabelNodeRecordExpression,
+    RegExpLiteral as BabelNodeRegExpLiteral,
+    RestElement as BabelNodeRestElement,
+    ReturnStatement as BabelNodeReturnStatement,
+    Scopable as BabelNodeScopable,
+    SequenceExpression as BabelNodeSequenceExpression,
+    SpreadElement as BabelNodeSpreadElement,
+    Standardized as BabelNodeStandardized,
+    Statement as BabelNodeStatement,
+    StaticBlock as BabelNodeStaticBlock,
+    StringLiteral as BabelNodeStringLiteral,
+    StringLiteralTypeAnnotation as BabelNodeStringLiteralTypeAnnotation,
+    StringTypeAnnotation as BabelNodeStringTypeAnnotation,
+    Super as BabelNodeSuper,
+    SwitchCase as BabelNodeSwitchCase,
+    SwitchStatement as BabelNodeSwitchStatement,
+    SymbolTypeAnnotation as BabelNodeSymbolTypeAnnotation,
+    TSAnyKeyword as BabelNodeTSAnyKeyword,
+    TSArrayType as BabelNodeTSArrayType,
+    TSAsExpression as BabelNodeTSAsExpression,
+    TSBaseType as BabelNodeTSBaseType,
+    TSBigIntKeyword as BabelNodeTSBigIntKeyword,
+    TSBooleanKeyword as BabelNodeTSBooleanKeyword,
+    TSCallSignatureDeclaration as BabelNodeTSCallSignatureDeclaration,
+    TSConditionalType as BabelNodeTSConditionalType,
+    TSConstructSignatureDeclaration as BabelNodeTSConstructSignatureDeclaration,
+    TSConstructorType as BabelNodeTSConstructorType,
+    TSDeclareFunction as BabelNodeTSDeclareFunction,
+    TSDeclareMethod as BabelNodeTSDeclareMethod,
+    TSEntityName as BabelNodeTSEntityName,
+    TSEnumBody as BabelNodeTSEnumBody,
+    TSEnumDeclaration as BabelNodeTSEnumDeclaration,
+    TSEnumMember as BabelNodeTSEnumMember,
+    TSExportAssignment as BabelNodeTSExportAssignment,
+    TSExpressionWithTypeArguments as BabelNodeTSExpressionWithTypeArguments,
+    TSExternalModuleReference as BabelNodeTSExternalModuleReference,
+    TSFunctionType as BabelNodeTSFunctionType,
+    TSImportEqualsDeclaration as BabelNodeTSImportEqualsDeclaration,
+    TSImportType as BabelNodeTSImportType,
+    TSIndexSignature as BabelNodeTSIndexSignature,
+    TSIndexedAccessType as BabelNodeTSIndexedAccessType,
+    TSInferType as BabelNodeTSInferType,
+    TSInstantiationExpression as BabelNodeTSInstantiationExpression,
+    TSInterfaceBody as BabelNodeTSInterfaceBody,
+    TSInterfaceDeclaration as BabelNodeTSInterfaceDeclaration,
+    TSIntersectionType as BabelNodeTSIntersectionType,
+    TSIntrinsicKeyword as BabelNodeTSIntrinsicKeyword,
+    TSLiteralType as BabelNodeTSLiteralType,
+    TSMappedType as BabelNodeTSMappedType,
+    TSMethodSignature as BabelNodeTSMethodSignature,
+    TSModuleBlock as BabelNodeTSModuleBlock,
+    TSModuleDeclaration as BabelNodeTSModuleDeclaration,
+    TSNamedTupleMember as BabelNodeTSNamedTupleMember,
+    TSNamespaceExportDeclaration as BabelNodeTSNamespaceExportDeclaration,
+    TSNeverKeyword as BabelNodeTSNeverKeyword,
+    TSNonNullExpression as BabelNodeTSNonNullExpression,
+    TSNullKeyword as BabelNodeTSNullKeyword,
+    TSNumberKeyword as BabelNodeTSNumberKeyword,
+    TSObjectKeyword as BabelNodeTSObjectKeyword,
+    TSOptionalType as BabelNodeTSOptionalType,
+    TSParameterProperty as BabelNodeTSParameterProperty,
+    TSParenthesizedType as BabelNodeTSParenthesizedType,
+    TSPropertySignature as BabelNodeTSPropertySignature,
+    TSQualifiedName as BabelNodeTSQualifiedName,
+    TSRestType as BabelNodeTSRestType,
+    TSSatisfiesExpression as BabelNodeTSSatisfiesExpression,
+    TSStringKeyword as BabelNodeTSStringKeyword,
+    TSSymbolKeyword as BabelNodeTSSymbolKeyword,
+    TSTemplateLiteralType as BabelNodeTSTemplateLiteralType,
+    TSThisType as BabelNodeTSThisType,
+    TSTupleType as BabelNodeTSTupleType,
+    TSType as BabelNodeTSType,
+    TSTypeAliasDeclaration as BabelNodeTSTypeAliasDeclaration,
+    TSTypeAnnotation as BabelNodeTSTypeAnnotation,
+    TSTypeAssertion as BabelNodeTSTypeAssertion,
+    TSTypeElement as BabelNodeTSTypeElement,
+    TSTypeLiteral as BabelNodeTSTypeLiteral,
+    TSTypeOperator as BabelNodeTSTypeOperator,
+    TSTypeParameter as BabelNodeTSTypeParameter,
+    TSTypeParameterDeclaration as BabelNodeTSTypeParameterDeclaration,
+    TSTypeParameterInstantiation as BabelNodeTSTypeParameterInstantiation,
+    TSTypePredicate as BabelNodeTSTypePredicate,
+    TSTypeQuery as BabelNodeTSTypeQuery,
+    TSTypeReference as BabelNodeTSTypeReference,
+    TSUndefinedKeyword as BabelNodeTSUndefinedKeyword,
+    TSUnionType as BabelNodeTSUnionType,
+    TSUnknownKeyword as BabelNodeTSUnknownKeyword,
+    TSVoidKeyword as BabelNodeTSVoidKeyword,
+    TaggedTemplateExpression as BabelNodeTaggedTemplateExpression,
+    TemplateElement as BabelNodeTemplateElement,
+    TemplateLiteral as BabelNodeTemplateLiteral,
+    Terminatorless as BabelNodeTerminatorless,
+    ThisExpression as BabelNodeThisExpression,
+    ThisTypeAnnotation as BabelNodeThisTypeAnnotation,
+    ThrowStatement as BabelNodeThrowStatement,
+    TopicReference as BabelNodeTopicReference,
+    TryStatement as BabelNodeTryStatement,
+    TupleExpression as BabelNodeTupleExpression,
+    TupleTypeAnnotation as BabelNodeTupleTypeAnnotation,
+    TypeAlias as BabelNodeTypeAlias,
+    TypeAnnotation as BabelNodeTypeAnnotation,
+    TypeCastExpression as BabelNodeTypeCastExpression,
+    TypeParameter as BabelNodeTypeParameter,
+    TypeParameterDeclaration as BabelNodeTypeParameterDeclaration,
+    TypeParameterInstantiation as BabelNodeTypeParameterInstantiation,
+    TypeScript as BabelNodeTypeScript,
+    TypeofTypeAnnotation as BabelNodeTypeofTypeAnnotation,
+    UnaryExpression as BabelNodeUnaryExpression,
+    UnaryLike as BabelNodeUnaryLike,
+    UnionTypeAnnotation as BabelNodeUnionTypeAnnotation,
+    UpdateExpression as BabelNodeUpdateExpression,
+    UserWhitespacable as BabelNodeUserWhitespacable,
+    V8IntrinsicIdentifier as BabelNodeV8IntrinsicIdentifier,
+    VariableDeclaration as BabelNodeVariableDeclaration,
+    VariableDeclarator as BabelNodeVariableDeclarator,
+    Variance as BabelNodeVariance,
+    VoidPattern as BabelNodeVoidPattern,
+    VoidTypeAnnotation as BabelNodeVoidTypeAnnotation,
+    While as BabelNodeWhile,
+    WhileStatement as BabelNodeWhileStatement,
+    WithStatement as BabelNodeWithStatement,
+    YieldExpression as BabelNodeYieldExpression,
+  } from '@babel/types';
+  // END GENERATED BABEL TYPE IMPORTS
+
   declare export type TraverseOptions<TState> = {
     ...Visitor<TState>,
     scope?: Scope,
@@ -26,7 +335,7 @@ declare module '@babel/traverse' {
     getCode(): ?string;
     getScope(): ?Scope;
     addHelper(name: string): {};
-    buildError<TError: Error>(
+    buildError<TError extends Error>(
       node: BabelNode,
       msg: string,
       Error: Class<TError>,
@@ -38,7 +347,7 @@ declare module '@babel/traverse' {
     getCode(): ?string;
     getScope(): ?Scope;
     addHelper(name: string): {};
-    buildError<TError: Error>(
+    buildError<TError extends Error>(
       node: BabelNode,
       msg: string,
       Error: Class<TError>,
@@ -54,7 +363,7 @@ declare module '@babel/traverse' {
 
     constructor(
       scope: Scope,
-      opts: TraverseOptions<mixed>,
+      opts: TraverseOptions<unknown>,
       state: any,
       parentPath: NodePath<>,
     ): TraversalContext;
@@ -84,10 +393,10 @@ declare module '@babel/traverse' {
     constructor(path: NodePath<>): Scope;
     path: NodePath<>;
     block: BabelNode;
-    +labels: Map<string, NodePath<>>;
-    +parentBlock: BabelNode;
-    +parent: Scope;
-    +hub: HubInterface;
+    readonly labels: Map<string, NodePath<>>;
+    readonly parentBlock: BabelNode;
+    readonly parent: Scope;
+    readonly hub: HubInterface;
     bindings?: {[name: string]: Binding};
     references?: {[name: string]: boolean};
     globals?: {[name: string]: BabelNode};
@@ -98,7 +407,7 @@ declare module '@babel/traverse' {
     /** Traverse node with current scope and path. */
     traverse<S>(
       node: BabelNode | Array<BabelNode>,
-      opts: $ReadOnly<TraverseOptions<S>>,
+      opts: Readonly<TraverseOptions<S>>,
       state: S,
     ): void;
 
@@ -247,12 +556,7 @@ declare module '@babel/traverse' {
   }
 
   declare export type BindingKind =
-    | 'var'
-    | 'let'
-    | 'const'
-    | 'module'
-    | 'hoisted'
-    | 'unknown';
+    'var' | 'let' | 'const' | 'module' | 'hoisted' | 'unknown';
 
   declare export class Binding {
     constructor(opts: {
@@ -295,16 +599,16 @@ declare module '@babel/traverse' {
 
   declare type Opts = {...};
 
-  declare export class NodePath<+TNode: BabelNode = BabelNode> {
+  declare export class NodePath<out TNode extends BabelNode = BabelNode> {
     parent: BabelNode;
     hub: HubInterface;
     contexts: Array<TraversalContext>;
-    data: {[key: string]: mixed} | null;
+    data: {[key: string]: unknown} | null;
     shouldSkip: boolean;
     shouldStop: boolean;
     removed: boolean;
-    state: mixed;
-    +opts: $ReadOnly<TraverseOptions<mixed>> | null;
+    state: unknown;
+    readonly opts: Readonly<TraverseOptions<unknown>> | null;
     skipKeys: null | {[key: string]: boolean};
     parentPath: ?NodePath<>;
     context: TraversalContext;
@@ -317,7 +621,7 @@ declare module '@babel/traverse' {
      * work with `NodePath`, e.g. that passing `NodePath<CallExpression>` to a
      * `NodePath<Node> works.
      */
-    +node: TNode;
+    readonly node: TNode;
 
     parentKey: string;
     scope: Scope;
@@ -327,7 +631,7 @@ declare module '@babel/traverse' {
 
     constructor(hub: HubInterface, parent: BabelNode): NodePath<TNode>;
 
-    static get({
+    static get(options: {
       hub: HubInterface,
       parentPath: ?NodePath<>,
       parent: BabelNode,
@@ -339,15 +643,15 @@ declare module '@babel/traverse' {
     getScope(scope: Scope): Scope;
 
     setData<TVal>(key: string, val: TVal): TVal;
-    getData<TVal = mixed>(key: string, def?: TVal): TVal;
+    getData<TVal = unknown>(key: string, def?: TVal): TVal;
 
-    buildCodeFrameError<TError: Error>(
+    buildCodeFrameError<TError extends Error>(
       msg: string,
       Error?: Class<TError>,
     ): TError;
 
     traverse<TState>(
-      visitor: $ReadOnly<TraverseOptions<TState>>,
+      visitor: Readonly<TraverseOptions<TState>>,
       state: TState,
     ): void;
 
@@ -391,9 +695,7 @@ declare module '@babel/traverse' {
      * Earliest is defined as being "before" all the other nodes in terms of list container
      * position and visiting key.
      */
-    getEarliestCommonAncestorFrom(
-      paths: $ReadOnlyArray<NodePath<>>,
-    ): NodePath<>;
+    getEarliestCommonAncestorFrom(paths: ReadonlyArray<NodePath<>>): NodePath<>;
 
     /**
      * Get the earliest path in the tree where the provided `paths` intersect.
@@ -401,7 +703,7 @@ declare module '@babel/traverse' {
      * TODO: Possible optimisation target.
      */
     getDeepestCommonAncestorFrom(
-      paths: $ReadOnlyArray<NodePath<>>,
+      paths: ReadonlyArray<NodePath<>>,
       filter?: (
         lastCommon: BabelNode,
         lastCommonIndex: number,
@@ -438,13 +740,7 @@ declare module '@babel/traverse' {
     isBaseType(baseName: string, soft?: boolean): boolean;
     couldBeBaseType(
       name:
-        | 'string'
-        | 'number'
-        | 'boolean'
-        | 'any'
-        | 'mixed'
-        | 'empty'
-        | 'void',
+        'string' | 'number' | 'boolean' | 'any' | 'mixed' | 'empty' | 'void',
     ): boolean;
     baseTypeStrictlyMatches(right: NodePath<>): ?boolean;
     isGenericType(genericName: string): boolean;
@@ -559,24 +855,24 @@ declare module '@babel/traverse' {
      * Check whether we have the input `key`. If the `key` references an array then we check
      * if the array has any items, otherwise we just check if it's falsy.
      */
-    has(key: $Keys<TNode>): boolean;
+    has(key: keyof TNode): boolean;
 
     isStatic(): boolean;
 
     /**
      * Alias of `has`.
      */
-    is(key: $Keys<TNode>): boolean;
+    is(key: keyof TNode): boolean;
 
     /**
      * Opposite of `has`.
      */
-    isnt(key: $Keys<TNode>): boolean;
+    isnt(key: keyof TNode): boolean;
 
     /**
      * Check whether the path node `key` strict equals `value`.
      */
-    equals(key: $Keys<TNode>, value: any): boolean;
+    equals(key: keyof TNode, value: any): boolean;
 
     /**
      * Check the type against our stored internal type of the node. This is handy when a node has
@@ -727,7 +1023,7 @@ declare module '@babel/traverse' {
 
     getAllPrevSiblings(): Array<NodePath<>>;
 
-    get<TKey: $Keys<TNode>>(
+    get<TKey extends keyof TNode>(
       key: TKey,
       context?: boolean | TraversalContext,
     ): TNode[TKey] extends BabelNode ? NodePath<> : Array<NodePath<>>;
@@ -888,6 +1184,7 @@ declare module '@babel/traverse' {
     isFunction(opts?: Opts): boolean;
     isFunctionDeclaration(opts?: Opts): boolean;
     isFunctionExpression(opts?: Opts): boolean;
+    isFunctionParameter(opts?: Opts): boolean;
     isFunctionParent(opts?: Opts): boolean;
     isFunctionTypeAnnotation(opts?: Opts): boolean;
     isFunctionTypeParam(opts?: Opts): boolean;
@@ -900,7 +1197,9 @@ declare module '@babel/traverse' {
     isImportAttribute(opts?: Opts): boolean;
     isImportDeclaration(opts?: Opts): boolean;
     isImportDefaultSpecifier(opts?: Opts): boolean;
+    isImportExpression(opts?: Opts): boolean;
     isImportNamespaceSpecifier(opts?: Opts): boolean;
+    isImportOrExportDeclaration(opts?: Opts): boolean;
     isImportSpecifier(opts?: Opts): boolean;
     isIndexedAccessType(opts?: Opts): boolean;
     isInferredPredicate(opts?: Opts): boolean;
@@ -1014,6 +1313,7 @@ declare module '@babel/traverse' {
     isTSDeclareFunction(opts?: Opts): boolean;
     isTSDeclareMethod(opts?: Opts): boolean;
     isTSEntityName(opts?: Opts): boolean;
+    isTSEnumBody(opts?: Opts): boolean;
     isTSEnumDeclaration(opts?: Opts): boolean;
     isTSEnumMember(opts?: Opts): boolean;
     isTSExportAssignment(opts?: Opts): boolean;
@@ -1051,6 +1351,7 @@ declare module '@babel/traverse' {
     isTSSatisfiesExpression(opts?: Opts): boolean;
     isTSStringKeyword(opts?: Opts): boolean;
     isTSSymbolKeyword(opts?: Opts): boolean;
+    isTSTemplateLiteralType(opts?: Opts): boolean;
     isTSThisType(opts?: Opts): boolean;
     isTSTupleType(opts?: Opts): boolean;
     isTSType(opts?: Opts): boolean;
@@ -1100,6 +1401,7 @@ declare module '@babel/traverse' {
     isVariableDeclaration(opts?: Opts): boolean;
     isVariableDeclarator(opts?: Opts): boolean;
     isVariance(opts?: Opts): boolean;
+    isVoidPattern(opts?: Opts): boolean;
     isVoidTypeAnnotation(opts?: Opts): boolean;
     isWhile(opts?: Opts): boolean;
     isWhileStatement(opts?: Opts): boolean;
@@ -1203,6 +1505,7 @@ declare module '@babel/traverse' {
     assertFunction(opts?: Opts): void;
     assertFunctionDeclaration(opts?: Opts): void;
     assertFunctionExpression(opts?: Opts): void;
+    assertFunctionParameter(opts?: Opts): void;
     assertFunctionParent(opts?: Opts): void;
     assertFunctionTypeAnnotation(opts?: Opts): void;
     assertFunctionTypeParam(opts?: Opts): void;
@@ -1215,7 +1518,9 @@ declare module '@babel/traverse' {
     assertImportAttribute(opts?: Opts): void;
     assertImportDeclaration(opts?: Opts): void;
     assertImportDefaultSpecifier(opts?: Opts): void;
+    assertImportExpression(opts?: Opts): void;
     assertImportNamespaceSpecifier(opts?: Opts): void;
+    assertImportOrExportDeclaration(opts?: Opts): void;
     assertImportSpecifier(opts?: Opts): void;
     assertIndexedAccessType(opts?: Opts): void;
     assertInferredPredicate(opts?: Opts): void;
@@ -1329,6 +1634,7 @@ declare module '@babel/traverse' {
     assertTSDeclareFunction(opts?: Opts): void;
     assertTSDeclareMethod(opts?: Opts): void;
     assertTSEntityName(opts?: Opts): void;
+    assertTSEnumBody(opts?: Opts): void;
     assertTSEnumDeclaration(opts?: Opts): void;
     assertTSEnumMember(opts?: Opts): void;
     assertTSExportAssignment(opts?: Opts): void;
@@ -1366,6 +1672,7 @@ declare module '@babel/traverse' {
     assertTSSatisfiesExpression(opts?: Opts): void;
     assertTSStringKeyword(opts?: Opts): void;
     assertTSSymbolKeyword(opts?: Opts): void;
+    assertTSTemplateLiteralType(opts?: Opts): void;
     assertTSThisType(opts?: Opts): void;
     assertTSTupleType(opts?: Opts): void;
     assertTSType(opts?: Opts): void;
@@ -1415,6 +1722,7 @@ declare module '@babel/traverse' {
     assertVariableDeclaration(opts?: Opts): void;
     assertVariableDeclarator(opts?: Opts): void;
     assertVariance(opts?: Opts): void;
+    assertVoidPattern(opts?: Opts): void;
     assertVoidTypeAnnotation(opts?: Opts): void;
     assertWhile(opts?: Opts): void;
     assertWhileStatement(opts?: Opts): void;
@@ -1423,21 +1731,23 @@ declare module '@babel/traverse' {
     // END GENERATED NODE PATH METHODS
   }
 
-  declare export type VisitNodeFunction<-TNode: BabelNode, TState> = (
+  declare export type VisitNodeFunction<in TNode extends BabelNode, TState> = (
     path: NodePath<TNode>,
     state: TState,
   ) => void;
 
-  declare export type VisitNodeObject<-TNode: BabelNode, TState> = Partial<{
+  declare export type VisitNodeObject<
+    in TNode extends BabelNode,
+    TState,
+  > = Partial<{
     enter(path: NodePath<TNode>, state: TState): void,
     exit(path: NodePath<TNode>, state: TState): void,
   }>;
 
-  declare export type VisitNode<-TNode: BabelNode, TState> =
-    | VisitNodeFunction<TNode, TState>
-    | VisitNodeObject<TNode, TState>;
+  declare export type VisitNode<in TNode extends BabelNode, TState> =
+    VisitNodeFunction<TNode, TState> | VisitNodeObject<TNode, TState>;
 
-  declare export type Visitor<TState = void> = $ReadOnly<{
+  declare export type Visitor<TState = void> = Readonly<{
     enter?: VisitNodeFunction<BabelNode, TState>,
     exit?: VisitNodeFunction<BabelNode, TState>,
 
@@ -1559,6 +1869,7 @@ declare module '@babel/traverse' {
     Function?: VisitNode<BabelNodeFunction, TState>,
     FunctionDeclaration?: VisitNode<BabelNodeFunctionDeclaration, TState>,
     FunctionExpression?: VisitNode<BabelNodeFunctionExpression, TState>,
+    FunctionParameter?: VisitNode<BabelNodeFunctionParameter, TState>,
     FunctionParent?: VisitNode<BabelNodeFunctionParent, TState>,
     FunctionTypeAnnotation?: VisitNode<BabelNodeFunctionTypeAnnotation, TState>,
     FunctionTypeParam?: VisitNode<BabelNodeFunctionTypeParam, TState>,
@@ -1571,8 +1882,13 @@ declare module '@babel/traverse' {
     ImportAttribute?: VisitNode<BabelNodeImportAttribute, TState>,
     ImportDeclaration?: VisitNode<BabelNodeImportDeclaration, TState>,
     ImportDefaultSpecifier?: VisitNode<BabelNodeImportDefaultSpecifier, TState>,
+    ImportExpression?: VisitNode<BabelNodeImportExpression, TState>,
     ImportNamespaceSpecifier?: VisitNode<
       BabelNodeImportNamespaceSpecifier,
+      TState,
+    >,
+    ImportOrExportDeclaration?: VisitNode<
+      BabelNodeImportOrExportDeclaration,
       TState,
     >,
     ImportSpecifier?: VisitNode<BabelNodeImportSpecifier, TState>,
@@ -1730,6 +2046,7 @@ declare module '@babel/traverse' {
     TSDeclareFunction?: VisitNode<BabelNodeTSDeclareFunction, TState>,
     TSDeclareMethod?: VisitNode<BabelNodeTSDeclareMethod, TState>,
     TSEntityName?: VisitNode<BabelNodeTSEntityName, TState>,
+    TSEnumBody?: VisitNode<BabelNodeTSEnumBody, TState>,
     TSEnumDeclaration?: VisitNode<BabelNodeTSEnumDeclaration, TState>,
     TSEnumMember?: VisitNode<BabelNodeTSEnumMember, TState>,
     TSExportAssignment?: VisitNode<BabelNodeTSExportAssignment, TState>,
@@ -1782,6 +2099,7 @@ declare module '@babel/traverse' {
     TSSatisfiesExpression?: VisitNode<BabelNodeTSSatisfiesExpression, TState>,
     TSStringKeyword?: VisitNode<BabelNodeTSStringKeyword, TState>,
     TSSymbolKeyword?: VisitNode<BabelNodeTSSymbolKeyword, TState>,
+    TSTemplateLiteralType?: VisitNode<BabelNodeTSTemplateLiteralType, TState>,
     TSThisType?: VisitNode<BabelNodeTSThisType, TState>,
     TSTupleType?: VisitNode<BabelNodeTSTupleType, TState>,
     TSType?: VisitNode<BabelNodeTSType, TState>,
@@ -1846,6 +2164,7 @@ declare module '@babel/traverse' {
     VariableDeclaration?: VisitNode<BabelNodeVariableDeclaration, TState>,
     VariableDeclarator?: VisitNode<BabelNodeVariableDeclarator, TState>,
     Variance?: VisitNode<BabelNodeVariance, TState>,
+    VoidPattern?: VisitNode<BabelNodeVoidPattern, TState>,
     VoidTypeAnnotation?: VisitNode<BabelNodeVoidTypeAnnotation, TState>,
     While?: VisitNode<BabelNodeWhile, TState>,
     WhileStatement?: VisitNode<BabelNodeWhileStatement, TState>,
@@ -1858,7 +2177,7 @@ declare module '@babel/traverse' {
     explode<TState>(visitor: Visitor<TState>): Visitor<TState>,
     verify<TState>(visitor: Visitor<TState>): void,
     merge(
-      visitors: Array<$ReadOnly<Visitor<any>>>,
+      visitors: Array<Readonly<Visitor<any>>>,
       states: Array<any>,
       wrapper?: ?Function,
     ): Array<Visitor<any>>,
@@ -1867,8 +2186,8 @@ declare module '@babel/traverse' {
   declare export var visitors: Visitors;
 
   declare export type Cache = {
-    path: $ReadOnlyWeakMap<BabelNode, mixed>,
-    scope: $ReadOnlyWeakMap<BabelNode, mixed>,
+    path: ReadonlyWeakMap<BabelNode, unknown>,
+    scope: ReadonlyWeakMap<BabelNode, unknown>,
     clear(): void,
     clearPath(): void,
     clearScope(): void,
@@ -1877,16 +2196,16 @@ declare module '@babel/traverse' {
   declare export type Traverse = {
     <TState>(
       parent?: BabelNode | Array<BabelNode>,
-      opts?: $ReadOnly<TraverseOptions<TState>>,
+      opts?: Readonly<TraverseOptions<TState>>,
       scope?: ?Scope,
       state: TState,
       parentPath?: ?NodePath<BabelNode>,
     ): void,
 
-    +cache: Cache,
-    +visitors: Visitors,
-    +verify: Visitors['verify'],
-    +explode: Visitors['explode'],
+    readonly cache: Cache,
+    readonly visitors: Visitors,
+    readonly verify: Visitors['verify'],
+    readonly explode: Visitors['explode'],
 
     cheap<TOptions>(
       node: BabelNode,
@@ -1895,7 +2214,7 @@ declare module '@babel/traverse' {
 
     node<TState>(
       node: BabelNode,
-      opts: $ReadOnly<TraverseOptions<TState>>,
+      opts: Readonly<TraverseOptions<TState>>,
       scope: Scope,
       state: TState,
       parentPath: NodePath<>,

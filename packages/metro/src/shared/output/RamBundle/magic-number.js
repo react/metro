@@ -9,6 +9,4 @@
  * @oncall react_native
  */
 
-'use strict';
-
-module.exports = 0xfb0bd1e5;
+export default 0xfb0bd1e5;

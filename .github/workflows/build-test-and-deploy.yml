@@ -1,0 +1,83 @@
+name: react/metro/build-test-and-deploy
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+# The job is triggered for any tag push. Tag format validation will be done
+# as part of the deploy job for clearer error reporting for bad tag formatting
+      - '**'
+  workflow_dispatch:
+
+# ref us unique per PR (refs/pull/<pr_number>/merge)
+# and per pushed tag (refs/tags/<tag_name>)
+# So this makes sure that previous CI for the same PR/tag
+# are cancelled when a newer one is triggered
+concurrency:
+  group: "build-test-and-deploy-${{ github.ref }}"
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  run-js-checks:
+    runs-on: ubuntu-latest
+    name: "Type check, lint, format, smoke test"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/yarn-install
+      - run: yarn typecheck
+      - run: yarn typecheck-ts
+      - run: yarn lint
+      - run: yarn lint-markdown
+      - run: yarn format-check
+      - run: yarn test-smoke
+
+  test-with-coverage:
+    runs-on: ubuntu-latest
+    name: "Tests with coverage"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/yarn-install
+      - run: yarn test-coverage
+      - run: "./.github/scripts/install_codecov.sh"
+      - run: "./codecov -t ${{ secrets.CODECOV_TOKEN }} -f ./coverage/coverage-final.json"
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: ['ubuntu-latest', 'windows-latest', 'macos-latest']
+        # Sync with nightly-tests.yml
+        node-version: [
+          '22.13.0', # minimum supported
+          'lts/*',   # latest lts
+          '*'        # latest stable node version ('latest' includes prereleases)
+        ]
+    uses: ./.github/workflows/test.yml
+    with:
+      node-version: ${{ matrix.node-version }}
+      runs-on: ${{ matrix.runs-on }}
+
+  deploy:
+    # runs only on tag pushes
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    name: "Deploy"
+    needs: [run-js-checks, test]
+    permissions:
+      contents: read
+      id-token: write  # Required for npm provenance / OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/yarn-install
+      - run: "./.github/scripts/publish.sh"
+        env:
+          RAW_TAG_NAME: ${{ github.ref_name }}
+          NPM_CONFIG_PROVENANCE: true

@@ -12,14 +12,14 @@
 import type {ChangeEventMetadata} from '../../flow-types';
 import type {WatcherOptions} from '../common';
 
-import FSEventsWatcher from '../FSEventsWatcher';
-import NodeWatcher from '../NodeWatcher';
+import FallbackWatcher from '../FallbackWatcher';
+import NativeWatcher from '../NativeWatcher';
 import WatchmanWatcher from '../WatchmanWatcher';
-import {execSync} from 'child_process';
-import {promises as fsPromises} from 'fs';
 import invariant from 'invariant';
-import os from 'os';
-import {join} from 'path';
+import {execSync} from 'node:child_process';
+import {promises as fsPromises} from 'node:fs';
+import os from 'node:os';
+import {join} from 'node:path';
 
 jest.useRealTimers();
 
@@ -41,17 +41,19 @@ const isWatchmanOnPath = () => {
 };
 
 // `null` Watchers will be marked as skipped tests.
-export const WATCHERS: $ReadOnly<{
-  [key: string]:
-    | Class<NodeWatcher>
-    | Class<FSEventsWatcher>
+export const WATCHERS: Readonly<{
+  [key: 'Watchman' | 'Native' | 'Fallback']:
+    | Class<FallbackWatcher>
+    | Class<NativeWatcher>
     | Class<WatchmanWatcher>
     | null,
 }> = {
-  Node: NodeWatcher,
   Watchman: isWatchmanOnPath() ? WatchmanWatcher : null,
-  FSEvents: FSEventsWatcher.isSupported() ? FSEventsWatcher : null,
+  Native: NativeWatcher.isSupported() ? NativeWatcher : null,
+  Fallback: FallbackWatcher,
 };
+
+export type WatcherName = keyof typeof WATCHERS;
 
 export type EventHelpers = {
   nextEvent: (afterFn: () => Promise<void>) => Promise<{
@@ -62,18 +64,18 @@ export type EventHelpers = {
   untilEvent: (
     afterFn: () => Promise<void>,
     expectedPath: string,
-    expectedEvent: 'add' | 'delete' | 'change',
+    expectedEvent: 'touch' | 'delete' | 'recrawl',
   ) => Promise<void>,
   allEvents: (
     afterFn: () => Promise<void>,
-    events: $ReadOnlyArray<[string, 'add' | 'delete' | 'change']>,
+    events: ReadonlyArray<[string, 'touch' | 'delete' | 'recrawl']>,
     opts?: {rejectUnexpected: boolean},
   ) => Promise<void>,
 };
 
 export const createTempWatchRoot = async (
-  watcherName: string,
-  watchmanConfig: {[key: string]: mixed} | false = {},
+  watcherName: WatcherName,
+  watchmanConfig: {[key: string]: unknown} | false = {},
 ): Promise<string> => {
   const tmpDir = await mkdtemp(
     join(os.tmpdir(), `metro-watcher-${watcherName}-test-`),
@@ -94,7 +96,7 @@ export const createTempWatchRoot = async (
 };
 
 export const startWatching = async (
-  watcherName: string,
+  watcherName: WatcherName,
   watchRoot: string,
   opts: WatcherOptions,
 ): (Promise<{
@@ -105,9 +107,39 @@ export const startWatching = async (
   invariant(Watcher != null, `Watcher ${watcherName} is not supported`);
   const watcherInstance = new Watcher(watchRoot, opts);
 
-  await new Promise(resolve => {
-    watcherInstance.once('ready', resolve);
-  });
+  await watcherInstance.startWatching();
+
+  // As Metro's Watcher does, confirm a watch that isn't live on start with a
+  // change of its own - a cookie file, matched by the `cookie-*` prefix.
+  // Watchers emit in order, so once the latest is reported, none of the
+  // earlier ones remain in flight to leak into a test.
+  if (!Watcher.isLiveOnStart()) {
+    const deadline = Date.now() + 10000;
+    for (let i = 1; ; i++) {
+      const cookie = `cookie-live-${i}`;
+      let unsubscribe: () => void = () => {};
+      const observed = new Promise<boolean>(resolve => {
+        unsubscribe = watcherInstance.onFileEvent(change => {
+          if (change.relativePath === cookie) {
+            resolve(true);
+          }
+        });
+      });
+      await writeFile(join(watchRoot, cookie), '');
+      const live = await Promise.race([
+        observed,
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 200)),
+      ]);
+      unsubscribe();
+      if (live) {
+        break;
+      }
+      invariant(
+        Date.now() < deadline,
+        `${watcherName} watch never became live`,
+      );
+    }
+  }
 
   const eventHelpers: EventHelpers = {
     nextEvent: afterFn =>
@@ -117,25 +149,27 @@ export const startWatching = async (
           metadata?: ChangeEventMetadata,
           path: string,
         }>((resolve, reject) => {
-          const listener = (
-            eventType: string,
-            path: string,
-            root: string,
-            metadata?: ChangeEventMetadata,
-          ) => {
-            if (path === '') {
-              // FIXME: FSEventsWatcher sometimes reports 'change' events to
-              // the watch root.
-              return;
-            }
-            watcherInstance.removeListener('all', listener);
-            if (root !== watchRoot) {
-              reject(new Error(`Expected root ${watchRoot}, got ${root}`));
-            }
+          const unsubscribe: () => void = watcherInstance.onFileEvent(
+            change => {
+              if (change.relativePath === '') {
+                // FIXME: FSEventsWatcher sometimes reports 'touch' events to
+                // the watch root.
+                return;
+              }
+              unsubscribe();
+              if (change.root !== watchRoot) {
+                reject(
+                  new Error(`Expected root ${watchRoot}, got ${change.root}`),
+                );
+              }
 
-            resolve({eventType, path, metadata});
-          };
-          watcherInstance.on('all', listener);
+              resolve({
+                eventType: change.event,
+                path: change.relativePath,
+                metadata: change.metadata,
+              });
+            },
+          );
         }),
         afterFn(),
       ]).then(([event]) => event),
@@ -145,34 +179,40 @@ export const startWatching = async (
         rejectUnexpected: false,
       }),
 
-    // $FlowFixMe[incompatible-use]
     allEvents: (afterFn, expectedEvents, {rejectUnexpected = true} = {}) =>
       Promise.all([
         new Promise((resolve, reject) => {
-          const tupleToKey = (tuple: $ReadOnlyArray<string>) =>
-            tuple.join('\0');
+          const tupleToKey = (tuple: ReadonlyArray<string>) => tuple.join('\0');
           const allEventKeys = new Set(
             expectedEvents.map(tuple => tupleToKey(tuple)),
           );
-          const listener = (eventType: string, path: string) => {
-            if (path === '') {
-              // FIXME: FSEventsWatcher sometimes reports 'change' events to
-              // the watch root.
-              return;
-            }
-            const receivedKey = tupleToKey([path, eventType]);
-            if (allEventKeys.has(receivedKey)) {
-              allEventKeys.delete(receivedKey);
-              if (allEventKeys.size === 0) {
-                watcherInstance.removeListener('all', listener);
-                resolve();
+          const unsubscribe: () => void = watcherInstance.onFileEvent(
+            change => {
+              if (change.relativePath === '') {
+                // FIXME: FSEventsWatcher sometimes reports 'touch' events to
+                // the watch root.
+                return;
               }
-            } else if (rejectUnexpected) {
-              watcherInstance.removeListener('all', listener);
-              reject(new Error(`Unexpected event: ${eventType} ${path}.`));
-            }
-          };
-          watcherInstance.on('all', listener);
+              const receivedKey = tupleToKey([
+                change.relativePath,
+                change.event,
+              ]);
+              if (allEventKeys.has(receivedKey)) {
+                allEventKeys.delete(receivedKey);
+                if (allEventKeys.size === 0) {
+                  unsubscribe();
+                  resolve();
+                }
+              } else if (rejectUnexpected) {
+                unsubscribe();
+                reject(
+                  new Error(
+                    `Unexpected event: ${change.event} ${change.relativePath}.`,
+                  ),
+                );
+              }
+            },
+          );
         }),
         afterFn(),
       ]).then(() => {}),
@@ -181,7 +221,7 @@ export const startWatching = async (
   return {
     eventHelpers,
     stopWatching: async () => {
-      await watcherInstance.close();
+      await watcherInstance.stopWatching();
     },
   };
 };

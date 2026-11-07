@@ -9,13 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {MixedSourceMap} from 'metro-source-map';
 
-const path = require('path');
+import path from 'node:path';
 
-function relativizeSourceMapInline(
+export default function relativizeSourceMapInline(
   sourceMap: MixedSourceMap,
   sourcesRoot: string,
 ): void {
@@ -30,5 +28,3 @@ function relativizeSourceMapInline(
     }
   }
 }
-
-module.exports = relativizeSourceMapInline;

@@ -9,24 +9,23 @@
  * @oncall react_native
  */
 
-'use strict';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from '../../../metro-source-map/src/source-map';
 import type {ExplodedSourceMap} from '../DeltaBundler/Serializers/getExplodedSourceMap';
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
+import type {ConfigT} from 'metro-config';
 
-const {greatestLowerBound} = require('metro-source-map/src/Consumer/search');
-const {
-  SourceMetadataMapConsumer,
-} = require('metro-symbolicate/src/Symbolication');
+import {greatestLowerBound} from 'metro-source-map/private/Consumer/search';
+import LineIndexedMappings from 'metro-source-map/private/LineIndexedMappings';
+import {SourceMetadataMapConsumer} from 'metro-symbolicate/private/Symbolication';
 
 export type StackFrameInput = {
-  +file: ?string,
-  +lineNumber: ?number,
-  +column: ?number,
-  +methodName: ?string,
+  readonly file: ?string,
+  readonly lineNumber: ?number,
+  readonly column: ?number,
+  readonly methodName: ?string,
   ...
 };
 export type IntermediateStackFrame = {
@@ -34,16 +33,82 @@ export type IntermediateStackFrame = {
   collapse?: boolean,
   ...
 };
-export type StackFrameOutput = $ReadOnly<{
-  ...IntermediateStackFrame,
-  ...
-}>;
-type ExplodedSourceMapModule = $ElementType<ExplodedSourceMap, number>;
-type Position = {+line1Based: number, column0Based: number};
+export type StackFrameOutput = Readonly<IntermediateStackFrame>;
+type ExplodedSourceMapModule = ExplodedSourceMap[number];
+type Position = {readonly line1Based: number, column0Based: number};
+
+// Cache of per-line indices, keyed on the VlqMap held by the module graph. A
+// WeakMap lets an index outlive the request that built it, so later requests
+// resolving frames in the same module reuse it, and releases it automatically
+// when the module leaves the graph. The index references the graph's existing
+// mappings string and adds only O(lines) integers, so retaining it alongside
+// the graph stays cheap.
+const lineIndexCache: WeakMap<VlqMap, LineIndexedMappings> = new WeakMap();
+
+// Resolve a generated (line, column) within a module to its original position.
+// Tuple-backed modules keep their decoded segments, so we search them directly;
+// VLQ-backed modules go through a compact per-line `LineIndexedMappings` that
+// decodes only the target line. Byte-identical either way.
+function originalPositionInModule(
+  map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+  generatedLine1Based: number,
+  generatedColumn0Based: number,
+): ?Position {
+  if (Array.isArray(map)) {
+    return originalPositionInTuples(
+      map,
+      generatedLine1Based,
+      generatedColumn0Based,
+    );
+  }
+  let decoded = lineIndexCache.get(map);
+  if (decoded == null) {
+    decoded = new LineIndexedMappings(map.mappings);
+    lineIndexCache.set(map, decoded);
+  }
+  return decoded.originalPositionFor(
+    generatedLine1Based,
+    generatedColumn0Based,
+  );
+}
+
+// greatestLowerBound over pre-decoded tuples, ordered by (line, column).
+function originalPositionInTuples(
+  mappings: Array<MetroSourceMapSegmentTuple>,
+  generatedLine1Based: number,
+  generatedColumn0Based: number,
+): ?Position {
+  const target = {
+    line1Based: generatedLine1Based,
+    column0Based: generatedColumn0Based,
+  };
+  const mappingIndex = greatestLowerBound(mappings, target, (t, candidate) => {
+    if (t.line1Based === candidate[0]) {
+      return t.column0Based - candidate[1];
+    }
+    return t.line1Based - candidate[0];
+  });
+  if (mappingIndex == null) {
+    return null;
+  }
+  const mapping = mappings[mappingIndex];
+  if (
+    mapping[0] !== target.line1Based ||
+    mapping.length < 4 /* no source line/column info */
+  ) {
+    return null;
+  }
+  return {
+    // $FlowFixMe[invalid-tuple-index]: Length checks do not refine tuple unions.
+    line1Based: mapping[2],
+    // $FlowFixMe[invalid-tuple-index]: Length checks do not refine tuple unions.
+    column0Based: mapping[3],
+  };
+}
 
 function createFunctionNameGetter(
   module: ExplodedSourceMapModule,
-): Position => ?string {
+): (position: Position) => ?string {
   const consumer = new SourceMetadataMapConsumer(
     {
       version: 3,
@@ -62,24 +127,24 @@ function createFunctionNameGetter(
     });
 }
 
-async function symbolicate(
-  stack: $ReadOnlyArray<StackFrameInput>,
+export default async function symbolicate(
+  stack: ReadonlyArray<StackFrameInput>,
   maps: Iterable<[string, ExplodedSourceMap]>,
   config: ConfigT,
-  extraData: mixed,
-): Promise<$ReadOnlyArray<StackFrameOutput>> {
+  extraData: unknown,
+): Promise<ReadonlyArray<StackFrameOutput>> {
   const mapsByUrl = new Map<?string, ExplodedSourceMap>();
   for (const [url, map] of maps) {
     mapsByUrl.set(url, map);
   }
   const functionNameGetters = new Map<
     {
-      +firstLine1Based: number,
-      +functionMap: ?FBSourceFunctionMap,
-      +map: Array<MetroSourceMapSegmentTuple>,
-      +path: string,
+      readonly firstLine1Based: number,
+      readonly functionMap: ?FBSourceFunctionMap,
+      readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+      readonly path: string,
     },
-    (Position) => ?string,
+    (position: Position) => ?string,
   >();
 
   function findModule(frame: StackFrameInput): ?ExplodedSourceMapModule {
@@ -102,52 +167,25 @@ async function symbolicate(
     frame: StackFrameInput,
     module: ExplodedSourceMapModule,
   ): ?Position {
-    if (
-      module.map == null ||
-      frame.lineNumber == null ||
-      frame.column == null
-    ) {
+    const lineNumber = frame.lineNumber;
+    const column = frame.column;
+    if (module.map == null || lineNumber == null || column == null) {
       return null;
     }
-    const generatedPosInModule = {
-      line1Based: frame.lineNumber - module.firstLine1Based + 1,
-      column0Based: frame.column,
-    };
-    const mappingIndex = greatestLowerBound(
+    return originalPositionInModule(
       module.map,
-      generatedPosInModule,
-      (target, candidate) => {
-        if (target.line1Based === candidate[0]) {
-          return target.column0Based - candidate[1];
-        }
-        return target.line1Based - candidate[0];
-      },
+      lineNumber - module.firstLine1Based + 1,
+      column,
     );
-    if (mappingIndex == null) {
-      return null;
-    }
-    const mapping = module.map[mappingIndex];
-    if (
-      mapping[0] !== generatedPosInModule.line1Based ||
-      mapping.length < 4 /* no source line/column info */
-    ) {
-      return null;
-    }
-    return {
-      // $FlowFixMe: Length checks do not refine tuple unions.
-      line1Based: mapping[2],
-      // $FlowFixMe: Length checks do not refine tuple unions.
-      column0Based: mapping[3],
-    };
   }
 
   function findFunctionName(
     originalPos: Position,
     module: {
-      +firstLine1Based: number,
-      +functionMap: ?FBSourceFunctionMap,
-      +map: Array<MetroSourceMapSegmentTuple>,
-      +path: string,
+      readonly firstLine1Based: number,
+      readonly functionMap: ?FBSourceFunctionMap,
+      readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+      readonly path: string,
     },
   ): ?string {
     if (module.functionMap) {
@@ -165,11 +203,6 @@ async function symbolicate(
     const module = findModule(frame);
     if (!module) {
       return {...frame};
-    }
-    if (!Array.isArray(module.map)) {
-      throw new Error(
-        `Unexpected module with serialized source map found: ${module.path}`,
-      );
     }
     const originalPos = findOriginalPos(frame, module);
     if (!originalPos) {
@@ -222,5 +255,3 @@ async function symbolicate(
     customizeStack,
   );
 }
-
-module.exports = symbolicate;

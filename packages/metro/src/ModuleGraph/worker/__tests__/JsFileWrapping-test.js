@@ -11,19 +11,13 @@
 
 'use strict';
 
-const {codeFromAst, comparableCode} = require('../../test-helpers');
 const JsFileWrapping = require('../JsFileWrapping');
+const {codeFromAst, comparableCode} = require('./test-helpers');
 const babylon = require('@babel/parser');
-
-const {WRAP_NAME} = JsFileWrapping;
-// Note; it's not important HOW Babel changes the name. Only THAT it does.
-// At the time of writing, it will prefix an underscore for our first rename
-const BABEL_RENAMED = '_' + WRAP_NAME;
-const BABEL_RENAMED2 = '_' + WRAP_NAME + '2';
 
 const defaultGlobalPrefix = '';
 
-it('wraps a module correctly', () => {
+test('wraps a module correctly', () => {
   const dependencyMapName = '_dependencyMapName';
 
   const originalAst = astFromCode(`
@@ -41,43 +35,6 @@ it('wraps a module correctly', () => {
     '_$$_IMPORT_ALL',
     dependencyMapName,
     defaultGlobalPrefix,
-    false,
-  );
-
-  expect(requireName).toBe(BABEL_RENAMED);
-  expect(codeFromAst(ast)).toEqual(
-    comparableCode(`
-      __d(function (global, ${BABEL_RENAMED}, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
-        const dynamicRequire = ${BABEL_RENAMED};
-        const a = ${BABEL_RENAMED}('b/lib/a');
-        exports.do = () => ${BABEL_RENAMED}("do");
-        if (!something) {
-          ${BABEL_RENAMED}("setup/something");
-        }
-        ${BABEL_RENAMED}.blah('do');
-      });`),
-  );
-});
-
-it('wraps a module without renaming require statements', () => {
-  const dependencyMapName = '_dependencyMapName';
-  const skipRequireRename = true;
-  const originalAst = astFromCode(`
-    const dynamicRequire = require;
-    const a = require('b/lib/a');
-    exports.do = () => require("do");
-    if (!something) {
-      require("setup/something");
-    }
-    require.blah('do');
-  `);
-  const {ast, requireName} = JsFileWrapping.wrapModule(
-    originalAst,
-    '_$$_IMPORT_DEFAULT',
-    '_$$_IMPORT_ALL',
-    dependencyMapName,
-    defaultGlobalPrefix,
-    skipRequireRename,
   );
 
   expect(requireName).toBe('require');
@@ -95,7 +52,7 @@ it('wraps a module without renaming require statements', () => {
   );
 });
 
-it('wraps a module correctly with global prefix', () => {
+test('wraps a module correctly with global prefix', () => {
   const dependencyMapName = '_dependencyMapName';
 
   const originalAst = astFromCode(`
@@ -108,142 +65,18 @@ it('wraps a module correctly with global prefix', () => {
     '_$$_IMPORT_ALL',
     dependencyMapName,
     globalPrefix,
-    false,
   );
 
-  expect(requireName).toBe(BABEL_RENAMED);
+  expect(requireName).toBe('require');
   expect(codeFromAst(ast)).toEqual(
     comparableCode(`
-      ${globalPrefix}__d(function (global, ${BABEL_RENAMED}, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
-        const dynamicRequire = ${BABEL_RENAMED};
+      ${globalPrefix}__d(function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
+        const dynamicRequire = require;
       });`),
   );
 });
 
-describe('safe renaming of require', () => {
-  ['let', 'const', 'var'].forEach((declKeyword: string) => {
-    describe('decl type = ' + declKeyword, () => {
-      it('original name will always be renamed so local decl should be fine', () => {
-        const dependencyMapName = '_dependencyMapName';
-
-        const originalAst = astFromCode(`
-          const dynamicRequire = require;
-          const a = require('b/lib/a');
-          ${declKeyword} ${WRAP_NAME} = 'foo';
-          exports.do = () => require("do");
-          if (!something) {
-            require("setup/something");
-          }
-          require.blah('do');
-        `);
-        const {ast, requireName} = JsFileWrapping.wrapModule(
-          originalAst,
-          '_$$_IMPORT_DEFAULT',
-          '_$$_IMPORT_ALL',
-          dependencyMapName,
-          defaultGlobalPrefix,
-          false,
-        );
-
-        expect(requireName).toBe(BABEL_RENAMED);
-        expect(codeFromAst(ast)).toEqual(
-          comparableCode(`
-            __d(function (global, ${BABEL_RENAMED}, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
-              const dynamicRequire = ${BABEL_RENAMED};
-              const a = ${BABEL_RENAMED}('b/lib/a');
-              ${declKeyword} ${WRAP_NAME} = 'foo';
-              exports.do = () => ${BABEL_RENAMED}("do");
-              if (!something) {
-                ${BABEL_RENAMED}("setup/something");
-              }
-              ${BABEL_RENAMED}.blah('do');
-            });`),
-        );
-      });
-
-      it('when the scope has the new name defined too', () => {
-        const dependencyMapName = '_dependencyMapName';
-
-        const originalAst = astFromCode(`
-          const dynamicRequire = require;
-          const a = require('b/lib/a');
-          ${declKeyword} ${BABEL_RENAMED} = 'foo';
-          exports.do = () => require("do");
-          if (!something) {
-            require("setup/something");
-          }
-          require.blah('do');
-        `);
-        const {ast, requireName} = JsFileWrapping.wrapModule(
-          originalAst,
-          '_$$_IMPORT_DEFAULT',
-          '_$$_IMPORT_ALL',
-          dependencyMapName,
-          defaultGlobalPrefix,
-          false,
-        );
-
-        expect(requireName).toBe(BABEL_RENAMED2);
-        expect(codeFromAst(ast)).toEqual(
-          comparableCode(`
-            __d(function (global, ${BABEL_RENAMED2}, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
-              const dynamicRequire = ${BABEL_RENAMED2};
-              const a = ${BABEL_RENAMED2}('b/lib/a');
-              ${declKeyword} ${BABEL_RENAMED} = 'foo';
-              exports.do = () => ${BABEL_RENAMED2}("do");
-              if (!something) {
-                ${BABEL_RENAMED2}("setup/something");
-              }
-              ${BABEL_RENAMED2}.blah('do');
-            });`),
-        );
-      });
-
-      it('when an inner scope already has the new name defined too', () => {
-        const dependencyMapName = '_dependencyMapName';
-
-        // Note; it's not important HOW Babel changes the name. Only THAT it does.
-        const BABEL_RENAMED = '_' + WRAP_NAME;
-
-        const originalAst = astFromCode(`
-          const dynamicRequire = require;
-          const a = require('b/lib/a');
-          if (a) {
-            (function () {
-              ${declKeyword} ${BABEL_RENAMED} = require('dingus');
-              a(${BABEL_RENAMED}(dynamicRequire));
-            })
-          }
-        `);
-        const {ast, requireName} = JsFileWrapping.wrapModule(
-          originalAst,
-          '_$$_IMPORT_DEFAULT',
-          '_$$_IMPORT_ALL',
-          dependencyMapName,
-          defaultGlobalPrefix,
-          false,
-        );
-
-        expect(requireName).toBe(BABEL_RENAMED2);
-        expect(codeFromAst(ast)).toEqual(
-          comparableCode(`
-            __d(function (global, ${BABEL_RENAMED2}, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
-              const dynamicRequire = ${BABEL_RENAMED2};
-              const a = ${BABEL_RENAMED2}('b/lib/a');
-              if (a) {
-                (function () {
-                  ${declKeyword} ${BABEL_RENAMED} = ${BABEL_RENAMED2}('dingus');
-                  a(${BABEL_RENAMED}(dynamicRequire));
-                });
-              }
-            });`),
-        );
-      });
-    });
-  });
-});
-
-it('wraps a polyfill correctly', () => {
+test('wraps a polyfill correctly', () => {
   const ast = astFromCode(`
     if (something) {
       console.log('foo');
@@ -265,7 +98,7 @@ it('wraps a polyfill correctly', () => {
   );
 });
 
-it('wraps a JSON file correctly', () => {
+test('wraps a JSON file correctly', () => {
   const source = JSON.stringify(
     {
       foo: 'foo',
@@ -296,6 +129,141 @@ it('wraps a JSON file correctly', () => {
         ]
       };
     });`,
+    ),
+  );
+});
+
+test('wraps a module with the static Hermes module factory', () => {
+  const dependencyMapName = '_dependencyMapName';
+
+  const originalAst = astFromCode(`
+    const a = require('b/lib/a');
+  `);
+  const {ast, requireName} = JsFileWrapping.wrapModule(
+    originalAst,
+    '_$$_IMPORT_DEFAULT',
+    '_$$_IMPORT_ALL',
+    dependencyMapName,
+    defaultGlobalPrefix,
+    {unstable_useStaticHermesModuleFactory: true},
+  );
+
+  expect(requireName).toBe('require');
+  expect(codeFromAst(ast)).toEqual(
+    comparableCode(`
+      __d($SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
+        const a = require('b/lib/a');
+      }));`),
+  );
+});
+
+test('wraps a module with the static Hermes module factory and a global prefix', () => {
+  const dependencyMapName = '_dependencyMapName';
+
+  const originalAst = astFromCode(`
+    const a = require('b/lib/a');
+  `);
+  const globalPrefix = '__metro';
+  const {ast} = JsFileWrapping.wrapModule(
+    originalAst,
+    '_$$_IMPORT_DEFAULT',
+    '_$$_IMPORT_ALL',
+    dependencyMapName,
+    globalPrefix,
+    {unstable_useStaticHermesModuleFactory: true},
+  );
+
+  expect(codeFromAst(ast)).toEqual(
+    comparableCode(`
+      ${globalPrefix}__d($SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, function (global, require, _$$_IMPORT_DEFAULT, _$$_IMPORT_ALL, module, exports, _dependencyMapName) {
+        const a = require('b/lib/a');
+      }));`),
+  );
+});
+
+test('wraps a JSON file with the static Hermes module factory', () => {
+  const source = JSON.stringify({foo: 'foo', baz: true}, null, 2);
+
+  const wrappedJson = JsFileWrapping.wrapJson(
+    source,
+    defaultGlobalPrefix,
+    /* unstable_useStaticHermesModuleFactory */ true,
+  );
+
+  expect(comparableCode(wrappedJson)).toEqual(
+    comparableCode(
+      `__d($SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, function(global, require, _importDefaultUnused, _importAllUnused, module, exports, _dependencyMapUnused) {
+      module.exports = {
+        "foo": "foo",
+        "baz": true
+      };
+    }));`,
+    ),
+  );
+});
+
+test('wrapModuleString wraps arbitrary JS code as a __d factory', () => {
+  const wrapped = JsFileWrapping.wrapModuleString(
+    'module.exports = 42;',
+    defaultGlobalPrefix,
+  );
+
+  expect(comparableCode(wrapped)).toEqual(
+    comparableCode(
+      `__d(function(global, require, _importDefaultUnused, _importAllUnused, module, exports, _dependencyMapUnused) {
+        module.exports = 42;
+      });`,
+    ),
+  );
+});
+
+test('wrapModuleString honours a global prefix', () => {
+  const wrapped = JsFileWrapping.wrapModuleString(
+    'module.exports = 42;',
+    '__metro',
+  );
+
+  expect(comparableCode(wrapped)).toEqual(
+    comparableCode(
+      `__metro__d(function(global, require, _importDefaultUnused, _importAllUnused, module, exports, _dependencyMapUnused) {
+        module.exports = 42;
+      });`,
+    ),
+  );
+});
+
+test('wrapModuleString threads custom factory-parameter names through', () => {
+  const wrapped = JsFileWrapping.wrapModuleString(
+    'module.exports = _dep[0];',
+    defaultGlobalPrefix,
+    {
+      importDefaultName: '_1',
+      importAllName: '_2',
+      dependencyMapName: '_dep',
+    },
+  );
+
+  expect(comparableCode(wrapped)).toEqual(
+    comparableCode(
+      `__d(function(global, require, _1, _2, module, exports, _dep) {
+        module.exports = _dep[0];
+      });`,
+    ),
+  );
+});
+
+test('wrapModuleString wraps the factory in $SHBuiltin.moduleFactory when opted in', () => {
+  const wrapped = JsFileWrapping.wrapModuleString(
+    'module.exports = 42;',
+    defaultGlobalPrefix,
+    {unstable_useStaticHermesModuleFactory: true},
+  );
+
+  expect(comparableCode(wrapped)).toEqual(
+    comparableCode(
+      `__d($SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, function(global, require, _importDefaultUnused, _importAllUnused, module, exports, _dependencyMapUnused) {
+        module.exports = 42;
+      }));`,
     ),
   );
 });

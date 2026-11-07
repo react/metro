@@ -4,12 +4,10 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  * @oncall react_native
  */
-
-'use strict';
 
 import type {PluginObj} from '@babel/core';
 import type {Binding, NodePath, Scope} from '@babel/traverse';
@@ -23,15 +21,15 @@ import type {
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-const createInlinePlatformChecks = require('./utils/createInlinePlatformChecks');
+import createInlinePlatformChecks from './utils/createInlinePlatformChecks';
 
-export type Options = {
+export type Options = Readonly<{
   dev: boolean,
   inlinePlatform: boolean,
   isWrapped: boolean,
   requireName?: string,
   platform: string,
-};
+}>;
 
 type State = {opts: Options};
 
@@ -41,12 +39,11 @@ const processId = {name: 'process'};
 
 const dev = {name: '__DEV__'};
 
-function inlinePlugin(
+export default function inlinePlugin(
   {types: t}: {types: Types},
   options: Options,
 ): PluginObj<State> {
   const {
-    isAssignmentExpression,
     isIdentifier,
     isMemberExpression,
     isObjectExpression,
@@ -57,26 +54,60 @@ function inlinePlugin(
   } = t;
   const {isPlatformNode, isPlatformSelectNode} = createInlinePlatformChecks(
     t,
-    options.requireName || 'require',
+    options.requireName ?? 'require',
   );
 
-  // $FlowFixMe[deprecated-type]
-  function isGlobal(binding: ?Binding): boolean %checks {
+  function isGlobal(binding: ?Binding): boolean {
     return !binding;
   }
 
   const isFlowDeclared = (binding: Binding) =>
     t.isDeclareVariable(binding.path);
 
-  // $FlowFixMe[deprecated-type]
-  function isGlobalOrFlowDeclared(binding: ?Binding): boolean %checks {
-    return isGlobal(binding) || isFlowDeclared(binding);
+  function isGlobalOrFlowDeclared(binding: ?Binding): boolean {
+    return !binding || isFlowDeclared(binding);
   }
 
-  const isLeftHandSideOfAssignmentExpression = (
-    node: Node,
-    parent: Node,
-  ): boolean => isAssignmentExpression(parent) && parent.left === node;
+  function isWriteTarget(path: NodePath<MemberExpression>): boolean {
+    let child: Node = path.node;
+    let parentPath = path.parentPath;
+
+    while (parentPath != null) {
+      const parent = parentPath.node;
+      if (
+        (parent.type === 'AssignmentExpression' ||
+          parent.type === 'ForInStatement' ||
+          parent.type === 'ForOfStatement') &&
+        parent.left === child
+      ) {
+        return true;
+      }
+      if (parent.type === 'UpdateExpression' && parent.argument === child) {
+        return true;
+      }
+      if (
+        parent.type === 'UnaryExpression' &&
+        parent.operator === 'delete' &&
+        parent.argument === child
+      ) {
+        return true;
+      }
+
+      const nestedWriteTarget =
+        parent.type === 'ArrayPattern' ||
+        parent.type === 'ObjectPattern' ||
+        (parent.type === 'ObjectProperty' && parent.value === child) ||
+        (parent.type === 'RestElement' && parent.argument === child) ||
+        (parent.type === 'AssignmentPattern' && parent.left === child);
+      if (!nestedWriteTarget) {
+        return false;
+      }
+
+      child = parent;
+      parentPath = parentPath.parentPath;
+    }
+    return false;
+  }
 
   const isProcessEnvNodeEnv = (node: MemberExpression, scope: Scope): boolean =>
     isIdentifier(node.property, nodeEnv) &&
@@ -94,9 +125,9 @@ function inlinePlugin(
     key: string,
     fallback: () => Node,
   ): Node {
-    let value = null;
-
-    for (const p of objectExpression.properties) {
+    // Object literal evaluation keeps the last definition of a duplicate key.
+    for (let i = objectExpression.properties.length - 1; i >= 0; i--) {
+      const p = objectExpression.properties[i];
       if (!isObjectProperty(p) && !isObjectMethod(p)) {
         continue;
       }
@@ -105,21 +136,19 @@ function inlinePlugin(
         (isStringLiteral(p.key) && p.key.value === key)
       ) {
         if (isObjectProperty(p)) {
-          value = p.value;
-          break;
+          return p.value;
         } else if (isObjectMethod(p)) {
-          value = t.toExpression(p);
-          break;
+          return t.toExpression(p);
         }
       }
     }
 
-    return value ?? fallback();
+    return fallback();
   }
 
   function hasStaticProperties(objectExpression: ObjectExpression): boolean {
     return objectExpression.properties.every(p => {
-      if (p.computed || isSpreadElement(p)) {
+      if (p.computed === true || isSpreadElement(p)) {
         return false;
       }
       if (isObjectMethod(p) && p.kind !== 'method') {
@@ -142,7 +171,7 @@ function inlinePlugin(
         const scope = path.scope;
         const opts = state.opts;
 
-        if (!isLeftHandSideOfAssignmentExpression(node, path.parent)) {
+        if (!isWriteTarget(path)) {
           if (
             opts.inlinePlatform &&
             isPlatformNode(node, scope, !!opts.isWrapped)
@@ -179,5 +208,3 @@ function inlinePlugin(
     },
   };
 }
-
-module.exports = inlinePlugin;

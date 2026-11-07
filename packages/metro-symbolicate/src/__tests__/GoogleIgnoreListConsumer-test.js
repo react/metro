@@ -9,12 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const GoogleIgnoreListConsumer = require('../GoogleIgnoreListConsumer.js');
+import GoogleIgnoreListConsumer from '../GoogleIgnoreListConsumer';
 
 describe('GoogleIgnoreListConsumer', () => {
-  it('discards indices beyond the range of the sources array', () => {
+  test('discards indices beyond the range of the sources array', () => {
     const consumer = new GoogleIgnoreListConsumer({
       version: 3,
       mappings: '',
@@ -25,9 +23,9 @@ describe('GoogleIgnoreListConsumer', () => {
     expect(consumer.toArray(['foo'])).toEqual([]);
   });
 
-  it('discards the index of a null source', () => {
+  test('discards the index of a null source', () => {
     const consumer = new GoogleIgnoreListConsumer(
-      // $FlowIgnore[incompatible-call] intentionally malformed source map
+      // $FlowFixMe[incompatible-type] intentionally malformed source map
       {
         version: 3,
         mappings: '',
@@ -39,7 +37,7 @@ describe('GoogleIgnoreListConsumer', () => {
     expect(consumer.toArray(['foo', null])).toEqual([0]);
   });
 
-  it('isIgnored works with a basic map', () => {
+  test('isIgnored works with a basic map', () => {
     const consumer = new GoogleIgnoreListConsumer({
       version: 3,
       mappings: '',

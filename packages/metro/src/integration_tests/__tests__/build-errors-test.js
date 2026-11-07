@@ -12,9 +12,8 @@
 'use strict';
 
 const Metro = require('../../..');
-const path = require('path');
+const path = require('node:path');
 
-jest.unmock('cosmiconfig');
 jest.setTimeout(30 * 1000);
 const BUILD_ERRORS_SRC_DIR =
   path.resolve(__dirname, '..', 'basic_bundle', 'build-errors') + path.sep;
@@ -112,6 +111,39 @@ describe('formatting edge cases', () => {
     });
 
     await expect(buildPromise).rejects.toMatchSnapshot();
+  });
+
+  test('reports resolution errors on locations past the end of the source', async () => {
+    // A Babel plugin appends an unresolvable import whose source location is
+    // past the end of the file on disk. The resolution error must survive:
+    // before, building the code frame threw a TypeError that replaced it.
+    const config = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+
+    const buildPromise = Metro.runBuild(
+      {
+        ...config,
+        transformer: {
+          ...config.transformer,
+          babelTransformerPath:
+            require.resolve('../injectImportPastEndOfFileTransformer'),
+        },
+      },
+      {entry: 'build-errors/transform-injected-import.js'},
+    );
+
+    // Deliberately not a snapshot: the resolver's list of candidate paths
+    // varies between versions, and what matters here is only that the
+    // resolution error survives with a code frame of the lines that do exist.
+    const error = await buildPromise.then(
+      () => null,
+      (e: Error) => e,
+    );
+    expect(error?.message).toMatch(
+      /^Unable to resolve module \.\/does-not-exist/,
+    );
+    expect(error?.message).toContain('13 | global.x = 1;');
   });
 
   test('reports resolution errors with embedded comment after the specifier', async () => {

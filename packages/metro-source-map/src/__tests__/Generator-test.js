@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const Generator = require('../Generator');
+import Generator from '../Generator';
 
 const {objectContaining} = expect;
 
@@ -20,7 +18,7 @@ beforeEach(() => {
   generator = new Generator();
 });
 
-it('adds file name and source code when starting a file', () => {
+test('adds file name and source code when starting a file', () => {
   const file1 = 'just/a/file';
   const file2 = 'another/file';
   const source1 = 'var a = 1;';
@@ -37,7 +35,7 @@ it('adds file name and source code when starting a file', () => {
   );
 });
 
-it('adds function map when starting a file', () => {
+test('adds function map when starting a file', () => {
   const file1 = 'just/a/file';
   const file2 = 'another/file';
   const source1 = 'var a = 1;';
@@ -53,17 +51,17 @@ it('adds function map when starting a file', () => {
   );
 });
 
-it('throws when adding a mapping without starting a file', () => {
+test('throws when adding a mapping without starting a file', () => {
   expect(() => generator.addSimpleMapping(1, 2)).toThrow();
 });
 
-it('throws when adding a mapping after ending a file', () => {
+test('throws when adding a mapping after ending a file', () => {
   generator.startFile('apples', 'pears');
   generator.endFile();
   expect(() => generator.addSimpleMapping(1, 2)).toThrow();
 });
 
-it('can add a mapping for generated code without corresponding original source', () => {
+test('can add a mapping for generated code without corresponding original source', () => {
   generator.startFile('apples', 'pears');
   generator.addSimpleMapping(12, 87);
   expect(generator.toMap()).toEqual(
@@ -73,7 +71,7 @@ it('can add a mapping for generated code without corresponding original source',
   );
 });
 
-it('can add a mapping with corresponding location in the original source', () => {
+test('can add a mapping with corresponding location in the original source', () => {
   generator.startFile('apples', 'pears');
   generator.addSourceMapping(2, 3, 456, 7);
   expect(generator.toMap()).toEqual(
@@ -83,7 +81,7 @@ it('can add a mapping with corresponding location in the original source', () =>
   );
 });
 
-it('can add a mapping with source location and symbol name', () => {
+test('can add a mapping with source location and symbol name', () => {
   generator.startFile('apples', 'pears');
   generator.addNamedSourceMapping(9, 876, 54, 3, 'arbitrary');
   expect(generator.toMap()).toEqual(
@@ -108,7 +106,7 @@ describe('full map generation', () => {
     generator.addSimpleMapping(15, 16);
   });
 
-  it('can add multiple mappings for each file', () => {
+  test('can add multiple mappings for each file', () => {
     expect(generator.toMap()).toEqual({
       version: 3,
       mappings: 'E;;IAIMA;;;;QCIIC;;;;YAIIA;;;;gB',
@@ -119,7 +117,7 @@ describe('full map generation', () => {
     });
   });
 
-  it('can add a `file` property to the map', () => {
+  test('can add a `file` property to the map', () => {
     expect(generator.toMap('arbitrary')).toEqual(
       objectContaining({
         file: 'arbitrary',
@@ -127,18 +125,18 @@ describe('full map generation', () => {
     );
   });
 
-  it('supports direct JSON serialization', () => {
+  test('supports direct JSON serialization', () => {
     expect(JSON.parse(generator.toString())).toEqual(generator.toMap());
   });
 
-  it('supports direct JSON serialization with a file name', () => {
+  test('supports direct JSON serialization with a file name', () => {
     const file = 'arbitrary/file';
     expect(JSON.parse(generator.toString(file))).toEqual(generator.toMap(file));
   });
 });
 
 describe('x_google_ignoreList', () => {
-  it('add files to ignore list', () => {
+  test('add files to ignore list', () => {
     const file1 = 'just/a/file';
     const file2 = 'another/file';
     const file3 = 'file3';
@@ -157,7 +155,7 @@ describe('x_google_ignoreList', () => {
     );
   });
 
-  it('not emitted if no files are ignored', () => {
+  test('not emitted if no files are ignored', () => {
     const file1 = 'just/a/file';
     const file2 = 'another/file';
     const file3 = 'file3';

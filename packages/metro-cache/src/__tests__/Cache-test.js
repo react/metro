@@ -20,6 +20,7 @@ describe('Cache', () => {
     // eslint-disable-next-line no-eval
     const TempClass = eval(`(class ${name} {})`);
 
+    // $FlowFixMe[unsafe-object-assign]
     return Object.assign(new TempClass(), {
       get: jest.fn().mockImplementation(() => null),
       set: jest.fn(),
@@ -28,7 +29,7 @@ describe('Cache', () => {
 
   beforeEach(() => {
     Logger = require('metro-core').Logger;
-    Cache = require('../Cache');
+    Cache = require('../Cache').default;
 
     Logger.on('log', item => {
       log.push({
@@ -38,16 +39,16 @@ describe('Cache', () => {
       });
     });
 
-    log = ([]: Array<
+    log = [] as Array<
       $FlowFixMe | {a: void | string, l: string, p: void | string},
-    >);
+    >;
   });
 
   afterEach(() => {
     jest.resetModules().restoreAllMocks();
   });
 
-  it('returns null when no result is found', async () => {
+  test('returns null when no result is found', async () => {
     const store1 = createStore();
     const store2 = createStore();
     const cache = new Cache([store1, store2]);
@@ -60,7 +61,7 @@ describe('Cache', () => {
     expect(store2.get).toHaveBeenCalledTimes(1);
   });
 
-  it('sequentially searches up until it finds a valid result', async () => {
+  test('sequentially searches up until it finds a valid result', async () => {
     const store1 = createStore();
     const store2 = createStore();
     const store3 = createStore();
@@ -77,7 +78,7 @@ describe('Cache', () => {
     expect(store3.get).not.toHaveBeenCalled();
   });
 
-  it('skips all cache stores when a hit is produced, based on the same key', async () => {
+  test('skips all cache stores when a hit is produced, based on the same key', async () => {
     const store1 = createStore();
     const store2 = createStore();
     const store3 = createStore();
@@ -94,7 +95,7 @@ describe('Cache', () => {
     expect(store3.set).not.toHaveBeenCalled();
   });
 
-  it('awaits for promises on stores, even if they return undefined', async () => {
+  test('awaits for promises on stores, even if they return undefined', async () => {
     let resolve;
 
     const store1 = createStore();
@@ -120,14 +121,20 @@ describe('Cache', () => {
     expect(store2.get).toHaveBeenCalledTimes(1);
   });
 
-  it('throws on a buggy store set', async () => {
-    const store1 = createStore();
-    const store2 = createStore();
-    const cache = new Cache([store1, store2]);
+  test('throws all errors on a buggy store set', async () => {
+    const goodStore = createStore('GoodStore');
+    const badAsyncStore = createStore('BadAsyncStore');
+    const badSyncStore = createStore('BadSyncStore');
+    const cache = new Cache([goodStore, badAsyncStore, badSyncStore]);
     let error = null;
 
-    store1.set.mockImplementation(() => null);
-    store2.set.mockImplementation(() => Promise.reject(new RangeError('foo')));
+    goodStore.set.mockImplementation(() => null);
+    badAsyncStore.set.mockImplementation(() =>
+      Promise.reject(new RangeError('foo')),
+    );
+    badSyncStore.set.mockImplementation(() => {
+      throw new TypeError('bar');
+    });
 
     try {
       await cache.set(Buffer.from('foo'), 'arg');
@@ -135,10 +142,16 @@ describe('Cache', () => {
       error = err;
     }
 
-    expect(error).toBeInstanceOf(RangeError);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error?.message).toBe(
+      'Cache write failed for store(s): BadSyncStore, BadAsyncStore',
+    );
+    expect(error?.errors).toHaveLength(2);
+    expect(error?.errors[0].cause).toEqual(TypeError('bar'));
+    expect(error?.errors[1].cause).toEqual(RangeError('foo'));
   });
 
-  it('throws on a buggy store get', async () => {
+  test('throws on a buggy store get', async () => {
     const store1 = createStore();
     const store2 = createStore();
     const cache = new Cache([store1, store2]);
@@ -156,7 +169,7 @@ describe('Cache', () => {
     expect(error).toBeInstanceOf(TypeError);
   });
 
-  it('logs the right messages when getting without errors', async () => {
+  test('logs the right messages when getting without errors', async () => {
     const store1 = createStore('Local');
     const store2 = createStore('Network');
     const cache = new Cache([store1, store2]);
@@ -176,7 +189,7 @@ describe('Cache', () => {
     ]);
   });
 
-  it('logs the right messages when getting with errors', async () => {
+  test('logs the right messages when getting with errors', async () => {
     const store1 = createStore('Local');
     const store2 = createStore('Network');
     const cache = new Cache([store1, store2]);
@@ -200,7 +213,7 @@ describe('Cache', () => {
     ]);
   });
 
-  it('logs the right messages when setting', async () => {
+  test('logs the right messages when setting', async () => {
     const store1 = createStore('Local');
     const store2 = createStore('Network');
     const cache = new Cache([store1, store2]);
@@ -208,24 +221,24 @@ describe('Cache', () => {
     await cache.set(Buffer.from('foo'));
 
     expect(log).toEqual([
-      {a: 'Cache set', l: 'Local::666f6f', p: undefined},
-      {a: 'Cache set', l: 'Network::666f6f', p: undefined},
+      {a: 'Cache set', l: 'Local::666f6f', p: 'start'},
+      {a: 'Cache set', l: 'Network::666f6f', p: 'start'},
+      {a: 'Cache set', l: 'Local::666f6f', p: 'end'},
+      {a: 'Cache set', l: 'Network::666f6f', p: 'end'},
     ]);
   });
 
   describe('disabled cache', () => {
-    it('returns null for reads', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+    test('returns null for reads', async () => {
+      const cache = new Cache<string>([]);
 
       const result = await cache.get(Buffer.from('foo'));
 
       expect(result).toBe(null);
     });
 
-    it('ignores writes', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+    test('ignores writes', async () => {
+      const cache = new Cache<string>([]);
 
       await cache.set(Buffer.from('foo'), 'value');
       const result = await cache.get(Buffer.from('foo'));
@@ -233,9 +246,8 @@ describe('Cache', () => {
       expect(result).toBe(null);
     });
 
-    it('logs nothing', async () => {
-      // $FlowFixMe[missing-empty-array-annot]
-      const cache = new Cache([]);
+    test('logs nothing', async () => {
+      const cache = new Cache<string>([]);
 
       await cache.set(Buffer.from('foo'), 'value');
       await cache.get(Buffer.from('foo'));

@@ -5,24 +5,29 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @format
+ * @flow strict-local
  * @oncall react_native
  */
 
-'use strict';
+import type {Options} from '../normalizePseudoGlobals';
 
-const normalizePseudoglobals = require('../normalizePseudoGlobals');
+import normalizePseudoglobals from '../normalizePseudoGlobals';
+
 const {transformFromAstSync, transformSync} = require('@babel/core');
+const nullthrows = require('nullthrows');
 
-function normalizePseudoglobalsCall(source, options) {
-  const {ast} = transformSync(source, {
-    ast: true,
-    babelrc: false,
-    browserslistConfigFile: false,
-    code: false,
-    compact: false,
-    configFile: false,
-    sourceType: 'module',
-  });
+function normalizePseudoglobalsCall(source: string, options?: Options) {
+  const ast = nullthrows(
+    transformSync(source, {
+      ast: true,
+      babelrc: false,
+      browserslistConfigFile: false,
+      code: false,
+      compact: false,
+      configFile: false,
+      sourceType: 'module',
+    }).ast,
+  );
 
   const reserved = normalizePseudoglobals(ast, options);
 
@@ -39,7 +44,7 @@ function normalizePseudoglobalsCall(source, options) {
   return {code, reserved};
 }
 
-it('minimizes arguments given', () => {
+test('minimizes arguments given', () => {
   const result = normalizePseudoglobalsCall(`
     __d(function (global, _$$_REQUIRE, module, exports, _dependencyMap) {
       _$$_REQUIRE(27).foo();
@@ -76,13 +81,13 @@ it('minimizes arguments given', () => {
   `);
 });
 
-it('throws if two variables collapse to the same name', () => {
+test('throws if two variables collapse to the same name', () => {
   expect(() =>
     normalizePseudoglobalsCall('__d(function (global, golf) {})'),
   ).toThrow(ReferenceError);
 });
 
-it('avoids renaming parameters appearing in reservedNames', () => {
+test('avoids renaming parameters appearing in reservedNames', () => {
   const result = normalizePseudoglobalsCall(
     `
       __d(function (renameMe, doNotRenameMe) {
@@ -106,7 +111,7 @@ it('avoids renaming parameters appearing in reservedNames', () => {
   `);
 });
 
-it('throws if a reserved name collides with a short name', () => {
+test('throws if a reserved name collides with a short name', () => {
   expect(() =>
     normalizePseudoglobalsCall(
       `

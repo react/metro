@@ -1,11 +1,17 @@
 {
   "name": "ob1",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "A small library for working with 0- and 1-based offsets in a type-checked way.",
   "main": "src/ob1.js",
+  "exports": {
+    ".": "./src/ob1.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/ob1"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
@@ -19,6 +25,6 @@
     "flow-enums-runtime": "^0.0.6"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

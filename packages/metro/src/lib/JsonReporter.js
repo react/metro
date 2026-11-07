@@ -4,28 +4,37 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
 
-'use strict';
+import type {Writable} from 'node:stream';
 
-import type {Writable} from 'stream';
+export type SerializedError = {
+  message: string,
+  stack: string,
+  errors?: ReadonlyArray<SerializedError>,
+  cause?: SerializedError,
+  ...
+};
 
-export type SerializedEvent<TEvent: {[string]: any, ...}> = TEvent extends {
+export type SerializedEvent<
+  TEvent extends {readonly [prop: string]: unknown, ...},
+> = TEvent extends {
   error: Error,
   ...
 }
   ? {
       ...Omit<TEvent, 'error'>,
-      message: string,
-      stack: string,
+      error: SerializedError,
       ...
     }
   : TEvent;
 
-class JsonReporter<TEvent: {[string]: any, ...}> {
+export default class JsonReporter<
+  TEvent extends {readonly [prop: string]: unknown, ...},
+> {
   _stream: Writable;
 
   constructor(stream: Writable) {
@@ -37,16 +46,44 @@ class JsonReporter<TEvent: {[string]: any, ...}> {
    * (Perhaps we should switch in favor of plain object?)
    */
   update(event: TEvent): void {
-    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-    if (Object.prototype.toString.call(event.error) === '[object Error]') {
-      event = Object.assign(event, {
-        message: event.error.message,
-        stack: event.error.stack,
-      });
+    let eventToWrite = event;
+    if (event.error instanceof Error) {
+      const {message, stack} = event.error;
+      eventToWrite = {
+        ...eventToWrite,
+        error: serializeError(event.error),
+        // TODO: Preexisting issue - this writes message, stack, etc. as
+        // top-level siblings of event.error (which was serialized to {}), whereas it was presumably
+        // intended to nest them _under_ error. Fix this in a breaking change.
+        message,
+        stack,
+      };
     }
-
-    this._stream.write(JSON.stringify(event) + '\n');
+    this._stream.write(JSON.stringify(eventToWrite) + '\n');
   }
 }
 
-module.exports = JsonReporter;
+function serializeError(
+  e: Error,
+  seen: Set<Error> = new Set(),
+): SerializedError {
+  if (seen.has(e)) {
+    // $FlowFixMe[incompatible-type]
+    return {message: '[circular]: ' + e.message, stack: e.stack};
+  }
+  seen.add(e);
+  const {message, stack, cause} = e;
+  // $FlowFixMe[incompatible-type]
+  const serialized: SerializedError = {message, stack};
+  if (e instanceof AggregateError) {
+    serialized.errors = [...e.errors]
+      .map(innerError =>
+        innerError instanceof Error ? serializeError(innerError, seen) : null,
+      )
+      .filter(Boolean);
+  }
+  if (cause instanceof Error) {
+    serialized.cause = serializeError(cause, seen);
+  }
+  return serialized;
+}

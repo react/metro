@@ -9,26 +9,45 @@
  * @oncall react_native
  */
 
-import type {BuildParameters} from '../../flow-types';
+import type {
+  BuildParameters,
+  CacheData,
+  CacheManagerEventSource,
+  FileMapPlugin,
+} from '../../flow-types';
 
 import {DiskCacheManager} from '../DiskCacheManager';
-import * as path from 'path';
+import EventEmitter from 'node:events';
+import * as path from 'node:path';
+import {serialize} from 'node:v8';
+
+const mockMkdir = jest.fn();
+const mockReadFile = jest.fn();
+const mockWriteFile = jest.fn();
+
+jest.mock('node:fs', () => ({
+  promises: {
+    mkdir: (...args) => mockMkdir(...args),
+    readFile: (...args) => mockReadFile(...args),
+    writeFile: (...args) => mockWriteFile(...args),
+  },
+}));
+
+// We're explicitly using node:timers, which Jest doesn't automatically mock
+// with useFakeTimers. Global timers are mocked.
+jest.mock('node:timers', () => ({
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+}));
 
 const buildParameters: BuildParameters = {
   cacheBreaker: '',
-  computeDependencies: true,
   computeSha1: true,
-  dependencyExtractor: null,
-  enableHastePackages: true,
   enableSymlinks: false,
-  forceNodeFilesystemAPI: true,
   ignorePattern: /ignored/,
-  mocksPattern: null,
   retainAllFiles: false,
-  skipPackageJson: false,
   extensions: ['js', 'json'],
-  hasteImplModulePath: require.resolve('../../__tests__/haste_impl'),
-  platforms: ['ios', 'android'],
+  plugins: [],
   rootDir: path.join('/', 'project'),
   roots: [
     path.join('/', 'project', 'fruits'),
@@ -37,13 +56,16 @@ const buildParameters: BuildParameters = {
 };
 
 const defaultConfig = {
-  buildParameters,
   cacheFilePrefix: 'default-label',
   cacheDirectory: '/tmp/cache',
 };
 
 describe('cacheManager', () => {
-  it('creates valid cache file paths', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('creates valid cache file paths', () => {
     expect(
       DiskCacheManager.getCacheFilePath(buildParameters, 'file-prefix', '/'),
     ).toMatch(
@@ -53,88 +75,259 @@ describe('cacheManager', () => {
     );
   });
 
-  it('creates different cache file paths for different roots', () => {
-    const cacheManager1 = new DiskCacheManager({
-      ...defaultConfig,
-      buildParameters: {
-        ...buildParameters,
-        rootDir: '/root1',
+  test('creates different cache file paths for different roots', () => {
+    const cacheManager1 = new DiskCacheManager(
+      {
+        buildParameters: {
+          ...buildParameters,
+          rootDir: '/root1',
+        },
       },
-    });
-    const cacheManager2 = new DiskCacheManager({
-      ...defaultConfig,
-      buildParameters: {
-        ...buildParameters,
-        rootDir: '/root2',
+      defaultConfig,
+    );
+    const cacheManager2 = new DiskCacheManager(
+      {
+        buildParameters: {
+          ...buildParameters,
+          rootDir: '/root2',
+        },
       },
-    });
+      defaultConfig,
+    );
     expect(cacheManager1.getCacheFilePath()).not.toBe(
       cacheManager2.getCacheFilePath(),
     );
   });
 
-  it('creates different cache file paths for different dependency extractor cache keys', () => {
-    const dependencyExtractor = require('../../__tests__/dependencyExtractor');
+  test('creates different cache file paths for different plugins', () => {
     const config = {
       ...defaultConfig,
-      buildParameters: {
-        ...buildParameters,
-        dependencyExtractor: require.resolve(
-          '../../__tests__/dependencyExtractor',
-        ),
+    };
+    let pluginCacheKey = 'foo';
+    const plugin: FileMapPlugin<> = {
+      name: 'foo',
+      onChanged() {},
+      async initialize() {},
+      assertValid() {},
+      getSerializableSnapshot() {
+        return {};
+      },
+      getWorker() {
+        return null;
+      },
+      getCacheKey() {
+        return pluginCacheKey;
       },
     };
-    dependencyExtractor.setCacheKey('foo');
-    const cacheManager1 = new DiskCacheManager(config);
-    dependencyExtractor.setCacheKey('bar');
-    const cacheManager2 = new DiskCacheManager(config);
-    expect(cacheManager1.getCacheFilePath()).not.toBe(
-      cacheManager2.getCacheFilePath(),
-    );
-  });
-
-  it('creates different cache file paths for different values of computeDependencies', () => {
-    const cacheManager1 = new DiskCacheManager({
-      ...defaultConfig,
+    const withPlugin = {
       buildParameters: {
         ...buildParameters,
-        computeDependencies: true,
+        plugins: [plugin],
       },
-    });
-    const cacheManager2 = new DiskCacheManager({
-      ...defaultConfig,
-      buildParameters: {
-        ...buildParameters,
-        computeDependencies: false,
+    };
+    const cachePath1 = new DiskCacheManager(
+      {buildParameters},
+      config,
+    ).getCacheFilePath();
+    const cachePath2 = new DiskCacheManager(
+      withPlugin,
+      config,
+    ).getCacheFilePath();
+    pluginCacheKey = 'bar';
+    const cachePath3 = new DiskCacheManager(
+      withPlugin,
+      config,
+    ).getCacheFilePath();
+    expect(new Set([cachePath1, cachePath2, cachePath3]).size).toBe(3);
+  });
+
+  test('creates different cache file paths for different projects', () => {
+    const cacheManager1 = new DiskCacheManager(
+      {buildParameters},
+      {
+        ...defaultConfig,
+        cacheFilePrefix: 'package-a',
       },
-    });
+    );
+    const cacheManager2 = new DiskCacheManager(
+      {buildParameters},
+      {
+        ...defaultConfig,
+        cacheFilePrefix: 'package-b',
+      },
+    );
     expect(cacheManager1.getCacheFilePath()).not.toBe(
       cacheManager2.getCacheFilePath(),
     );
   });
 
-  it('creates different cache file paths for different hasteImplModulePath cache keys', () => {
-    const hasteImpl = require('../../__tests__/haste_impl');
-    hasteImpl.setCacheKey('foo');
-    const cacheManager1 = new DiskCacheManager(defaultConfig);
-    hasteImpl.setCacheKey('bar');
-    const cacheManager2 = new DiskCacheManager(defaultConfig);
-    expect(cacheManager1.getCacheFilePath()).not.toBe(
-      cacheManager2.getCacheFilePath(),
+  test('reads a cache file and deserialises its contents', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    mockReadFile.mockResolvedValueOnce(serialize({foo: 'bar'}));
+    const cache = await cacheManager.read();
+    expect(mockReadFile).toHaveBeenCalledWith(cacheManager.getCacheFilePath());
+    expect(cache).toEqual({foo: 'bar'});
+  });
+
+  test('serialises and writes a cache file', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const getSnapshot = jest.fn(
+      () =>
+        ({
+          clocks: new Map([['foo', 'bar']]),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+    );
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError: () => {},
+    });
+    expect(getSnapshot).toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      cacheManager.getCacheFilePath(),
+      serialize(getSnapshot()),
     );
   });
 
-  it('creates different cache file paths for different projects', () => {
-    const cacheManager1 = new DiskCacheManager({
-      ...defaultConfig,
-      cacheFilePrefix: 'package-a',
-    });
-    const cacheManager2 = new DiskCacheManager({
-      ...defaultConfig,
-      cacheFilePrefix: 'package-b',
-    });
-    expect(cacheManager1.getCacheFilePath()).not.toBe(
-      cacheManager2.getCacheFilePath(),
+  test('creates the cache directory if it does not exist', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const getSnapshot = jest.fn(
+      () =>
+        ({
+          clocks: new Map([['foo', 'bar']]),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
     );
+    mockWriteFile.mockRejectedValueOnce({code: 'ENOENT'});
+    const onWriteError = jest.fn();
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError,
+    });
+    expect(mockMkdir).toHaveBeenCalledWith(
+      path.dirname(cacheManager.getCacheFilePath()),
+      {recursive: true},
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(2);
+    expect(mockWriteFile).toHaveBeenLastCalledWith(
+      cacheManager.getCacheFilePath(),
+      serialize(getSnapshot()),
+    );
+    expect(onWriteError).not.toHaveBeenCalled();
+  });
+
+  test('reports other write errors without retrying', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const error = {code: 'EACCES'};
+    mockWriteFile.mockRejectedValueOnce(error);
+    const onWriteError = jest.fn();
+    await cacheManager.write(
+      () =>
+        ({
+          clocks: new Map(),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+      {
+        changedSinceCacheRead: true,
+        eventSource: {onChange: () => () => {}},
+        onWriteError,
+      },
+    );
+    expect(mockMkdir).not.toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(onWriteError).toHaveBeenCalledWith(error);
+  });
+
+  test('does not write when there have been no changes', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const getSnapshot = jest.fn(
+      () =>
+        ({
+          clocks: new Map([['foo', 'bar']]),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+    );
+    await cacheManager.write(
+      getSnapshot,
+      // No changes
+      {
+        changedSinceCacheRead: false,
+        eventSource: {onChange: () => () => {}},
+        onWriteError: () => {},
+      },
+    );
+    expect(getSnapshot).not.toHaveBeenCalled();
+    expect(mockWriteFile).not.toHaveBeenCalled();
+  });
+
+  describe('autoSave', () => {
+    let getSnapshot;
+    let cacheManager: DiskCacheManager;
+    let emitter: EventEmitter;
+    let eventSource: CacheManagerEventSource;
+
+    beforeEach(async () => {
+      jest.clearAllMocks();
+      getSnapshot = jest.fn();
+      emitter = new EventEmitter();
+      eventSource = {
+        onChange: jest.fn().mockImplementation(cb => {
+          emitter.on('change', cb);
+          return () => emitter.removeListener('change', cb);
+        }),
+      };
+      cacheManager = new DiskCacheManager(
+        {buildParameters},
+        {
+          ...defaultConfig,
+          autoSave: {
+            debounceMs: 1000,
+          },
+        },
+      );
+      await cacheManager.write(getSnapshot, {
+        changedSinceCacheRead: false,
+        eventSource,
+        onWriteError: () => {},
+      });
+    });
+
+    test('subscribes to change events during write(), even on empty delta', async () => {
+      expect(eventSource.onChange).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockWriteFile).not.toHaveBeenCalled();
+    });
+
+    test('gets a snapshot and saves the cache after debounceMs', async () => {
+      emitter.emit('change');
+      await jest.advanceTimersByTime(999);
+      expect(getSnapshot).not.toHaveBeenCalled();
+      await jest.advanceTimersByTime(1);
+      expect(getSnapshot).toHaveBeenCalled();
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        cacheManager.getCacheFilePath(),
+        expect.any(Buffer),
+      );
+    });
+
+    test('successive changes within debounceMs are debounced', async () => {
+      emitter.emit('change');
+      await jest.advanceTimersByTime(500);
+      emitter.emit('change');
+      await jest.advanceTimersByTime(999);
+      expect(getSnapshot).not.toHaveBeenCalled();
+      await jest.advanceTimersByTime(1);
+      expect(getSnapshot).toHaveBeenCalled();
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        cacheManager.getCacheFilePath(),
+        expect.any(Buffer),
+      );
+      expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    });
   });
 });

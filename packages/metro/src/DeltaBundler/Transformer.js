@@ -9,34 +9,49 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {TransformResult, TransformResultWithSource} from '../DeltaBundler';
+import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {TransformerConfig, TransformOptions} from './Worker';
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
+import type {ConfigT} from 'metro-config';
 
-import crypto from 'crypto';
+import {getAssetUrlPath} from '../Assets';
+import {normalizePathSeparatorsToPosix} from '../lib/pathUtils';
+import getTransformCacheKey from './getTransformCacheKey';
+import WorkerFarm from './WorkerFarm';
+import debugModule from 'debug';
+import {Cache, stableHash} from 'metro-cache';
+import assert from 'node:assert';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const getTransformCacheKey = require('./getTransformCacheKey');
-const WorkerFarm = require('./WorkerFarm');
-const assert = require('assert');
-const fs = require('fs');
-const {Cache, stableHash} = require('metro-cache');
-const path = require('path');
+const debug = debugModule('Metro:Transformer');
 
-class Transformer {
+type GetOrComputeSha1Fn = (
+  filePath: string,
+) => Promise<Readonly<{content?: Buffer, sha1: string}>>;
+
+export default class Transformer {
   _config: ConfigT;
   _cache: Cache<TransformResult<>>;
   _baseHash: string;
-  _getSha1: string => string;
+  _getDynamicRoots: () => ReadonlyArray<DynamicRoot>;
+  _getSha1: GetOrComputeSha1Fn;
   _workerFarm: WorkerFarm;
 
-  constructor(config: ConfigT, getSha1Fn: string => string) {
+  constructor(
+    config: ConfigT,
+    opts: Readonly<{
+      getDynamicRoots?: () => ReadonlyArray<DynamicRoot>,
+      getOrComputeSha1: GetOrComputeSha1Fn,
+    }>,
+  ) {
     this._config = config;
 
     this._config.watchFolders.forEach(verifyRootExists);
     this._cache = new Cache(config.cacheStores);
-    this._getSha1 = getSha1Fn;
+    this._getDynamicRoots = opts.getDynamicRoots ?? (() => []);
+    this._getSha1 = opts.getOrComputeSha1;
 
     // Remove the transformer config params that we don't want to pass to the
     // transformer. We should change the config object and move them away so we
@@ -44,17 +59,19 @@ class Transformer {
     const {
       getTransformOptions: _getTransformOptions,
       transformVariants: _transformVariants,
-      workerPath: _workerPath,
+      unstable_supportsInlineModules: _supportsInlineModules,
       unstable_workerThreads: _workerThreads,
       ...transformerConfig
     } = this._config.transformer;
 
     const transformerOptions: TransformerConfig = {
       transformerPath: this._config.transformerPath,
-      transformerConfig,
+      // Babel plugins can emit different code for this, so it must be part of
+      // the transform cache key.
+      transformerConfig: this._config.resolver.unstable_allowVirtualModules
+        ? {...transformerConfig, unstable_supportsInlineModules: true}
+        : transformerConfig,
     };
-
-    this._workerFarm = new WorkerFarm(config, transformerOptions);
 
     const globalCacheKey = this._cache.isDisabled
       ? ''
@@ -64,7 +81,12 @@ class Transformer {
           transformerConfig: transformerOptions,
         });
 
-    this._baseHash = stableHash([globalCacheKey]).toString('binary');
+    const baseHashBuffer = stableHash([globalCacheKey]);
+    this._baseHash = baseHashBuffer.toString('binary');
+    debug('Base hash: %s', baseHashBuffer.toString('hex'));
+
+    // Start workers last - nothing can end them if the constructor throws.
+    this._workerFarm = new WorkerFarm(config, transformerOptions);
   }
 
   async transformFile(
@@ -78,15 +100,15 @@ class Transformer {
       customTransformOptions,
       dev,
       experimentalImportSupport,
-      hot,
       inlinePlatform,
       inlineRequires,
       minify,
       nonInlinedRequires,
       platform,
       type,
-      unstable_disableES6Transforms,
       unstable_transformProfile,
+      unstable_memoizeInlineRequires,
+      unstable_nonMemoizedInlineRequires,
       ...extra
     } = transformerOptions;
 
@@ -99,35 +121,58 @@ class Transformer {
       }
     }
 
-    const localPath = path.relative(this._config.projectRoot, filePath);
+    const projectRelativePath = path.relative(
+      this._config.projectRoot,
+      filePath,
+    );
+    // Assets are the only modules whose output depends on watchFolders and
+    // dynamic roots, via the URL path baked into them, so that dependency
+    // enters the cache key per asset here and not in the base hash.
+    const assetUrlPath =
+      type === 'asset'
+        ? getAssetUrlPath(
+            filePath,
+            this._config.projectRoot,
+            this._config.watchFolders,
+            this._getDynamicRoots(),
+          )
+        : null;
 
     const partialKey = stableHash([
       // This is the hash related to the global Bundler config.
       this._baseHash,
 
-      // Path.
-      localPath,
-
+      // Project-relative, posix-separated path for portability. Necessary in
+      // addition to content hash because transformers receive path as an
+      // input, and may apply e.g. extension-based logic.
+      normalizePathSeparatorsToPosix(projectRelativePath),
+      assetUrlPath,
       customTransformOptions,
       dev,
       experimentalImportSupport,
-      hot,
       inlinePlatform,
       inlineRequires,
       minify,
       nonInlinedRequires,
       platform,
       type,
-      unstable_disableES6Transforms,
+      unstable_memoizeInlineRequires,
+      unstable_nonMemoizedInlineRequires,
       unstable_transformProfile,
     ]);
 
     let sha1: string;
+    let content: ?Buffer;
     if (fileBuffer) {
       // Shortcut for virtual modules which provide the contents with the filename.
       sha1 = crypto.createHash('sha1').update(fileBuffer).digest('hex');
+      content = fileBuffer;
     } else {
-      sha1 = this._getSha1(filePath);
+      const result = await this._getSha1(filePath);
+      sha1 = result.sha1;
+      if (result.content) {
+        content = result.content;
+      }
     }
 
     let fullKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
@@ -144,15 +189,16 @@ class Transformer {
 
     // A valid result from the cache is used directly; otherwise we call into
     // the transformer to computed the corresponding result.
-    const data: $ReadOnly<{
+    const data: Readonly<{
       result: TransformResult<>,
       sha1: string,
     }> = result
       ? {result, sha1}
       : await this._workerFarm.transform(
-          localPath,
+          projectRelativePath,
           transformerOptions,
-          fileBuffer,
+          content,
+          assetUrlPath ?? undefined,
         );
 
     // Only re-compute the full key if the SHA-1 changed. This is because
@@ -182,9 +228,8 @@ class Transformer {
     };
   }
 
-  end(): void {
-    // $FlowFixMe[unused-promise]
-    this._workerFarm.kill();
+  async end(): Promise<void> {
+    await this._workerFarm.kill();
   }
 }
 
@@ -192,5 +237,3 @@ function verifyRootExists(root: string): void {
   // Verify that the root exists.
   assert(fs.statSync(root).isDirectory(), 'Root has to be a valid directory');
 }
-
-module.exports = Transformer;

@@ -13,8 +13,6 @@
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 
-jest.unmock('cosmiconfig');
-
 jest.setTimeout(30 * 1000);
 
 test('require-context/matching.js', async () => {
@@ -63,7 +61,7 @@ test('require-context/empty.js - release', async () => {
   ).resolves.toMatchSnapshot();
 });
 
-async function execTest(entry, {dev = true}: $ReadOnly<{dev: boolean}> = {}) {
+async function execTest(entry, {dev = true}: Readonly<{dev: boolean}> = {}) {
   const config = await Metro.loadConfig(
     {
       config: require.resolve('../metro.config.js'),

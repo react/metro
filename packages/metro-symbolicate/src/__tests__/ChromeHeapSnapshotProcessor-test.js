@@ -13,9 +13,9 @@
 
 import type {ChromeHeapSnapshot} from '../ChromeHeapSnapshot';
 
-const {ChromeHeapSnapshotProcessor} = require('../ChromeHeapSnapshot');
+import {ChromeHeapSnapshotProcessor} from '../ChromeHeapSnapshot';
 
-const SNAPSHOT_COMMON = {
+const SNAPSHOT_COMMON: Pick<ChromeHeapSnapshot, 'snapshot'> = {
   snapshot: {
     meta: {
       node_fields: [
@@ -195,7 +195,7 @@ describe('ChromeHeapSnapshotProcessor', () => {
     beforeEach(() => {
       data = {
         ...SNAPSHOT_COMMON,
-        locations: ([]: Array<number>),
+        locations: [] as Array<number>,
         nodes: [
           // -- Node #0 --
           /* type (synthetic) */ 9, /* name */ 0, /* id */ 1, /* self_size */ 0,
@@ -587,8 +587,8 @@ describe('ChromeHeapSnapshotProcessor', () => {
     beforeEach(() => {
       data = {
         ...SNAPSHOT_COMMON,
-        edges: ([]: Array<number>),
-        locations: ([]: Array<number>),
+        edges: [] as Array<number>,
+        locations: [] as Array<number>,
         nodes: [
           // -- Node #0 --
           /* type (synthetic) */ 9, /* name */ 0, /* id */ 1, /* self_size */ 0,
@@ -872,8 +872,8 @@ describe('ChromeHeapSnapshotProcessor', () => {
     test('data truncated while iterating', () => {
       const data: ChromeHeapSnapshot = {
         ...SNAPSHOT_COMMON,
-        edges: ([]: Array<number>),
-        locations: ([]: Array<number>),
+        edges: [] as Array<number>,
+        locations: [] as Array<number>,
         nodes: [
           // -- Node #0 --
           /* type (synthetic) */ 9, /* name */ 0, /* id */ 1, /* self_size */ 0,
@@ -886,7 +886,7 @@ describe('ChromeHeapSnapshotProcessor', () => {
         ],
         samples: [],
         strings: [''],
-        trace_function_infos: ([]: Array<number>),
+        trace_function_infos: [] as Array<number>,
         trace_tree: [],
       };
       const processor = new ChromeHeapSnapshotProcessor(data);

@@ -15,59 +15,65 @@ var AssetPaths = require('../AssetPaths');
 
 const TEST_PLATFORMS = new Set(['ios', 'android']);
 
+// Relative file paths written as posix, in the platform's native format.
+const p: (posixPath: string) => string =
+  process.platform === 'win32'
+    ? posixPath => posixPath.replaceAll('/', '\\')
+    : posixPath => posixPath;
+
 describe('AssetPaths', () => {
-  it('should get data from name', () => {
-    expect(AssetPaths.parse('a/b/c.png', TEST_PLATFORMS)).toEqual({
+  test('should get data from name', () => {
+    expect(AssetPaths.parse(p('a/b/c.png'), TEST_PLATFORMS)).toEqual({
       resolution: 1,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: null,
     });
 
-    expect(AssetPaths.parse('a/b/c@1x.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b/c@1x.png'), TEST_PLATFORMS)).toEqual({
       resolution: 1,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: null,
     });
 
-    expect(AssetPaths.parse('a/b/c@2.5x.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b/c@2.5x.png'), TEST_PLATFORMS)).toEqual({
       resolution: 2.5,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: null,
     });
 
-    expect(AssetPaths.parse('a/b/c.ios.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b/c.ios.png'), TEST_PLATFORMS)).toEqual({
       resolution: 1,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: 'ios',
     });
 
-    expect(AssetPaths.parse('a/b/c@1x.ios.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b/c@1x.ios.png'), TEST_PLATFORMS)).toEqual({
       resolution: 1,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: 'ios',
     });
 
-    expect(AssetPaths.parse('a/b/c@2.5x.ios.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b/c@2.5x.ios.png'), TEST_PLATFORMS)).toEqual({
       resolution: 2.5,
-      assetName: 'a/b/c.png',
+      assetName: p('a/b/c.png'),
       type: 'png',
       name: 'c',
       platform: 'ios',
     });
 
-    expect(AssetPaths.parse('a/b /c.png', TEST_PLATFORMS)).toEqual({
+    expect(AssetPaths.parse(p('a/b /c.png'), TEST_PLATFORMS)).toEqual({
       resolution: 1,
-      assetName: 'a/b /c.png',
+      assetName: p('a/b /c.png'),
       type: 'png',
       name: 'c',
       platform: null,
@@ -75,7 +81,7 @@ describe('AssetPaths', () => {
   });
 
   describe('resolution extraction', () => {
-    it('should extract resolution simple case', () => {
+    test('should extract resolution simple case', () => {
       var data = AssetPaths.parse('test@2x.png', TEST_PLATFORMS);
       expect(data).toEqual({
         assetName: 'test.png',
@@ -86,7 +92,7 @@ describe('AssetPaths', () => {
       });
     });
 
-    it('should default resolution to 1', () => {
+    test('should default resolution to 1', () => {
       var data = AssetPaths.parse('test.png', TEST_PLATFORMS);
       expect(data).toEqual({
         assetName: 'test.png',
@@ -97,7 +103,7 @@ describe('AssetPaths', () => {
       });
     });
 
-    it('should support float', () => {
+    test('should support float', () => {
       var data = AssetPaths.parse('test@1.1x.png', TEST_PLATFORMS);
       expect(data).toEqual({
         assetName: 'test.png',

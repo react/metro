@@ -1,0 +1,43 @@
+name: test
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        required: false
+        default: '22.x'
+      runs-on:
+        type: string
+        required: false
+        default: 'ubuntu-latest'
+      no-lockfile:
+        type: string
+        required: false
+        default: 'false'
+
+jobs:
+  test:
+    name: "Tests [Node.js ${{ inputs.node-version }}, ${{ inputs.runs-on }}, ${{ inputs.no-lockfile == 'false' && 'Using yarn.lock' || 'Ignoring yarn.lock' }}]"
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/yarn-install
+        with:
+          node-version: ${{ inputs.node-version }}
+          no-lockfile: ${{ inputs.no-lockfile }}
+      - name: Run Jest Tests
+        env:
+          NIGHTLY_TESTS_NO_LOCKFILE: ${{ inputs.no-lockfile }}
+        shell: bash
+        run: |
+          max_attempts=3
+          attempt=1
+          until yarn jest --ci --maxWorkers 4 --reporters=default --reporters=jest-junit --rootdir='./'; do
+            if [ $attempt -ge $max_attempts ]; then
+              echo "Tests failed after $max_attempts attempts"
+              exit 1
+            fi
+            echo "Attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+            sleep 5
+          done

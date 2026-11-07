@@ -12,14 +12,14 @@
 import type {ResolutionContext} from '../index';
 import type {PackageJson} from '../types';
 
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Data structure approximating a file tree. Should be populated with complete
  * paths mapping to file contents.
  */
-type MockFileMap = $ReadOnly<{
-  [path: string]: ?(string | $ReadOnly<{realPath: ?string}>),
+export type MockFileMap = Readonly<{
+  [path: string]: ?(string | Readonly<{realPath: ?string}>),
 }>;
 
 /**
@@ -28,9 +28,19 @@ type MockFileMap = $ReadOnly<{
  * consuming tests.
  */
 export function createResolutionContext(
-  fileMap: MockFileMap,
-  {enableSymlinks}: $ReadOnly<{enableSymlinks?: boolean}> = {},
-): $Diff<ResolutionContext, {originModulePath: string}> {
+  fileMap: MockFileMap = {},
+): Omit<ResolutionContext, 'originModulePath'> {
+  const directorySet = new Set<string>();
+  for (const filePath of Object.keys(fileMap)) {
+    let currentDir = filePath;
+    let prevDir;
+    do {
+      prevDir = currentDir;
+      currentDir = path.dirname(currentDir);
+      directorySet.add(currentDir);
+    } while (currentDir !== prevDir);
+  }
+
   return {
     dev: true,
     allowHaste: true,
@@ -38,39 +48,46 @@ export function createResolutionContext(
     customResolverOptions: {},
     disableHierarchicalLookup: false,
     extraNodeModules: null,
+    fileSystemLookup: inputPath => {
+      // Normalise and remove any trailing slash.
+      const filePath = path.resolve(inputPath);
+      const candidate = fileMap[filePath];
+      if (typeof candidate === 'string') {
+        return {exists: true, type: 'f', realPath: filePath};
+      }
+      if (candidate == null) {
+        if (directorySet.has(filePath)) {
+          return {exists: true, type: 'd', realPath: filePath};
+        }
+        return {exists: false};
+      }
+      if (candidate.realPath == null) {
+        return {exists: false};
+      }
+      return {
+        exists: true,
+        type: 'f',
+        realPath: candidate.realPath,
+      };
+    },
+    isESMImport: false,
     mainFields: ['browser', 'main'],
     nodeModulesPaths: [],
     preferNativePlatform: false,
-    redirectModulePath: (filePath: string) => filePath,
     resolveAsset: (filePath: string) => null,
     resolveHasteModule: (name: string) => null,
     resolveHastePackage: (name: string) => null,
+    schemeResolvers: {},
     sourceExts: ['js', 'jsx', 'json', 'ts', 'tsx'],
+    unstable_applyBrowserSpecAfterExports: true,
     unstable_conditionNames: ['require'],
     unstable_conditionsByPlatform: {
       web: ['browser'],
     },
     unstable_enablePackageExports: false,
     unstable_logWarning: () => {},
+    unstable_resolveExportsFromPackageRoot: true,
     ...createPackageAccessors(fileMap),
-    ...(enableSymlinks === true
-      ? {
-          doesFileExist: (filePath: string) =>
-            // Should return false unless realpath(filePath) exists. We mock shallow
-            // dereferencing.
-            fileMap[filePath] != null &&
-            (typeof fileMap[filePath] === 'string' ||
-              typeof fileMap[filePath].realPath === 'string'),
-          unstable_getRealPath: filePath =>
-            typeof fileMap[filePath] === 'string'
-              ? filePath
-              : fileMap[filePath]?.realPath,
-        }
-      : {
-          doesFileExist: (filePath: string) =>
-            typeof fileMap[filePath] === 'string',
-          unstable_getRealPath: null,
-        }),
   };
 }
 
@@ -79,8 +96,10 @@ export function createResolutionContext(
  * `ResolutionContext` based on the input mock file/package.json map.
  */
 export function createPackageAccessors(
-  fileOrPackageJsonMap: MockFileMap | {[path: string]: PackageJson},
-): $ReadOnly<{
+  fileOrPackageJsonMap: Readonly<{
+    [path: string]: ?(string | Readonly<{realPath: ?string}> | PackageJson),
+  }>,
+): Readonly<{
   getPackage: ResolutionContext['getPackage'],
   getPackageForModule: ResolutionContext['getPackageForModule'],
 }> {
@@ -101,6 +120,7 @@ export function createPackageAccessors(
     const parsedPath = path.parse(modulePath);
     const root = parsedPath.root;
     let dir = path.join(parsedPath.dir, parsedPath.base);
+    let prevDir;
 
     do {
       if (path.basename(dir) === 'node_modules') {
@@ -117,8 +137,11 @@ export function createPackageAccessors(
         };
       }
 
+      prevDir = dir;
       dir = path.dirname(dir);
-    } while (dir !== '.' && dir !== root);
+      // `root` may use different separators to `dir` (e.g. '/' vs '\' on
+      // Windows), so also stop once `dirname` no longer changes the path.
+    } while (dir !== '.' && dir !== root && dir !== prevDir);
 
     return null;
   };
@@ -128,3 +151,8 @@ export function createPackageAccessors(
     getPackageForModule,
   };
 }
+
+export const posixToSystemPath: (filePath: string) => string =
+  process.platform === 'win32'
+    ? filePath => filePath.replaceAll('/', '\\').replace(/^\\/, 'C:\\')
+    : filePath => filePath;

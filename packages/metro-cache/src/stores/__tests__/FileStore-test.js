@@ -4,11 +4,12 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
+ * @flow strict-local
  * @format
  * @oncall react_native
  */
 
-'use strict';
+import {memfs} from 'memfs';
 
 describe('FileStore', () => {
   let FileStore;
@@ -18,53 +19,100 @@ describe('FileStore', () => {
     jest
       .resetModules()
       .resetAllMocks()
-      .mock('fs', () => new (require('metro-memory-fs'))());
+      .mock('node:fs', () => memfs().fs);
 
-    FileStore = require('../FileStore');
-    fs = require('fs');
+    FileStore = require('../FileStore').default;
+    fs = jest.requireMock('node:fs');
     jest.spyOn(fs, 'unlinkSync');
   });
 
-  it('sets and writes into the cache', async () => {
-    const fileStore = new FileStore({root: '/root'});
+  test('sets and writes into the cache', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
 
     await fileStore.set(cache, {foo: 42});
     expect(await fileStore.get(cache)).toEqual({foo: 42});
+    expect(fs.readFileSync('/root/fa/ceb00c', 'utf8')).toBe('{"foo":42}');
   });
 
-  it('returns null when reading a non-existing file', async () => {
-    const fileStore = new FileStore({root: '/root'});
+  test('returns null when reading a non-existing file', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
 
     expect(await fileStore.get(cache)).toEqual(null);
   });
 
-  it('returns null when reading a empty file', async () => {
-    const fileStore = new FileStore({root: '/root'});
+  test('returns null when reading a empty file', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
-    const filePath = fileStore._getFilePath(cache);
-
-    fs.writeFileSync(filePath, '');
+    jest.spyOn(fs.promises, 'readFile').mockImplementation(async () => '');
     expect(await fileStore.get(cache)).toEqual(null);
+    expect(fs.promises.readFile).toHaveBeenCalledWith(expect.any(String));
   });
 
-  it('writes into cache if folder is missing', async () => {
-    const fileStore = new FileStore({root: '/root'});
+  test('writes into cache if folder is missing', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
     const data = Buffer.from([0xca, 0xc4, 0xe5]);
 
-    require('rimraf').sync('/root');
+    jest.requireMock('node:fs').rmSync('/root', {recursive: true, force: true});
     await fileStore.set(cache, data);
     expect(await fileStore.get(cache)).toEqual(data);
   });
 
-  it('reads and writes binary data', async () => {
-    const fileStore = new FileStore({root: '/root'});
+  test.each([
+    ['non-empty', Buffer.from([0xca, 0xc4, 0xe5])],
+    ['empty', Buffer.alloc(0)],
+    ['all-zero', Buffer.alloc(64)],
+  ])('reads and writes %s binary data', async (_name, data) => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
     const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
-    const data = Buffer.from([0xca, 0xc4, 0xe5]);
 
     await fileStore.set(cache, data);
     expect(await fileStore.get(cache)).toEqual(data);
   });
+
+  test('treats a zero-filled cache entry as a miss and overwrites it', async () => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
+    const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+    const data = {dependencies: [], output: []};
+
+    await fileStore.set(cache, data);
+    const filePath = '/root/fa/ceb00c';
+    fs.writeFileSync(filePath, Buffer.alloc(fs.statSync(filePath).size));
+
+    expect(await fileStore.get(cache)).toBeNull();
+    await fileStore.set(cache, data);
+    expect(await fileStore.get(cache)).toEqual(data);
+  });
+
+  test.each([
+    ['non-empty', Buffer.from([0xca, 0xc4, 0xe5])],
+    ['empty', Buffer.alloc(0)],
+    ['all-zero', Buffer.alloc(64)],
+  ])('invalidates legacy %s binary cache entries', async (_name, data) => {
+    const fileStore = new FileStore<unknown>({root: '/root'});
+    const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+    fs.mkdirSync('/root/fa', {recursive: true});
+    fs.writeFileSync(
+      '/root/fa/ceb00c',
+      Buffer.concat([Buffer.from([0]), data]),
+    );
+
+    expect(await fileStore.get(cache)).toBeNull();
+    await fileStore.set(cache, data);
+    expect(await fileStore.get(cache)).toEqual(data);
+  });
+
+  test.each(['', '{"foo":', 'invalid'])(
+    'treats malformed JSON %j as a miss',
+    async data => {
+      const fileStore = new FileStore<unknown>({root: '/root'});
+      const cache = Buffer.from([0xfa, 0xce, 0xb0, 0x0c]);
+      fs.mkdirSync('/root/fa', {recursive: true});
+      fs.writeFileSync('/root/fa/ceb00c', data);
+
+      expect(await fileStore.get(cache)).toBeNull();
+    },
+  );
 });

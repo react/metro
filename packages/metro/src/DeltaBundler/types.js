@@ -1,0 +1,244 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * @flow strict-local
+ * @format
+ * @oncall react_native
+ */
+
+import type {RequireContext} from '../lib/contextModule';
+import type {RequireContextParams} from '../ModuleGraph/worker/collectDependencies';
+import type {ReadonlySourceLocation} from '../shared/types';
+import type {Graph} from './Graph';
+import type {JsTransformOptions} from 'metro-transform-worker';
+
+import CountingSet from '../lib/CountingSet';
+
+// Valid inputs to JSON.stringify, as used to encode literals into transform
+// output.
+export type ReadonlyJsonData =
+  | null
+  | boolean
+  | number
+  | string
+  | ReadonlyArray<?ReadonlyJsonData>
+  | Readonly<{[key: string]: ?ReadonlyJsonData}>;
+
+export type MixedOutput = {
+  readonly data: unknown,
+  readonly type: string,
+};
+
+export type AsyncDependencyType = 'async' | 'maybeSync' | 'prefetch' | 'weak';
+
+export type TransformResultDependency = Readonly<{
+  /**
+   * The literal name provided to a require or import call. For example 'foo' in
+   * case of `require('foo')`.
+   */
+  name: string,
+
+  /**
+   * Extra data returned by the dependency extractor.
+   */
+  data: Readonly<{
+    /**
+     * A locally unique key for this dependency within the current module.
+     */
+    key: string,
+    /**
+     * If not null, this dependency is due to a dynamic `import()` or `__prefetchImport()` call.
+     */
+    asyncType: AsyncDependencyType | null,
+    /**
+     * True if the dependency is declared with a static "import x from 'y'" or
+     * an import() call.
+     */
+    isESMImport: boolean,
+    /**
+     * The dependency is enclosed in a try/catch block.
+     */
+    isOptional?: boolean,
+
+    locs: ReadonlyArray<ReadonlySourceLocation>,
+
+    /** Context for requiring a collection of modules. */
+    contextParams?: RequireContextParams,
+  }>,
+}>;
+
+export type ResolvedDependency = Readonly<{
+  absolutePath: string,
+  data: TransformResultDependency,
+}>;
+
+export type Dependency =
+  | ResolvedDependency
+  | Readonly<{
+      data: TransformResultDependency,
+    }>;
+
+export type Module<T = MixedOutput> = Readonly<{
+  dependencies: Map<string, Dependency>,
+  inverseDependencies: CountingSet<string>,
+  output: ReadonlyArray<T>,
+  path: string,
+  getSource: () => Buffer,
+  unstable_transformResultKey?: ?string,
+}>;
+
+/**
+ * How the transform obtains the source of a module that has no file, as
+ * supplied by the resolution that produced it. A virtual module arrives as the
+ * buffer itself. A `require.context` module arrives as the parameters the
+ * transform expands by enumerating the file map: a derived module whose inputs
+ * are discovered at transform time rather than pinned at resolution, which is
+ * why it has its own invalidation in `Graph.markModifiedContextModules`.
+ */
+export type VirtualSource =
+  | Readonly<{type: 'requireContext', requireContext: RequireContext}>
+  | Readonly<{
+      type: 'buffer',
+      source: Buffer,
+      /**
+       * SHA-1 of `source`. A virtual module's identity is independent of its
+       * content, so this is how the graph notices that an edge now supplies
+       * different content for an existing module and re-transforms it.
+       */
+      sha1: string,
+    }>;
+
+export type ModuleData<T = MixedOutput> = Readonly<{
+  dependencies: ReadonlyMap<string, Dependency>,
+  /** Keyed by dependency key, for the dependencies that resolved to a module with no file. */
+  virtualSources: ReadonlyMap<string, VirtualSource>,
+  output: ReadonlyArray<T>,
+  getSource: () => Buffer,
+  unstable_transformResultKey?: ?string,
+}>;
+
+export type Dependencies<T = MixedOutput> = Map<string, Module<T>>;
+export type ReadOnlyDependencies<T = MixedOutput> = ReadonlyMap<
+  string,
+  Module<T>,
+>;
+
+export type TransformInputOptions = Omit<
+  JsTransformOptions,
+  'inlinePlatform' | 'inlineRequires',
+>;
+
+export type GraphInputOptions = Readonly<{
+  entryPoints: ReadonlySet<string>,
+  // Unused in core but useful for custom serializers / experimentalSerializerHook
+  transformOptions: TransformInputOptions,
+}>;
+
+export interface ReadOnlyGraph<T = MixedOutput> {
+  readonly entryPoints: ReadonlySet<string>;
+  // Unused in core but useful for custom serializers / experimentalSerializerHook
+  readonly transformOptions: Readonly<TransformInputOptions>;
+  readonly dependencies: ReadOnlyDependencies<T>;
+}
+
+export type {Graph};
+
+export type TransformResult<T = MixedOutput> = Readonly<{
+  dependencies: ReadonlyArray<TransformResultDependency>,
+  output: ReadonlyArray<T>,
+  unstable_transformResultKey?: ?string,
+}>;
+
+export type TransformResultWithSource<T = MixedOutput> = Readonly<{
+  ...TransformResult<T>,
+  getSource: () => Buffer,
+}>;
+
+export type TransformFn<T = MixedOutput> = (
+  modulePath: string,
+  virtualSource: ?VirtualSource,
+) => Promise<TransformResultWithSource<T>>;
+
+export type ResolveFn = (
+  from: string,
+  dependency: TransformResultDependency,
+) => BundlerResolution;
+
+export type AllowOptionalDependenciesWithOptions = {
+  readonly exclude: Array<string>,
+};
+export type AllowOptionalDependencies =
+  boolean | AllowOptionalDependenciesWithOptions;
+
+export type BundlerResolution =
+  | Readonly<{
+      type: 'sourceFile',
+      filePath: string,
+    }>
+  | Readonly<{
+      type: 'virtualModule',
+      /**
+       * The module's identity in the graph: its virtual path in the
+       * `virtual:` namespace. See `lib/modulePath.js`.
+       */
+      filePath: string,
+      /** Carried to the transform as the module's input in place of a file read. */
+      source: Buffer,
+      /** SHA-1 of `source`. */
+      sha1: string,
+    }>;
+
+export type Options<T = MixedOutput> = Readonly<{
+  resolve: ResolveFn,
+  transform: TransformFn<T>,
+  transformOptions: TransformInputOptions,
+  onProgress: ?(numProcessed: number, total: number) => unknown,
+  lazy: boolean,
+  unstable_allowRequireContext: boolean,
+  unstable_enablePackageExports: boolean,
+  unstable_incrementalResolution: boolean,
+  shallow: boolean,
+}>;
+
+export type DeltaResult<T = MixedOutput> = {
+  readonly added: Map<string, Module<T>>,
+  readonly modified: Map<string, Module<T>>,
+  readonly deleted: Set<string>,
+  readonly reset: boolean,
+};
+
+export type SerializerOptions = Readonly<{
+  asyncRequireModulePath: string,
+  createModuleId: (absolutePath: string) => number,
+  dependencyMapReservedName?: ?string,
+  dev: boolean,
+  getRunModuleStatement: (
+    moduleId: number | string,
+    globalPrefix: string,
+  ) => string,
+  globalPrefix: string,
+  includeAsyncPaths: boolean,
+  inlineSourceMap?: ?boolean,
+  modulesOnly: boolean,
+  processModuleFilter: (module: Module<>) => boolean,
+  projectRoot: string,
+  // The string reserved for identifiers that Metro generates. The default
+  // transformer rejects it in source and JSON files, which prevents accidental
+  // collisions.
+  reservedString: string,
+  runBeforeMainModule: ReadonlyArray<string>,
+  runModule: boolean,
+  serverRoot: string,
+  shouldAddToIgnoreList: (module: Module<>) => boolean,
+  sourceMapUrl?: ?string,
+  sourceUrl?: ?string,
+  getSourceUrl?: ?(module: Module<>) => string,
+  unstable_inlineDependencyMap?: boolean,
+  unstable_getAsyncDependencyPath?: (
+    dependency: ResolvedDependency,
+    options: unknown,
+  ) => ?ReadonlyJsonData,
+}>;

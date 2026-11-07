@@ -9,20 +9,18 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {MixedSourceMap} from '../source-map';
-import type {IConsumer} from './types.flow';
+import type {IConsumer} from './types';
 
-const invariant = require('invariant');
+import MappingsConsumer from './MappingsConsumer';
+import SectionsConsumer from './SectionsConsumer';
+import invariant from 'invariant';
 
-function createConsumer(sourceMap: MixedSourceMap): IConsumer {
+export default function createConsumer(sourceMap: MixedSourceMap): IConsumer {
   invariant(
-    (sourceMap.version: mixed) === '3' || sourceMap.version === 3,
+    (sourceMap.version as unknown) === '3' || sourceMap.version === 3,
     `Unrecognized source map format version: ${sourceMap.version}`,
   );
-  const MappingsConsumer = require('./MappingsConsumer');
-  const SectionsConsumer = require('./SectionsConsumer');
 
   // eslint-disable-next-line lint/strictly-null
   if (sourceMap.mappings === undefined) {
@@ -30,5 +28,3 @@ function createConsumer(sourceMap: MixedSourceMap): IConsumer {
   }
   return new MappingsConsumer(sourceMap);
 }
-
-module.exports = createConsumer;

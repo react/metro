@@ -10,7 +10,7 @@
 
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 require('eslint-plugin-lint').load(path.join(__dirname, 'rules'));
 
@@ -22,14 +22,16 @@ module.exports = {
     node: true,
   },
   root: true,
-  extends: ['eslint-config-fb-strict', 'plugin:prettier/recommended'],
-  plugins: ['babel', 'ft-flow', 'import', 'lint', 'prettier'],
-  parser: 'hermes-eslint',
+  extends: ['eslint-config-fb-strict', 'prettier'],
+  plugins: ['babel', 'ft-flow', 'import', 'lint'],
+  parser: 'flow-eslint',
   rules: {
     'babel/quotes': ['error', 'single', 'avoid-escape'],
     'consistent-return': 'error',
+    'import/enforce-node-protocol-usage': ['warn', 'always'],
     'import/no-extraneous-dependencies': 'error',
-    'lint/extra-arrow-initializer': 'off',
+    'fb-www/extra-arrow-initializer': 'off',
+    'lint/metro-deep-imports': 'warn',
     'lint/sort-imports': 'warn',
     'lint/strictly-null': 'warn',
     'max-len': 'off',
@@ -41,11 +43,35 @@ module.exports = {
     quotes: 'off',
     'sort-keys': 'off',
 
+    'no-restricted-imports': [
+      'error',
+      {
+        name: 'url',
+        message:
+          'Deprecated. Please use URL instead. https://nodejs.org/docs/latest/api/url.html#legacy-url-api',
+      },
+    ],
+    'no-restricted-modules': [
+      'error',
+      {
+        name: 'url',
+        message:
+          'Deprecated. Please use URL instead. https://nodejs.org/docs/latest/api/url.html#legacy-url-api',
+      },
+    ],
+
+    // TODO: This was added after migrating from `eslint-plugin-prettier` to
+    // `eslint-config-prettier`. The former used to disable this rule, so this
+    // was added to avoid introducing lint errors during the migration. Either
+    // this needs to be properly configured or lint errors need to be fixed so
+    // this override can be removed.
+    'prefer-arrow-callback': 'off',
+
     // prettier handles this
     'flowtype/object-type-delimiter': 'off',
     'ft-flow/object-type-delimiter': 'off',
 
-    // These rules are not required with hermes-eslint
+    // These rules are not required with flow-eslint
     'ft-flow/define-flow-type': 0,
     'ft-flow/use-flow-type': 0,
     'flowtype/define-flow-type': 0,
@@ -59,11 +85,16 @@ module.exports = {
       env: {
         jest: true,
       },
+      plugins: ['jest'],
       rules: {
         'babel/quotes': [
           'error',
           'single',
           {avoidEscape: true, allowTemplateLiterals: true},
+        ],
+        'jest/consistent-test-it': [
+          'warn',
+          {fn: 'test', withinDescribe: 'test'},
         ],
         quotes: 'off',
       },

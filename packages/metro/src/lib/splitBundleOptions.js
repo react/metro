@@ -9,14 +9,14 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {BundleOptions, SplitBundleOptions} from '../shared/types.flow';
+import type {BundleOptions, SplitBundleOptions} from '../shared/types';
 
 /**
  * Splits a BundleOptions object into smaller, more manageable parts.
  */
-function splitBundleOptions(options: BundleOptions): SplitBundleOptions {
+export default function splitBundleOptions(
+  options: BundleOptions,
+): SplitBundleOptions {
   return {
     entryFile: options.entryFile,
     resolverOptions: {
@@ -26,7 +26,6 @@ function splitBundleOptions(options: BundleOptions): SplitBundleOptions {
     transformOptions: {
       customTransformOptions: options.customTransformOptions,
       dev: options.dev,
-      hot: options.hot,
       minify: options.minify,
       platform: options.platform,
       type: 'module',
@@ -48,5 +47,3 @@ function splitBundleOptions(options: BundleOptions): SplitBundleOptions {
     onProgress: options.onProgress,
   };
 }
-
-module.exports = splitBundleOptions;

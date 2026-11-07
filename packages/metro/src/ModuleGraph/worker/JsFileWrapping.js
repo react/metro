@@ -4,20 +4,22 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict-local
+ * @format
  */
 
-'use strict';
+import type {
+  File as BabelNodeFile,
+  FunctionExpression,
+  Identifier,
+  Program,
+} from '@babel/types';
 
-import type {FunctionExpression, Identifier, Program} from '@babel/types';
-
+import {RESERVED_STRING} from '../../lib/reservedString';
 import template from '@babel/template';
-import traverse from '@babel/traverse';
 import * as t from '@babel/types';
-import invariant from 'invariant';
 
-const WRAP_NAME = '$$_REQUIRE'; // note: babel will prefix this with _
+const MODULE_ID_PLACEHOLDER = `${RESERVED_STRING}MODULE_ID`;
 
 // Check first the `global` variable as the global object. This way serializers
 // can create a local variable called global to fake it as a global object
@@ -32,7 +34,9 @@ function wrapModule(
   importAllName: string,
   dependencyMapName: string,
   globalPrefix: string,
-  skipRequireRename: boolean,
+  {
+    unstable_useStaticHermesModuleFactory = false,
+  }: Readonly<{unstable_useStaticHermesModuleFactory?: boolean}> = {},
 ): {
   ast: BabelNodeFile,
   requireName: string,
@@ -43,14 +47,25 @@ function wrapModule(
     dependencyMapName,
   );
   const factory = functionFromProgram(fileAst.program, params);
-  const def = t.callExpression(t.identifier(`${globalPrefix}__d`), [factory]);
+
+  const def = t.callExpression(t.identifier(`${globalPrefix}__d`), [
+    unstable_useStaticHermesModuleFactory
+      ? t.callExpression(
+          t.memberExpression(
+            t.identifier('$SHBuiltin'),
+            t.identifier('moduleFactory'),
+          ),
+          [t.identifier(MODULE_ID_PLACEHOLDER), factory],
+        )
+      : factory,
+  ]);
+
   const ast = t.file(t.program([t.expressionStatement(def)]));
 
-  // `require` doesn't need to be scoped when Metro serializes to iife because the local function
-  // `require` will be used instead of the global one.
-  const requireName = skipRequireRename ? 'require' : renameRequires(ast);
-
-  return {ast, requireName};
+  // `require` is never scoped/renamed: the local `require` function parameter is
+  // used instead of the global one when Metro serializes to the IIFE module
+  // factory.
+  return {ast, requireName: 'require'};
 }
 
 function wrapPolyfill(fileAst: BabelNodeFile): BabelNodeFile {
@@ -64,24 +79,75 @@ function jsonToCommonJS(source: string): string {
   return `module.exports = ${source};`;
 }
 
-function wrapJson(source: string, globalPrefix: string): string {
-  // Unused parameters; remember that's wrapping JSON.
+function wrapJson(
+  source: string,
+  globalPrefix: string,
+  unstable_useStaticHermesModuleFactory?: boolean = false,
+): string {
+  // The factory-parameter defaults (`_importDefaultUnused` etc.) are safe
+  // for JSON, whose body only references `module` / `module.exports`.
+  return wrapModuleString(jsonToCommonJS(source), globalPrefix, {
+    unstable_useStaticHermesModuleFactory,
+  });
+}
+
+/**
+ * Wraps an arbitrary JS `body` source string as a `__d(function(...) { <body> })`
+ * module definition, with pure string manipulation.
+ *
+ * This is the lower-level primitive that `wrapJson` builds on - it is also
+ * exposed for callers that need to synthesize `__d`-wrapped modules from
+ * strings cheaply (e.g. codegen of synthetic segment/metadata modules).
+ *
+ * Factory parameter names default to the `_*Unused` names `wrapJson` emits.
+ * Callers whose body references one of these slots by name (typically the
+ * dependency-map parameter) must pass the corresponding option so the emitted
+ * factory signature exposes that name. Callers are responsible for ensuring
+ * that the body does not unintentionally shadow or redeclare parameters.
+ */
+function wrapModuleString(
+  body: string,
+  globalPrefix: string,
+  {
+    importDefaultName = '_importDefaultUnused',
+    importAllName = '_importAllUnused',
+    dependencyMapName = '_dependencyMapUnused',
+    unstable_useStaticHermesModuleFactory = false,
+  }: Readonly<{
+    importDefaultName?: string,
+    importAllName?: string,
+    dependencyMapName?: string,
+    unstable_useStaticHermesModuleFactory?: boolean,
+  }> = {},
+): string {
   const moduleFactoryParameters = buildParameters(
-    '_importDefaultUnused',
-    '_importAllUnused',
-    '_dependencyMapUnused',
+    importDefaultName,
+    importAllName,
+    dependencyMapName,
   );
 
-  return [
-    `${globalPrefix}__d(function(${moduleFactoryParameters.join(', ')}) {`,
-    `  ${jsonToCommonJS(source)}`,
-    '});',
+  const factory = [
+    `function(${moduleFactoryParameters.join(', ')}) {`,
+    `  ${body}`,
+    '}',
   ].join('\n');
+
+  return (
+    `${globalPrefix}__d(` +
+    (unstable_useStaticHermesModuleFactory
+      ? '$SHBuiltin.moduleFactory(' +
+        MODULE_ID_PLACEHOLDER +
+        ', ' +
+        factory +
+        ')'
+      : factory) +
+    ');'
+  );
 }
 
 function functionFromProgram(
   program: Program,
-  parameters: $ReadOnlyArray<string>,
+  parameters: ReadonlyArray<string>,
 ): FunctionExpression {
   return t.functionExpression(
     undefined,
@@ -98,7 +164,7 @@ function buildParameters(
   importDefaultName: string,
   importAllName: string,
   dependencyMapName: string,
-): $ReadOnlyArray<string> {
+): ReadonlyArray<string> {
   return [
     'global',
     'require',
@@ -110,36 +176,4 @@ function buildParameters(
   ];
 }
 
-// Renaming requires should ideally only be done when generating for the target
-// that expects the custom require name in the optimize step.
-// This visitor currently renames all `require` references even if the module
-// contains a custom `require` declaration. This should be fixed by only renaming
-// if the `require` symbol hasn't been redeclared.
-function renameRequires(ast: BabelNodeFile): string {
-  let newRequireName = WRAP_NAME;
-
-  traverse(ast, {
-    Program(path) {
-      const body = path.get('body.0.expression.arguments.0.body');
-
-      invariant(
-        !Array.isArray(body),
-        'metro: Expected `body` to be a single path.',
-      );
-
-      newRequireName = body.scope.generateUid(WRAP_NAME);
-      body.scope.rename('require', newRequireName);
-    },
-  });
-
-  return newRequireName;
-}
-
-module.exports = {
-  WRAP_NAME,
-
-  wrapJson,
-  jsonToCommonJS,
-  wrapModule,
-  wrapPolyfill,
-};
+export {wrapJson, jsonToCommonJS, wrapModule, wrapModuleString, wrapPolyfill};

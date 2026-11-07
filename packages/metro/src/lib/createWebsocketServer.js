@@ -4,30 +4,34 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @flow
+ * @flow strict
  * @format
  * @oncall react_native
  */
 
+import {clearInterval, setInterval} from 'node:timers';
 import ws from 'ws';
+
 type WebsocketServiceInterface<T> = interface {
-  +onClientConnect: (
+  readonly onClientConnect: (
     url: string,
     sendFn: (data: string) => void,
   ) => Promise<?T>,
-  +onClientDisconnect?: (client: T) => mixed,
-  +onClientError?: (client: T, e: ErrorEvent) => mixed,
-  +onClientMessage?: (
+  readonly onClientDisconnect?: (client: T) => unknown,
+  readonly onClientError?: (client: T, e: Error) => unknown,
+  readonly onClientMessage?: (
     client: T,
     message: string | Buffer | ArrayBuffer | Array<Buffer>,
     sendFn: (data: string) => void,
-  ) => mixed,
+  ) => unknown,
 };
 
 type HMROptions<TClient> = {
   websocketServer: WebsocketServiceInterface<TClient>,
   ...
 };
+
+const KEEP_ALIVE_INTERVAL_MS = 20000;
 
 /**
  * Returns a WebSocketServer to be attached to an existing HTTP instance. It forwards
@@ -40,7 +44,7 @@ type HMROptions<TClient> = {
  *   - onClientDisconnect
  */
 
-module.exports = function createWebsocketServer<TClient: Object>({
+export default function createWebsocketServer<TClient>({
   websocketServer,
 }: HMROptions<TClient>): ws.Server {
   const wss = new ws.Server({
@@ -51,10 +55,9 @@ module.exports = function createWebsocketServer<TClient: Object>({
     let connected = true;
     const url = req.url;
 
-    const sendFn = (...args: Array<string>) => {
+    const sendFn = (data: string) => {
       if (connected) {
-        // $FlowFixMe[incompatible-call]
-        ws.send(...args);
+        ws.send(data);
       }
     };
 
@@ -65,12 +68,17 @@ module.exports = function createWebsocketServer<TClient: Object>({
       return;
     }
 
+    const keepAliveInterval = setInterval(
+      () => ws.ping(),
+      KEEP_ALIVE_INTERVAL_MS,
+    ).unref();
+
     ws.on('error', e => {
-      // $FlowFixMe[incompatible-call]
       websocketServer.onClientError && websocketServer.onClientError(client, e);
     });
 
     ws.on('close', () => {
+      clearInterval(keepAliveInterval);
       websocketServer.onClientDisconnect &&
         websocketServer.onClientDisconnect(client);
       connected = false;
@@ -83,4 +91,4 @@ module.exports = function createWebsocketServer<TClient: Object>({
   });
 
   return wss;
-};
+}

@@ -10,7 +10,7 @@
 
 'use strict';
 
-const getTransitiveDependencies = require('../getTransitiveDependencies');
+import getTransitiveDependencies from '../getTransitiveDependencies';
 
 function createModule(name, dependencies, type = 'module') {
   return [
@@ -40,7 +40,7 @@ const graph = {
   ]),
 };
 
-it('should find the transitive dependencies correctly', () => {
+test('should find the transitive dependencies correctly', () => {
   expect(getTransitiveDependencies('/root/entry.js', graph)).toEqual(
     new Set([
       '/root/entry2.js',

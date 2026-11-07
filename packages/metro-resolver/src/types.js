@@ -9,30 +9,67 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {TransformResultDependency} from 'metro/private/DeltaBundler/types';
 
-import type {TransformResultDependency} from 'metro/src/DeltaBundler/types.flow';
+export type Result<out TResolution, out TCandidates> =
+  | {readonly type: 'resolved', readonly resolution: TResolution}
+  | {readonly type: 'failed', readonly candidates: TCandidates};
 
-export type Result<+TResolution, +TCandidates> =
-  | {+type: 'resolved', +resolution: TResolution}
-  | {+type: 'failed', +candidates: TCandidates};
+export type Resolution =
+  FileResolution | VirtualResolution | {readonly type: 'empty'};
 
-export type Resolution = FileResolution | {+type: 'empty'};
-
-export type SourceFileResolution = $ReadOnly<{
+export type SourceFileResolution = Readonly<{
   type: 'sourceFile',
   filePath: string,
 }>;
-export type AssetFileResolution = $ReadOnlyArray<string>;
-export type AssetResolution = $ReadOnly<{
+export type AssetFileResolution = ReadonlyArray<string>;
+export type AssetResolution = Readonly<{
   type: 'assetFiles',
   filePaths: AssetFileResolution,
 }>;
 export type FileResolution = AssetResolution | SourceFileResolution;
 
+/**
+ * A JS module whose contents are provided by the resolver rather than read from
+ * a file on disk.
+ *
+ * A virtual path names exactly one module, as a file path does. A change in
+ * `source` at the same virtual path is a modification of that module, as an
+ * edit to a file is, and the transform cache key is content-addressed, so
+ * nothing about a virtual module can go stale.
+ *
+ * A resolver must produce the same `source` for the same virtual path wherever
+ * it is resolved from. Metro throws when two resolutions in one traversal
+ * disagree.
+ */
+export type VirtualResolution = Readonly<{
+  type: 'virtualModule',
+  /**
+   * The path the module notionally lives at. It should not be the path of a
+   * real file, and need not exist on disk. Relative and package imports inside
+   * the virtual module resolve from this path's directory, and path-based
+   * transform configuration (Babel overrides, `inlineRequires` block lists, and
+   * so on) sees this path.
+   *
+   * Metro keeps virtual modules in their own namespace, so a virtual path can
+   * never be confused with a real module, but two distinct virtual modules
+   * need two distinct virtual paths. A resolver deriving several modules from
+   * one file should name them beside it, for example `App.generated-1.tsx`.
+   *
+   * `null` declares a module with no base, as a `data:` URL has, whose identity
+   * is its source alone and inside which relative imports are errors.
+   * Resolving the dependencies of such a module needs a `ResolutionContext`
+   * with no `originModulePath`, which is a breaking change to the resolver
+   * contract, so Metro does not accept `null` yet.
+   */
+  virtualPath: ?string,
+  /** The complete source of the module, as text or UTF-8 bytes. */
+  source: string | Buffer,
+}>;
+
 export type FileAndDirCandidates = {
-  +dir: FileCandidates,
-  +file: FileCandidates,
+  readonly dir: ?FileCandidates,
+  readonly file: ?FileCandidates,
 };
 
 /**
@@ -42,51 +79,47 @@ export type FileAndDirCandidates = {
  */
 export type FileCandidates =
   // We only tried to resolve a specific asset.
-  | {+type: 'asset', +name: string}
+  | {readonly type: 'asset', readonly name: string}
   // We attempted to resolve a name as being a source file (ex. JavaScript,
   // JSON...), in which case there can be several extensions we tried, for
   // example `/js/foo.ios.js`, `/js/foo.js`, etc. for a single prefix '/js/foo'.
   | {
-      +type: 'sourceFile',
+      readonly type: 'sourceFile',
       filePathPrefix: string,
-      +candidateExts: $ReadOnlyArray<string>,
+      readonly candidateExts: ReadonlyArray<string>,
     };
 
-export type ExportMap = $ReadOnly<{
-  [subpathOrCondition: string]: string | ExportMap | null,
+export type ExportsLikeMap = Readonly<{
+  [subpathOrCondition: string]:
+    string | ExportsLikeMap | ExportValueWithFallback | null,
 }>;
 
-/** "exports" mapping where values may be legacy Node.js <13.7 array format. */
-export type ExportMapWithFallbacks = $ReadOnly<{
-  [subpath: string]: $Values<ExportMap> | ExportValueWithFallback,
-}>;
+/** An ordered list of package target fallbacks. */
+export type ExportValueWithFallback = ReadonlyArray<
+  ExportsLikeMap | string | null | ExportValueWithFallback,
+>;
 
-/** "exports" subpath value when in legacy Node.js <13.7 array format. */
-export type ExportValueWithFallback =
-  | $ReadOnlyArray<ExportMap | string>
-  // JSON can also contain exotic nested array structure, which will not be parsed
-  | $ReadOnlyArray<$ReadOnlyArray<mixed>>;
+export type ExportsField = string | ExportValueWithFallback | ExportsLikeMap;
 
-export type ExportsField =
-  | string
-  | $ReadOnlyArray<string>
-  | ExportValueWithFallback
-  | ExportMap
-  | ExportMapWithFallbacks;
+export type NormalizedExportsLikeMap = Map<
+  string /* subpath */,
+  null | string | ExportsLikeMap | ExportValueWithFallback,
+>;
 
-export type PackageJson = $ReadOnly<{
+export type PackageJson = Readonly<{
   name?: string,
   main?: string,
   exports?: ExportsField,
+  imports?: ExportsLikeMap,
   ...
 }>;
 
-export type PackageInfo = $ReadOnly<{
+export type PackageInfo = Readonly<{
   packageJson: PackageJson,
   rootPath: string,
 }>;
 
-export type PackageForModule = $ReadOnly<{
+export type PackageForModule = Readonly<{
   ...PackageInfo,
   /* A system-separated subpath (with no './' prefix) that reflects the subpath
      of the given candidate relative to the returned rootPath. */
@@ -94,10 +127,13 @@ export type PackageForModule = $ReadOnly<{
 }>;
 
 /**
- * Check existence of a single file.
+ * Performs a lookup against an absolute or project-relative path to determine
+ * whether it exists as a file or directory. Follows any symlinks, and returns
+ * a real absolute path on existence.
  */
-export type DoesFileExist = (filePath: string) => boolean;
-export type GetRealPath = (path: string) => ?string;
+export type FileSystemLookup = (
+  absoluteOrProjectRelativePath: string,
+) => {exists: false} | {exists: true, type: 'f' | 'd', realPath: string};
 
 /**
  * Given a directory path and the base asset name, return a list of all the
@@ -109,15 +145,15 @@ export type ResolveAsset = (
   dirPath: string,
   assetName: string,
   extension: string,
-) => ?$ReadOnlyArray<string>;
+) => ?ReadonlyArray<string>;
 
-export type ResolutionContext = $ReadOnly<{
+export type ResolutionContext = Readonly<{
   allowHaste: boolean,
-  assetExts: $ReadOnlySet<string>,
+  assetExts: ReadonlySet<string>,
   customResolverOptions: CustomResolverOptions,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
-  extraNodeModules: ?{[string]: string, ...},
+
+  extraNodeModules: ?{[packageName: string]: string, ...},
 
   /** Is resolving for a development bundle. */
   dev: boolean,
@@ -132,7 +168,19 @@ export type ResolutionContext = $ReadOnly<{
    * for a given absolute candidate path (which need not exist), or null if
    * there is no package.json closer than the nearest node_modules directory.
    *
-   * @deprecated See https://github.com/facebook/metro/commit/29c77bff31e2475a086bc3f04073f485da8f9ff0
+   * A path through a symlinked directory checks the link's target, then
+   * continues up from the link's parent. A symlinked file is scoped by where
+   * the link is.
+   *
+   * A missing path takes the scope of its deepest existing ancestor, or null
+   * if the first missing segment is `node_modules`.
+   *
+   * For the scope of every file in a directory, the resolver asks about its
+   * `package.json` (which needn't exist).
+   *
+   * The resolver calls this a few times per resolution, so it should be cheap.
+   *
+   * @deprecated See https://github.com/react/metro/commit/29c77bff31e2475a086bc3f04073f485da8f9ff0
    */
   getPackageForModule: (absoluteModulePath: string) => ?PackageForModule,
 
@@ -144,10 +192,28 @@ export type ResolutionContext = $ReadOnly<{
   dependency?: TransformResultDependency,
 
   /**
+   * Whether the dependency to be resolved was declared with an ESM import,
+   * ("import x from 'y'" or "await import('z')"), or a CommonJS "require".
+   * Corresponds to the criteria Node.js uses to assert an "import"
+   * resolution condition, vs "require".
+   *
+   * Always equal to dependency.data.isESMImport where dependency is provided,
+   * but may be used for resolution.
+   */
+  isESMImport: boolean,
+
+  /**
+   * Synchronously returns information about a given absolute path, including
+   * whether it exists, whether it is a file or directory, and its absolute
+   * real path.
+   */
+  fileSystemLookup: FileSystemLookup,
+
+  /**
    * The ordered list of fields to read in `package.json` to resolve a main
    * entry point based on the "browser" field spec.
    */
-  mainFields: $ReadOnlyArray<string>,
+  mainFields: ReadonlyArray<string>,
 
   /**
    * Full path of the module that is requiring or importing the module to be
@@ -156,10 +222,9 @@ export type ResolutionContext = $ReadOnly<{
    */
   originModulePath: string,
 
-  nodeModulesPaths: $ReadOnlyArray<string>,
+  nodeModulesPaths: ReadonlyArray<string>,
   preferNativePlatform: boolean,
   resolveAsset: ResolveAsset,
-  redirectModulePath: (modulePath: string) => string | false,
 
   /**
    * Given a name, this should return the full path to the file that provides
@@ -175,17 +240,43 @@ export type ResolutionContext = $ReadOnly<{
   resolveHastePackage: (name: string) => ?string,
 
   resolveRequest?: ?CustomResolver,
-  sourceExts: $ReadOnlyArray<string>,
-  unstable_conditionNames: $ReadOnlyArray<string>,
-  unstable_conditionsByPlatform: $ReadOnly<{
-    [platform: string]: $ReadOnlyArray<string>,
+
+  /**
+   * Resolvers for specifiers prefixed with a URI scheme, keyed by the
+   * lowercased scheme (the part before the first ':', without the colon). The
+   * scheme parsed from a specifier is lowercased before lookup, so keys must be
+   * lowercase (both `Foo:` and `foo:` match the `'foo'` key). When a
+   * specifier's scheme matches a key, the corresponding resolver is invoked
+   * instead of the default algorithm, receiving the full specifier and a
+   * context whose `resolveRequest` delegates to default resolution.
+   */
+  schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}>,
+
+  sourceExts: ReadonlyArray<string>,
+
+  /**
+   * When resolving a package with an "exports" field, apply "browser" spec
+   * redirections (from object-valued `mainFields`) to the file that
+   * "exports" resolves to, instead of to the requested subpath before
+   * "exports" is considered. This matches webpack 5 and Vite 8.
+   */
+  unstable_applyBrowserSpecAfterExports: boolean,
+  unstable_conditionNames: ReadonlyArray<string>,
+  unstable_conditionsByPlatform: Readonly<{
+    [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
-  unstable_getRealPath?: ?GetRealPath,
+
+  /**
+   * Read a package's "exports" field from the `package.json` at the root of
+   * the package named by a bare specifier, instead of the `package.json`
+   * closest to the requested subpath.
+   */
+  unstable_resolveExportsFromPackageRoot: boolean,
   unstable_logWarning: (message: string) => void,
 }>;
 
-export type CustomResolutionContext = $ReadOnly<{
+export type CustomResolutionContext = Readonly<{
   ...ResolutionContext,
   resolveRequest: CustomResolver,
 }>;
@@ -198,6 +289,6 @@ export type CustomResolver = (
 
 export type CustomResolverOptions = {
   __proto__: null,
-  +[string]: mixed,
+  readonly [key: string]: unknown,
   ...
 };

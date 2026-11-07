@@ -1,18 +1,21 @@
 {
-  "extends": "@tsconfig/node18/tsconfig.json",
+  "extends": "@tsconfig/node20/tsconfig.json",
   "include": ["./packages/*/types/**/*.d.ts"],
   "compilerOptions": {
     "noEmit": true,
-    "baseUrl": ".",
     "skipLibCheck": false,
     "paths": {
       "metro": ["./packages/metro/types"],
-      "metro/src/*": ["./packages/metro/types/*"],
+      "metro/private/*": ["./packages/metro/types/*"],
+      "metro-core/private/*": ["./packages/metro-core/types/*"],
+      "metro-resolver/private/*": ["./packages/metro-resolver/types/*"],
+      "metro-runtime/src/*": ["./packages/metro-runtime/types/*"],
       "metro-*": ["./packages/metro-*/types"],
       // Mappings for main entry points which are not "src/index.js". Required
       // only for this tsconfig - external consumers will read the "main" field
       // and find the adjacent typedef file.
-      "metro-source-map": ["./packages/metro-source-map/types/source-map.d.ts"]
+      "metro-source-map": ["./packages/metro-source-map/types/source-map.d.ts"],
+      "ob1": ["./packages/ob1/types/ob1.d.ts"]
     }
   }
 }

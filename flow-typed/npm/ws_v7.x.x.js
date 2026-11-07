@@ -6,7 +6,6 @@
  *
  * @flow strict
  * @format
- * @oncall react_native
  */
 
 declare type ws$PerMessageDeflateOptions = {
@@ -22,7 +21,7 @@ declare type ws$PerMessageDeflateOptions = {
   maxPayload?: number,
 };
 
-/* $FlowFixMe[incompatible-extend] - Found with Flow v0.143.1 upgrade
+/* $FlowFixMe[incompatible-type] - Found with Flow v0.143.1 upgrade
  * "on" definition failing with string is incompatible with string literal */
 declare class ws$WebSocketServer extends events$EventEmitter {
   /**
@@ -32,7 +31,7 @@ declare class ws$WebSocketServer extends events$EventEmitter {
     options: {
       backlog?: number,
       clientTracking?: boolean,
-      handleProtocols?: () => mixed,
+      handleProtocols?: () => unknown,
       host?: string,
       maxPayload?: number,
       noServer?: boolean,
@@ -40,28 +39,31 @@ declare class ws$WebSocketServer extends events$EventEmitter {
       perMessageDeflate?: boolean | ws$PerMessageDeflateOptions,
       port?: number,
       server?: http$Server | https$Server,
-      verifyClient?: () => mixed,
+      verifyClient?: () => unknown,
     },
-    callback?: () => mixed,
+    callback?: () => unknown,
   ): this;
 
   /**
    * Emitted when the server closes.
    */
-  on(event: 'close', () => mixed): this;
+  on(event: 'close', listener: () => unknown): this;
 
   /**
    * Emitted when the handshake is complete.
    */
   on(
     event: 'connection',
-    (socket: ws$WebSocket, request: http$IncomingMessage<>) => mixed,
+    listener: (
+      socket: ws$WebSocket,
+      request: http$IncomingMessage<>,
+    ) => unknown,
   ): this;
 
   /**
    * Emitted when an error occurs on the underlying server.
    */
-  on(event: 'error', (error: Error) => mixed): this;
+  on(event: 'error', listener: (error: Error) => unknown): this;
 
   /**
    * Emitted before the response headers are written to the socket as part of
@@ -69,13 +71,16 @@ declare class ws$WebSocketServer extends events$EventEmitter {
    */
   on(
     event: 'headers',
-    (headers: Array<string>, request: http$IncomingMessage<>) => mixed,
+    listener: (
+      headers: Array<string>,
+      request: http$IncomingMessage<>,
+    ) => unknown,
   ): this;
 
   /**
    * Emitted when the underlying server has been bound.
    */
-  on(event: 'listening', () => mixed): this;
+  on(event: 'listening', listener: () => unknown): this;
 
   /**
    * Returns the bound address, the address family name, and port of the server
@@ -94,7 +99,7 @@ declare class ws$WebSocketServer extends events$EventEmitter {
   /**
    * Close the server.
    */
-  close(callback?: () => mixed): void;
+  close(callback?: () => unknown): void;
 
   /**
    * Handle a HTTP Upgrade request.
@@ -103,7 +108,7 @@ declare class ws$WebSocketServer extends events$EventEmitter {
     request: http$IncomingMessage<>,
     socket: net$Socket,
     head: Buffer,
-    callback: (?ws$WebSocket) => mixed,
+    callback: (socket: ?ws$WebSocket) => unknown,
   ): void;
 
   /**
@@ -123,26 +128,30 @@ declare type ws$WebSocketOptions = {
   ...requestOptions,
   agent?: boolean | http$Agent<> | http$Agent<tls$TLSSocket>,
   createConnection?:
-    | ((options: net$connectOptions, callback?: () => mixed) => net$Socket)
-    | ((options: tls$connectOptions, callback?: () => mixed) => tls$TLSSocket),
+    | ((options: net$connectOptions, callback?: () => unknown) => net$Socket)
+    | ((
+        options: tls$connectOptions,
+        callback?: () => unknown,
+      ) => tls$TLSSocket),
   rejectUnauthorized?: boolean,
 };
 
-declare type ws$CloseListener = (code: number, reason: string) => mixed;
-declare type ws$ErrorListener = (error: Error) => mixed;
+declare type ws$CloseListener = (code: number, reason: string) => unknown;
+declare type ws$ErrorListener = (error: Error) => unknown;
 declare type ws$MessageListener = (
   data: string | Buffer | ArrayBuffer | Array<Buffer>,
-) => mixed;
-declare type ws$OpenListener = () => mixed;
-declare type ws$PingListener = (Buffer) => mixed;
-declare type ws$PongListener = (Buffer) => mixed;
+  isBinary: boolean,
+) => unknown;
+declare type ws$OpenListener = () => unknown;
+declare type ws$PingListener = (data: Buffer) => unknown;
+declare type ws$PongListener = (data: Buffer) => unknown;
 declare type ws$UnexpectedResponseListener = (
   request: http$ClientRequest<>,
   response: http$IncomingMessage<>,
-) => mixed;
-declare type ws$UpgradeListener = (response: http$IncomingMessage<>) => mixed;
+) => unknown;
+declare type ws$UpgradeListener = (response: http$IncomingMessage<>) => unknown;
 
-/* $FlowFixMe[incompatible-extend] - Found with Flow v0.143.1 upgrade
+/* $FlowFixMe[incompatible-type] - Found with Flow v0.143.1 upgrade
  * "on" definition failing with string is incompatible with string literal */
 declare class ws$WebSocket extends events$EventEmitter {
   static Server: typeof ws$WebSocketServer;
@@ -170,44 +179,47 @@ declare class ws$WebSocket extends events$EventEmitter {
   /*
    * Emitted when the connection is closed.
    */
-  on('close', ws$CloseListener): this;
+  on(event: 'close', listener: ws$CloseListener): this;
 
   /*
    * Emitted when an error occurs.
    */
-  on('error', ws$ErrorListener): this;
+  on(event: 'error', listener: ws$ErrorListener): this;
 
   /*
    * Emitted when a message is received from the server.
    */
-  on('message', ws$MessageListener): this;
+  on(event: 'message', listener: ws$MessageListener): this;
 
   /*
    * Emitted when the connection is established.
    */
-  on('open', ws$OpenListener): this;
+  on(event: 'open', listener: ws$OpenListener): this;
 
   /*
    * Emitted when a ping is received from the server.
    */
-  on('ping', ws$PingListener): this;
+  on(event: 'ping', listener: ws$PingListener): this;
 
   /*
    * Emitted when a pong is received from the server.
    */
-  on('pong', ws$PongListener): this;
+  on(event: 'pong', listener: ws$PongListener): this;
 
   /*
    * Emitted when the server response is not the expected one,
    * for example a 401 response.
    */
-  on('unexpected-response', ws$UnexpectedResponseListener): this;
+  on(
+    event: 'unexpected-response',
+    listener: ws$UnexpectedResponseListener,
+  ): this;
 
   /*
    * Emitted when response headers are received from the server as part of the
    * handshake.
    */
-  on('upgrade', ws$UpgradeListener): this;
+  on(event: 'upgrade', listener: ws$UpgradeListener): this;
 
   /**
    * Register an event listener emulating the `EventTarget` interface.
@@ -244,7 +256,7 @@ declare class ws$WebSocket extends events$EventEmitter {
   ): this;
   addEventListener(
     type: 'unexpected-response',
-    ws$UnexpectedResponseListener,
+    listener: ws$UnexpectedResponseListener,
     options?: {once?: boolean},
   ): this;
   addEventListener(
@@ -278,16 +290,16 @@ declare class ws$WebSocket extends events$EventEmitter {
   /**
    * Send a ping.
    */
-  ping(data?: any, mask?: boolean, callback?: () => mixed): void;
-  ping(data: any, callback: () => mixed): void;
-  ping(callback: () => mixed): void;
+  ping(data?: any, mask?: boolean, callback?: () => unknown): void;
+  ping(data: any, callback: () => unknown): void;
+  ping(callback: () => unknown): void;
 
   /**
    * Send a pong.
    */
-  pong(data?: any, mask?: boolean, callback?: () => mixed): void;
-  pong(data: any, callback: () => mixed): void;
-  pong(callback: () => mixed): void;
+  pong(data?: any, mask?: boolean, callback?: () => unknown): void;
+  pong(data: any, callback: () => unknown): void;
+  pong(callback: () => unknown): void;
 
   /**
    * The subprotocol selected by the server.
@@ -310,7 +322,7 @@ declare class ws$WebSocket extends events$EventEmitter {
   removeEventListener(type: 'pong', listener: ws$PongListener): this;
   removeEventListener(
     type: 'unexpected-response',
-    ws$UnexpectedResponseListener,
+    listener: ws$UnexpectedResponseListener,
   ): this;
   removeEventListener(type: 'upgrade', listener: ws$UpgradeListener): this;
 
@@ -325,9 +337,9 @@ declare class ws$WebSocket extends events$EventEmitter {
       mask?: boolean,
       fin?: boolean,
     },
-    callback?: () => mixed,
+    callback?: () => unknown,
   ): void;
-  send(data: any, callback: () => mixed): void;
+  send(data: any, callback: () => unknown): void;
 
   /**
    * Forcibly close the connection.
@@ -336,6 +348,7 @@ declare class ws$WebSocket extends events$EventEmitter {
 }
 
 declare module 'ws' {
+  declare export type Server = ws$WebSocketServer;
   declare module.exports: typeof ws$WebSocket;
 }
 

@@ -9,12 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
-function greatestLowerBound<T, U>(
-  elements: $ReadOnlyArray<T>,
+export function greatestLowerBound<T, U>(
+  elements: ReadonlyArray<T>,
   target: U,
-  comparator: (U, T) => number,
+  comparator: (target: U, element: T) => number,
 ): ?number {
   let first = 0;
   let it = 0;
@@ -33,5 +31,3 @@ function greatestLowerBound<T, U>(
   }
   return first ? first - 1 : null;
 }
-
-module.exports = {greatestLowerBound};

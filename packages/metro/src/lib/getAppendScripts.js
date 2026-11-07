@@ -9,38 +9,36 @@
  * @oncall react_native
  */
 
-'use strict';
 import type {Module} from '../DeltaBundler';
-import type {Dependency} from '../DeltaBundler/types.flow';
+import type {Dependency} from '../DeltaBundler/types';
 
+import getInlineSourceMappingURL from '../DeltaBundler/Serializers/helpers/getInlineSourceMappingURL';
+import {sourceMapString} from '../DeltaBundler/Serializers/sourceMapString';
 import CountingSet from './CountingSet';
+import countLines from './countLines';
+import nullthrows from 'nullthrows';
 
-const getInlineSourceMappingURL = require('../DeltaBundler/Serializers/helpers/getInlineSourceMappingURL');
-const {
-  sourceMapString,
-} = require('../DeltaBundler/Serializers/sourceMapString');
-const countLines = require('./countLines');
-const nullthrows = require('nullthrows');
-
-type Options<T: number | string> = $ReadOnly<{
+type Options<T extends number | string> = Readonly<{
   asyncRequireModulePath: string,
-  createModuleId: string => T,
-  getRunModuleStatement: T => string,
+  createModuleId: (absolutePath: string) => T,
+  getRunModuleStatement: (moduleId: T, globalPrefix: string) => string,
+  globalPrefix: string,
   inlineSourceMap: ?boolean,
-  runBeforeMainModule: $ReadOnlyArray<string>,
+  processModuleFilter: (module: Module<>) => boolean,
+  runBeforeMainModule: ReadonlyArray<string>,
   runModule: boolean,
-  shouldAddToIgnoreList: (Module<>) => boolean,
+  shouldAddToIgnoreList: (module: Module<>) => boolean,
   sourceMapUrl: ?string,
   sourceUrl: ?string,
-  getSourceUrl: ?(Module<>) => string,
+  getSourceUrl: ?(module: Module<>) => string,
   ...
 }>;
 
-function getAppendScripts<T: number | string>(
+export default function getAppendScripts<T extends number | string>(
   entryPoint: string,
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: Options<T>,
-): $ReadOnlyArray<Module<>> {
+): ReadonlyArray<Module<>> {
   const output: Array<Module<>> = [];
 
   if (options.runModule) {
@@ -50,6 +48,7 @@ function getAppendScripts<T: number | string>(
       if (modules.some((module: Module<>) => module.path === path)) {
         const code = options.getRunModuleStatement(
           options.createModuleId(path),
+          options.globalPrefix,
         );
         output.push({
           path: `require-${path}`,
@@ -75,7 +74,7 @@ function getAppendScripts<T: number | string>(
     const sourceMappingURL = options.inlineSourceMap
       ? getInlineSourceMappingURL(
           sourceMapString(modules, {
-            processModuleFilter: (): boolean => true,
+            processModuleFilter: options.processModuleFilter,
             excludeSource: false,
             shouldAddToIgnoreList: options.shouldAddToIgnoreList,
             getSourceUrl: options.getSourceUrl,
@@ -124,5 +123,3 @@ function getAppendScripts<T: number | string>(
 
   return output;
 }
-
-module.exports = getAppendScripts;

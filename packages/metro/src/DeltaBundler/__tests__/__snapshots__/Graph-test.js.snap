@@ -10,6 +10,7 @@ TestGraph {
           "data": Object {
             "data": Object {
               "asyncType": null,
+              "isESMImport": false,
               "key": "LB7P4TKrvfdUdViBXGaVopqz7Os=",
               "locs": Array [],
             },
@@ -39,6 +40,7 @@ TestGraph {
           "data": Object {
             "data": Object {
               "asyncType": null,
+              "isESMImport": false,
               "key": "W+de6an7x9bzpev84O0W/hS4K8U=",
               "locs": Array [],
             },
@@ -50,6 +52,7 @@ TestGraph {
           "data": Object {
             "data": Object {
               "asyncType": null,
+              "isESMImport": false,
               "key": "x6e9Oz1JO0QPfIBBjUad2qqGFjI=",
               "locs": Array [],
             },
@@ -118,7 +121,6 @@ TestGraph {
   },
   "transformOptions": Object {
     "dev": false,
-    "hot": false,
     "minify": false,
     "platform": null,
     "type": "module",
@@ -137,6 +139,7 @@ TestGraph {
           "data": Object {
             "data": Object {
               "asyncType": null,
+              "isESMImport": false,
               "key": "LB7P4TKrvfdUdViBXGaVopqz7Os=",
               "locs": Array [],
             },
@@ -165,7 +168,6 @@ TestGraph {
   },
   "transformOptions": Object {
     "dev": false,
-    "hot": false,
     "minify": false,
     "platform": null,
     "type": "module",

@@ -31,11 +31,11 @@
 'use strict';
 
 const coverage = require('../coverage/coverage-final.json');
-const createReporter = require('istanbul-api').createReporter;
 const istanbulCoverage = require('istanbul-lib-coverage');
+const istanbulReport = require('istanbul-lib-report');
+const istanbulReports = require('istanbul-reports');
 
 const map = istanbulCoverage.createCoverageMap();
-const reporter = createReporter();
 
 const mapFileCoverage = fileCoverage => {
   fileCoverage.path = fileCoverage.path.replace(
@@ -49,5 +49,7 @@ Object.keys(coverage).forEach(filename =>
   map.addFileCoverage(mapFileCoverage(coverage[filename])),
 );
 
-reporter.addAll(['json', 'lcov', 'text']);
-reporter.write(map);
+const context = istanbulReport.createContext({coverageMap: map});
+for (const reportName of ['json', 'lcov', 'text']) {
+  istanbulReports.create(reportName).execute(context);
+}

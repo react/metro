@@ -9,12 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const canonicalize = require('../canonicalize');
+import canonicalize from '../canonicalize';
 
 describe('canonicalize', () => {
-  it('has the same output for two objects with the same key/value pairs', () => {
+  test('has the same output for two objects with the same key/value pairs', () => {
     expect(
       canonicalize('', {
         a: true,
@@ -28,7 +26,7 @@ describe('canonicalize', () => {
     );
   });
 
-  it("doesn't have the same output for two objects with different key/value pairs", () => {
+  test("doesn't have the same output for two objects with different key/value pairs", () => {
     expect(
       canonicalize('', {
         a: true,
@@ -42,14 +40,14 @@ describe('canonicalize', () => {
     );
   });
 
-  it("doesn't affect arrays and primitive values", () => {
+  test("doesn't affect arrays and primitive values", () => {
     expect(canonicalize('', ['a', true, 0])).toEqual(['a', true, 0]);
     expect(canonicalize('', 'a')).toEqual('a');
     expect(canonicalize('', true)).toEqual(true);
     expect(canonicalize('', 0)).toEqual(0);
   });
 
-  it('works with JSON.stringify', () => {
+  test('works with JSON.stringify', () => {
     expect(
       JSON.stringify(
         {
@@ -87,7 +85,7 @@ describe('canonicalize', () => {
     );
   });
 
-  it('works with JSON.stringify for deeply nested objects', () => {
+  test('works with JSON.stringify for deeply nested objects', () => {
     expect(
       JSON.stringify(
         {
@@ -149,7 +147,7 @@ describe('canonicalize', () => {
     );
   });
 
-  it('works with JSON.stringify for objects with no prototype', () => {
+  test('works with JSON.stringify for objects with no prototype', () => {
     const obj1 = Object.create(null);
     // $FlowFixMe[prop-missing]
     obj1.b = true;

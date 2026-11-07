@@ -4,19 +4,19 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict
+ * @format
  */
 
-import {execFile} from 'child_process';
-import {promisify} from 'util';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 
 export default async function checkWatchmanCapabilities(
-  requiredCapabilities: $ReadOnlyArray<string>,
+  requiredCapabilities: ReadonlyArray<string>,
 ): Promise<{version: string}> {
   const execFilePromise: (
     cmd: string,
-    args: $ReadOnlyArray<string>,
+    args: ReadonlyArray<string>,
   ) => Promise<{stdout: string}> = promisify(execFile);
 
   let rawResponse;
@@ -37,7 +37,7 @@ export default async function checkWatchmanCapabilities(
 
   let parsedResponse;
   try {
-    parsedResponse = (JSON.parse(rawResponse): mixed);
+    parsedResponse = JSON.parse(rawResponse) as unknown;
   } catch {
     throw new Error(
       'Failed to parse response from `watchman list-capabilities`',

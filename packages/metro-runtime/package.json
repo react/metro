@@ -1,11 +1,22 @@
 {
   "name": "metro-runtime",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "🚇 Module required for evaluating Metro bundles.",
-  "main": "src",
+  "exports": {
+    "./package.json": "./package.json",
+    "./modules/asyncRequire": "./src/modules/asyncRequire.js",
+    "./modules/empty-module": "./src/modules/empty-module.js",
+    "./modules/HMRClient": "./src/modules/HMRClient.js",
+    "./modules/null-module": "./src/modules/null-module.js",
+    "./polyfills/require": "./src/polyfills/require.js",
+    "./private/*": "./src/*.js",
+    "./src/*.js": "./src/*.js",
+    "./src/*": "./src/*.js"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:facebook/metro.git"
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/metro-runtime"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
@@ -13,16 +24,18 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@babel/runtime": "^7.0.0",
+    "@babel/runtime": "^7.25.0",
     "flow-enums-runtime": "^0.0.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "react": "^18.3.1",
-    "react-refresh": "^0.14.0",
-    "react-test-renderer": "^18.3.1"
+    "@babel/core": "^7.25.2",
+    "@testing-library/dom": "^10.0.0",
+    "@testing-library/react": "^16.1.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-refresh": "^0.14.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

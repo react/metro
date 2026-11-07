@@ -45,6 +45,22 @@ Object {
 }
 `;
 
+exports[`Metro development server serves bundles via HTTP should serve lazy bundles 3`] = `
+Object {
+  "default": Object {
+    "foo": "export-7: FOO",
+  },
+  "foo": "export-7: FOO",
+}
+`;
+
+exports[`Metro development server serves bundles via HTTP should serve lazy bundles 4`] = `
+Object {
+  "default": "export-8: DEFAULT",
+  "foo": "export-8: FOO",
+}
+`;
+
 exports[`Metro development server serves bundles via HTTP should serve non-lazy bundles by default 1`] = `
 Object {
   "default": Object {
@@ -58,6 +74,22 @@ exports[`Metro development server serves bundles via HTTP should serve non-lazy 
 Object {
   "default": "export-6: DEFAULT",
   "foo": "export-6: FOO",
+}
+`;
+
+exports[`Metro development server serves bundles via HTTP should serve non-lazy bundles by default 3`] = `
+Object {
+  "default": Object {
+    "foo": "export-7: FOO",
+  },
+  "foo": "export-7: FOO",
+}
+`;
+
+exports[`Metro development server serves bundles via HTTP should serve non-lazy bundles by default 4`] = `
+Object {
+  "default": "export-8: DEFAULT",
+  "foo": "export-8: FOO",
 }
 `;
 

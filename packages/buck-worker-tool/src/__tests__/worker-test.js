@@ -11,7 +11,7 @@
 'use strict';
 
 jest
-  .mock('console', () => {
+  .mock('node:console', () => {
     // Automocking is no longer working with jest after https://github.com/nodejs/node/pull/35399
     // because the typeof console is now 'console' and no longer Object.
     const mock = jest.fn();
@@ -21,16 +21,17 @@ jest
 
     return {Console};
   })
-  .mock('fs', () => new (require('metro-memory-fs'))())
+  .mock('node:fs', () => new (require('metro-memory-fs'))())
   .useRealTimers();
 
 const JSONStream = require('../third-party/JSONStream');
-const buckWorker = require('../worker-tool');
-// mocked
-const {Console} = require('console');
-const fs = require('fs');
-const path = require('path');
+const {buckWorker} = require('../worker-tool');
+const path = require('node:path');
 const through = require('through');
+
+// mocked
+const {Console} = jest.requireMock('node:console');
+const fs = jest.requireMock('node:fs');
 
 const {any, anything} = expect;
 
@@ -51,13 +52,13 @@ describe('Buck worker:', () => {
   });
 
   describe('handshake:', () => {
-    it('responds to a correct handshake', () => {
+    test('responds to a correct handshake', () => {
       inStream.write(handshake());
 
       return end().then(data => expect(data).toEqual([handshake()]));
     });
 
-    it('responds to a handshake with a `protocol_version` different from "0"', () => {
+    test('responds to a handshake with a `protocol_version` different from "0"', () => {
       inStream.write({
         id: 0,
         type: 'handshake',
@@ -76,7 +77,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors for a second handshake', () => {
+    test('errors for a second handshake', () => {
       inStream.write(handshake());
       inStream.write(handshake(1));
 
@@ -90,7 +91,7 @@ describe('Buck worker:', () => {
     });
   });
 
-  it('errors for unknown message types', () => {
+  test('errors for unknown message types', () => {
     inStream.write(handshake());
     inStream.write({id: 1, type: 'arbitrary'});
     return end().then(([, response]) =>
@@ -110,13 +111,14 @@ describe('Buck worker:', () => {
       writeFiles(files, '/');
     }
 
+    // The mocked fs is a posix memory fs on every platform.
     function writeFiles(files, dirPath) {
       for (const key in files) {
         const entry = files[key];
         if (entry == null || typeof entry === 'string') {
-          fs.writeFileSync(path.join(dirPath, key), entry || '');
+          fs.writeFileSync(path.posix.join(dirPath, key), entry || '');
         } else {
-          const subDirPath = path.join(dirPath, key);
+          const subDirPath = path.posix.join(dirPath, key);
           fs.mkdirSync(subDirPath, {recursive: true});
           writeFiles(entry, subDirPath);
         }
@@ -165,7 +167,7 @@ describe('Buck worker:', () => {
       return Promise.all(streamClosedPromises);
     });
 
-    it('errors if `args_path` cannot be opened', () => {
+    test('errors if `args_path` cannot be opened', () => {
       mockFiles({some: {'args-path': undefined}});
       inStream.write(command({id: 5, args_path: '/some/args-path'}));
       return end(2).then(([, response]) => {
@@ -177,7 +179,7 @@ describe('Buck worker:', () => {
       });
     });
 
-    it('errors if `stdout_path` cannot be opened', () => {
+    test('errors if `stdout_path` cannot be opened', () => {
       const path = '/does/not/exist';
       inStream.write(command({id: 5, stdout_path: path}));
       return end(2).then(([, response]) => {
@@ -189,7 +191,7 @@ describe('Buck worker:', () => {
       });
     });
 
-    it('errors if `stderr_path` cannot be opened', () => {
+    test('errors if `stderr_path` cannot be opened', () => {
       const path = '/does/not/exist';
       inStream.write(command({id: 5, stderr_path: path}));
       return end(2).then(([, response]) => {
@@ -201,7 +203,7 @@ describe('Buck worker:', () => {
       });
     });
 
-    it('errors for unspecified commands', () => {
+    test('errors for unspecified commands', () => {
       mockFiles({
         arbitrary: {
           file: '--flag-without-preceding-command',
@@ -223,7 +225,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors for empty commands', () => {
+    test('errors for empty commands', () => {
       mockFiles({
         arbitrary: {
           file: '',
@@ -245,7 +247,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors for unknown commands', () => {
+    test('errors for unknown commands', () => {
       mockFiles({
         arbitrary: {
           file: 'arbitrary',
@@ -267,7 +269,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors if no `args_path` is specified', () => {
+    test('errors if no `args_path` is specified', () => {
       inStream.write({
         id: 1,
         type: 'command',
@@ -283,7 +285,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors if no `stdout_path` is specified', () => {
+    test('errors if no `stdout_path` is specified', () => {
       inStream.write({
         id: 1,
         type: 'command',
@@ -299,7 +301,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('errors if no `stderr_path` is specified', () => {
+    test('errors if no `stderr_path` is specified', () => {
       inStream.write({
         id: 1,
         type: 'command',
@@ -315,7 +317,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('passes arguments to an existing command', async () => {
+    test('passes arguments to an existing command', async () => {
       commands.transform = jest.fn();
       const args = 'foo  bar baz\tmore';
       mockFiles({
@@ -338,7 +340,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('passes JSON/structured arguments to an existing command', async () => {
+    test('passes JSON/structured arguments to an existing command', async () => {
       commands.transform = jest.fn();
       const args = {foo: 'bar', baz: 'glo'};
       mockFiles({
@@ -357,7 +359,7 @@ describe('Buck worker:', () => {
       expect(commands.transform).toBeCalledWith([], args, anything());
     });
 
-    it('passes a console object to the command', () => {
+    test('passes a console object to the command', () => {
       mockFiles({
         args: 'transform',
         stdio: {},
@@ -385,7 +387,7 @@ describe('Buck worker:', () => {
       });
     });
 
-    it('responds with success if the command finishes succesfully', () => {
+    test('responds with success if the command finishes successfully', () => {
       commands.transform = (args, _) => {};
       mockFiles({path: {to: {args: 'transform'}}});
       inStream.write(
@@ -404,7 +406,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('responds with error if the command does not exist', async () => {
+    test('responds with error if the command does not exist', async () => {
       commands.transform = jest.fn(() => Promise.resolve());
       mockFiles({path: {to: {args: 'inexistent_command'}}});
       inStream.write(
@@ -425,7 +427,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('responds with error if the command errors asynchronously', () => {
+    test('responds with error if the command errors asynchronously', () => {
       commands.transform = jest.fn((args, _, callback) =>
         Promise.reject(new Error('arbitrary')),
       );
@@ -446,7 +448,7 @@ describe('Buck worker:', () => {
       );
     });
 
-    it('responds with error if the command throws synchronously', () => {
+    test('responds with error if the command throws synchronously', () => {
       commands.transform = (args, _) => {
         throw new Error('arbitrary');
       };

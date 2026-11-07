@@ -8,123 +8,102 @@
  * @format
  */
 
+/* eslint-disable import/no-commonjs */
+
 /*::
-import type {WorkerMessage, WorkerMetadata} from './flow-types';
+import type {
+  FileMapPluginWorker,
+  MetadataWorker,
+  WorkerMessage,
+  WorkerMetadata,
+  WorkerSetupArgs,
+  V8Serializable,
+} from './flow-types';
 */
 
 'use strict';
 
-const H = require('./constants');
-const dependencyExtractor = require('./lib/dependencyExtractor');
-const excludedExtensions = require('./workerExclusionList');
-const {createHash} = require('crypto');
-const {promises: fsPromises} = require('fs');
-const fs = require('graceful-fs');
-const path = require('path');
-
-const PACKAGE_JSON = path.sep + 'package.json';
-
-let hasteImpl /*: ?{getHasteName: string => ?string} */ = null;
-let hasteImplModulePath /*: ?string */ = null;
-
-function getHasteImpl(
-  requestedModulePath /*: string */,
-) /*: {getHasteName: string => ?string} */ {
-  if (hasteImpl) {
-    if (requestedModulePath !== hasteImplModulePath) {
-      throw new Error('metro-file-map: hasteImplModulePath changed');
-    }
-    return hasteImpl;
-  }
-  hasteImplModulePath = requestedModulePath;
-  // $FlowFixMe[unsupported-syntax] - dynamic require
-  hasteImpl = require(hasteImplModulePath);
-  return hasteImpl;
-}
+const {createHash} = require('node:crypto');
+const fs = require('node:fs');
 
 function sha1hex(content /*: string | Buffer */) /*: string */ {
   return createHash('sha1').update(content).digest('hex');
 }
 
-async function worker(
-  data /*: WorkerMessage */,
-) /*: Promise<WorkerMetadata> */ {
-  let content /*: ?Buffer */;
-  let dependencies /*: WorkerMetadata['dependencies'] */;
-  let id /*: WorkerMetadata['id'] */;
-  let module /*: WorkerMetadata['module'] */;
-  let sha1 /*: WorkerMetadata['sha1'] */;
-  let symlinkTarget /*: WorkerMetadata['symlinkTarget'] */;
+class Worker {
+  // prettier-ignore
+  #plugins /*: ReadonlyArray<MetadataWorker> */;
 
-  const {
-    computeDependencies,
-    computeSha1,
-    enableHastePackages,
-    readLink,
-    rootDir,
-    filePath,
-  } = data;
+  constructor({plugins = []} /*: WorkerSetupArgs */) {
+    this.#plugins = plugins.map(({modulePath, setupArgs}) => {
+      // $FlowFixMe[unsupported-syntax] - dynamic require
+      const mod = require(modulePath);
+      const PluginWorker =
+        mod.__esModule === true && 'default' in mod ? mod.default : mod;
+      return new PluginWorker(setupArgs);
+    });
+  }
 
-  const getContent = () /*: Buffer */ => {
-    if (content == null) {
-      content = fs.readFileSync(filePath);
-    }
+  processFile(data /*: WorkerMessage */) /*: WorkerMetadata */ {
+    let content;
+    let sha1;
 
-    return content;
-  };
+    const {computeSha1, filePath, pluginsToRun} = data;
 
-  if (enableHastePackages && filePath.endsWith(PACKAGE_JSON)) {
-    // Process a package.json that is returned as a PACKAGE type with its name.
-    try {
-      const fileData = JSON.parse(getContent().toString());
-
-      if (fileData.name) {
-        const relativeFilePath = path.relative(rootDir, filePath);
-        id = fileData.name;
-        module = [relativeFilePath, H.PACKAGE];
+    const getContent = () /*: Buffer */ => {
+      if (content == null) {
+        content = fs.readFileSync(filePath);
       }
-    } catch (err) {
-      throw new Error(`Cannot parse ${filePath} as JSON: ${err.message}`);
-    }
-  } else if (
-    (data.hasteImplModulePath != null || computeDependencies) &&
-    !excludedExtensions.has(filePath.substr(filePath.lastIndexOf('.')))
-  ) {
-    // Process a random file that is returned as a MODULE.
-    if (data.hasteImplModulePath != null) {
-      id = getHasteImpl(data.hasteImplModulePath).getHasteName(filePath);
-      if (id != null) {
-        const relativeFilePath = path.relative(rootDir, filePath);
-        module = [relativeFilePath, H.MODULE];
-      }
+
+      return content;
+    };
+
+    const workerUtils = {getContent};
+    const pluginData = pluginsToRun.map(pluginIdx =>
+      this.#plugins[pluginIdx].processFile(data, workerUtils),
+    );
+
+    // If a SHA-1 is requested on update, compute it.
+    if (computeSha1) {
+      sha1 = sha1hex(getContent());
     }
 
-    if (computeDependencies) {
-      dependencies = Array.from(
-        data.dependencyExtractor != null
-          ? // $FlowFixMe[unsupported-syntax] - dynamic require
-            require(data.dependencyExtractor).extract(
-              getContent().toString(),
-              filePath,
-              dependencyExtractor.extract,
-            )
-          : dependencyExtractor.extract(getContent().toString()),
-      );
-    }
+    return content && data.maybeReturnContent
+      ? {content, pluginData, sha1}
+      : {pluginData, sha1};
   }
+}
 
-  // If a SHA-1 is requested on update, compute it.
-  if (computeSha1) {
-    sha1 = sha1hex(getContent());
+let singletonWorker;
+
+function setup(args /*: WorkerSetupArgs */) /*: void */ {
+  if (singletonWorker) {
+    throw new Error('metro-file-map: setup() should only be called once');
   }
+  singletonWorker = new Worker(args);
+}
 
-  if (readLink) {
-    symlinkTarget = await fsPromises.readlink(filePath);
+function processFile(data /*: WorkerMessage */) /*: WorkerMetadata */ {
+  if (!singletonWorker) {
+    throw new Error(
+      'metro-file-map: setup() must be called before processFile()',
+    );
   }
-
-  return {dependencies, id, module, sha1, symlinkTarget};
+  return singletonWorker.processFile(data);
 }
 
 module.exports = {
-  worker,
+  /**
+   * Called automatically by jest-worker before the first call to `worker` when
+   * this module is used as worker thread or child process.
+   */
+  setup,
+  /**
+   * Called by jest-worker with each workload
+   */
+  processFile,
+  /**
+   * Exposed for use outside a jest-worker context, ie when processing in-band.
+   */
+  Worker,
 };

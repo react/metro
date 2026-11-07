@@ -25,7 +25,7 @@ describe('Util', () => {
     width: 240,
   };
 
-  it('generates a local asset for a given descriptor', () => {
+  test('generates a local asset for a given descriptor', () => {
     const {code} = babelGenerate(
       generateAssetCodeFileAst(
         'react-native-module/asset-resolver',

@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const fs = require('fs');
+import fs from 'node:fs';
 
 let currentInspectorSession;
 let isProfiling = false;
@@ -20,13 +18,14 @@ function getInspectorSession() {
   if (currentInspectorSession) {
     return currentInspectorSession;
   }
-  const inspector = require('inspector');
+  // eslint-disable-next-line import/no-commonjs
+  const inspector = require('node:inspector');
   currentInspectorSession = new inspector.Session();
   currentInspectorSession.connect();
   return currentInspectorSession;
 }
 
-async function startProfiling() {
+export async function startProfiling() {
   if (isProfiling) {
     return;
   }
@@ -37,7 +36,7 @@ async function startProfiling() {
   isProfiling = true;
 }
 
-async function stopProfilingAndWrite(workerName: ?string) {
+export async function stopProfilingAndWrite(workerName: ?string) {
   if (!isProfiling) {
     return;
   }
@@ -56,8 +55,3 @@ async function stopProfilingAndWrite(workerName: ?string) {
   );
   isProfiling = false;
 }
-
-module.exports = {
-  stopProfilingAndWrite,
-  startProfiling,
-};

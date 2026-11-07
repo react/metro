@@ -9,30 +9,28 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {ModuleGroups, ModuleTransportLike} from '../../types.flow';
+import type {ModuleGroups, ModuleTransportLike} from '../../types';
 import type {IndexMap} from 'metro-source-map';
 
-const {
+import {
   combineSourceMaps,
   combineSourceMapsAddingOffsets,
   joinModules,
-} = require('./util');
+} from './util';
 
 type Params = {
   fixWrapperOffset: boolean,
-  lazyModules: $ReadOnlyArray<ModuleTransportLike>,
+  lazyModules: ReadonlyArray<ModuleTransportLike>,
   moduleGroups: ?ModuleGroups,
-  startupModules: $ReadOnlyArray<ModuleTransportLike>,
+  startupModules: ReadonlyArray<ModuleTransportLike>,
 };
 
-module.exports = (({
+export default ({
   fixWrapperOffset,
   lazyModules,
   moduleGroups,
   startupModules,
-}: Params) => {
+}: Params): IndexMap => {
   const options = fixWrapperOffset ? {fixWrapperOffset: true} : undefined;
   const startupModule: ModuleTransportLike = {
     code: joinModules(startupModules),
@@ -61,4 +59,4 @@ module.exports = (({
   }
 
   return map;
-}: Params => IndexMap);
+};

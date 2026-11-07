@@ -9,18 +9,16 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {Module} from '../types.flow';
+import type {Module} from '../types';
 import type {SourceMapGeneratorOptions} from './sourceMapGenerator';
 
-const {
+import {
   sourceMapGenerator,
   sourceMapGeneratorNonBlocking,
-} = require('./sourceMapGenerator');
+} from './sourceMapGenerator';
 
 function sourceMapString(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): string {
   return sourceMapGenerator(modules, options).toString(undefined, {
@@ -29,7 +27,7 @@ function sourceMapString(
 }
 
 async function sourceMapStringNonBlocking(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): Promise<string> {
   const generator = await sourceMapGeneratorNonBlocking(modules, options);
@@ -38,7 +36,4 @@ async function sourceMapStringNonBlocking(
   });
 }
 
-module.exports = {
-  sourceMapString,
-  sourceMapStringNonBlocking,
-};
+export {sourceMapString, sourceMapStringNonBlocking};

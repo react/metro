@@ -9,17 +9,24 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {DeltaResult, Options} from './types.flow';
-import type {RootPerfLogger} from 'metro-config';
-import type {ChangeEventMetadata} from 'metro-file-map';
+import type {DeltaResult, Options} from './types';
+import type {ChangeEvent} from 'metro-file-map';
 
 import {Graph} from './Graph';
-import path from 'path';
+import debugModule from 'debug';
+import crypto from 'node:crypto';
+import EventEmitter from 'node:events';
+import path from 'node:path';
 
-const debug = require('debug')('Metro:DeltaCalculator');
-const {EventEmitter} = require('events');
+const debug = debugModule('Metro:DeltaCalculator');
+
+/**
+ * Assigns a unique, stable `changeId` to each `ChangeEvent` from the file
+ * watcher. Since all `DeltaCalculator` instances share the same
+ * `ChangeEvent` object reference per file system change, the `WeakMap`
+ * ensures each gets the same `changeId`.
+ */
+const changeEventIds: WeakMap<ChangeEvent, string> = new WeakMap();
 
 /**
  * This class is in charge of calculating the delta of changed modules that
@@ -27,7 +34,7 @@ const {EventEmitter} = require('events');
  * traverse the files that have been changed between calls and avoid having to
  * traverse the whole dependency tree for trivial small changes.
  */
-class DeltaCalculator<T> extends EventEmitter {
+export default class DeltaCalculator<T> extends EventEmitter {
   _changeEventSource: EventEmitter;
   _options: Options<T>;
 
@@ -35,12 +42,12 @@ class DeltaCalculator<T> extends EventEmitter {
   _deletedFiles: Set<string> = new Set();
   _modifiedFiles: Set<string> = new Set();
   _addedFiles: Set<string> = new Set();
-  _requiresReset = false;
+  _requiresReset: boolean = false;
 
   _graph: Graph<T>;
 
   constructor(
-    entryPoints: $ReadOnlySet<string>,
+    entryPoints: ReadonlySet<string>,
     changeEventSource: EventEmitter,
     options: Options<T>,
   ) {
@@ -140,9 +147,17 @@ class DeltaCalculator<T> extends EventEmitter {
       // processed (since we haven't actually created any delta). If we do not
       // do so, asking for a delta after an error will produce an empty Delta,
       // which is not correct.
-      modifiedFiles.forEach((file: string) => this._modifiedFiles.add(file));
-      deletedFiles.forEach((file: string) => this._deletedFiles.add(file));
-      addedFiles.forEach((file: string) => this._addedFiles.add(file));
+      // Changes that arrived while this delta was being built happened after
+      // the ones it took, so they are applied on top of them.
+      const laterAddedFiles = this._addedFiles;
+      const laterModifiedFiles = this._modifiedFiles;
+      const laterDeletedFiles = this._deletedFiles;
+      this._addedFiles = addedFiles;
+      this._modifiedFiles = modifiedFiles;
+      this._deletedFiles = deletedFiles;
+      laterAddedFiles.forEach((file: string) => this.#markAdded(file));
+      laterModifiedFiles.forEach((file: string) => this.#markModified(file));
+      laterDeletedFiles.forEach((file: string) => this.#markDeleted(file));
 
       throw error;
     } finally {
@@ -155,8 +170,8 @@ class DeltaCalculator<T> extends EventEmitter {
 
       return {
         added: this._graph.dependencies,
-        modified: new Map(),
         deleted: new Set(),
+        modified: new Map(),
         reset: true,
       };
     }
@@ -173,87 +188,88 @@ class DeltaCalculator<T> extends EventEmitter {
     return this._graph;
   }
 
-  /* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
-   * LTI update could not be added via codemod */
-  _handleMultipleFileChanges = changeEvent => {
-    changeEvent.eventsQueue.forEach(eventInfo => {
-      this._handleFileChange(eventInfo, changeEvent.logger);
-    });
-  };
+  #shouldReset(
+    canonicalPath: string,
+    metadata: {readonly isSymlink: boolean, ...},
+  ): boolean {
+    if (metadata.isSymlink) {
+      return true;
+    }
 
-  /**
-   * Handles a single file change. To avoid doing any work before it's needed,
-   * the listener only stores the modified file, which will then be used later
-   * when the delta needs to be calculated.
-   */
-  _handleFileChange = (
-    {
-      type,
-      filePath,
-      metadata,
-    }: {
-      type: string,
-      filePath: string,
-      metadata: ChangeEventMetadata,
-      ...
-    },
-    logger: ?RootPerfLogger,
-  ): mixed => {
-    debug('Handling %s: %s (type: %s)', type, filePath, metadata.type);
     if (
-      metadata.type === 'l' ||
-      (this._options.unstable_enablePackageExports &&
-        filePath.endsWith(path.sep + 'package.json'))
+      this._options.unstable_enablePackageExports &&
+      (canonicalPath === 'package.json' ||
+        canonicalPath.endsWith(path.sep + 'package.json'))
     ) {
-      this._requiresReset = true;
-      this.emit('change', {logger});
-    }
-    let state: void | 'deleted' | 'modified' | 'added';
-    if (this._deletedFiles.has(filePath)) {
-      state = 'deleted';
-    } else if (this._modifiedFiles.has(filePath)) {
-      state = 'modified';
-    } else if (this._addedFiles.has(filePath)) {
-      state = 'added';
+      return true;
     }
 
-    let nextState: 'deleted' | 'modified' | 'added';
-    if (type === 'delete') {
-      nextState = 'deleted';
-    } else if (type === 'add') {
-      // A deleted+added file is modified
-      nextState = state === 'deleted' ? 'modified' : 'added';
+    return false;
+  }
+
+  // Deleted+added = modified, otherwise added.
+  #markAdded(absolutePath: string): void {
+    if (this._deletedFiles.has(absolutePath)) {
+      this._deletedFiles.delete(absolutePath);
+      this._modifiedFiles.add(absolutePath);
     } else {
-      // type === 'change'
-      // An added+modified file is added
-      nextState = state === 'added' ? 'added' : 'modified';
+      this._addedFiles.add(absolutePath);
+      this._modifiedFiles.delete(absolutePath);
+    }
+  }
+
+  // Added+modified stays added, otherwise modified.
+  #markModified(absolutePath: string): void {
+    if (!this._addedFiles.has(absolutePath)) {
+      this._modifiedFiles.add(absolutePath);
+    }
+    this._deletedFiles.delete(absolutePath);
+  }
+
+  // Added+deleted = no change, otherwise deleted.
+  #markDeleted(absolutePath: string): void {
+    if (this._addedFiles.has(absolutePath)) {
+      this._addedFiles.delete(absolutePath);
+    } else {
+      this._deletedFiles.add(absolutePath);
+      this._modifiedFiles.delete(absolutePath);
+    }
+  }
+
+  _handleMultipleFileChanges = (changeEvent: ChangeEvent) => {
+    const {changes, logger, rootDir} = changeEvent;
+
+    for (const [canonicalPath, metadata] of changes.addedFiles) {
+      debug('Handling add: %s', canonicalPath);
+      if (this.#shouldReset(canonicalPath, metadata)) {
+        this._requiresReset = true;
+      }
+      this.#markAdded(path.join(rootDir, canonicalPath));
     }
 
-    switch (nextState) {
-      case 'deleted':
-        this._deletedFiles.add(filePath);
-        this._modifiedFiles.delete(filePath);
-        this._addedFiles.delete(filePath);
-        break;
-      case 'added':
-        this._addedFiles.add(filePath);
-        this._deletedFiles.delete(filePath);
-        this._modifiedFiles.delete(filePath);
-        break;
-      case 'modified':
-        this._modifiedFiles.add(filePath);
-        this._deletedFiles.delete(filePath);
-        this._addedFiles.delete(filePath);
-        break;
-      default:
-        (nextState: empty);
+    for (const [canonicalPath, metadata] of changes.modifiedFiles) {
+      debug('Handling change: %s', canonicalPath);
+      if (this.#shouldReset(canonicalPath, metadata)) {
+        this._requiresReset = true;
+      }
+      this.#markModified(path.join(rootDir, canonicalPath));
     }
 
-    // Notify users that there is a change in some of the bundle files. This
-    // way the client can choose to refetch the bundle.
-    this.emit('change', {
-      logger,
-    });
+    for (const [canonicalPath, metadata] of changes.removedFiles) {
+      debug('Handling delete: %s', canonicalPath);
+      if (this.#shouldReset(canonicalPath, metadata)) {
+        this._requiresReset = true;
+      }
+      this.#markDeleted(path.resolve(rootDir, canonicalPath));
+    }
+
+    let changeId = changeEventIds.get(changeEvent);
+    if (changeId == null) {
+      changeId = crypto.randomUUID();
+      changeEventIds.set(changeEvent, changeId);
+    }
+
+    this.emit('change', {logger, changeId});
   };
 
   async _getChangedDependencies(
@@ -268,8 +284,8 @@ class DeltaCalculator<T> extends EventEmitter {
 
       return {
         added,
-        modified: new Map(),
         deleted: new Set(),
+        modified: new Map(),
         reset: true,
       };
     }
@@ -285,6 +301,16 @@ class DeltaCalculator<T> extends EventEmitter {
         if (!deletedFiles.has(modifiedModulePath)) {
           modifiedFiles.add(modifiedModulePath);
         }
+      }
+    });
+
+    // An added file the graph already holds was deleted and recreated during
+    // a build, so its module is stale. It is modified, not added, since it
+    // never left the graph.
+    addedFiles.forEach((filePath: string) => {
+      if (this._graph.dependencies.has(filePath)) {
+        addedFiles.delete(filePath);
+        modifiedFiles.add(filePath);
       }
     });
 
@@ -309,8 +335,8 @@ class DeltaCalculator<T> extends EventEmitter {
     if (modifiedDependencies.length === 0) {
       return {
         added: new Map(),
-        modified: new Map(),
         deleted: new Set(),
+        modified: new Map(),
         reset: false,
       };
     }
@@ -329,11 +355,9 @@ class DeltaCalculator<T> extends EventEmitter {
 
     return {
       added,
-      modified,
       deleted,
+      modified,
       reset: false,
     };
   }
 }
-
-module.exports = DeltaCalculator;

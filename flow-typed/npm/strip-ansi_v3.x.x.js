@@ -1,5 +1,8 @@
 /**
- * (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  *
  * @flow strict-local
  * @format
@@ -8,8 +11,4 @@
 
 declare module 'strip-ansi' {
   declare module.exports: (string: string) => string;
-}
-
-declare module 'strip-ansi' {
-  declare export default function stripAnsi(string: string): string;
 }

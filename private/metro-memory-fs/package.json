@@ -1,0 +1,23 @@
+{
+  "name": "metro-memory-fs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "🚇 A memory-based implementation of `fs` useful for testing.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:react/metro.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "flow-enums-runtime": "^0.0.6"
+  },
+  "engines": {
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
+  }
+}

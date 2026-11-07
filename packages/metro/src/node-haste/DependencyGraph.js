@@ -12,34 +12,41 @@
 import type {
   BundlerResolution,
   TransformResultDependency,
-} from '../DeltaBundler/types.flow';
-import type {ResolverInputOptions} from '../shared/types.flow';
-import type Package from './Package';
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
-import type MetroFileMap, {
+} from '../DeltaBundler/types';
+import type {DynamicRoot} from '../lib/dynamicRoots';
+import type {ResolverInputOptions} from '../shared/types';
+import type {ModuleResolver} from './DependencyGraph/ModuleResolution';
+import type {ConfigT} from 'metro-config';
+import type {
   ChangeEvent,
+  DependencyPlugin,
+  FileMapRoot,
   FileSystem,
   HasteMap,
   HealthCheckResult,
   WatcherStatus,
+  default as MetroFileMap,
 } from 'metro-file-map';
 
-import {DuplicateHasteCandidatesError} from 'metro-file-map';
-
-const createFileMap = require('./DependencyGraph/createFileMap');
-const {ModuleResolver} = require('./DependencyGraph/ModuleResolution');
-const ModuleCache = require('./ModuleCache');
-const {EventEmitter} = require('events');
-const fs = require('fs');
-const {
+import {getDynamicRoots} from '../lib/dynamicRoots';
+import {getMetroBabelRuntimePackageJsonPath} from '../lib/metroBabelRuntime';
+import {getMetroRuntimePackageJsonPath} from '../lib/metroRuntime';
+import createFileMap from './DependencyGraph/createFileMap';
+import createModuleResolver from './DependencyGraph/createModuleResolver';
+import {PackageCache} from './PackageCache';
+import {
   AmbiguousModuleResolutionError,
-  Logger: {createActionStartEntry, createActionEndEntry, log},
+  Logger,
   PackageResolutionError,
-} = require('metro-core');
-const canonicalize = require('metro-core/src/canonicalize');
-const {InvalidPackageError} = require('metro-resolver');
-const nullthrows = require('nullthrows');
-const path = require('path');
+} from 'metro-core';
+import canonicalize from 'metro-core/private/canonicalize';
+import {DuplicateHasteCandidatesError} from 'metro-file-map';
+import {InvalidPackageError} from 'metro-resolver';
+import EventEmitter from 'node:events';
+import path from 'node:path';
+import nullthrows from 'nullthrows';
+
+const {createActionStartEntry, createActionEndEntry, log} = Logger;
 
 const NULL_PLATFORM = Symbol();
 
@@ -55,13 +62,14 @@ function getOrCreateMap<T>(
   return subMap;
 }
 
-class DependencyGraph extends EventEmitter {
+export default class DependencyGraph extends EventEmitter {
   _config: ConfigT;
   _haste: MetroFileMap;
   _fileSystem: FileSystem;
-  _moduleCache: ModuleCache;
+  #packageCache: PackageCache;
   _hasteMap: HasteMap;
-  _moduleResolver: ModuleResolver<Package>;
+  #dependencyPlugin: ?DependencyPlugin;
+  _moduleResolver: ModuleResolver;
   _resolutionCache: Map<
     // Custom resolver options
     string | symbol,
@@ -79,13 +87,15 @@ class DependencyGraph extends EventEmitter {
       >,
     >,
   >;
-  _readyPromise: Promise<void>;
+  _initializedPromise: Promise<void>;
+  #dynamicRoots: ReadonlyArray<DynamicRoot> = [];
+  #dynamicRootsSource: ?ReadonlyArray<FileMapRoot> = null;
 
   constructor(
     config: ConfigT,
     options?: {
-      +hasReducedPerformance?: boolean,
-      +watch?: boolean,
+      readonly hasReducedPerformance?: boolean,
+      readonly watch?: boolean,
     },
   ) {
     super();
@@ -101,7 +111,10 @@ class DependencyGraph extends EventEmitter {
       type: 'dep_graph_loading',
       hasReducedPerformance: !!hasReducedPerformance,
     });
-    const fileMap = createFileMap(config, {watch});
+    const {fileMap, hasteMap, dependencyPlugin} = createFileMap(config, {
+      throwOnModuleCollision: false,
+      watch,
+    });
 
     // We can have a lot of graphs listening to Haste for changes.
     // Bump this up to silence the max listeners EventEmitter warning.
@@ -110,21 +123,62 @@ class DependencyGraph extends EventEmitter {
     this._haste = fileMap;
     this._haste.on('status', status => this._onWatcherStatus(status));
 
-    this._readyPromise = fileMap.build().then(({fileSystem, hasteMap}) => {
+    this._initializedPromise = fileMap.build().then(async ({fileSystem}) => {
+      await this._addMetroRuntimeRoots();
       log(createActionEndEntry(initializingMetroLogEntry));
       config.reporter.update({type: 'dep_graph_loaded'});
 
       this._fileSystem = fileSystem;
       this._hasteMap = hasteMap;
+      this.#dependencyPlugin = dependencyPlugin;
 
       this._haste.on('change', changeEvent => this._onHasteChange(changeEvent));
       this._haste.on('healthCheck', result =>
         this._onWatcherHealthCheck(result),
       );
       this._resolutionCache = new Map();
-      this._moduleCache = this._createModuleCache();
+      this.#packageCache = new PackageCache({
+        getClosestPackage: absoluteModulePath =>
+          this._getClosestPackage(absoluteModulePath),
+      });
       this._createModuleResolver();
     });
+  }
+
+  /**
+   * `metro:runtime` and `metro:babel-runtime` resolve into the metro-runtime
+   * that Metro depends on and its `@babel/runtime`, wherever they are
+   * installed, so their files must be in the file map even when no configured
+   * root contains them. metro-runtime is added first, so that an
+   * `@babel/runtime` nested within it needs no root of its own.
+   */
+  async _addMetroRuntimeRoots(): Promise<void> {
+    for (const getPackageJsonPath of [
+      getMetroRuntimePackageJsonPath,
+      getMetroBabelRuntimePackageJsonPath,
+    ]) {
+      let packageJsonPath;
+      try {
+        packageJsonPath = getPackageJsonPath();
+      } catch {
+        // Reported by the `metro:` scheme resolver, if it is ever used.
+        continue;
+      }
+      await this._haste.addRoot(path.dirname(packageJsonPath));
+    }
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. The same array is returned until the roots change.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    const fileMapRoots = this._haste.getRoots();
+    if (fileMapRoots !== this.#dynamicRootsSource) {
+      this.#dynamicRoots = getDynamicRoots(fileMapRoots);
+      this.#dynamicRootsSource = fileMapRoots;
+    }
+    return this.#dynamicRoots;
   }
 
   _onWatcherHealthCheck(result: HealthCheckResult) {
@@ -138,167 +192,86 @@ class DependencyGraph extends EventEmitter {
   // Waits for the dependency graph to become ready after initialisation.
   // Don't read anything from the graph until this resolves.
   async ready(): Promise<void> {
-    await this._readyPromise;
+    await this._initializedPromise;
   }
 
-  // Creates the dependency graph and waits for it to become ready.
-  // @deprecated Use the constructor + ready() directly.
-  static async load(
-    config: ConfigT,
-    options?: {+hasReducedPerformance?: boolean, +watch?: boolean},
-  ): Promise<DependencyGraph> {
-    const self = new DependencyGraph(config, options);
-    await self.ready();
-    return self;
-  }
-
-  _getClosestPackage(
-    absoluteModulePath: string,
-  ): ?{packageJsonPath: string, packageRelativePath: string} {
-    const parsedPath = path.parse(absoluteModulePath);
-    const root = parsedPath.root;
-    let dir = path.join(parsedPath.dir, parsedPath.base);
-
-    do {
-      // If we've hit a node_modules directory, the closest package was not
-      // found (`filePath` was likely nonexistent).
-      if (path.basename(dir) === 'node_modules') {
-        return null;
-      }
-      const candidate = path.join(dir, 'package.json');
-      if (this._fileSystem.exists(candidate)) {
-        return {
-          packageJsonPath: candidate,
-          // Note that by construction, dir is a prefix of absoluteModulePath,
-          // so this relative path has no indirections.
-          packageRelativePath: path.relative(dir, absoluteModulePath),
-        };
-      }
-      dir = path.dirname(dir);
-    } while (dir !== '.' && dir !== root);
-    return null;
-  }
-
-  _onHasteChange({eventsQueue}: ChangeEvent) {
+  _onHasteChange({changes, rootDir}: ChangeEvent) {
     this._resolutionCache = new Map();
-    eventsQueue.forEach(({filePath}) => this._moduleCache.invalidate(filePath));
+    [
+      ...changes.addedFiles,
+      ...changes.modifiedFiles,
+      ...changes.removedFiles,
+    ].forEach(([canonicalPath]) =>
+      this.#packageCache.invalidate(path.join(rootDir, canonicalPath)),
+    );
     this._createModuleResolver();
     this.emit('change');
   }
 
   _createModuleResolver() {
-    const getRealPathIfFile = (path: string) => {
-      const result = this._fileSystem.lookup(path);
-      return result.exists && result.type === 'f' ? result.realPath : null;
-    };
-
-    this._moduleResolver = new ModuleResolver({
-      assetExts: new Set(this._config.resolver.assetExts),
-      dirExists: (filePath: string) => {
-        try {
-          return fs.lstatSync(filePath).isDirectory();
-        } catch (e) {}
-        return false;
-      },
-      disableHierarchicalLookup:
-        this._config.resolver.disableHierarchicalLookup,
-      doesFileExist: this._doesFileExist,
-      emptyModulePath: this._config.resolver.emptyModulePath,
-      extraNodeModules: this._config.resolver.extraNodeModules,
-      getHasteModulePath: (name, platform) =>
-        this._hasteMap.getModule(name, platform, true),
-      getHastePackagePath: (name, platform) =>
-        this._hasteMap.getPackage(name, platform, true),
-      mainFields: this._config.resolver.resolverMainFields,
-      moduleCache: this._moduleCache,
-      nodeModulesPaths: this._config.resolver.nodeModulesPaths,
-      preferNativePlatform: true,
-      projectRoot: this._config.projectRoot,
-      reporter: this._config.reporter,
-      resolveAsset: (dirPath: string, assetName: string, extension: string) => {
-        const basePath = dirPath + path.sep + assetName;
-        let assets = [
-          basePath + extension,
-          ...this._config.resolver.assetResolutions.map(
-            resolution => basePath + '@' + resolution + 'x' + extension,
-          ),
-        ];
-
-        if (this._config.resolver.unstable_enableSymlinks) {
-          assets = assets.map(getRealPathIfFile).filter(Boolean);
-        } else {
-          assets = assets.filter(candidate =>
-            this._fileSystem.exists(candidate),
-          );
-        }
-
-        return assets.length ? assets : null;
-      },
-      resolveRequest: this._config.resolver.resolveRequest,
-      sourceExts: this._config.resolver.sourceExts,
-      unstable_conditionNames: this._config.resolver.unstable_conditionNames,
-      unstable_conditionsByPlatform:
-        this._config.resolver.unstable_conditionsByPlatform,
-      unstable_enablePackageExports:
-        this._config.resolver.unstable_enablePackageExports,
-      unstable_getRealPath: this._config.resolver.unstable_enableSymlinks
-        ? getRealPathIfFile
-        : null,
+    this._moduleResolver = createModuleResolver({
+      config: this._config,
+      fileSystem: this._fileSystem,
+      hasteMap: this._hasteMap,
+      packageCache: this.#packageCache,
     });
   }
 
-  _createModuleCache(): ModuleCache {
-    return new ModuleCache({
-      getClosestPackage: absoluteModulePath =>
-        this._getClosestPackage(absoluteModulePath),
-    });
+  _getClosestPackage(
+    absoluteModulePath: string,
+  ): ?{packageJsonPath: string, packageRelativePath: string} {
+    const result = this._fileSystem.hierarchicalLookup(
+      absoluteModulePath,
+      'package.json',
+      {
+        breakOnSegment: 'node_modules',
+        subpathType: 'f',
+      },
+    );
+    return result
+      ? {
+          packageJsonPath: result.absolutePath,
+          packageRelativePath: result.containerRelativePath,
+        }
+      : null;
   }
 
   getAllFiles(): Array<string> {
     return nullthrows(this._fileSystem).getAllFiles();
   }
 
-  getSha1(filename: string): string {
-    // Prior to unstable_enableSymlinks:
-    // Calling realpath allows us to get a hash for a given path even when
-    // it's a symlink to a file, which prevents Metro from crashing in such a
-    // case. However, it doesn't allow Metro to track changes to the target file
-    // of the symlink. We should fix this by implementing a symlink map into
-    // Metro (or maybe by implementing those "extra transformation sources" we've
-    // been talking about for stuff like CSS or WASM).
-    //
-    // This is unnecessary with a symlink-aware fileSystem implementation.
-    const resolvedPath = this._config.resolver.unstable_enableSymlinks
-      ? filename
-      : fs.realpathSync(filename);
-
-    const sha1 = this._fileSystem.getSha1(resolvedPath);
-
-    if (!sha1) {
-      throw new ReferenceError(
-        `SHA-1 for file ${filename} (${resolvedPath}) is not computed.
-         Potential causes:
-           1) You have symlinks in your project - watchman does not follow symlinks.
-           2) Check \`blockList\` in your metro.config.js and make sure it isn't excluding the file path.`,
-      );
+  /**
+   * Used when watcher.unstable_lazySha1 is true
+   */
+  async getOrComputeSha1(
+    mixedPath: string,
+  ): Promise<{content?: Buffer, sha1: string}> {
+    const result = await this._fileSystem.getOrComputeSha1(mixedPath);
+    if (!result || !result.sha1) {
+      throw new Error(`Failed to get the SHA-1 for: ${mixedPath}.
+      Potential causes:
+        1) The file is not watched. Ensure it is under the configured \`projectRoot\` or \`watchFolders\`.
+        2) Check \`blockList\` in your metro.config.js and make sure it isn't excluding the file path.
+        3) The file may have been deleted since it was resolved - try refreshing your app.
+        4) Otherwise, this is a bug in Metro or the configured resolver - please report it.`);
     }
-
-    return sha1;
+    return result;
   }
 
   getWatcher(): EventEmitter {
     return this._haste;
   }
 
-  end() {
-    // $FlowFixMe[unused-promise]
-    this._haste.end();
+  async end() {
+    // A failed build is surfaced by ready(), and shouldn't prevent teardown.
+    await this._initializedPromise.catch(() => {});
+    await this._haste.end();
   }
 
   /** Given a search context, return a list of file paths matching the query. */
   matchFilesWithContext(
     from: string,
-    context: $ReadOnly<{
+    context: Readonly<{
       /* Should search for files recursively. */
       recursive: boolean,
       /* Filter relative paths against a pattern. */
@@ -315,32 +288,35 @@ class DependencyGraph extends EventEmitter {
   }
 
   resolveDependency(
-    from: string,
+    originModulePath: string,
     dependency: TransformResultDependency,
     platform: string | null,
     resolverOptions: ResolverInputOptions,
 
     // TODO: Fold assumeFlatNodeModules into resolverOptions and add to graphId
-    {assumeFlatNodeModules}: {assumeFlatNodeModules: boolean} = {
+    extraOptions: {assumeFlatNodeModules: boolean} = {
       assumeFlatNodeModules: false,
     },
   ): BundlerResolution {
     const to = dependency.name;
     const isSensitiveToOriginFolder =
       // Resolution is always relative to the origin folder unless we assume a flat node_modules
-      !assumeFlatNodeModules ||
+      !extraOptions.assumeFlatNodeModules ||
       // Path requests are resolved relative to the origin folder
       to.includes('/') ||
       to === '.' ||
       to === '..' ||
       // Preserve standard assumptions under node_modules
-      from.includes(path.sep + 'node_modules' + path.sep);
+      originModulePath.includes(path.sep + 'node_modules' + path.sep);
 
     // Compound key for the resolver cache
     const resolverOptionsKey =
       JSON.stringify(resolverOptions ?? {}, canonicalize) ?? '';
-    const originKey = isSensitiveToOriginFolder ? path.dirname(from) : '';
-    const targetKey = to;
+    const originKey = isSensitiveToOriginFolder
+      ? path.dirname(originModulePath)
+      : '';
+    const targetKey =
+      to + (dependency.data.isESMImport === true ? '\0esm' : '\0cjs');
     const platformKey = platform ?? NULL_PLATFORM;
 
     // Traverse the resolver cache, which is a tree of maps
@@ -349,14 +325,19 @@ class DependencyGraph extends EventEmitter {
       mapByResolverOptions,
       resolverOptionsKey,
     );
-    const mapByTarget = getOrCreateMap(mapByOrigin, originKey);
-    const mapByPlatform = getOrCreateMap(mapByTarget, targetKey);
-    let resolution: ?BundlerResolution = mapByPlatform.get(platformKey);
+    // A virtual module may be anchored at the importing module itself, so its
+    // resolution is memoised per origin file rather than per directory: the
+    // same specifier in two sibling files may be two modules. Only virtual
+    // resolutions are stored per file, so the per-directory memo is checked
+    // first and a hit there needs no second lookup.
+    let resolution: ?BundlerResolution =
+      mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey) ??
+      mapByOrigin.get(originModulePath)?.get(targetKey)?.get(platformKey);
 
     if (!resolution) {
       try {
         resolution = this._moduleResolver.resolveDependency(
-          this._moduleCache.getModule(from),
+          originModulePath,
           dependency,
           true,
           platform,
@@ -364,12 +345,12 @@ class DependencyGraph extends EventEmitter {
         );
       } catch (error) {
         if (error instanceof DuplicateHasteCandidatesError) {
-          throw new AmbiguousModuleResolutionError(from, error);
+          throw new AmbiguousModuleResolutionError(originModulePath, error);
         }
         if (error instanceof InvalidPackageError) {
           throw new PackageResolutionError({
             packageError: error,
-            originModulePath: from,
+            originModulePath,
             targetModuleName: to,
           });
         }
@@ -377,16 +358,21 @@ class DependencyGraph extends EventEmitter {
       }
     }
 
-    mapByPlatform.set(platformKey, resolution);
+    const memoOriginKey =
+      resolution.type === 'virtualModule' ? originModulePath : originKey;
+    getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
+      platformKey,
+      resolution,
+    );
     return resolution;
   }
 
-  _doesFileExist = (filePath: string): boolean => {
+  doesFileExist = (filePath: string): boolean => {
     return this._fileSystem.exists(filePath);
   };
 
   getHasteName(filePath: string): string {
-    const hasteName = this._fileSystem.getModuleName(filePath);
+    const hasteName = this._hasteMap.getModuleNameByPath(filePath);
 
     if (hasteName) {
       return hasteName;
@@ -396,8 +382,13 @@ class DependencyGraph extends EventEmitter {
   }
 
   getDependencies(filePath: string): Array<string> {
-    return nullthrows(this._fileSystem.getDependencies(filePath));
+    if (!this.#dependencyPlugin) {
+      throw new Error(
+        'getDependencies called but extractDependencies is false',
+      );
+    }
+    return Array.from(
+      nullthrows(this.#dependencyPlugin.getDependencies(filePath)),
+    );
   }
 }
-
-module.exports = DependencyGraph;

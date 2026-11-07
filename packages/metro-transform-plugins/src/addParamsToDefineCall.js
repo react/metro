@@ -9,24 +9,22 @@
  * @oncall react_native
  */
 
-'use strict';
-
 /**
  * Simple way of adding additional parameters to the end of the define calls.
  *
- * This is used to add extra information to the generaic compiled modules (like
+ * This is used to add extra information to the generic compiled modules (like
  * the dependencyMap object or the list of inverse dependencies).
  */
-function addParamsToDefineCall(
+export default function addParamsToDefineCall(
   code: string,
-  ...paramsToAdd: Array<mixed>
+  ...paramsToAdd: Array<unknown>
 ): string {
   const index = code.lastIndexOf(')');
   const params = paramsToAdd.map(param =>
+    // Distinguish between `undefined` and `null` - `undefined` is not JSON.
+    // eslint-disable-next-line lint/strictly-null
     param !== undefined ? JSON.stringify(param) : 'undefined',
   );
 
   return code.slice(0, index) + ',' + params.join(',') + code.slice(index);
 }
-
-module.exports = addParamsToDefineCall;

@@ -5,7 +5,7 @@ exports[`linux assets checks asset extensions case insensitively 1`] = `
 
 None of these files exist:
   * asset.PNG(.native.js|.js|.native.json|.json)
-  * asset.PNG/index(.native.js|.js|.native.json|.json)
+  * asset.PNG
   1 | import foo from 'bar';
 > 2 | import a from './asset.PNG';
     |                ^
@@ -17,7 +17,7 @@ exports[`linux assets resolves asset files with resolution suffixes (matching ex
 
 None of these files exist:
   * c@2x.png
-  * c@2x.png/index(.native.js|.js|.native.json|.json)
+  * c@2x.png
   1 | import foo from 'bar';
 > 2 | import a from './c@2x.png';
     |                ^
@@ -29,7 +29,7 @@ exports[`linux assets resolves asset files with resolution suffixes (matching si
 
 None of these files exist:
   * a@1.5x.png
-  * a@1.5x.png/index(.native.js|.js|.native.json|.json)
+  * a@1.5x.png
   1 | import foo from 'bar';
 > 2 | import a from './a@1.5x.png';
     |                ^
@@ -41,7 +41,7 @@ exports[`linux assets resolves custom asset extensions when overriding assetExts
 
 None of these files exist:
   * asset2.png(.native.js|.js|.native.json|.json)
-  * asset2.png/index(.native.js|.js|.native.json|.json)
+  * asset2.png
   1 | import foo from 'bar';
 > 2 | import a from './asset2.png';
     |                ^
@@ -116,7 +116,7 @@ exports[`linux packages in node_modules/ browser field in package.json resolves 
 
 None of these files exist:
   * node_modules/aPackage/foo.js(.native.js|.js|.native.json|.json)
-  * node_modules/aPackage/foo.js/index(.native.js|.js|.native.json|.json)
+  * node_modules/aPackage/foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -146,7 +146,7 @@ exports[`linux packages in node_modules/ react-native field in package.json reso
 
 None of these files exist:
   * node_modules/aPackage/foo.js(.native.js|.js|.native.json|.json)
-  * node_modules/aPackage/foo.js/index(.native.js|.js|.native.json|.json)
+  * node_modules/aPackage/foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -176,7 +176,7 @@ exports[`linux platforms resolves platform-specific files 1`] = `
 
 None of these files exist:
   * foo.js(.ios.js|.native.js|.js|.ios.json|.native.json|.json)
-  * foo.js/index(.ios.js|.native.js|.js|.ios.json|.native.json|.json)
+  * foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -188,7 +188,7 @@ exports[`linux relative paths fails when trying to implicitly require an extensi
 
 None of these files exist:
   * a.another(.native.js|.js|.native.json|.json)
-  * a.another/index(.native.js|.js|.native.json|.json)
+  * a.another
   1 | import foo from 'bar';
 > 2 | import root from './a.another';
     |                   ^
@@ -200,7 +200,7 @@ exports[`linux relative paths with additional files included in the file map (wa
 
 None of these files exist:
   * a(.native.js|.js|.native.json|.json)
-  * a/index(.native.js|.js|.native.json|.json)
+  * a
   1 | import foo from 'bar';
 > 2 | import a from './a';
     |                ^
@@ -212,7 +212,7 @@ exports[`win32 assets checks asset extensions case insensitively 1`] = `
 
 None of these files exist:
   * asset.PNG(.native.js|.js|.native.json|.json)
-  * asset.PNG\\\\index(.native.js|.js|.native.json|.json)
+  * asset.PNG
   1 | import foo from 'bar';
 > 2 | import a from './asset.PNG';
     |                ^
@@ -224,7 +224,7 @@ exports[`win32 assets resolves asset files with resolution suffixes (matching ex
 
 None of these files exist:
   * c@2x.png
-  * c@2x.png\\\\index(.native.js|.js|.native.json|.json)
+  * c@2x.png
   1 | import foo from 'bar';
 > 2 | import a from './c@2x.png';
     |                ^
@@ -236,7 +236,7 @@ exports[`win32 assets resolves asset files with resolution suffixes (matching si
 
 None of these files exist:
   * a@1.5x.png
-  * a@1.5x.png\\\\index(.native.js|.js|.native.json|.json)
+  * a@1.5x.png
   1 | import foo from 'bar';
 > 2 | import a from './a@1.5x.png';
     |                ^
@@ -248,7 +248,7 @@ exports[`win32 assets resolves custom asset extensions when overriding assetExts
 
 None of these files exist:
   * asset2.png(.native.js|.js|.native.json|.json)
-  * asset2.png\\\\index(.native.js|.js|.native.json|.json)
+  * asset2.png
   1 | import foo from 'bar';
 > 2 | import a from './asset2.png';
     |                ^
@@ -323,7 +323,7 @@ exports[`win32 packages in node_modules/ browser field in package.json resolves 
 
 None of these files exist:
   * node_modules\\\\aPackage\\\\foo.js(.native.js|.js|.native.json|.json)
-  * node_modules\\\\aPackage\\\\foo.js\\\\index(.native.js|.js|.native.json|.json)
+  * node_modules\\\\aPackage\\\\foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -353,7 +353,7 @@ exports[`win32 packages in node_modules/ react-native field in package.json reso
 
 None of these files exist:
   * node_modules\\\\aPackage\\\\foo.js(.native.js|.js|.native.json|.json)
-  * node_modules\\\\aPackage\\\\foo.js\\\\index(.native.js|.js|.native.json|.json)
+  * node_modules\\\\aPackage\\\\foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -383,7 +383,7 @@ exports[`win32 platforms resolves platform-specific files 1`] = `
 
 None of these files exist:
   * foo.js(.ios.js|.native.js|.js|.ios.json|.native.json|.json)
-  * foo.js\\\\index(.ios.js|.native.js|.js|.ios.json|.native.json|.json)
+  * foo.js
   1 | import foo from 'bar';
 > 2 | import f from './foo.js';
     |                ^
@@ -395,7 +395,7 @@ exports[`win32 relative paths fails when trying to implicitly require an extensi
 
 None of these files exist:
   * a.another(.native.js|.js|.native.json|.json)
-  * a.another\\\\index(.native.js|.js|.native.json|.json)
+  * a.another
   1 | import foo from 'bar';
 > 2 | import root from './a.another';
     |                   ^
@@ -407,7 +407,7 @@ exports[`win32 relative paths with additional files included in the file map (wa
 
 None of these files exist:
   * a(.native.js|.js|.native.json|.json)
-  * a\\\\index(.native.js|.js|.native.json|.json)
+  * a
   1 | import foo from 'bar';
 > 2 | import a from './a';
     |                ^

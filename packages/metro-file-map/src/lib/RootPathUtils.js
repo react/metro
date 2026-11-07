@@ -4,11 +4,12 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict
+ * @format
  */
 
-import * as path from 'path';
+import invariant from 'invariant';
+import * as path from 'node:path';
 
 /**
  * This module provides path utility functions - similar to `node:path` -
@@ -27,6 +28,12 @@ import * as path from 'path';
  * Output and input paths are at least well-formed (normal where indicated by
  * naming).
  *
+ * Trailing path separators are preserved, except for fs roots in
+ * normalToAbsolute (fs roots always have a trailing separator), and the
+ * project root in absoluteToNormal and relativeToNormal (the project root is
+ * always the empty string, and is always a directory, so a trailing separator
+ * is redundant).
+ *
  * As of Node 20, absoluteToNormal is ~8x faster than `path.relative` and
  * `normalToAbsolute` is ~20x faster than `path.resolve`, benchmarked on the
  * real inputs from building FB's product graph. Some well-formed inputs
@@ -39,10 +46,13 @@ const SEP_UP_FRAGMENT = path.sep + '..';
 const UP_FRAGMENT_SEP_LENGTH = UP_FRAGMENT_SEP.length;
 const CURRENT_FRAGMENT = '.' + path.sep;
 
+const IS_WIN32 = path.sep === '\\';
+const ROOT_BASE_IDX = IS_WIN32 ? 0 : 1;
+
 export class RootPathUtils {
   #rootDir: string;
-  #rootDirnames: $ReadOnlyArray<string>;
-  #rootParts: $ReadOnlyArray<string>;
+  #rootDirnames: ReadonlyArray<string>;
+  #rootParts: ReadonlyArray<string>;
   #rootDepth: number;
 
   constructor(rootDir: string) {
@@ -50,6 +60,8 @@ export class RootPathUtils {
     const rootDirnames = [];
     for (
       let next = rootDir, previous = null;
+      /* $FlowFixMe[invalid-compare] Error discovered during Constant Condition
+       * roll out. See https://fburl.com/workplace/5whu3i34. */
       previous !== next;
       previous = next, next = path.dirname(next)
     ) {
@@ -71,6 +83,10 @@ export class RootPathUtils {
     return this.#rootParts[this.#rootParts.length - 1 - n];
   }
 
+  getParts(): ReadonlyArray<string> {
+    return this.#rootParts;
+  }
+
   // absolutePath may be any well-formed absolute path.
   absoluteToNormal(absolutePath: string): string {
     let endOfMatchingPrefix = 0;
@@ -84,7 +100,6 @@ export class RootPathUtils {
       absolutePath.startsWith(nextPart, endOfMatchingPrefix) &&
       (absolutePath.length === endOfMatchingPrefix + nextLength ||
         absolutePath[endOfMatchingPrefix + nextLength] === path.sep);
-
     ) {
       // Move our matching pointer forward and load the next part.
       endOfMatchingPrefix += nextLength + 1;
@@ -108,8 +123,16 @@ export class RootPathUtils {
         absolutePath,
         endOfMatchingPrefix,
         upIndirectionsToPrepend,
-      ) ?? path.relative(this.#rootDir, absolutePath)
+      )?.collapsedPath ?? this.#slowAbsoluteToNormal(absolutePath)
     );
+  }
+
+  #slowAbsoluteToNormal(absolutePath: string): string {
+    const endsWithSep = absolutePath.endsWith(path.sep);
+    const result = path.relative(this.#rootDir, absolutePath);
+    return endsWithSep && !result.endsWith(path.sep)
+      ? result + path.sep
+      : result;
   }
 
   // `normalPath` is assumed to be normal (root-relative, no redundant
@@ -128,6 +151,12 @@ export class RootPathUtils {
     const right = pos === 0 ? normalPath : normalPath.slice(pos);
     if (right.length === 0) {
       return left;
+    } else if (IS_WIN32 && pos > this.#rootDepth * UP_FRAGMENT_SEP_LENGTH) {
+      // On a real file system, navigating to `..` at the top level (posix `/`
+      // or Windows drive) is a no-op, but we can't respect that on Windows
+      // because Metro uses e.g. `..\..\D:\foo` to represent cross-drive
+      // relative paths.
+      return right;
     }
     // left may already end in a path separator only if it is a filesystem root,
     // '/' or 'X:\'.
@@ -139,25 +168,70 @@ export class RootPathUtils {
 
   relativeToNormal(relativePath: string): string {
     return (
-      this.#tryCollapseIndirectionsInSuffix(relativePath, 0, 0) ??
+      this.#tryCollapseIndirectionsInSuffix(relativePath, 0, 0)
+        ?.collapsedPath ??
       path.relative(this.#rootDir, path.join(this.#rootDir, relativePath))
     );
+  }
+
+  resolveSymlinkToNormal(
+    symlinkNormalPath: string,
+    readlinkResult: string,
+  ): string {
+    // Lexically resolves the target against the symlink's directory. This is
+    // string manipulation only: symlinks within the target are not followed,
+    // and the target need not exist, so the result is not a real path.
+    //
+    // readlink returns whatever the link was created with, which need not be
+    // well-formed (e.g. '..', 'a/./b', 'a//b', or '/' separators on Windows),
+    // so resolve with node:path. This runs once per symlink, when its node is
+    // populated, not on traversal.
+    const normal = this.absoluteToNormal(
+      path.resolve(
+        this.normalToAbsolute(symlinkNormalPath),
+        '..',
+        readlinkResult,
+      ),
+    );
+    // Normalization keeps a trailing separator when the result is the root or
+    // an ancestor of it (e.g. a link to '/'), and readlink itself may return
+    // one. A stored symlink target never has one.
+    return normal.endsWith(path.sep) ? normal.slice(0, -1) : normal;
   }
 
   // Takes a normal and relative path, and joins them efficiently into a normal
   // path, including collapsing trailing '..' in the first part with leading
   // project root segments in the relative part.
-  joinNormalToRelative(normalPath: string, relativePath: string): string {
+  joinNormalToRelative(
+    normalPath: string,
+    relativePath: string,
+  ): {normalPath: string, collapsedSegments: number} {
     if (normalPath === '') {
-      return relativePath;
+      return {collapsedSegments: 0, normalPath: relativePath};
     }
     if (relativePath === '') {
-      return normalPath;
+      return {collapsedSegments: 0, normalPath};
     }
+    const left = normalPath.endsWith(path.sep)
+      ? normalPath
+      : normalPath + path.sep;
+    const rawPath = left + relativePath;
     if (normalPath === '..' || normalPath.endsWith(SEP_UP_FRAGMENT)) {
-      return this.relativeToNormal(normalPath + path.sep + relativePath);
+      const collapsed = this.#tryCollapseIndirectionsInSuffix(rawPath, 0, 0);
+      invariant(collapsed != null, 'Failed to collapse');
+      return {
+        collapsedSegments: collapsed.collapsedSegments,
+        normalPath: collapsed.collapsedPath,
+      };
     }
-    return normalPath + path.sep + relativePath;
+    return {
+      collapsedSegments: 0,
+      normalPath: rawPath,
+    };
+  }
+
+  relative(from: string, to: string): string {
+    return path.relative(from, to);
   }
 
   // Internal: Tries to collapse sequences like `../root/foo` for root
@@ -166,8 +240,9 @@ export class RootPathUtils {
     fullPath: string, // A string ending with the relative path to process
     startOfRelativePart: number, // Index of the start of part to process
     implicitUpIndirections: number, // 0=root-relative, 1=dirname(root)-relative...
-  ): ?string {
+  ): ?{collapsedPath: string, collapsedSegments: number} {
     let totalUpIndirections = implicitUpIndirections;
+    let collapsedSegments = 0;
     // Allow any sequence of indirection fragments at the start of the
     // unmatched suffix e.g /project/[../../foo], but bail out to Node's
     // path.relative if we find a possible indirection after any later segment,
@@ -194,30 +269,56 @@ export class RootPathUtils {
               fullPath[segmentToMaybeCollapse.length + pos] === path.sep)
           ) {
             pos += segmentToMaybeCollapse.length + 1;
+            collapsedSegments++;
             totalUpIndirections--;
           } else {
             break;
           }
         }
-        const right = fullPath.slice(pos);
+        // After collapsing we may have no more segments remaining (following
+        // '..' indirections). Ensure that we don't drop or add a trailing
+        // separator in this case by taking .slice(pos-1). In any other case,
+        // we know that fullPath[pos] is a separator.
+        if (pos >= fullPath.length) {
+          return {
+            collapsedPath:
+              totalUpIndirections > 0
+                ? UP_FRAGMENT_SEP.repeat(totalUpIndirections - 1) +
+                  '..' +
+                  fullPath.slice(pos - 1)
+                : '',
+            collapsedSegments,
+          };
+        }
+        const right = pos > 0 ? fullPath.slice(pos) : fullPath;
         if (
-          right === '' ||
-          (right === '..' && totalUpIndirections >= this.#rootParts.length - 1)
+          right === '..' &&
+          totalUpIndirections >= this.#rootParts.length - 1
         ) {
           // If we have no right side (or an indirection that would take us
-          // below the root), just ensure we don't include a trailing separtor.
-          return UP_FRAGMENT_SEP.repeat(totalUpIndirections).slice(0, -1);
+          // below the root), just ensure we don't include a trailing separator.
+          return {
+            collapsedPath: UP_FRAGMENT_SEP.repeat(totalUpIndirections).slice(
+              0,
+              -1,
+            ),
+            collapsedSegments,
+          };
         }
         // Optimisation for the common case, saves a concatenation.
         if (totalUpIndirections === 0) {
-          return right;
+          return {collapsedPath: right, collapsedSegments};
         }
-        return UP_FRAGMENT_SEP.repeat(totalUpIndirections) + right;
+        return {
+          collapsedPath: UP_FRAGMENT_SEP.repeat(totalUpIndirections) + right,
+          collapsedSegments,
+        };
       }
 
-      // Cap the number of indirections at the total number of root segments.
-      // File systems treat '..' at the root as '.'.
-      if (totalUpIndirections < this.#rootParts.length - 1) {
+      // Cap the number of indirections at the total number of root parts.
+      // File systems treat '..' at the root as '.'. For Windows, cross-device
+      // paths need to survive this.
+      if (totalUpIndirections < this.#rootParts.length - ROOT_BASE_IDX) {
         totalUpIndirections++;
       }
 

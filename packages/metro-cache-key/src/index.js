@@ -9,12 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 
-const crypto = require('crypto');
-const fs = require('fs');
-
-function getCacheKey(files: Array<string>): string {
+export function getCacheKey(files: ReadonlyArray<string>): string {
   return files
     .reduce(
       (hash, file) => hash.update('\0', 'utf8').update(fs.readFileSync(file)),
@@ -22,5 +20,3 @@ function getCacheKey(files: Array<string>): string {
     )
     .digest('hex');
 }
-
-module.exports = getCacheKey;

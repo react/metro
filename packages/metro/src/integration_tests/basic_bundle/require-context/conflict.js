@@ -24,4 +24,4 @@ function main() {
   };
 }
 
-module.exports = (main(): mixed);
+module.exports = main() as unknown;

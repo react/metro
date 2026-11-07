@@ -5,6 +5,9 @@
 /reports
 npm-debug.log*
 packages/*/build/
+# Generated TypeScript definitions. Build artifacts produced on demand from
+# Flow sources (for npm publish and public API snapshotting); not checked in.
+packages/*/types/
 
 website/build/
 website/i18n/*

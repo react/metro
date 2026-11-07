@@ -14,7 +14,7 @@
  */
 
 import generateBabelFlowLibraryDefinitions from './support/generateBabelFlowLibraryDefinitions';
-import {promises as fsPromises} from 'fs';
+import {promises as fsPromises} from 'node:fs';
 
 async function main() {
   const newContentByFile = await generateBabelFlowLibraryDefinitions();

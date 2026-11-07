@@ -10,7 +10,7 @@
  * @oncall react_native
  */
 
-'use strict';
+import symbolicate from './symbolicate';
 
 // $FlowFixMe[unused-promise]
-require('./symbolicate.js')().then(code => process.exit(code));
+symbolicate().then(code => process.exit(code));

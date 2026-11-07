@@ -9,8 +9,6 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {
   DeltaResult,
   Graph,
@@ -18,10 +16,10 @@ import type {
   MixedOutput,
   Options,
   ReadOnlyGraph,
-} from './DeltaBundler/types.flow';
-import type EventEmitter from 'events';
+} from './DeltaBundler/types';
+import type EventEmitter from 'node:events';
 
-const DeltaCalculator = require('./DeltaBundler/DeltaCalculator');
+import DeltaCalculator from './DeltaBundler/DeltaCalculator';
 
 export type {
   DeltaResult,
@@ -34,7 +32,7 @@ export type {
   TransformResult,
   TransformResultDependency,
   TransformResultWithSource,
-} from './DeltaBundler/types.flow';
+} from './DeltaBundler/types';
 
 /**
  * `DeltaBundler` uses the `DeltaTransformer` to build bundle deltas. This
@@ -42,7 +40,7 @@ export type {
  * concurrent clients requesting their own deltas. This is done through the
  * `clientId` param (which maps a client to a specific delta transformer).
  */
-class DeltaBundler<T = MixedOutput> {
+export default class DeltaBundler<T = MixedOutput> {
   _changeEventSource: EventEmitter;
   _deltaCalculators: Map<Graph<T>, DeltaCalculator<T>> = new Map();
 
@@ -58,7 +56,7 @@ class DeltaBundler<T = MixedOutput> {
   }
 
   async getDependencies(
-    entryPoints: $ReadOnlyArray<string>,
+    entryPoints: ReadonlyArray<string>,
     options: Options<T>,
   ): Promise<ReadOnlyGraph<T>['dependencies']> {
     const deltaCalculator = new DeltaCalculator(
@@ -78,7 +76,7 @@ class DeltaBundler<T = MixedOutput> {
   // so that we don't leak graphs that are not reachable.
   // To get just the dependencies, use getDependencies which will not leak graphs.
   async buildGraph(
-    entryPoints: $ReadOnlyArray<string>,
+    entryPoints: ReadonlyArray<string>,
     options: Options<T>,
   ): Promise<Graph<T>> {
     const deltaCalculator = new DeltaCalculator(
@@ -140,5 +138,3 @@ class DeltaBundler<T = MixedOutput> {
     this._deltaCalculators.delete(graph);
   }
 }
-
-module.exports = DeltaBundler;

@@ -5,21 +5,25 @@
  * LICENSE file in the root directory of this source tree.
  *
  * @format
+ * @flow strict-local
  * @oncall react_native
  */
 
-import H from '../constants';
-import {worker} from '../worker';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as vm from 'vm';
+import type {WorkerMessage, WorkerMetadata} from '../flow-types';
+import typeof TWorker from '../worker';
+import typeof FS from 'node:fs';
 
-jest.mock('fs', () => {
-  const path = require('path');
+import {HastePlugin} from '..';
+import {Worker} from '../worker';
+import * as path from 'node:path';
+import * as vm from 'node:vm';
+
+jest.mock('node:fs', () => {
+  const path = require('node:path');
   const mockFs = {
     [path.join('/project', 'fruits', 'Banana.js')]: `
         const Strawberry = require("Strawberry");
-      `,
+      ` as Buffer | string | Readonly<{link: string}>,
     [path.join('/project', 'fruits', 'Pear.js')]: `
         const Banana = require("Banana");
         const Strawberry = require('Strawberry');
@@ -43,195 +47,159 @@ jest.mock('fs', () => {
   };
 
   return {
-    ...jest.createMockFromModule('fs'),
+    ...jest.createMockFromModule('node:fs'),
     readFileSync: jest.fn((path, options) => {
       const entry = mockFs[path];
       if (entry) {
-        if (typeof entry.link === 'string') {
-          throw new Error('Tried to call readFile on a symlink');
+        if (typeof entry === 'string') {
+          return options === 'utf8' ? entry : Buffer.from(entry);
         }
-        return options === 'utf8' ? entry : Buffer.from(entry);
+        if (entry instanceof Buffer) {
+          return options === 'utf8' ? entry.toString('utf8') : entry;
+        }
+        throw new Error('Tried to call readFile on a symlink');
       }
       throw new Error(`Cannot read path '${path}'.`);
     }),
-    promises: {
-      readlink: jest.fn(async path => {
-        const entry = mockFs[path];
-        if (entry) {
-          if (typeof entry.link === 'string') {
-            return entry.link;
-          } else {
-            throw new Error('Tried to call readlink on a non-symlink');
-          }
-        }
-        throw new Error(`Cannot read path '${path}'.`);
-      }),
-    },
   };
 });
 
-const rootDir = '/project';
+const fs: FS = jest.requireMock('node:fs');
+
+const defaults: WorkerMessage = {
+  computeSha1: false,
+  filePath: path.join('/project', 'notexist.js'),
+  maybeReturnContent: false,
+  pluginsToRun: [],
+};
+
+const defaultHasteConfig = {
+  enableHastePackages: true,
+  hasteImplModulePath: path.resolve(__dirname, 'haste_impl.js'),
+  failValidationOnConflicts: false,
+  platforms: new Set(['ios', 'android']),
+  rootDir: path.normalize('/project'),
+};
+
+function workerWithHaste(
+  message: WorkerMessage,
+  hasteOverrides: Partial<typeof defaultHasteConfig> = {},
+) {
+  return new Worker({
+    plugins: [
+      new HastePlugin({
+        ...defaultHasteConfig,
+        ...hasteOverrides,
+      }).getWorker().worker,
+    ],
+  }).processFile({
+    ...message,
+    pluginsToRun: [0], // Run Haste
+  });
+}
 
 describe('worker', () => {
+  let worker: (message: WorkerMessage) => Promise<WorkerMetadata>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    const workerInstance = new Worker({});
+    worker = async message => workerInstance.processFile(message);
   });
 
-  it('parses JavaScript files and extracts module information', async () => {
+  const defaults: WorkerMessage = {
+    computeSha1: false,
+    filePath: path.join('/project', 'notexist.js'),
+    maybeReturnContent: false,
+    pluginsToRun: [],
+  };
+
+  test('simply computes SHA-1s when requested (works well with binary data)', async () => {
     expect(
       await worker({
-        computeDependencies: true,
-        filePath: path.join('/project', 'fruits', 'Pear.js'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: ['Banana', 'Strawberry'],
-    });
-
-    expect(
-      await worker({
-        computeDependencies: true,
-        filePath: path.join('/project', 'fruits', 'Strawberry.js'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: [],
-    });
-  });
-
-  it('accepts a custom dependency extractor', async () => {
-    expect(
-      await worker({
-        computeDependencies: true,
-        dependencyExtractor: path.join(__dirname, 'dependencyExtractor.js'),
-        filePath: path.join('/project', 'fruits', 'Pear.js'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: ['Banana', 'Strawberry', 'Lime'],
-    });
-  });
-
-  it('delegates to hasteImplModulePath for getting the id', async () => {
-    expect(
-      await worker({
-        computeDependencies: true,
-        filePath: path.join('/project', 'fruits', 'Pear.js'),
-        hasteImplModulePath: require.resolve('./haste_impl.js'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: ['Banana', 'Strawberry'],
-      id: 'Pear',
-      module: [path.join('fruits', 'Pear.js'), H.MODULE],
-    });
-
-    expect(
-      await worker({
-        computeDependencies: true,
-        filePath: path.join('/project', 'fruits', 'Strawberry.js'),
-        hasteImplModulePath: require.resolve('./haste_impl.js'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: [],
-      id: 'Strawberry',
-      module: [path.join('fruits', 'Strawberry.js'), H.MODULE],
-    });
-  });
-
-  it('parses package.json files as haste packages when enableHastePackages=true', async () => {
-    expect(
-      await worker({
-        computeDependencies: true,
-        enableHastePackages: true,
-        filePath: path.join('/project', 'package.json'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: undefined,
-      id: 'haste-package',
-      module: ['package.json', H.PACKAGE],
-    });
-  });
-
-  it('does not parse package.json files as haste packages when enableHastePackages=false', async () => {
-    expect(
-      await worker({
-        computeDependencies: true,
-        enableHastePackages: false,
-        filePath: path.join('/project', 'package.json'),
-        rootDir,
-      }),
-    ).toEqual({
-      dependencies: undefined,
-      id: undefined,
-      module: undefined,
-    });
-  });
-
-  it('returns an error when a file cannot be accessed', async () => {
-    let error = null;
-
-    try {
-      await worker({computeDependencies: true, filePath: '/kiwi.js', rootDir});
-    } catch (err) {
-      error = err;
-    }
-
-    expect(error.message).toEqual(`Cannot read path '/kiwi.js'.`);
-  });
-
-  it('simply computes SHA-1s when requested (works well with binary data)', async () => {
-    expect(
-      await worker({
+        ...defaults,
         computeSha1: true,
         filePath: path.join('/project', 'fruits', 'apple.png'),
-        rootDir,
       }),
-    ).toEqual({sha1: '4caece539b039b16e16206ea2478f8c5ffb2ca05'});
+    ).toEqual({
+      pluginData: [],
+      sha1: '4caece539b039b16e16206ea2478f8c5ffb2ca05',
+    });
 
     expect(
       await worker({
+        ...defaults,
         computeSha1: false,
         filePath: path.join('/project', 'fruits', 'Banana.js'),
-        rootDir,
       }),
-    ).toEqual({sha1: undefined});
+    ).toEqual({pluginData: [], sha1: undefined});
 
     expect(
       await worker({
+        ...defaults,
         computeSha1: true,
         filePath: path.join('/project', 'fruits', 'Banana.js'),
-        rootDir,
       }),
-    ).toEqual({sha1: '7772b628e422e8cf59c526be4bb9f44c0898e3d1'});
+    ).toEqual({
+      pluginData: [],
+      sha1: '7772b628e422e8cf59c526be4bb9f44c0898e3d1',
+    });
 
     expect(
       await worker({
+        ...defaults,
         computeSha1: true,
         filePath: path.join('/project', 'fruits', 'Pear.js'),
-        rootDir,
       }),
-    ).toEqual({sha1: 'c7a7a68a1c8aaf452669dd2ca52ac4a434d25552'});
+    ).toEqual({
+      pluginData: [],
+      sha1: 'c7a7a68a1c8aaf452669dd2ca52ac4a434d25552',
+    });
 
-    await expect(
-      worker({computeSha1: true, filePath: '/i/dont/exist.js', rootDir}),
+    await expect(() =>
+      worker({...defaults, computeSha1: true, filePath: '/i/dont/exist.js'}),
     ).rejects.toThrow();
   });
 
-  it('avoids computing dependencies if not requested and Haste does not need it', async () => {
+  test('delegates to hasteImplModulePath for getting the id', async () => {
     expect(
-      await worker({
-        computeDependencies: false,
+      await workerWithHaste({
+        ...defaults,
         filePath: path.join('/project', 'fruits', 'Pear.js'),
-        hasteImplModulePath: path.resolve(__dirname, 'haste_impl.js'),
-        rootDir,
       }),
     ).toEqual({
-      dependencies: undefined,
-      id: 'Pear',
-      module: [path.join('fruits', 'Pear.js'), H.MODULE],
+      pluginData: ['Pear'],
+    });
+
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        filePath: path.join('/project', 'fruits', 'Strawberry.js'),
+      }),
+    ).toEqual({
+      pluginData: ['Strawberry'],
+    });
+  });
+
+  test('parses package.json files as haste packages', async () => {
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        filePath: path.join('/project', 'package.json'),
+      }),
+    ).toEqual({
+      pluginData: ['haste-package'],
+    });
+  });
+
+  test('avoids computing dependencies if not requested and Haste does not need it', async () => {
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        filePath: path.join('/project', 'fruits', 'Pear.js'),
+      }),
+    ).toEqual({
+      pluginData: ['Pear'],
       sha1: undefined,
     });
 
@@ -240,30 +208,68 @@ describe('worker', () => {
     expect(fs.readFile).not.toHaveBeenCalled();
   });
 
-  it('calls readLink and returns symlink target when readLink=true', async () => {
+  test('returns content if requested and content is read', async () => {
     expect(
-      await worker({
-        computeDependencies: false,
-        filePath: path.join('/project', 'fruits', 'LinkToStrawberry.js'),
-        readLink: true,
-        rootDir,
+      await workerWithHaste({
+        ...defaults,
+        computeSha1: true,
+        filePath: path.join('/project', 'fruits', 'Pear.js'),
+        maybeReturnContent: true,
       }),
     ).toEqual({
-      dependencies: undefined,
-      id: undefined,
-      module: undefined,
-      sha1: undefined,
-      symlinkTarget: path.join('.', 'Strawberry.js'),
+      content: expect.any(Buffer),
+      pluginData: ['Pear'],
+      sha1: 'c7a7a68a1c8aaf452669dd2ca52ac4a434d25552',
     });
-
-    expect(fs.readFileSync).not.toHaveBeenCalled();
-    expect(fs.promises.readlink).toHaveBeenCalled();
   });
 
-  it('can be loaded directly without transpilation', async () => {
+  test('does not return content if maybeReturnContent but content is not read', async () => {
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        computeSha1: false,
+        filePath: path.join('/project', 'fruits', 'Pear.js'),
+        maybeReturnContent: true,
+      }),
+    ).toEqual({
+      content: undefined,
+      pluginData: ['Pear'],
+      sha1: undefined,
+    });
+  });
+
+  test('can be loaded directly without transpilation', async () => {
     const code = await jest
-      .requireActual('fs')
+      .requireActual<FS>('node:fs')
       .promises.readFile(require.resolve('../worker.js'), 'utf8');
     expect(() => new vm.Script(code)).not.toThrow();
+  });
+});
+
+describe('jest-worker interface', () => {
+  let workerModule: TWorker;
+
+  beforeEach(() => {
+    jest.resetModules();
+    workerModule = require('../worker');
+  });
+
+  test('setup must be called before processFile', () => {
+    expect(() => workerModule.processFile(defaults)).toThrow(
+      new Error('metro-file-map: setup() must be called before processFile()'),
+    );
+  });
+
+  test('setup cannot be called twice', () => {
+    workerModule.setup({});
+    expect(() => workerModule.setup({})).toThrow(
+      new Error('metro-file-map: setup() should only be called once'),
+    );
+  });
+
+  test('processFile may be called after setup', () => {
+    jest.mock('mock-haste-impl', () => {}, {virtual: true});
+    workerModule.setup({});
+    workerModule.processFile(defaults);
   });
 });

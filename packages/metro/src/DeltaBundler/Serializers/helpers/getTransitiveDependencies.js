@@ -9,11 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {ReadOnlyGraph} from '../../types';
 
-import type {ReadOnlyGraph} from '../../types.flow';
+import {isResolvedDependency} from '../../../lib/isResolvedDependency';
 
-function getTransitiveDependencies<T>(
+export default function getTransitiveDependencies<T>(
   path: string,
   graph: ReadOnlyGraph<T>,
 ): Set<string> {
@@ -44,10 +44,10 @@ function _getDeps<T>(
   deps.add(path);
 
   for (const dependency of module.dependencies.values()) {
-    _getDeps(dependency.absolutePath, graph, deps);
+    if (isResolvedDependency(dependency)) {
+      _getDeps(dependency.absolutePath, graph, deps);
+    }
   }
 
   return deps;
 }
-
-module.exports = getTransitiveDependencies;

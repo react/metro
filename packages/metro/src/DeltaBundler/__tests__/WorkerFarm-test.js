@@ -10,8 +10,8 @@
 
 'use strict';
 
-const getDefaultConfig = require('metro-config/src/defaults');
-const {Readable} = require('stream');
+const {getDefaultConfig} = require('metro-config');
+const {Readable} = require('node:stream');
 
 describe('Worker Farm', function () {
   let api;
@@ -23,10 +23,10 @@ describe('Worker Farm', function () {
   beforeEach(async function () {
     jest
       .resetModules()
-      .mock('fs', () => ({writeFileSync: jest.fn()}))
+      .mock('node:fs', () => ({writeFileSync: jest.fn()}))
       .mock('jest-worker', () => ({__esModule: true, Worker: jest.fn()}));
 
-    const fs = require('fs');
+    const fs = jest.requireMock('node:fs');
     const jestWorker = require('jest-worker');
     config = await getDefaultConfig();
 
@@ -55,10 +55,10 @@ describe('Worker Farm', function () {
       return api;
     });
 
-    WorkerFarm = require('../WorkerFarm');
+    WorkerFarm = require('../WorkerFarm').default;
   });
 
-  it('passes transform data to the worker farm when transforming', async () => {
+  test('passes transform data to the worker farm when transforming', async () => {
     const transformOptions = {arbitrary: 'options'};
     const transformerConfig = {
       transformerPath: config.transformerPath,
@@ -76,10 +76,34 @@ describe('Worker Farm', function () {
       config.projectRoot,
       transformerConfig,
       undefined,
+      undefined,
     );
   });
 
-  it('Passes the correct config to separate farm instances', async () => {
+  test('passes the asset URL path through to the worker', async () => {
+    const transformerConfig = {
+      transformerPath: config.transformerPath,
+      transformerConfig: config.transformer,
+    };
+
+    await new WorkerFarm(config, transformerConfig).transform(
+      fileName,
+      {type: 'asset'},
+      undefined,
+      '[metro-watchFolders]/1/imgs/a.png',
+    );
+
+    expect(api.transform).toBeCalledWith(
+      fileName,
+      {type: 'asset'},
+      config.projectRoot,
+      transformerConfig,
+      undefined,
+      '[metro-watchFolders]/1/imgs/a.png',
+    );
+  });
+
+  test('Passes the correct config to separate farm instances', async () => {
     const transformerConfig = {
       transformerPath: config.transformerPath,
       transformerConfig: config.transformer,
@@ -97,6 +121,7 @@ describe('Worker Farm', function () {
       '/foo',
       transformerConfig,
       undefined,
+      undefined,
     );
 
     await farm.kill();
@@ -113,10 +138,11 @@ describe('Worker Farm', function () {
       '/bar',
       transformerConfig,
       undefined,
+      undefined,
     );
   });
 
-  it('should add file info to parse errors', () => {
+  test('should add file info to parse errors', () => {
     const workerFarm = new WorkerFarm(config, {
       transformerPath: config.transformerPath,
       transformerConfig: config.transformer,

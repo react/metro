@@ -21,10 +21,10 @@ export function planQuery({
   extensions,
   includeSha1,
   includeSymlinks,
-}: $ReadOnly<{
+}: Readonly<{
   since: ?WatchmanQuerySince,
-  directoryFilters: $ReadOnlyArray<string>,
-  extensions: $ReadOnlyArray<string>,
+  directoryFilters: ReadonlyArray<string>,
+  extensions: ReadonlyArray<string>,
   includeSha1: boolean,
   includeSymlinks: boolean,
 }>): {
@@ -100,7 +100,7 @@ export function planQuery({
       allOfTerms.push([
         'anyof',
         ...directoryFilters.map(
-          dir => (['dirname', dir]: WatchmanDirnameExpression),
+          dir => ['dirname', dir] as WatchmanDirnameExpression,
         ),
       ]);
     }

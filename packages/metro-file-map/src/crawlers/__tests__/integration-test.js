@@ -12,10 +12,10 @@
 import TreeFS from '../../lib/TreeFS';
 import nodeCrawl from '../node';
 import watchmanCrawl from '../watchman';
-import {execSync} from 'child_process';
 import invariant from 'invariant';
-import os from 'os';
-import {join} from 'path';
+import {execSync} from 'node:child_process';
+import os from 'node:os';
+import {join} from 'node:path';
 
 jest.useRealTimers();
 
@@ -34,18 +34,10 @@ const isWatchmanOnPath = () => {
   }
 };
 
-const mockUseNativeFind = jest.fn();
-jest.mock('../node/hasNativeFindSupport', () => () => mockUseNativeFind());
-
 type Crawler = typeof nodeCrawl | typeof watchmanCrawl;
 
 const CRAWLERS: {[key: string]: ?Crawler} = {
-  'node-find': opts => {
-    mockUseNativeFind.mockResolvedValue(true);
-    return nodeCrawl(opts);
-  },
   'node-recursive': opts => {
-    mockUseNativeFind.mockResolvedValue(false);
     return nodeCrawl(opts);
   },
   watchman: isWatchmanOnPath() ? watchmanCrawl : null,
@@ -58,15 +50,15 @@ const FIXTURES_DIR = join(__dirname, '..', '__fixtures__');
 // defer to the caller. This matcher helps with nested expectations.
 declare var expect: {
   /** The object that you want to make assertions against */
-  (value: mixed, description?: string): JestExpectType,
+  (value: unknown, description?: string): JestExpectType,
   extend(matchers: {[name: string]: JestMatcher, ...}): void,
   assertions(expectedAssertions: number): void,
-  any(value: mixed): JestAsymmetricEqualityType,
-  oneOf: (mixed, mixed) => boolean,
+  any(value: unknown): JestAsymmetricEqualityType,
+  oneOf: (first: unknown, second: unknown) => boolean,
   ...
 };
 
-function oneOf(this: $FlowFixMe, actual: mixed, ...expectOneOf: mixed[]) {
+function oneOf(this: $FlowFixMe, actual: unknown, ...expectOneOf: unknown[]) {
   const pass = expectOneOf.includes(actual);
   return {
     pass,
@@ -76,35 +68,31 @@ function oneOf(this: $FlowFixMe, actual: mixed, ...expectOneOf: mixed[]) {
       } to be in ${this.utils.printExpected(expectOneOf)}`,
   };
 }
+/* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+ * https://fburl.com/gdoc/y8dn025u */
 expect.extend({oneOf});
 
 const CASES = [
   [
     true,
     new Map([
-      ['foo.js', ['', expect.any(Number), 245, 0, '', null, 0]],
-      [
-        join('directory', 'bar.js'),
-        ['', expect.any(Number), 245, 0, '', null, 0],
-      ],
+      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
+      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
       [
         'link-to-directory',
-        ['', expect.any(Number), 9, 0, '', null, expect.oneOf(1, 'directory')],
+        [expect.any(Number), 9, 0, null, expect.oneOf(1, 'directory')],
       ],
       [
         'link-to-foo.js',
-        ['', expect.any(Number), 6, 0, '', null, expect.oneOf(1, 'foo.js')],
+        [expect.any(Number), 6, 0, null, expect.oneOf(1, 'foo.js')],
       ],
     ]),
   ],
   [
     false,
     new Map([
-      [
-        join('directory', 'bar.js'),
-        ['', expect.any(Number), 245, 0, '', null, 0],
-      ],
-      ['foo.js', ['', expect.any(Number), 245, 0, '', null, 0]],
+      [join('directory', 'bar.js'), [expect.any(Number), 245, 0, null, 0]],
+      ['foo.js', [expect.any(Number), 245, 0, null, 0]],
     ]),
   ],
 ];
@@ -124,7 +112,10 @@ describe.each(Object.keys(CRAWLERS))(
           previousState: {
             fileSystem: new TreeFS({
               rootDir: FIXTURES_DIR,
-              files: new Map([['removed.js', ['', 123, 234, 0, '', null, 0]]]),
+              files: new Map([['removed.js', [123, 234, 0, null, 0]]]),
+              processFile: () => {
+                throw new Error('Not implemented');
+              },
             }),
             clocks: new Map(),
           },
@@ -135,7 +126,6 @@ describe.each(Object.keys(CRAWLERS))(
           rootDir: FIXTURES_DIR,
           abortSignal: null,
           computeSha1: false,
-          forceNodeFilesystemAPI: false,
           onStatus: () => {},
         });
 

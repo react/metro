@@ -9,23 +9,30 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {
+  ConfigT,
+  InputConfigT,
+  ServerMiddleware,
+  YargArguments,
+} from './types';
 
-import type {ConfigT, InputConfigT, YargArguments} from './configTypes.flow';
+import getDefaultConfig from './defaults';
+import validConfig from './defaults/validConfig';
+import {validate} from 'jest-validate';
+import * as MetroCache from 'metro-cache';
+import * as fs from 'node:fs';
+import {homedir} from 'node:os';
+import * as path from 'node:path';
+// eslint-disable-next-line no-restricted-imports
+import {pathToFileURL} from 'node:url';
 
-const getDefaultConfig = require('./defaults');
-const validConfig = require('./defaults/validConfig');
-const cosmiconfig = require('cosmiconfig');
-const fs = require('fs');
-const {validate} = require('jest-validate');
-const MetroCache = require('metro-cache');
-const path = require('path');
-const {dirname, join} = require('path');
-
-type CosmiConfigResult = {
+type ResolveConfigResult = {
   filepath: string,
   isEmpty: boolean,
-  config: (ConfigT => Promise<ConfigT>) | (ConfigT => ConfigT) | InputConfigT,
+  config:
+    | ((baseConfig: ConfigT) => Promise<ConfigT>)
+    | ((baseConfig: ConfigT) => ConfigT)
+    | InputConfigT,
   ...
 };
 
@@ -38,35 +45,32 @@ function overrideArgument<T>(arg: Array<T> | T): T {
   }
 
   if (Array.isArray(arg)) {
-    // $FlowFixMe[incompatible-return]
+    // $FlowFixMe[incompatible-type]
     return arg[arg.length - 1];
   }
 
   return arg;
 }
 
-const explorer = cosmiconfig('metro', {
-  searchPlaces: [
-    'metro.config.js',
-    'metro.config.cjs',
-    'metro.config.json',
-    'package.json',
-  ],
-  loaders: {
-    '.json': cosmiconfig.loadJson,
-    '.yaml': cosmiconfig.loadYaml,
-    '.yml': cosmiconfig.loadYaml,
-    '.js': cosmiconfig.loadJs,
-    '.cjs': cosmiconfig.loadJs,
-    '.es6': cosmiconfig.loadJs,
-    noExt: cosmiconfig.loadYaml,
-  },
-});
+const SEARCH_JS_EXTS = ['.js', '.cjs', '.mjs', '.json'];
+const SEARCH_TS_EXTS = ['.ts', '.cts', '.mts'];
+const SEARCH_PLACES = [
+  ...['metro.config', path.join('.config', 'metro')].flatMap(prefix =>
+    [...SEARCH_JS_EXTS, ...SEARCH_TS_EXTS].map(ext => prefix + ext),
+  ),
+  'package.json',
+];
 
-const isFile = (filePath: string) =>
+const JS_EXTENSIONS = new Set(SEARCH_JS_EXTS);
+const TS_EXTENSIONS = new Set(SEARCH_TS_EXTS);
+
+const PACKAGE_JSON = path.sep + 'package.json';
+const PACKAGE_JSON_PROP_NAME = 'metro';
+
+const isFile = (filePath: string): boolean =>
   fs.existsSync(filePath) && !fs.lstatSync(filePath).isDirectory();
 
-const resolve = (filePath: string) => {
+const resolve = (filePath: string): string => {
   // Attempt to resolve the path with the node resolution algorithm but fall back to resolving
   // the file relative to the current working directory if the input is not an absolute path.
   try {
@@ -84,120 +88,244 @@ const resolve = (filePath: string) => {
 async function resolveConfig(
   filePath?: string,
   cwd?: string,
-): Promise<CosmiConfigResult> {
-  if (filePath) {
-    return explorer.load(resolve(filePath));
-  }
+): Promise<ResolveConfigResult> {
+  const configPath: ?string =
+    filePath != null
+      ? resolve(filePath)
+      : searchForConfigFile(path.resolve(process.cwd(), cwd ?? ''), homedir());
 
-  const result = await explorer.search(cwd);
-  if (result == null) {
+  if (configPath == null) {
     // No config file found, return a default
     return {
       isEmpty: true,
-      filepath: join(cwd || process.cwd(), 'metro.config.stub.js'),
+      filepath: path.join(cwd ?? process.cwd(), 'metro.config.stub.js'),
       config: {},
     };
   }
-
-  return result;
+  return await loadConfigFile(configPath);
 }
 
-function mergeConfig<T: $ReadOnly<InputConfigT>>(
-  defaultConfig: T,
-  ...configs: Array<InputConfigT>
+function mergeConfigObjects<T extends InputConfigT>(
+  base: T,
+  overrides: InputConfigT,
 ): T {
-  // If the file is a plain object we merge the file with the default config,
-  // for the function we don't do this since that's the responsibility of the user
-  return configs.reduce(
-    (totalConfig, nextConfig) => ({
-      ...totalConfig,
-      ...nextConfig,
+  return {
+    ...base,
+    ...overrides,
+    ...(overrides.cacheStores != null
+      ? {
+          cacheStores:
+            typeof overrides.cacheStores === 'function'
+              ? overrides.cacheStores(MetroCache)
+              : overrides.cacheStores,
+        }
+      : null),
 
-      cacheStores:
-        nextConfig.cacheStores != null
-          ? typeof nextConfig.cacheStores === 'function'
-            ? nextConfig.cacheStores(MetroCache)
-            : nextConfig.cacheStores
-          : totalConfig.cacheStores,
+    resolver: {
+      ...base.resolver,
+      ...overrides.resolver,
+      // $FlowFixMe[exponential-spread]
+      ...(overrides.resolver?.dependencyExtractor != null
+        ? {dependencyExtractor: resolve(overrides.resolver.dependencyExtractor)}
+        : null),
+      ...(overrides.resolver?.hasteImplModulePath != null
+        ? {hasteImplModulePath: resolve(overrides.resolver.hasteImplModulePath)}
+        : null),
+      schemeResolvers: {
+        // $FlowFixMe[exponential-spread]
+        ...base.resolver?.schemeResolvers,
+        ...overrides.resolver?.schemeResolvers,
+      },
+    },
+    serializer: {
+      ...base.serializer,
+      // $FlowFixMe[exponential-spread]
+      ...overrides.serializer,
+    },
+    transformer: {
+      ...base.transformer,
+      ...overrides.transformer,
+      // $FlowFixMe[exponential-spread]
+      ...(overrides.transformer?.babelTransformerPath != null
+        ? {
+            babelTransformerPath: resolve(
+              overrides.transformer.babelTransformerPath,
+            ),
+          }
+        : null),
+    },
+    server: {
+      ...base.server,
+      ...overrides.server,
+      ...mergeServerHandlers(base.server, overrides.server),
+      // $FlowFixMe[exponential-spread]
+      ...(base.server?.tls != null ? {tls: base.server?.tls} : null),
+      // only override base tls config with false or an object
+      ...(overrides.server?.tls === false
+        ? {tls: false}
+        : overrides.server?.tls != null &&
+            typeof overrides.server?.tls === 'object'
+          ? {
+              tls: {
+                ...(base.server?.tls ?? {}),
+                ...overrides.server?.tls,
+              },
+            }
+          : null),
+    },
+    symbolicator: {
+      ...base.symbolicator,
+      // $FlowFixMe[exponential-spread]
+      ...overrides.symbolicator,
+    },
+    watcher: {
+      ...base.watcher,
+      // $FlowFixMe[exponential-spread]
+      ...overrides.watcher,
+      watchman: {
+        // $FlowFixMe[exponential-spread]
+        ...base.watcher?.watchman,
+        ...overrides.watcher?.watchman,
+      },
+      healthCheck: {
+        // $FlowFixMe[exponential-spread]
+        ...base.watcher?.healthCheck,
+        ...overrides.watcher?.healthCheck,
+      },
+      unstable_autoSaveCache: {
+        // $FlowFixMe[exponential-spread]
+        ...base.watcher?.unstable_autoSaveCache,
+        ...overrides.watcher?.unstable_autoSaveCache,
+      },
+    },
+  };
+}
 
-      resolver: {
-        ...totalConfig.resolver,
-        // $FlowFixMe[exponential-spread]
-        ...(nextConfig.resolver || {}),
-        dependencyExtractor:
-          nextConfig.resolver && nextConfig.resolver.dependencyExtractor != null
-            ? resolve(nextConfig.resolver.dependencyExtractor)
-            : // $FlowFixMe[incompatible-use]
-              totalConfig.resolver.dependencyExtractor,
-        hasteImplModulePath:
-          nextConfig.resolver && nextConfig.resolver.hasteImplModulePath != null
-            ? resolve(nextConfig.resolver.hasteImplModulePath)
-            : // $FlowFixMe[incompatible-use]
-              totalConfig.resolver.hasteImplModulePath,
-      },
-      serializer: {
-        ...totalConfig.serializer,
-        // $FlowFixMe[exponential-spread]
-        ...(nextConfig.serializer || {}),
-      },
-      transformer: {
-        ...totalConfig.transformer,
-        // $FlowFixMe[exponential-spread]
-        ...(nextConfig.transformer || {}),
-        babelTransformerPath:
-          nextConfig.transformer &&
-          nextConfig.transformer.babelTransformerPath != null
-            ? resolve(nextConfig.transformer.babelTransformerPath)
-            : // $FlowFixMe[incompatible-use]
-              totalConfig.transformer.babelTransformerPath,
-      },
-      server: {
-        ...totalConfig.server,
-        // $FlowFixMe[exponential-spread]
-        ...(nextConfig.server || {}),
-      },
-      symbolicator: {
-        ...totalConfig.symbolicator,
-        // $FlowFixMe[exponential-spread]
-        ...(nextConfig.symbolicator || {}),
-      },
-      watcher: {
-        ...totalConfig.watcher,
-        // $FlowFixMe[exponential-spread]
-        ...nextConfig.watcher,
-        watchman: {
-          // $FlowFixMe[exponential-spread]
-          ...totalConfig.watcher?.watchman,
-          ...nextConfig.watcher?.watchman,
-        },
-        healthCheck: {
-          // $FlowFixMe[exponential-spread]
-          ...totalConfig.watcher?.healthCheck,
-          // $FlowFixMe: Spreading shapes creates an explosion of union types
-          ...nextConfig.watcher?.healthCheck,
-        },
-      },
-    }),
-    defaultConfig,
+// Later configs wrap earlier ones: their `unstable_middleware` runs last and
+// their `unstable_priorityMiddleware` runs first.
+function mergeServerHandlers(
+  base: InputConfigT['server'],
+  overrides: InputConfigT['server'],
+): {
+  unstable_middleware?: ReadonlyArray<ServerMiddleware>,
+  unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+} {
+  const merged: {
+    unstable_middleware?: ReadonlyArray<ServerMiddleware>,
+    unstable_priorityMiddleware?: ReadonlyArray<ServerMiddleware>,
+  } = {};
+  const middleware = concatUnique(
+    base?.unstable_middleware,
+    overrides?.unstable_middleware,
   );
+  if (middleware != null) {
+    merged.unstable_middleware = middleware;
+  }
+  const priorityMiddleware = concatUnique(
+    overrides?.unstable_priorityMiddleware,
+    base?.unstable_priorityMiddleware,
+  );
+  if (priorityMiddleware != null) {
+    merged.unstable_priorityMiddleware = priorityMiddleware;
+  }
+  return merged;
+}
+
+// An entry in both lists (e.g. copied by spreading the base config) is kept
+// once, at its first position.
+function concatUnique<T>(
+  first: ?ReadonlyArray<T>,
+  second: ?ReadonlyArray<T>,
+): ?ReadonlyArray<T> {
+  if (first == null || second == null) {
+    return first ?? second;
+  }
+  return [...new Set([...first, ...second])];
+}
+
+async function mergeConfigAsync<T extends InputConfigT>(
+  baseConfig: Promise<T>,
+  ...reversedConfigs: ReadonlyArray<
+    | InputConfigT
+    | ((baseConfig: T) => InputConfigT)
+    | ((baseConfig: T) => Promise<InputConfigT>),
+  >
+): Promise<T> {
+  let currentConfig: T = await baseConfig;
+  for (const next of reversedConfigs) {
+    const nextConfig: InputConfigT = await (typeof next === 'function'
+      ? next(currentConfig)
+      : next);
+    currentConfig = mergeConfigObjects(currentConfig, nextConfig);
+  }
+  return currentConfig;
+}
+
+/**
+ * Merge two or more partial config objects (or functions returning partial
+ * configs) together, with arguments to the right overriding the left.
+ *
+ * Functions will be parsed the current config (the merge of all configs to the
+ * left).
+ *
+ * Functions may be async, in which case this function will return a promise.
+ * Otherwise it will return synchronously.
+ */
+function mergeConfig<
+  T extends InputConfigT,
+  R extends ReadonlyArray<
+    | InputConfigT
+    | ((baseConfig: T) => InputConfigT)
+    | ((baseConfig: T) => Promise<InputConfigT>),
+  >,
+>(
+  base: T | (() => T),
+  ...configs: R
+): R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT)>
+  ? T
+  : Promise<T> {
+  let currentConfig: T = typeof base === 'function' ? base() : base;
+  // Reverse for easy popping
+  const reversedConfigs = configs.toReversed();
+  let next;
+  while ((next = reversedConfigs.pop())) {
+    const nextConfig: InputConfigT | Promise<InputConfigT> =
+      typeof next === 'function' ? next(currentConfig) : next;
+    if (nextConfig instanceof Promise) {
+      // $FlowFixMe[incompatible-type] Not clear why Flow doesn't like this
+      return mergeConfigAsync(
+        nextConfig.then(resolved =>
+          mergeConfigObjects(currentConfig, resolved),
+        ),
+        ...reversedConfigs.toReversed(),
+      );
+    }
+    currentConfig = mergeConfigObjects(currentConfig, nextConfig) as T;
+  }
+  // $FlowFixMe[incompatible-type] Not clear why Flow doesn't like this
+  return currentConfig;
 }
 
 async function loadMetroConfigFromDisk(
-  path?: string,
+  pathToLoad?: string,
   cwd?: string,
-  defaultConfigOverrides: InputConfigT,
+  defaultConfigOverrides: InputConfigT = {},
 ): Promise<ConfigT> {
-  const resolvedConfigResults: CosmiConfigResult = await resolveConfig(
-    path,
+  const resolvedConfigResults: ResolveConfigResult = await resolveConfig(
+    pathToLoad,
     cwd,
   );
 
   const {config: configModule, filepath} = resolvedConfigResults;
-  const rootPath = dirname(filepath);
+  let rootPath = path.dirname(filepath);
+  // Special case .config directories, which are assumed to be a child of the
+  // project root.
+  if (path.basename(rootPath) === '.config') {
+    rootPath = path.dirname(rootPath);
+  }
 
   const defaults = await getDefaultConfig(rootPath);
-  // $FlowFixMe[incompatible-variance]
-  // $FlowFixMe[incompatible-call]
+
   const defaultConfig: ConfigT = mergeConfig(defaults, defaultConfigOverrides);
 
   if (typeof configModule === 'function') {
@@ -205,13 +333,10 @@ async function loadMetroConfigFromDisk(
     // to the function.
 
     const resultedConfig = await configModule(defaultConfig);
-    // $FlowFixMe[incompatible-call]
-    // $FlowFixMe[incompatible-variance]
+
     return mergeConfig(defaultConfig, resultedConfig);
   }
 
-  // $FlowFixMe[incompatible-variance]
-  // $FlowFixMe[incompatible-call]
   return mergeConfig(defaultConfig, configModule);
 }
 
@@ -220,8 +345,14 @@ function overrideConfigWithArguments(
   argv: YargArguments,
 ): ConfigT {
   // We override some config arguments here with the argv
-
-  const output: InputConfigT = {
+  const output: {
+    // Spread to remove invariance so that `output` is mutable.
+    ...Partial<ConfigT>,
+    resolver: {...Partial<ConfigT['resolver']>},
+    serializer: {...Partial<ConfigT['serializer']>},
+    server: {...Partial<ConfigT['server']>},
+    transformer: {...Partial<ConfigT['transformer']>},
+  } = {
     resolver: {},
     serializer: {},
     server: {},
@@ -229,8 +360,6 @@ function overrideConfigWithArguments(
   };
 
   if (argv.port != null) {
-    // $FlowFixMe[incompatible-use]
-    // $FlowFixMe[cannot-write]
     output.server.port = Number(argv.port);
   }
 
@@ -243,30 +372,22 @@ function overrideConfigWithArguments(
   }
 
   if (argv.assetExts != null) {
-    // $FlowFixMe[incompatible-use]
-    // $FlowFixMe[cannot-write]
     output.resolver.assetExts = argv.assetExts;
   }
 
   if (argv.sourceExts != null) {
-    // $FlowFixMe[incompatible-use]
-    // $FlowFixMe[cannot-write]
     output.resolver.sourceExts = argv.sourceExts;
   }
 
   if (argv.platforms != null) {
-    // $FlowFixMe[incompatible-use]
-    // $FlowFixMe[cannot-write]
     output.resolver.platforms = argv.platforms;
   }
 
   if (argv['max-workers'] != null || argv.maxWorkers != null) {
-    output.maxWorkers = Number(argv['max-workers'] || argv.maxWorkers);
+    output.maxWorkers = Number(argv['max-workers'] ?? argv.maxWorkers);
   }
 
   if (argv.transformer != null) {
-    // $FlowFixMe[incompatible-use]
-    // $FlowFixMe[cannot-write]
     output.transformer.babelTransformerPath = argv.transformer;
   }
 
@@ -283,8 +404,6 @@ function overrideConfigWithArguments(
     // TODO: Ask if this is the way to go
   }
 
-  // $FlowFixMe[incompatible-variance]
-  // $FlowFixMe[incompatible-call]
   return mergeConfig(config, output);
 }
 
@@ -309,33 +428,114 @@ async function loadConfig(
   validate(configuration, {
     exampleConfig: await validConfig(),
     recursiveDenylist: ['reporter', 'resolver', 'transformer'],
-    deprecatedConfig: {
-      blacklistRE: () =>
-        `Warning: Metro config option \`blacklistRE\` is deprecated.
-         Please use \`blockList\` instead.`,
-    },
+    deprecatedConfig: {},
   });
 
   // Override the configuration with cli parameters
   const configWithArgs = overrideConfigWithArguments(configuration, argv);
 
-  const overriddenConfig: {[string]: mixed} = {};
-
-  overriddenConfig.watchFolders = [
-    configWithArgs.projectRoot,
-    ...configWithArgs.watchFolders,
-  ];
-
   // Set the watchfolders to include the projectRoot, as Metro assumes that is
   // the case
-  // $FlowFixMe[incompatible-variance]
-  // $FlowFixMe[incompatible-indexer]
-  // $FlowFixMe[incompatible-call]
-  return mergeConfig(configWithArgs, overriddenConfig);
+  return mergeConfig(configWithArgs, {
+    watchFolders: [configWithArgs.projectRoot, ...configWithArgs.watchFolders],
+  });
 }
 
-module.exports = {
-  loadConfig,
-  resolveConfig,
-  mergeConfig,
-};
+export async function loadConfigFile(
+  absolutePath: string,
+): Promise<ResolveConfigResult> {
+  // Config should be JSON, CommonJS, or ESM
+  let config: unknown;
+  const extension = path.extname(absolutePath);
+
+  if (JS_EXTENSIONS.has(extension) || TS_EXTENSIONS.has(extension)) {
+    try {
+      // $FlowExpectedError[unsupported-syntax]
+      const configModule = require(absolutePath);
+      if (absolutePath.endsWith(PACKAGE_JSON)) {
+        config = configModule[PACKAGE_JSON_PROP_NAME];
+      } else {
+        config = await (configModule.__esModule
+          ? configModule.default
+          : configModule);
+      }
+    } catch (e) {
+      try {
+        // $FlowExpectedError[unsupported-syntax]
+        const configModule = await import(
+          path.isAbsolute(absolutePath)
+            ? pathToFileURL(absolutePath).toString()
+            : absolutePath
+        );
+        // The default export is a promise in the case of top-level await
+        config = await configModule.default;
+      } catch (error) {
+        let prefix = `Error loading Metro config at: ${absolutePath}\n`;
+        if (
+          error.code === 'ERR_UNKNOWN_FILE_EXTENSION' &&
+          TS_EXTENSIONS.has(extension)
+        ) {
+          prefix +=
+            'Ensure your Node.js version supports loading TypeScript. (>=24.0.0 or >=22.6.0 with --experimental-strip-types).\n';
+        }
+        // error.stack is a getter that includes error.message. Access it now
+        // to cache the current value before modifying message, so that we
+        // don't repeat the prefix when printing message and stack later.
+        error.stack;
+        error.message = prefix + error.message;
+        throw error;
+      }
+    }
+  } else if (extension === '.yaml' || extension === '.yml') {
+    throw new Error(
+      'YAML config is no longer supported, please migrate to JavaScript config (e.g. metro.config.js)',
+    );
+  } else {
+    throw new Error(
+      `Unsupported config file extension: ${extension}. ` +
+        `Supported extensions are ${[...JS_EXTENSIONS, ...TS_EXTENSIONS].map(ext => (ext === '' ? 'none' : `${ext}`)).join()})}.`,
+    );
+  }
+
+  return {
+    isEmpty: false,
+    filepath: absolutePath,
+    config,
+  };
+}
+
+function searchForConfigFile(
+  absoluteStartDir: string,
+  absoluteStopDir: string,
+): ?string {
+  for (
+    let currentDir: string = absoluteStartDir, prevDir: string;
+    prevDir !== currentDir && prevDir !== absoluteStopDir;
+    currentDir = path.dirname(prevDir)
+  ) {
+    for (const candidate of SEARCH_PLACES) {
+      const candidatePath = path.join(currentDir, candidate);
+      if (isFile(candidatePath)) {
+        if (candidatePath.endsWith(path.sep + 'package.json')) {
+          // package.json is a special case - we only find a config if
+          // the json has a top-level `metro` key.
+          //
+          // By using `require`, we'll add the json to the Node.js module
+          // cache, so we don't incur further parse cost after returning the
+          // manifest's path.
+          // $FlowFixMe[unsupported-syntax] dynamic require
+          const content = require(candidatePath);
+          if (Object.hasOwn(content, PACKAGE_JSON_PROP_NAME)) {
+            return candidatePath;
+          }
+        } else {
+          return candidatePath;
+        }
+      }
+    }
+    prevDir = currentDir;
+  }
+  return null;
+}
+
+export {loadConfig, resolveConfig, mergeConfig};

@@ -9,28 +9,25 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {Module} from '../types';
 
-import type {Module} from '../types.flow';
+import getSourceMapInfo from './helpers/getSourceMapInfo';
+import {isJsModule} from './helpers/js';
+import {fromRawMappingsIndexed} from 'metro-source-map';
 
-const getSourceMapInfo = require('./helpers/getSourceMapInfo');
-const {isJsModule} = require('./helpers/js');
-const {
-  fromRawMappings,
-  fromRawMappingsNonBlocking,
-} = require('metro-source-map');
-
-export type SourceMapGeneratorOptions = $ReadOnly<{
+export type SourceMapGeneratorOptions = Readonly<{
   excludeSource: boolean,
   processModuleFilter: (module: Module<>) => boolean,
   shouldAddToIgnoreList: (module: Module<>) => boolean,
-  getSourceUrl: ?(module: Module<>) => string,
+  getSourceUrl?: ?(module: Module<>) => string,
 }>;
 
 function getSourceMapInfosImpl(
   isBlocking: boolean,
-  onDone: ($ReadOnlyArray<ReturnType<typeof getSourceMapInfo>>) => void,
-  modules: $ReadOnlyArray<Module<>>,
+  onDone: (
+    sourceMapInfos: ReadonlyArray<ReturnType<typeof getSourceMapInfo>>,
+  ) => void,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
 ): void {
   const sourceMapInfos = [];
@@ -44,6 +41,7 @@ function getSourceMapInfosImpl(
     }
 
     const mod = modulesToProcess.shift();
+    // $FlowFixMe[incompatible-type]
     const info = getSourceMapInfo(mod, {
       excludeSource: options.excludeSource,
       shouldAddToIgnoreList: options.shouldAddToIgnoreList,
@@ -80,9 +78,9 @@ function getSourceMapInfosImpl(
 }
 
 function sourceMapGenerator(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappings> {
+): ReturnType<typeof fromRawMappingsIndexed> {
   let sourceMapInfos;
   getSourceMapInfosImpl(
     true,
@@ -97,22 +95,21 @@ function sourceMapGenerator(
       'Expected getSourceMapInfosImpl() to finish synchronously.',
     );
   }
-  return fromRawMappings(sourceMapInfos);
+  return fromRawMappingsIndexed(sourceMapInfos);
 }
 
 async function sourceMapGeneratorNonBlocking(
-  modules: $ReadOnlyArray<Module<>>,
+  modules: ReadonlyArray<Module<>>,
   options: SourceMapGeneratorOptions,
-): ReturnType<typeof fromRawMappingsNonBlocking> {
+): Promise<ReturnType<typeof fromRawMappingsIndexed>> {
   const sourceMapInfos = await new Promise<
-    $ReadOnlyArray<ReturnType<typeof getSourceMapInfo>>,
+    ReadonlyArray<ReturnType<typeof getSourceMapInfo>>,
   >(resolve => {
     getSourceMapInfosImpl(false, resolve, modules, options);
   });
-  return fromRawMappingsNonBlocking(sourceMapInfos);
+  // Building an index map is a cheap synchronous passthrough (VLQ maps carry
+  // over verbatim); only gathering the per-module info above needs to yield.
+  return fromRawMappingsIndexed(sourceMapInfos);
 }
 
-module.exports = {
-  sourceMapGenerator,
-  sourceMapGeneratorNonBlocking,
-};
+export {sourceMapGenerator, sourceMapGeneratorNonBlocking};

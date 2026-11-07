@@ -11,17 +11,16 @@
 
 import type {ChromeHeapSnapshot} from './ChromeHeapSnapshot';
 import type {HermesFunctionOffsets, MixedSourceMap} from 'metro-source-map';
+import type {Writable} from 'node:stream';
 
-// flowlint-next-line untyped-type-import:off
+import {ChromeHeapSnapshotProcessor} from './ChromeHeapSnapshot';
+import GoogleIgnoreListConsumer from './GoogleIgnoreListConsumer';
+import SourceMetadataMapConsumer from './SourceMetadataMapConsumer';
+import invariant from 'invariant';
+import fs from 'node:fs';
+import path from 'node:path';
+import nullthrows from 'nullthrows';
 import {typeof SourceMapConsumer} from 'source-map';
-
-const {ChromeHeapSnapshotProcessor} = require('./ChromeHeapSnapshot');
-const GoogleIgnoreListConsumer = require('./GoogleIgnoreListConsumer');
-const SourceMetadataMapConsumer = require('./SourceMetadataMapConsumer');
-const fs = require('fs');
-const invariant = require('invariant');
-const nullthrows = require('nullthrows');
-const path = require('path');
 
 type SingleMapModuleIds = {
   segmentId: number,
@@ -30,11 +29,11 @@ type SingleMapModuleIds = {
 };
 
 type ContextOptionsInput = {
-  +nameSource?: 'function_names' | 'identifier_names',
-  +inputLineStart?: number,
-  +inputColumnStart?: number,
-  +outputLineStart?: number,
-  +outputColumnStart?: number,
+  readonly nameSource?: 'function_names' | 'identifier_names',
+  readonly inputLineStart?: number,
+  readonly inputColumnStart?: number,
+  readonly outputLineStart?: number,
+  readonly outputColumnStart?: number,
   ...
 };
 
@@ -61,15 +60,17 @@ type ChromeTraceEntry = {
 };
 
 type ChromeTrace = {
-  stackFrames: {[string]: ChromeTraceEntry},
+  stackFrames: {[key: string]: ChromeTraceEntry},
 };
 
 type HermesMinidumpCrashInfo = {
-  +callstack: $ReadOnlyArray<HermesMinidumpStackFrame | NativeCodeStackFrame>,
+  readonly callstack: ReadonlyArray<
+    HermesMinidumpStackFrame | NativeCodeStackFrame,
+  >,
   ...
 };
 
-type HermesMinidumpStackFrame = $ReadOnly<{
+type HermesMinidumpStackFrame = Readonly<{
   ByteCodeOffset: number,
   FunctionID: number,
   // NOTE: CJSModuleOffset has been renamed to SegmentID. Support both formats for now.
@@ -81,25 +82,25 @@ type HermesMinidumpStackFrame = $ReadOnly<{
 }>;
 
 type HermesCoverageInfo = {
-  +executedFunctions: $ReadOnlyArray<HermesCoverageStackFrame>,
+  readonly executedFunctions: ReadonlyArray<HermesCoverageStackFrame>,
 };
 
-type HermesCoverageStackFrame = $ReadOnly<{
+type HermesCoverageStackFrame = Readonly<{
   line: number, // SegmentID or zero-based line,
   column: number, // VirtualOffset or zero-based column,
   SourceURL: ?string,
 }>;
 
-type NativeCodeStackFrame = $ReadOnly<{
+type NativeCodeStackFrame = Readonly<{
   NativeCode: true,
   StackFrameRegOffs: string,
 }>;
 
-type SymbolicatedStackTrace = $ReadOnlyArray<
+type SymbolicatedStackTrace = ReadonlyArray<
   SymbolicatedStackFrame | NativeCodeStackFrame,
 >;
 
-type SymbolicatedStackFrame = $ReadOnly<{
+type SymbolicatedStackFrame = Readonly<{
   line: ?number,
   column: ?number,
   source: ?string,
@@ -114,12 +115,12 @@ const UNKNOWN_MODULE_IDS: SingleMapModuleIds = {
 };
 
 class SymbolicationContext<ModuleIdsT> {
-  +options: {
-    +nameSource: 'function_names' | 'identifier_names',
-    +inputLineStart: number,
-    +inputColumnStart: number,
-    +outputLineStart: number,
-    +outputColumnStart: number,
+  readonly options: {
+    readonly nameSource: 'function_names' | 'identifier_names',
+    readonly inputLineStart: number,
+    readonly inputColumnStart: number,
+    readonly outputLineStart: number,
+    readonly outputColumnStart: number,
     ...
   };
 
@@ -137,8 +138,10 @@ class SymbolicationContext<ModuleIdsT> {
         'inputColumnStart',
         'outputLineStart',
         'outputColumnStart',
-      ]) {
+      ] as const) {
         if (options[option] != null) {
+          /* $FlowFixMe[incompatible-type] error found during natural inference
+           * roll-out. See https://fburl.com/workplace/tc9m3tcf */
           this.options[option] = options[option];
         }
       }
@@ -157,11 +160,13 @@ class SymbolicationContext<ModuleIdsT> {
   //  IOS: foo@123.js:4:18131, Android: bar:123.js:4:18063
   // sample stack trace without function name:
   //  123.js:4:18131
+  // sample stack trace with a Windows absolute path:
+  //  foo@C:\app\123.js:4:18131
   // sample result:
   //  IOS: foo.js:57:foo, Android: bar.js:75:bar
   symbolicate(stackTrace: string): string {
     return stackTrace.replace(
-      /(?:([^@: \n(]+)(@|:))?(?:(?:([^@: \n(]+):)?(\d+):(\d+)|\[native code\])/g,
+      /(?:((?:[A-Za-z]:\\)?[^@: \n(]+)(@|:))?(?:(?:((?:[A-Za-z]:\\)?[^@: \n(]+):)?(\d+):(\d+)|\[native code\](?::\d+:\d+)?)/g,
       (match, func, delimiter, fileName, line, column) => {
         if (delimiter === ':' && func && !fileName) {
           fileName = func;
@@ -270,8 +275,8 @@ class SymbolicationContext<ModuleIdsT> {
       stdout,
       stderr,
     }: {
-      stdout: stream$Writable,
-      stderr: stream$Writable,
+      stdout: Writable,
+      stderr: Writable,
       ...
     },
   ): void {
@@ -293,8 +298,8 @@ class SymbolicationContext<ModuleIdsT> {
 
       if (entry.funcVirtAddr != null && entry.offset != null) {
         // Without debug information.
-        const funcVirtAddr = parseInt(entry.funcVirtAddr, 10);
-        const offsetInFunction = parseInt(entry.offset, 10);
+        const funcVirtAddr = parseInt(String(entry.funcVirtAddr), 10);
+        const offsetInFunction = parseInt(String(entry.offset), 10);
         // Main bundle always use hard-coded line value 1.
         // TODO: support multiple bundle/module.
         line = this.options.inputLineStart;
@@ -395,7 +400,7 @@ class SymbolicationContext<ModuleIdsT> {
   }
 
   /**
-   * Symbolicates heap alloction stacks in a Chrome-formatted heap
+   * Symbolicates heap allocation stacks in a Chrome-formatted heap
    * snapshot/timeline.
    * Line and column offsets in options (both input and output) are _ignored_,
    * because this format has a well-defined convention (1-based lines and
@@ -494,20 +499,20 @@ class SymbolicationContext<ModuleIdsT> {
 }
 
 class SingleMapSymbolicationContext extends SymbolicationContext<SingleMapModuleIds> {
-  +_segments: {
-    +[id: string]: {
+  readonly _segments: {
+    readonly [id: string]: {
       // $FlowFixMe[value-as-type]
-      +consumer: SourceMapConsumer,
-      +moduleOffsets: $ReadOnlyArray<number>,
-      +sourceFunctionsConsumer: ?SourceMetadataMapConsumer,
-      +hermesOffsets: ?HermesFunctionOffsets,
-      +googleIgnoreListConsumer: GoogleIgnoreListConsumer,
+      readonly consumer: SourceMapConsumer,
+      readonly moduleOffsets: ReadonlyArray<number>,
+      readonly sourceFunctionsConsumer: ?SourceMetadataMapConsumer,
+      readonly hermesOffsets: ?HermesFunctionOffsets,
+      readonly googleIgnoreListConsumer: GoogleIgnoreListConsumer,
     },
     ...
   };
-  +_legacyFormat: boolean;
+  readonly _legacyFormat: boolean;
   // $FlowFixMe[value-as-type]
-  +_SourceMapConsumer: SourceMapConsumer;
+  readonly _SourceMapConsumer: SourceMapConsumer;
 
   constructor(
     // $FlowFixMe[value-as-type]
@@ -690,10 +695,25 @@ class SingleMapSymbolicationContext extends SymbolicationContext<SingleMapModule
       }
       moduleLineOffset = moduleOffsets[localId];
     }
-    const original = metadata.consumer.originalPositionFor({
-      line: Number(lineNumber) + moduleLineOffset,
-      column: Number(columnNumber),
-    });
+    const line = Number(lineNumber) + moduleLineOffset;
+    const column = Number(columnNumber);
+
+    // Crash reporters normalise frames that have no JS location - native
+    // frames in particular - to line 0, column 0. `originalPositionFor` throws
+    // on an out-of-range position, so report these as unresolved instead,
+    // matching what we already do for a bare `[native code]` frame.
+    if (line <= 0 || column < 0) {
+      return {
+        line: null,
+        column: null,
+        source: null,
+        functionName: null,
+        name: null,
+        isIgnored: false,
+      };
+    }
+
+    const original = metadata.consumer.originalPositionFor({line, column});
     if (metadata.sourceFunctionsConsumer) {
       original.functionName =
         metadata.sourceFunctionsConsumer.functionNameFor(original) || null;
@@ -724,10 +744,10 @@ class SingleMapSymbolicationContext extends SymbolicationContext<SingleMapModule
 }
 
 class DirectorySymbolicationContext extends SymbolicationContext<string> {
-  +_fileMaps: Map<string, SingleMapSymbolicationContext>;
-  +_rootDir: string;
+  readonly _fileMaps: Map<string, SingleMapSymbolicationContext>;
+  readonly _rootDir: string;
   // $FlowFixMe[value-as-type]
-  +_SourceMapConsumer: SourceMapConsumer;
+  readonly _SourceMapConsumer: SourceMapConsumer;
 
   constructor(
     // $FlowFixMe[value-as-type]
@@ -904,8 +924,8 @@ function symbolicateChromeTrace<ModuleIdsT>(
     stdout,
     stderr,
   }: {
-    stdout: stream$Writable,
-    stderr: stream$Writable,
+    stdout: Writable,
+    stderr: Writable,
     ...
   },
   context: SymbolicationContext<ModuleIdsT>,
@@ -913,11 +933,11 @@ function symbolicateChromeTrace<ModuleIdsT>(
   return context.symbolicateChromeTrace(traceFile, {stdout, stderr});
 }
 
-module.exports = {
+export {
   createContext,
   unstable_createDirectoryContext,
   getOriginalPositionFor,
-  parseFileName: parseSingleMapFileName,
+  parseSingleMapFileName as parseFileName,
   symbolicate,
   symbolicateProfilerMap,
   symbolicateAttribution,

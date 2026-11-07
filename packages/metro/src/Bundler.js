@@ -9,36 +9,38 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {TransformResultWithSource} from './DeltaBundler';
 import type {TransformOptions} from './DeltaBundler/Worker';
-import type EventEmitter from 'events';
-import type {ConfigT} from 'metro-config/src/configTypes.flow';
+import type {DynamicRoot} from './lib/dynamicRoots';
+import type {ConfigT} from 'metro-config';
+import type EventEmitter from 'node:events';
 
-const Transformer = require('./DeltaBundler/Transformer');
-const DependencyGraph = require('./node-haste/DependencyGraph');
+import Transformer from './DeltaBundler/Transformer';
+import DependencyGraph from './node-haste/DependencyGraph';
+import nullthrows from 'nullthrows';
 
-export type BundlerOptions = $ReadOnly<{
+export type BundlerOptions = Readonly<{
   hasReducedPerformance?: boolean,
   watch?: boolean,
 }>;
 
-class Bundler {
+export default class Bundler {
   _depGraph: DependencyGraph;
-  _readyPromise: Promise<void>;
-  _transformer: Transformer;
+  _initializedPromise: Promise<void>;
+  _transformer: ?Transformer;
 
   constructor(config: ConfigT, options?: BundlerOptions) {
     this._depGraph = new DependencyGraph(config, options);
 
-    this._readyPromise = this._depGraph
+    this._initializedPromise = this._depGraph
       .ready()
       .then(() => {
         config.reporter.update({type: 'transformer_load_started'});
-        this._transformer = new Transformer(config, (...args) =>
-          this._depGraph.getSha1(...args),
-        );
+        this._transformer = new Transformer(config, {
+          getDynamicRoots: () => this._depGraph.getDynamicRoots(),
+          getOrComputeSha1: filePath =>
+            this._depGraph.getOrComputeSha1(filePath),
+        });
         config.reporter.update({type: 'transformer_load_done'});
       })
       .catch(error => {
@@ -47,7 +49,12 @@ class Bundler {
           type: 'transformer_load_failed',
           error,
         });
+        throw error;
       });
+
+    // Observe initialization failures immediately so callers can await the
+    // original promise later without triggering an unhandled rejection.
+    this._initializedPromise.catch(() => {});
   }
 
   getWatcher(): EventEmitter {
@@ -55,14 +62,28 @@ class Bundler {
   }
 
   async end(): Promise<void> {
-    await this._depGraph.ready();
+    // Initialization errors are surfaced by ready() and the reporter, and
+    // shouldn't prevent teardown of whatever was started.
+    await this._initializedPromise.catch(() => {});
 
-    this._transformer.end();
-    this._depGraph.end();
+    try {
+      await this._transformer?.end();
+    } finally {
+      await this._depGraph.end();
+    }
+  }
+
+  /**
+   * Roots held by the file map in addition to `projectRoot` and
+   * `watchFolders`. Empty until the dependency graph is ready.
+   */
+  getDynamicRoots(): ReadonlyArray<DynamicRoot> {
+    return this._depGraph.getDynamicRoots();
   }
 
   async getDependencyGraph(): Promise<DependencyGraph> {
-    await this._depGraph.ready();
+    await this.ready();
+
     return this._depGraph;
   }
 
@@ -74,9 +95,9 @@ class Bundler {
   ): Promise<TransformResultWithSource<>> {
     // We need to be sure that the DependencyGraph has been initialized.
     // TODO: Remove this ugly hack!
-    await this._depGraph.ready();
+    await this.ready();
 
-    return this._transformer.transformFile(
+    return nullthrows(this._transformer).transformFile(
       filePath,
       transformOptions,
       fileBuffer,
@@ -85,8 +106,6 @@ class Bundler {
 
   // Waits for the bundler to become ready.
   async ready(): Promise<void> {
-    await this._readyPromise;
+    await this._initializedPromise;
   }
 }
-
-module.exports = Bundler;

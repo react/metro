@@ -9,19 +9,14 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {
-  Bundle,
-  BundleMetadata,
-} from 'metro-runtime/src/modules/types.flow';
+import type {Bundle, BundleMetadata} from 'metro-runtime/src/modules/types';
 
 /**
  * Serializes a bundle into a plain JS bundle.
  */
-function bundleToString(bundle: Bundle): {
-  +code: string,
-  +metadata: BundleMetadata,
+export default function bundleToString(bundle: Bundle): {
+  readonly code: string,
+  readonly metadata: BundleMetadata,
 } {
   let code = bundle.pre.length > 0 ? bundle.pre + '\n' : '';
   const modules = [];
@@ -50,5 +45,3 @@ function bundleToString(bundle: Bundle): {
     metadata: {pre: bundle.pre.length, post: bundle.post.length, modules},
   };
 }
-
-module.exports = bundleToString;

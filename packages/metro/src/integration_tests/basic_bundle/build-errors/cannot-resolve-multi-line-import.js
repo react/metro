@@ -26,4 +26,4 @@ import {
   // $FlowExpectedError[cannot-resolve-module]
 } from './does-not-exist';
 
-global.x = (aaaaaaaaaa: DoesNotExistT);
+global.x = aaaaaaaaaa as DoesNotExistT;

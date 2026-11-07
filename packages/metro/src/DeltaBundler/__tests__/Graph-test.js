@@ -32,23 +32,31 @@
  *   boxes/lines as needed).
  */
 
-import type {RequireContext} from '../../lib/contextModule';
+import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
 import type {Result} from '../Graph';
 import type {
+  BundlerResolution,
   Dependency,
   MixedOutput,
   Module,
   Options,
   ReadOnlyDependencies,
   ReadOnlyGraph,
+  ResolvedDependency,
   TransformFn,
   TransformResultDependency,
   TransformResultWithSource,
-} from '../types.flow';
+  VirtualSource,
+} from '../types';
 
 import {deriveAbsolutePathFromContext} from '../../lib/contextModule';
 import CountingSet from '../../lib/CountingSet';
+import {
+  deriveVirtualModulePath,
+  isVirtualModulePath,
+} from '../../lib/modulePath';
 import {Graph} from '../Graph';
+import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
 
 const {objectContaining} = expect;
@@ -59,7 +67,7 @@ let mockedDependencies: Set<string> = new Set();
 let mockedDependencyTree: Map<
   string,
   Array<
-    $ReadOnly<{
+    Readonly<{
       name: string,
       path: string,
       data: DependencyDataInput,
@@ -67,10 +75,10 @@ let mockedDependencyTree: Map<
   >,
 > = new Map();
 
-/* `files` emulates the changed paths typically aggregated by DeltaCalcutor.
+/* `files` emulates the changed paths typically aggregated by DeltaCalculator.
  * Paths will be added to this set by any addition, deletion or modification,
  * respecting getModifiedModulesForDeletedPath. Each such operation will
- * increment the count - we'll intepret count as a file revision number, with
+ * increment the count - we'll interpret count as a file revision number, with
  * a changed count reflected in a change to the transform output key.
  */
 const files = new CountingSet<string>();
@@ -81,7 +89,7 @@ const files = new CountingSet<string>();
 let transformOverrides: Map<string, TransformFn<MixedOutput>>;
 
 let graph: TestGraph;
-let options;
+let options: Options<>;
 
 let entryModule;
 let moduleFoo;
@@ -155,8 +163,12 @@ const Actions = {
       Actions.createFile(path);
     }
     const deps = getMockDependency(path);
-    const depName = name ?? dependencyPath.replace('/', '');
-    const key = require('crypto')
+    // Derive a relative, posix-style specifier from the (possibly Windows)
+    // absolute path, e.g. '/foo/bar' or 'C:\foo\bar' -> 'foo/bar'.
+    const depName =
+      name ??
+      dependencyPath.replace(/^(?:[A-Za-z]:)?[\\/]/, '').replaceAll('\\', '/');
+    const key = require('node:crypto')
       .createHash('sha1')
       .update([depName, data?.asyncType ?? '(null)'].join('\0'))
       .digest('base64');
@@ -213,10 +225,10 @@ const Actions = {
 };
 
 function deferred(
-  value: $ReadOnly<{
-    dependencies: $ReadOnlyArray<TransformResultDependency>,
+  value: Readonly<{
+    dependencies: ReadonlyArray<TransformResultDependency>,
     getSource: () => Buffer,
-    output: $ReadOnlyArray<MixedOutput>,
+    output: ReadonlyArray<MixedOutput>,
     unstable_transformResultKey?: ?string,
   }>,
 ) {
@@ -226,9 +238,11 @@ function deferred(
   return {promise, resolve: () => resolve(value)};
 }
 
-/* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
- * LTI update could not be added via codemod */
-function getPaths({added, modified, deleted}) {
+function getPaths<T>({added, modified, deleted}: Result<T>): {
+  added: Set<string>,
+  modified: Set<string>,
+  deleted: Set<string>,
+} {
   const addedPaths = [...added.values()].map(module => module.path);
   const modifiedPaths = [...modified.values()].map(module => module.path);
 
@@ -282,7 +296,10 @@ function computeInverseDependencies(
   }
   for (const module of graph.dependencies.values()) {
     for (const dependency of module.dependencies.values()) {
-      if (options.lazy && dependency.data.data.asyncType != null) {
+      if (
+        dependency.absolutePath == null ||
+        (options.lazy && dependency.data.data.asyncType != null)
+      ) {
         // Async deps aren't tracked in inverseDependencies
         continue;
       }
@@ -298,15 +315,30 @@ function computeInverseDependencies(
 
 class TestGraph extends Graph<> {
   async traverseDependencies(
-    paths: $ReadOnlyArray<string>,
+    paths: ReadonlyArray<string>,
     options: Options<>,
   ): Promise<Result<MixedOutput>> {
     // Get a snapshot of the graph before the traversal.
     const dependenciesBefore = new Set(this.dependencies.keys());
     const modifiedPaths = new Set(files);
+    // The mocks don't model file contents, but they do model virtual module
+    // contents: a virtual module whose transform output key changes is
+    // expected to be reported as modified.
+    const virtualKeysBefore = new Map(
+      [...this.dependencies]
+        .filter(([path]) => isVirtualModulePath(path))
+        .map(([path, module]) => [path, module.unstable_transformResultKey]),
+    );
 
     // Mutate the graph and calculate a delta.
     const delta = await super.traverseDependencies(paths, options);
+
+    for (const [path, keyBefore] of virtualKeysBefore) {
+      const module = this.dependencies.get(path);
+      if (module != null && module.unstable_transformResultKey !== keyBefore) {
+        modifiedPaths.add(path);
+      }
+    }
 
     // Validate the delta against the current state of the graph.
     const expectedDelta = computeDelta(
@@ -322,7 +354,7 @@ class TestGraph extends Graph<> {
       options,
     );
     const actualInverseDependencies = new Map<string, Set<string>>();
-    for (const [path, module] of graph.dependencies) {
+    for (const [path, module] of this.dependencies) {
       actualInverseDependencies.set(path, new Set(module.inverseDependencies));
     }
     expect(actualInverseDependencies).toEqual(expectedInverseDependencies);
@@ -331,24 +363,24 @@ class TestGraph extends Graph<> {
   }
 }
 
-// $FlowFixMe[missing-local-annot]
-function getMatchingContextModules<T>(graph: Graph<T>, filePath: string) {
+function getMatchingContextModules<T>(
+  graph: Graph<T>,
+  filePath: string,
+): Set<string> {
   const contextPaths = new Set<string>();
   graph.markModifiedContextModules(filePath, contextPaths);
   return contextPaths;
 }
 
 beforeEach(async () => {
-  mockedDependencies = new Set();
-  mockedDependencyTree = new Map();
   transformOverrides = new Map();
 
   mockTransform = jest
     .fn<
-      [string, ?RequireContext],
+      [string, ?VirtualSource],
       Promise<TransformResultWithSource<MixedOutput>>,
     >()
-    .mockImplementation(async (path: string, context: ?RequireContext) => {
+    .mockImplementation(async (path: string, context: ?VirtualSource) => {
       const override = transformOverrides.get(path);
       if (override != null) {
         return override(path, context);
@@ -369,9 +401,9 @@ beforeEach(async () => {
           name: dep.name,
           data: {
             asyncType: null,
-            // $FlowFixMe[missing-empty-array-annot]
+            isESMImport: false,
             locs: [],
-            // $FlowFixMe[incompatible-call]
+            // $FlowFixMe[incompatible-type]
             key: dep.data.key,
             ...dep.data,
           },
@@ -395,6 +427,7 @@ beforeEach(async () => {
   options = {
     unstable_allowRequireContext: false,
     unstable_enablePackageExports: false,
+    unstable_incrementalResolution: false,
     lazy: false,
     onProgress: null,
     resolve: (from: string, to: TransformResultDependency) => {
@@ -410,7 +443,6 @@ beforeEach(async () => {
     transformOptions: {
       // NOTE: These options are ignored because we mock out the transformer.
       dev: false,
-      hot: false,
       minify: false,
       platform: null,
       type: 'module',
@@ -419,36 +451,46 @@ beforeEach(async () => {
     shallow: false,
   };
 
-  /*
-  Generate the initial dependency graph:
-  ┌─────────┐     ┌──────┐     ┌──────┐
-  │ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
-  └─────────┘     └──────┘     └──────┘
-                    │
-                    │
-                    ▼
-                  ┌──────┐
-                  │ /baz │
-                  └──────┘
-  */
-  entryModule = Actions.createFile('/bundle');
-  moduleFoo = Actions.createFile('/foo');
-  moduleBar = Actions.createFile('/bar');
-  moduleBaz = Actions.createFile('/baz');
+  setUpInitialGraph(posixPath => posixPath);
+});
 
-  Actions.addDependency('/bundle', '/foo');
-  Actions.addDependency('/foo', '/bar');
-  Actions.addDependency('/foo', '/baz');
+/*
+Generate the initial dependency graph:
+┌─────────┐     ┌──────┐     ┌──────┐
+│ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
+└─────────┘     └──────┘     └──────┘
+                  │
+                  │
+                  ▼
+                ┌──────┐
+                │ /baz │
+                └──────┘
+
+Paths are given as posix and mapped through `p`, so that tests exercising
+path-sensitive logic can use system paths.
+*/
+function setUpInitialGraph(p: (posixPath: string) => string) {
+  mockedDependencies = new Set();
+  mockedDependencyTree = new Map();
+
+  entryModule = Actions.createFile(p('/bundle'));
+  moduleFoo = Actions.createFile(p('/foo'));
+  moduleBar = Actions.createFile(p('/bar'));
+  moduleBaz = Actions.createFile(p('/baz'));
+
+  Actions.addDependency(p('/bundle'), p('/foo'));
+  Actions.addDependency(p('/foo'), p('/bar'));
+  Actions.addDependency(p('/foo'), p('/baz'));
 
   files.clear();
 
   graph = new TestGraph({
-    entryPoints: new Set(['/bundle']),
+    entryPoints: new Set([p('/bundle')]),
     transformOptions: options.transformOptions,
   });
-});
+}
 
-it('should do the initial traversal correctly', async () => {
+test('should do the initial traversal correctly', async () => {
   const result = await graph.initialTraverseDependencies(options);
 
   expect(getPaths(result)).toEqual({
@@ -460,7 +502,7 @@ it('should do the initial traversal correctly', async () => {
   expect(graph).toMatchSnapshot();
 });
 
-it('should populate all the inverse dependencies', async () => {
+test('should populate all the inverse dependencies', async () => {
   // create a second inverse dependency on /bar.
   Actions.addDependency('/bundle', '/bar');
 
@@ -471,7 +513,7 @@ it('should populate all the inverse dependencies', async () => {
   ).toEqual(new CountingSet(['/foo', '/bundle']));
 });
 
-it('should return an empty result when there are no changes', async () => {
+test('should return an empty result when there are no changes', async () => {
   await graph.initialTraverseDependencies(options);
 
   expect(
@@ -483,7 +525,7 @@ it('should return an empty result when there are no changes', async () => {
   });
 });
 
-it('should return a removed dependency', async () => {
+test('should return a removed dependency', async () => {
   await graph.initialTraverseDependencies(options);
 
   Actions.removeDependency('/foo', '/bar');
@@ -497,7 +539,7 @@ it('should return a removed dependency', async () => {
   });
 });
 
-it('should return added/removed dependencies', async () => {
+test('should return added/removed dependencies', async () => {
   await graph.initialTraverseDependencies(options);
 
   Actions.addDependency('/foo', '/qux');
@@ -513,7 +555,7 @@ it('should return added/removed dependencies', async () => {
   });
 });
 
-it('should retry to traverse the dependencies as it was after getting an error', async () => {
+test('should retry to traverse the dependencies as it was after getting an error', async () => {
   await graph.initialTraverseDependencies(options);
 
   Actions.deleteFile(moduleBar, graph);
@@ -529,12 +571,12 @@ it('should retry to traverse the dependencies as it was after getting an error',
   ).rejects.toBeInstanceOf(Error);
 });
 
-it('should retry traversing dependencies after a transform error', async () => {
+test('should retry traversing dependencies after a transform error', async () => {
   class BadError extends Error {}
 
   const localOptions = {
     ...options,
-    transform(path: string, context: ?RequireContext) {
+    transform(path: string, context: ?VirtualSource) {
       if (path === '/bad') {
         throw new BadError();
       }
@@ -567,7 +609,7 @@ it('should retry traversing dependencies after a transform error', async () => {
   });
 });
 
-it('should not traverse past the initial module if `shallow` is passed', async () => {
+test('should not traverse past the initial module if `shallow` is passed', async () => {
   const result = await graph.initialTraverseDependencies({
     ...options,
     shallow: true,
@@ -583,7 +625,7 @@ it('should not traverse past the initial module if `shallow` is passed', async (
 });
 
 describe('Progress updates', () => {
-  it('calls back for each finished module', async () => {
+  test('calls back for each finished module', async () => {
     const onProgress = jest.fn();
 
     await graph.initialTraverseDependencies({...options, onProgress});
@@ -593,7 +635,7 @@ describe('Progress updates', () => {
     expect(onProgress.mock.calls.length).toBe(mockedDependencies.size * 2);
   });
 
-  it('increases the number of discover/finished modules in steps of one', async () => {
+  test('increases the number of discover/finished modules in steps of one', async () => {
     const onProgress = jest.fn();
 
     await graph.initialTraverseDependencies({...options, onProgress});
@@ -612,7 +654,7 @@ describe('Progress updates', () => {
     }
   });
 
-  it('increases the number of discover/finished modules in steps of one when there are multiple entrypoints', async () => {
+  test('increases the number of discover/finished modules in steps of one when there are multiple entrypoints', async () => {
     const onProgress = jest.fn();
 
     // Add a new entry point to the graph.
@@ -642,7 +684,7 @@ describe('Progress updates', () => {
 });
 
 describe('edge cases', () => {
-  it('should handle cyclic dependencies', async () => {
+  test('should handle cyclic dependencies', async () => {
     Actions.addDependency('/baz', '/foo');
     files.clear();
 
@@ -657,7 +699,7 @@ describe('edge cases', () => {
     ).toEqual(new CountingSet(['/baz', '/bundle']));
   });
 
-  it('should handle renames correctly', async () => {
+  test('should handle renames correctly', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.removeDependency('/foo', '/baz');
@@ -673,7 +715,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('should not try to remove wrong dependencies when renaming files', async () => {
+  test('should not try to remove wrong dependencies when renaming files', async () => {
     await graph.initialTraverseDependencies(options);
 
     // Rename /foo to /foo-renamed, but keeping all its dependencies.
@@ -695,7 +737,7 @@ describe('edge cases', () => {
     expect(graph.dependencies.get('/foo')).toBe(undefined);
   });
 
-  it('should handle file extension changes correctly', async () => {
+  test('should handle file extension changes correctly', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.removeDependency('/foo', '/baz');
@@ -710,7 +752,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('modify a file and delete it afterwards', async () => {
+  test('modify a file and delete it afterwards', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.modifyFile('/baz');
@@ -727,7 +769,7 @@ describe('edge cases', () => {
     expect(graph.dependencies.get('/baz')).toBe(undefined);
   });
 
-  it('remove a dependency and modify it afterwards', async () => {
+  test('remove a dependency and modify it afterwards', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.removeDependency('/bundle', '/foo');
@@ -746,7 +788,7 @@ describe('edge cases', () => {
     expect(graph.dependencies.get('/baz')).toBe(undefined);
   });
 
-  it('remove a dependency, modify it, and re-add it elsewhere', async () => {
+  test('remove a dependency, modify it, and re-add it elsewhere', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.removeDependency('/foo', '/bar');
@@ -762,7 +804,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('Add a dependency, modify it, and remove it', async () => {
+  test('Add a dependency, modify it, and remove it', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.createFile('/quux');
@@ -779,7 +821,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a cyclic dependency but should not remove any dependency', async () => {
+  test('removes a cyclic dependency but should not remove any dependency', async () => {
     Actions.createFile('/bar1');
     Actions.addDependency('/bar', '/bar1');
     Actions.addDependency('/bar1', '/foo');
@@ -799,7 +841,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes cyclic leaf dependencies interchangeably', async () => {
+  test('removes cyclic leaf dependencies interchangeably', async () => {
     Actions.createFile('/core');
     Actions.createFile('/a');
     Actions.createFile('/b');
@@ -843,7 +885,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a cyclic dependency with inverse dependency from other sub-graph', async () => {
+  test('removes a cyclic dependency with inverse dependency from other sub-graph', async () => {
     Actions.createFile('/toFoo');
     Actions.addDependency('/toFoo', '/baz');
     Actions.addDependency('/bundle', '/toFoo');
@@ -862,7 +904,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a cyclic dependency', async () => {
+  test('removes a cyclic dependency', async () => {
     Actions.addDependency('/baz', '/foo');
     files.clear();
 
@@ -879,7 +921,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a cycle with a weak dependency', async () => {
+  test('removes a cycle with a weak dependency', async () => {
     Actions.addDependency('/baz', '/foo');
     Actions.addDependency('/baz', '/weak', {data: {asyncType: 'weak'}});
     files.clear();
@@ -927,7 +969,7 @@ describe('edge cases', () => {
     });
   });
 
-  it.each([true, false])(
+  test.each([true, false])(
     'removes a cycle with an async dependency when lazy: %s',
     async lazy => {
       Actions.addDependency('/baz', '/foo');
@@ -981,7 +1023,7 @@ describe('edge cases', () => {
     },
   );
 
-  it('removes a cyclic dependency which is both inverse dependency and direct dependency', async () => {
+  test('removes a cyclic dependency which is both inverse dependency and direct dependency', async () => {
     Actions.addDependency('/foo', '/bundle');
 
     files.clear();
@@ -999,7 +1041,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a dependency with transient cyclic dependency', async () => {
+  test('removes a dependency with transient cyclic dependency', async () => {
     Actions.createFile('/baz1');
     Actions.addDependency('/baz', '/baz1');
     Actions.addDependency('/baz1', '/foo');
@@ -1019,7 +1061,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('removes a sub graph that has internal cyclic dependency', async () => {
+  test('removes a sub graph that has internal cyclic dependency', async () => {
     Actions.createFile('/bar2');
     Actions.addDependency('/bar', '/bar2');
     Actions.addDependency('/bar2', '/bar');
@@ -1040,7 +1082,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('move a file to a different folder', async () => {
+  test('move a file to a different folder', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.addDependency('/foo', '/baz-moved');
@@ -1057,7 +1099,7 @@ describe('edge cases', () => {
     expect(graph.dependencies.get('/baz')).toBe(undefined);
   });
 
-  it('maintain the order of module dependencies', async () => {
+  test('maintain the order of module dependencies', async () => {
     await graph.initialTraverseDependencies(options);
 
     Actions.addDependency('/foo', '/qux', {position: 0});
@@ -1127,7 +1169,7 @@ describe('edge cases', () => {
      *   * A "live" edge is one that makes it to the final state of graph.
      *   * A "dead" edge is one that is pruned from the final graph.
      */
-    it('all in one delta, adding the live edge first', async () => {
+    test('all in one delta, adding the live edge first', async () => {
       await graph.initialTraverseDependencies(options);
 
       /*
@@ -1202,7 +1244,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('all in one delta, adding the live edge after the dead edge', async () => {
+    test('all in one delta, adding the live edge after the dead edge', async () => {
       await graph.initialTraverseDependencies(options);
 
       /*
@@ -1279,7 +1321,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('add the dead edge, compute a delta, then add the live edge', async () => {
+    test('add the dead edge, compute a delta, then add the live edge', async () => {
       await graph.initialTraverseDependencies(options);
 
       /*
@@ -1380,7 +1422,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('create the module, compute a delta, then add the dead edge and the live edge', async () => {
+    test('create the module, compute a delta, then add the dead edge and the live edge', async () => {
       await graph.initialTraverseDependencies(options);
 
       /*
@@ -1502,7 +1544,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('more than two state transitions in one delta calculation', async () => {
+    test('more than two state transitions in one delta calculation', async () => {
       await graph.initialTraverseDependencies(options);
 
       /*
@@ -1618,7 +1660,7 @@ describe('edge cases', () => {
       };
     });
 
-    it('async dependencies and their deps are omitted from the initial graph', async () => {
+    test('async dependencies and their deps are omitted from the initial graph', async () => {
       Actions.removeDependency('/bundle', '/foo');
       Actions.addDependency('/bundle', '/foo', {
         data: {
@@ -1647,7 +1689,7 @@ describe('edge cases', () => {
       expect(graph.dependencies.get('/bar')).toBeUndefined();
     });
 
-    it('new async dependencies are not traversed', async () => {
+    test('new async dependencies are not traversed', async () => {
       Actions.removeDependency('/bundle', '/foo');
       Actions.addDependency('/bundle', '/foo', {
         data: {
@@ -1696,7 +1738,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('removing an async dependency preserves existing sync dependency', async () => {
+    test('removing an async dependency preserves existing sync dependency', async () => {
       const asyncDependencyKey = Actions.addDependency('/bundle', '/foo', {
         data: {
           asyncType: 'async',
@@ -1738,7 +1780,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('changing a sync dependency to async is a deletion', async () => {
+    test('changing a sync dependency to async is a deletion', async () => {
       /*
       ┌─────────┐     ┌──────┐     ┌──────┐
       │ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
@@ -1780,7 +1822,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('changing an async dependency to sync is an addition', async () => {
+    test('changing an async dependency to sync is an addition', async () => {
       Actions.removeDependency('/bundle', '/foo');
       Actions.addDependency('/bundle', '/foo', {
         data: {
@@ -1825,7 +1867,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('initial graph can have async+sync edges to the same module', async () => {
+    test('initial graph can have async+sync edges to the same module', async () => {
       Actions.addDependency('/bar', '/foo', {
         data: {
           asyncType: 'async',
@@ -1851,7 +1893,7 @@ describe('edge cases', () => {
       expect(graph.dependencies.get('/foo')).not.toBeUndefined();
     });
 
-    it('adding an async edge pointing at an existing module in the graph', async () => {
+    test('adding an async edge pointing at an existing module in the graph', async () => {
       /*
       ┌─────────┐     ┌──────┐     ┌──────┐
       │ /bundle │ ──▶ │ /foo │ ──▶ │ /bar │
@@ -1894,7 +1936,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('adding a sync edge brings in a module that is already the target of an async edge', async () => {
+    test('adding a sync edge brings in a module that is already the target of an async edge', async () => {
       Actions.removeDependency('/foo', '/bar');
       Actions.addDependency('/foo', '/bar', {
         data: {
@@ -1940,7 +1982,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('on initial traversal, modules are not kept alive by a cycle with an async dep', async () => {
+    test('on initial traversal, modules are not kept alive by a cycle with an async dep', async () => {
       Actions.removeDependency('/foo', '/bar');
       Actions.addDependency('/foo', '/bar', {
         data: {
@@ -1972,7 +2014,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('on incremental traversal, modules are not kept alive by a cycle with an async dep - deleting the sync edge in a delta', async () => {
+    test('on incremental traversal, modules are not kept alive by a cycle with an async dep - deleting the sync edge in a delta', async () => {
       Actions.removeDependency('/foo', '/bar');
       Actions.addDependency('/foo', '/bar', {
         data: {
@@ -2021,7 +2063,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('on incremental traversal, modules are not kept alive by a cycle with an async dep - adding the async edge in a delta', async () => {
+    test('on incremental traversal, modules are not kept alive by a cycle with an async dep - adding the async edge in a delta', async () => {
       Actions.removeDependency('/foo', '/bar');
       Actions.addDependency('/bar', '/foo');
       Actions.removeDependency('/bundle', '/foo');
@@ -2071,7 +2113,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('on incremental traversal, modules are not kept alive by a cycle with an async dep - deletion + add async in the same delta', async () => {
+    test('on incremental traversal, modules are not kept alive by a cycle with an async dep - deletion + add async in the same delta', async () => {
       Actions.removeDependency('/foo', '/bar');
       Actions.addDependency('/bar', '/foo');
 
@@ -2120,7 +2162,7 @@ describe('edge cases', () => {
       });
     });
 
-    it('deleting the target of an async dependency retraverses its parent', async () => {
+    test('deleting the target of an async dependency retraverses its parent', async () => {
       Actions.removeDependency('/bundle', '/foo');
       Actions.addDependency('/bundle', '/foo', {
         data: {
@@ -2186,7 +2228,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('should try to transform every file only once', async () => {
+  test('should try to transform every file only once', async () => {
     // create a second inverse dependency on /bar to add a cycle.
     Actions.addDependency('/bundle', '/bar');
     files.clear();
@@ -2196,7 +2238,7 @@ describe('edge cases', () => {
     expect(mockTransform.mock.calls.length).toBe(4);
   });
 
-  it('should not re-transform an unmodified file when it is removed and readded within a delta', async () => {
+  test('should not re-transform an unmodified file when it is removed and readded within a delta', async () => {
     /*
     ┌─────────┐     ┌──────┐     ┌───────┐
     │ /bundle │ ──▶ │ /foo │ ──▶ │ /bar  │
@@ -2236,7 +2278,7 @@ describe('edge cases', () => {
     expect(mockTransform).not.toHaveBeenCalledWith('/baz', undefined);
   });
 
-  it('should try to transform every file only once with multiple entry points', async () => {
+  test('should try to transform every file only once with multiple entry points', async () => {
     Actions.createFile('/bundle-2');
     Actions.addDependency('/bundle-2', '/foo');
     files.clear();
@@ -2252,7 +2294,7 @@ describe('edge cases', () => {
     expect(mockTransform.mock.calls.length).toBe(5);
   });
 
-  it('should create two entries when requiring the same file in different forms', async () => {
+  test('should create two entries when requiring the same file in different forms', async () => {
     await graph.initialTraverseDependencies(options);
 
     // We're adding a new reference from bundle to foo.
@@ -2292,7 +2334,7 @@ describe('edge cases', () => {
     ]);
   });
 
-  it('should traverse a graph from multiple entry points', async () => {
+  test('should traverse a graph from multiple entry points', async () => {
     entryModule = Actions.createFile('/bundle-2');
 
     Actions.addDependency('/bundle-2', '/bundle-2-foo');
@@ -2319,7 +2361,7 @@ describe('edge cases', () => {
     ]);
   });
 
-  it('should traverse the dependency tree in a deterministic order', async () => {
+  test('should traverse the dependency tree in a deterministic order', async () => {
     const localMockTransform = jest.fn();
 
     // Mocks the transformer call, always resolving the module in `slowPath`
@@ -2329,7 +2371,7 @@ describe('edge cases', () => {
       let fastResolved = false;
 
       localMockTransform.mockImplementation(
-        async (path: string, context: ?RequireContext) => {
+        async (path: string, context: ?VirtualSource) => {
           const result = await mockTransform(path, context);
 
           if (path === slowPath && !fastResolved) {
@@ -2401,7 +2443,7 @@ describe('edge cases', () => {
     expect(mockTransform).toHaveBeenCalledWith('/foo', undefined);
   });
 
-  it('removing a cycle with multiple outgoing edges to the same module', async () => {
+  test('removing a cycle with multiple outgoing edges to the same module', async () => {
     /*
                       ┌─────────────────────────┐
                       │                         ▼
@@ -2437,7 +2479,7 @@ describe('edge cases', () => {
     });
   });
 
-  it('deleting a cycle root, then reintroducing the same module, does not corrupt its dependencies', async () => {
+  test('deleting a cycle root, then reintroducing the same module, does not corrupt its dependencies', async () => {
     Actions.createFile('/quux');
     Actions.removeDependency('/foo', '/baz');
     Actions.addDependency('/bar', '/foo');
@@ -2673,9 +2715,9 @@ describe('only reachable errors are reported', () => {
                     │ /baz │
                     └──────┘
     */
-    expect(graph.traverseDependencies([...files], options)).rejects.toThrow(
-      BarError,
-    );
+    await expect(
+      graph.traverseDependencies([...files], options),
+    ).rejects.toThrow(BarError);
 
     // NOTE: not clearing `files`, to mimic DeltaCalculator's error behaviour.
 
@@ -2893,9 +2935,9 @@ describe('only reachable errors are reported', () => {
                     │ /baz │
                     └──────┘
     */
-    expect(graph.traverseDependencies([...files], options)).rejects.toThrow(
-      BarError,
-    );
+    await expect(
+      graph.traverseDependencies([...files], options),
+    ).rejects.toThrow(BarError);
 
     // NOTE: not clearing `files`, to mimic DeltaCalculator's error behaviour.
 
@@ -2924,33 +2966,225 @@ describe('only reachable errors are reported', () => {
   });
 });
 
+describe('virtual modules', () => {
+  const p = createPathNormalizer();
+  // The virtual module is anchored at a path with no file of its own, so the
+  // transform mock can be keyed on it independently of the real modules.
+  const virtualPath = p('/virtual.js');
+  const sha1 = (source: Buffer) =>
+    require('node:crypto').createHash('sha1').update(source).digest('hex');
+  let virtualSource: Buffer;
+  let localOptions;
+
+  beforeEach(() => {
+    virtualSource = Buffer.from('v1');
+    // Whatever the resolver produces for `test:x` is served from
+    // `virtualSource`, so a test can change the module's content without
+    // changing its identity.
+    localOptions = {
+      ...options,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'test:x'
+          ? {
+              type: 'virtualModule',
+              filePath: deriveVirtualModulePath(virtualPath),
+              source: virtualSource,
+              sha1: sha1(virtualSource),
+            }
+          : options.resolve(from, to),
+    };
+    transformOverrides.set(virtualPath, async (path, context) => {
+      if (context?.type !== 'buffer') {
+        throw new Error('expected the virtual module source');
+      }
+      const {source} = context;
+      return {
+        dependencies: [],
+        getSource: () => source,
+        output: [
+          {
+            data: {code: source.toString(), lineCount: 1, map: []},
+            type: 'js/module',
+          },
+        ],
+        unstable_transformResultKey: path + ' ' + context.sha1,
+      };
+    });
+    Actions.addDependency('/foo', virtualPath, {name: 'test:x'});
+    files.clear();
+  });
+
+  const modulePath = () => deriveVirtualModulePath(virtualPath);
+
+  test('a virtual module is added once and named after its virtual path', async () => {
+    expect(
+      getPaths(await graph.initialTraverseDependencies(localOptions)),
+    ).toEqual({
+      added: new Set(['/bundle', '/foo', '/bar', '/baz', modulePath()]),
+      modified: new Set(),
+      deleted: new Set(),
+    });
+    expect(mockTransform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source: virtualSource,
+      sha1: sha1(virtualSource),
+    });
+  });
+
+  test('a content change at the same virtual path is a modification of the same module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+
+    expect(
+      getPaths(await graph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(),
+      modified: new Set(['/foo', modulePath()]),
+      deleted: new Set(),
+    });
+    expect(
+      nullthrows(graph.dependencies.get(modulePath())).getSource().toString(),
+    ).toBe('v2');
+  });
+
+  test('re-resolving to the same content does not modify the virtual module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+
+    Actions.modifyFile('/foo');
+
+    expect(
+      getPaths(await graph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(),
+      modified: new Set(['/foo']),
+      deleted: new Set(),
+    });
+  });
+
+  test('after a content change, a later edit to the importer does not revisit the virtual module', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    mockTransform.mockClear();
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    expect(mockTransform).not.toHaveBeenCalledWith(expect.anything());
+  });
+
+  test('after a content change, revisiting the virtual module directly uses the new content', async () => {
+    await graph.initialTraverseDependencies(localOptions);
+    virtualSource = Buffer.from('v2');
+    Actions.modifyFile('/foo');
+    await graph.traverseDependencies([...files], localOptions);
+
+    // As getModifiedModulesForDeletedPath does for an inverse dependency of a
+    // deleted file.
+    files.clear();
+    mockTransform.mockClear();
+    await graph.traverseDependencies([modulePath()], localOptions);
+
+    expect(mockTransform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source: Buffer.from('v2'),
+      sha1: sha1(Buffer.from('v2')),
+    });
+  });
+
+  test('a content conflict on an optional dependency is still an error', async () => {
+    Actions.addDependency('/bar', virtualPath, {
+      name: 'test:x',
+      data: {isOptional: true},
+    });
+    files.clear();
+    const conflictingOptions = {
+      ...localOptions,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'test:x'
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath(),
+              source: Buffer.from(from),
+              sha1: sha1(Buffer.from(from)),
+            }
+          : options.resolve(from, to),
+    };
+
+    await expect(
+      graph.initialTraverseDependencies(conflictingOptions),
+    ).rejects.toThrow(/was resolved with different contents/);
+  });
+
+  test('two importers resolving the same virtual module to different content is an error', async () => {
+    Actions.addDependency('/bar', virtualPath, {name: 'test:x'});
+    files.clear();
+    const conflictingOptions = {
+      ...localOptions,
+      resolve: (
+        from: string,
+        to: TransformResultDependency,
+      ): BundlerResolution =>
+        to.name === 'test:x'
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath(),
+              source: Buffer.from(from),
+              sha1: sha1(Buffer.from(from)),
+            }
+          : options.resolve(from, to),
+    };
+
+    await expect(
+      graph.initialTraverseDependencies(conflictingOptions),
+    ).rejects.toThrow(/was resolved with different contents/);
+  });
+});
+
 describe('require.context', () => {
+  // Context modules are derived from and matched against file paths, so use
+  // system paths throughout.
+  const p = createPathNormalizer();
+
   let localOptions;
   beforeEach(() => {
+    setUpInitialGraph(p);
     localOptions = {
       ...options,
       unstable_allowRequireContext: true,
     };
   });
 
-  const ctxParams = {
+  const ctxParams: RequireContextParams = {
     recursive: true,
     mode: 'sync',
     filter: {pattern: '.*', flags: ''},
   };
 
   const ctxResolved = {
-    recursive: true,
-    mode: 'sync',
-    filter: /.*/,
-    from: '/ctx',
+    type: 'requireContext',
+    requireContext: {
+      recursive: true,
+      mode: 'sync',
+      filter: /.*/,
+      from: p('/ctx'),
+    },
   };
 
-  const ctxPath = deriveAbsolutePathFromContext('/ctx', ctxParams);
+  const ctxPath = deriveAbsolutePathFromContext(p('/ctx'), ctxParams);
 
-  it('a context module is created when the context exists in the initial graph', async () => {
+  test('a context module is created when the context exists in the initial graph', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -2965,22 +3199,22 @@ describe('require.context', () => {
     // Ensure the module has been created
     expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
     // No module at /ctx - that dependency turned into the context module
-    expect(graph.dependencies.get('/ctx')).toBe(undefined);
+    expect(graph.dependencies.get(p('/ctx'))).toBe(undefined);
 
     // We can match paths against the created context
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
-    expect(getMatchingContextModules(graph, '/no-match')).toEqual(new Set());
+    expect(getMatchingContextModules(graph, p('/no-match'))).toEqual(new Set());
   });
 
-  it('a context module is created incrementally', async () => {
+  test('a context module is created incrementally', async () => {
     // Compute the initial graph
     files.clear();
     await graph.initialTraverseDependencies(localOptions);
 
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -2992,21 +3226,21 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([ctxPath]),
       deleted: new Set([]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
     });
 
     // The transformer receives the arguments necessary to generate a context module
     expect(mockTransform).toHaveBeenCalledWith(ctxPath, ctxResolved);
 
     // We can match paths against the created context
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
   });
 
-  it('context exists in initial traversal and is then removed', async () => {
+  test('context exists in initial traversal and is then removed', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3017,7 +3251,7 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     expect(
@@ -3025,27 +3259,27 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([]),
       deleted: new Set([ctxPath]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
     });
 
     // We can no longer match against this context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });
 
-  it('context + matched file exist in initial traversal and are then removed', async () => {
+  test('context + matched file exist in initial traversal and are then removed', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
@@ -3053,38 +3287,38 @@ describe('require.context', () => {
 
     // Ensure the context module and the matched file are in the graph
     expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
-    expect(graph.dependencies.get('/ctx/matched-file')).not.toBe(undefined);
+    expect(graph.dependencies.get(p('/ctx/matched-file'))).not.toBe(undefined);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      deleted: new Set([ctxPath, '/ctx/matched-file']),
-      modified: new Set(['/bundle']),
+      deleted: new Set([ctxPath, p('/ctx/matched-file')]),
+      modified: new Set([p('/bundle')]),
     });
 
     // We can no longer match against this context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });
 
-  it('remove a matched file incrementally from a context', async () => {
+  test('remove a matched file incrementally from a context', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
@@ -3092,15 +3326,15 @@ describe('require.context', () => {
 
     // Ensure we recorded an inverse dependency between the matched file and the context module
     expect([
-      ...nullthrows(graph.dependencies.get('/ctx/matched-file'))
+      ...nullthrows(graph.dependencies.get(p('/ctx/matched-file')))
         .inverseDependencies,
     ]).toEqual([ctxPath]);
 
     // Delete the matched file
-    Actions.deleteFile('/ctx/matched-file', graph);
+    Actions.deleteFile(p('/ctx/matched-file'), graph);
 
     // Propagate the deletion to the context module (normally DeltaCalculator's responsibility)
-    Actions.removeInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.removeInferredDependency(ctxPath, p('/ctx/matched-file'));
     Actions.modifyFile(ctxPath);
 
     // Compute the new graph incrementally
@@ -3110,32 +3344,32 @@ describe('require.context', () => {
     ).toEqual({
       added: new Set([]),
       modified: new Set([ctxPath]),
-      deleted: new Set(['/ctx/matched-file']),
+      deleted: new Set([p('/ctx/matched-file')]),
     });
 
     // Ensure the incremental traversal re-transformed the context module
     expect(mockTransform).toHaveBeenCalledWith(ctxPath, ctxResolved);
   });
 
-  it('modify a matched file incrementally', async () => {
+  test('modify a matched file incrementally', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
     await graph.initialTraverseDependencies(localOptions);
 
     // Modify the matched file
-    Actions.modifyFile('/ctx/matched-file');
+    Actions.modifyFile(p('/ctx/matched-file'));
 
     // We do not propagate the modification to the context module. (See DeltaCalculator)
 
@@ -3145,7 +3379,7 @@ describe('require.context', () => {
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      modified: new Set(['/ctx/matched-file']),
+      modified: new Set([p('/ctx/matched-file')]),
       deleted: new Set([]),
     });
 
@@ -3153,9 +3387,9 @@ describe('require.context', () => {
     expect(mockTransform).not.toHaveBeenCalledWith(ctxPath, ctxResolved);
   });
 
-  it('add a matched file incrementally to a context', async () => {
+  test('add a matched file incrementally to a context', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3166,18 +3400,18 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
     // Create a dependency between the context module and the new file, for mockTransform
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
     // Propagate the addition to the context module (normally DeltaCalculator's responsibility)
-    graph.markModifiedContextModules('/ctx/matched-file', files);
+    graph.markModifiedContextModules(p('/ctx/matched-file'), files);
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/ctx/matched-file']),
+      added: new Set([p('/ctx/matched-file')]),
       modified: new Set([ctxPath]),
       deleted: new Set([]),
     });
@@ -3186,16 +3420,16 @@ describe('require.context', () => {
     expect(mockTransform).toHaveBeenCalledWith(ctxPath, ctxResolved);
   });
 
-  it('add a matched file incrementally to a context with two references', async () => {
+  test('add a matched file incrementally to a context with two references', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create another reference to the same context module
-    Actions.addDependency('/foo', '/ctx', {
+    Actions.addDependency(p('/foo'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3206,17 +3440,17 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
     // Propagate the addition to the context module (normally DeltaCalculator's responsibility)
-    graph.markModifiedContextModules('/ctx/matched-file', files);
+    graph.markModifiedContextModules(p('/ctx/matched-file'), files);
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/ctx/matched-file']),
+      added: new Set([p('/ctx/matched-file')]),
       modified: new Set([ctxPath]),
       deleted: new Set([]),
     });
@@ -3225,16 +3459,16 @@ describe('require.context', () => {
     expect(mockTransform).toHaveBeenCalledWith(ctxPath, ctxResolved);
   });
 
-  it('remove only one of two references to a context module', async () => {
+  test('remove only one of two references to a context module', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
     });
 
     // Create another reference to the same context module
-    Actions.addDependency('/foo', '/ctx', {
+    Actions.addDependency(p('/foo'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
       },
@@ -3245,7 +3479,7 @@ describe('require.context', () => {
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove one reference
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
 
     // Compute the new graph incrementally
     mockTransform.mockClear();
@@ -3253,7 +3487,7 @@ describe('require.context', () => {
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
       added: new Set([]),
-      modified: new Set(['/bundle']),
+      modified: new Set([p('/bundle')]),
       deleted: new Set([]),
     });
 
@@ -3261,40 +3495,43 @@ describe('require.context', () => {
     expect(mockTransform).not.toHaveBeenCalledWith(ctxPath, ctxResolved);
 
     // We can still match against this context because it has not been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set([ctxPath]),
     );
   });
 
   describe('when two distinct contexts match the same file', () => {
-    const narrowCtxParams = {
+    const narrowCtxParams: RequireContextParams = {
       recursive: true,
       mode: 'sync',
       filter: {pattern: '\\./narrow/.*', flags: ''},
     };
 
     const narrowCtxResolved = {
-      recursive: true,
-      mode: 'sync',
-      filter: /\.\/narrow\/.*/,
-      from: '/ctx',
+      type: 'requireContext',
+      requireContext: {
+        recursive: true,
+        mode: 'sync',
+        filter: /\.\/narrow\/.*/,
+        from: p('/ctx'),
+      },
     };
 
     const narrowCtxPath = deriveAbsolutePathFromContext(
-      '/ctx',
+      p('/ctx'),
       narrowCtxParams,
     );
 
-    it('creates two context modules in the initial traversal', async () => {
+    test('creates two context modules in the initial traversal', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3315,30 +3552,30 @@ describe('require.context', () => {
       expect(graph.dependencies.get(ctxPath)).not.toBe(undefined);
       expect(graph.dependencies.get(narrowCtxPath)).not.toBe(undefined);
       // No module at /ctx or /ctx/narrow - those dependencies turned into the context modules
-      expect(graph.dependencies.get('/ctx')).toBe(undefined);
-      expect(graph.dependencies.get('/ctx/narrow')).toBe(undefined);
+      expect(graph.dependencies.get(p('/ctx'))).toBe(undefined);
+      expect(graph.dependencies.get(p('/ctx/narrow'))).toBe(undefined);
       // Not conflating the key with the virtual path
       expect(graph.dependencies.get('/ctx2')).toBe(undefined);
 
       // We can match paths against the contexts
-      expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+      expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
         new Set([ctxPath]),
       );
       expect(
-        getMatchingContextModules(graph, '/ctx/narrow/matched-file'),
+        getMatchingContextModules(graph, p('/ctx/narrow/matched-file')),
       ).toEqual(new Set([ctxPath, narrowCtxPath]));
     });
 
-    it('add a file matched by both contexts', async () => {
+    test('add a file matched by both contexts', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3350,32 +3587,35 @@ describe('require.context', () => {
       await graph.initialTraverseDependencies(localOptions);
 
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
       // Propagate the addition to the context modules (normally DeltaCalculator's responsibility)
-      graph.markModifiedContextModules('/ctx/narrow/matched-file', files);
+      graph.markModifiedContextModules(p('/ctx/narrow/matched-file'), files);
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
-        added: new Set(['/ctx/narrow/matched-file']),
+        added: new Set([p('/ctx/narrow/matched-file')]),
         modified: new Set([ctxPath, narrowCtxPath]),
         deleted: new Set([]),
       });
     });
 
-    it('deleting one context does not delete a file matched by both contexts', async () => {
+    test('deleting one context does not delete a file matched by both contexts', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
         },
       });
 
       // Create a different context module with the same base path and origin module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx2',
@@ -3383,121 +3623,128 @@ describe('require.context', () => {
       });
 
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
 
       // Compute the initial graph
       files.clear();
       await graph.initialTraverseDependencies(localOptions);
 
       // Remove the reference to one of the context modules
-      Actions.removeDependency('/bundle', '/ctx');
+      Actions.removeDependency(p('/bundle'), p('/ctx'));
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
         added: new Set([]),
-        modified: new Set(['/bundle']),
+        modified: new Set([p('/bundle')]),
         deleted: new Set([ctxPath]),
       });
     });
 
-    it('edge case: changing context params incrementally under the same key', async () => {
+    test('edge case: changing context params incrementally under the same key', async () => {
       // Create a context module
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: ctxParams,
           key: '/ctx',
         },
       });
       // Create the file matched by the contexts
-      Actions.createFile('/ctx/narrow/matched-file');
-      Actions.addInferredDependency(ctxPath, '/ctx/narrow/matched-file');
+      Actions.createFile(p('/ctx/narrow/matched-file'));
+      Actions.addInferredDependency(ctxPath, p('/ctx/narrow/matched-file'));
 
       // Compute the initial graph
       files.clear();
       await graph.initialTraverseDependencies(localOptions);
 
       // Remove the reference to one of the context modules
-      Actions.removeDependency('/bundle', '/ctx');
+      Actions.removeDependency(p('/bundle'), p('/ctx'));
       // Replace it with a context with different params
-      Actions.addDependency('/bundle', '/ctx', {
+      Actions.addDependency(p('/bundle'), p('/ctx'), {
         data: {
           contextParams: narrowCtxParams,
           key: '/ctx',
         },
       });
-      Actions.addInferredDependency(narrowCtxPath, '/ctx/narrow/matched-file');
+      Actions.addInferredDependency(
+        narrowCtxPath,
+        p('/ctx/narrow/matched-file'),
+      );
 
       // Compute the new graph incrementally
       expect(
         getPaths(await graph.traverseDependencies([...files], localOptions)),
       ).toEqual({
         added: new Set([narrowCtxPath]),
-        modified: new Set(['/bundle']),
+        modified: new Set([p('/bundle')]),
         deleted: new Set([ctxPath]),
       });
 
       // We can match paths against the updated context
-      expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+      expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
         new Set(),
       );
       expect(
-        getMatchingContextModules(graph, '/ctx/narrow/matched-file'),
+        getMatchingContextModules(graph, p('/ctx/narrow/matched-file')),
       ).toEqual(new Set([narrowCtxPath]));
     });
   });
 
-  it('edge case: replacing a generated context file with a file that happens to have the same name and key', async () => {
+  test('edge case: replacing a generated context file with a file that happens to have the same name and key', async () => {
     // Create a context module
-    Actions.addDependency('/bundle', '/ctx', {
+    Actions.addDependency(p('/bundle'), p('/ctx'), {
       data: {
         contextParams: ctxParams,
         key: '/ctx',
       },
     });
     // Create the file matched by the context
-    Actions.createFile('/ctx/matched-file');
-    Actions.addInferredDependency(ctxPath, '/ctx/matched-file');
+    Actions.createFile(p('/ctx/matched-file'));
+    Actions.addInferredDependency(ctxPath, p('/ctx/matched-file'));
 
     // Compute the initial graph
     files.clear();
     await graph.initialTraverseDependencies(localOptions);
 
     // Remove the reference to the context module
-    Actions.removeDependency('/bundle', '/ctx');
+    Actions.removeDependency(p('/bundle'), p('/ctx'));
     // Create a real file that collides with the context module's generated path
     Actions.createFile(ctxPath);
-    Actions.addDependency('/bundle', ctxPath, {data: {key: '/ctx'}});
-    Actions.createFile('/other-file');
-    Actions.removeInferredDependency(ctxPath, '/ctx/matched-file');
-    Actions.addDependency(ctxPath, '/other-file');
+    Actions.addDependency(p('/bundle'), ctxPath, {data: {key: '/ctx'}});
+    Actions.createFile(p('/other-file'));
+    Actions.removeInferredDependency(ctxPath, p('/ctx/matched-file'));
+    Actions.addDependency(ctxPath, p('/other-file'));
 
     // Compute the new graph incrementally
     expect(
       getPaths(await graph.traverseDependencies([...files], localOptions)),
     ).toEqual({
-      added: new Set(['/other-file']),
-      modified: new Set(['/bundle', ctxPath]),
-      deleted: new Set(['/ctx/matched-file']),
+      added: new Set([p('/other-file')]),
+      modified: new Set([p('/bundle'), ctxPath]),
+      deleted: new Set([p('/ctx/matched-file')]),
     });
 
     // We can no longer match paths against the context because it has been deleted
-    expect(getMatchingContextModules(graph, '/ctx/matched-file')).toEqual(
+    expect(getMatchingContextModules(graph, p('/ctx/matched-file'))).toEqual(
       new Set(),
     );
   });
 });
 
 describe('reorderGraph', () => {
-  it('should reorder any unordered graph in DFS order', async () => {
-    const dep = (path: string): Dependency => ({
+  test('should reorder any unordered graph in DFS order', async () => {
+    const dep = (path: string): ResolvedDependency => ({
       absolutePath: path,
       data: {
         data: {
           asyncType: null,
+          isESMImport: false,
           locs: [],
           key: path.substr(1),
         },
@@ -3550,36 +3797,12 @@ describe('reorderGraph', () => {
 describe('optional dependencies', () => {
   let localGraph;
   let localOptions;
-  const getAllDependencies = () => {
-    const all = new Set<string>();
-    mockedDependencyTree.forEach(deps => {
-      deps.forEach(r => all.add(r.name));
-    });
-    return all;
-  };
-  const assertResults = (
-    dependencies: Map<string, Module<>>,
-    expectedMissing: Array<string>,
-  ) => {
-    let count = 0;
-    const allDependency = getAllDependencies();
-    allDependency.forEach(m => {
-      const data = dependencies.get(`/${m}`);
-      if (expectedMissing.includes(m)) {
-        expect(data).toBeUndefined();
-      } else {
-        expect(data).not.toBeUndefined();
-      }
-      count += 1;
-    });
-    expect(count).toBeGreaterThan(0);
-    expect(count).toBe(allDependency.size);
-  };
+  let dependencyKeys: Map<string, string>;
 
   const createMockTransform = (notOptional?: string[]) => {
     /* $FlowFixMe[missing-this-annot] The 'this' type annotation(s) required by
      * Flow's LTI update could not be added via codemod */
-    return async function (path: string, context: ?RequireContext) {
+    return async function (path: string, context: ?VirtualSource) {
       const result = await mockTransform.call(this, path, context);
       return {
         ...result,
@@ -3605,11 +3828,18 @@ describe('optional dependencies', () => {
   beforeEach(() => {
     mockedDependencies = new Set();
     mockedDependencyTree = new Map();
+    dependencyKeys = new Map();
 
     entryModule = Actions.createFile('/bundle-o');
 
-    Actions.addDependency('/bundle-o', '/regular-a');
-    Actions.addDependency('/bundle-o', '/optional-b');
+    dependencyKeys.set(
+      '/regular-a',
+      Actions.addDependency('/bundle-o', '/regular-a'),
+    );
+    dependencyKeys.set(
+      '/optional-b',
+      Actions.addDependency('/bundle-o', '/optional-b'),
+    );
 
     localGraph = new TestGraph({
       entryPoints: new Set(['/bundle-o']),
@@ -3619,7 +3849,7 @@ describe('optional dependencies', () => {
     Actions.deleteFile('/optional-b', localGraph);
   });
 
-  it('missing optional dependency will be skipped', async () => {
+  test('missing optional dependency will be skipped', async () => {
     localOptions = {
       ...options,
       transform: createMockTransform(),
@@ -3627,10 +3857,43 @@ describe('optional dependencies', () => {
 
     const result = await localGraph.initialTraverseDependencies(localOptions);
 
-    const dependencies = result.added;
-    assertResults(dependencies, ['optional-b']);
+    expect(result.added).toEqual(
+      new Map([
+        [
+          '/bundle-o',
+          expect.objectContaining({
+            dependencies: new Map([
+              [
+                dependencyKeys.get('/regular-a'),
+                expect.objectContaining({
+                  absolutePath: '/regular-a',
+                  data: expect.objectContaining({
+                    isOptional: false,
+                  }),
+                }),
+              ],
+              [
+                dependencyKeys.get('/optional-b'),
+                expect.objectContaining({
+                  absolutePath: null,
+                  data: expect.objectContaining({
+                    isOptional: true,
+                  }),
+                }),
+              ],
+            ]),
+          }),
+        ],
+        [
+          '/regular-a',
+          expect.objectContaining({
+            dependencies: new Map(),
+          }),
+        ],
+      ]),
+    );
   });
-  it('missing non-optional dependency will throw', async () => {
+  test('missing non-optional dependency will throw', async () => {
     localOptions = {
       ...options,
       transform: createMockTransform(['optional-b']),
@@ -3639,10 +3902,109 @@ describe('optional dependencies', () => {
       localGraph.initialTraverseDependencies(localOptions),
     ).rejects.toThrow();
   });
+
+  test('deleting an optional dependency will not throw', async () => {
+    localOptions = {
+      ...options,
+      transform: createMockTransform(),
+    };
+    /*
+    ┌───────────┐     ┌────────────┐
+    │ /bundle-o │ ──▶ │ /regular-a │
+    └───────────┘     └────────────┘
+          │
+          │
+          ▼
+    ┌─────────────┐     ┌────────────┐
+    │ /optional-b │ ──▶ │ /regular-c │
+    └─────────────┘     └────────────┘
+    */
+    Actions.createFile('/optional-b');
+    Actions.addDependency('/optional-b', '/regular-c');
+
+    expect(
+      getPaths(await localGraph.initialTraverseDependencies(localOptions)),
+    ).toEqual({
+      added: new Set(['/bundle-o', '/regular-a', '/optional-b', '/regular-c']),
+      modified: new Set(),
+      deleted: new Set(),
+    });
+
+    Actions.deleteFile('/optional-b', localGraph);
+
+    /*
+    ┌───────────┐     ┌────────────┐
+    │ /bundle-o │ ──▶ │ /regular-a │
+    └───────────┘     └────────────┘
+          │
+          │
+          ▼
+    ┌────╲──╱─────┐     ┌────────────┐
+    │ /optional-b │ ──▶ │ /regular-c │
+    └────╱──╲─────┘     └────────────┘
+    */
+
+    expect(
+      getPaths(await localGraph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(),
+      modified: new Set(['/bundle-o']),
+      deleted: new Set(['/optional-b', '/regular-c']),
+    });
+  });
+
+  test('creating a file satisfying an unresolved optional dependency', async () => {
+    localOptions = {
+      ...options,
+      transform: createMockTransform(),
+    };
+    /*
+    ┌───────────┐     ┌────────────┐
+    │ /bundle-o │ ──▶ │ /regular-a │
+    └───────────┘     └────────────┘
+          ┊
+          ┊
+          ▽
+    ┌┈┈┈┈┈┈┈┈┈┈┈┈┈┐
+    ┊ /optional-b ┊ (not yet created)
+    └┈┈┈┈┈┈┈┈┈┈┈┈┈┘
+    */
+
+    expect(
+      getPaths(await localGraph.initialTraverseDependencies(localOptions)),
+    ).toEqual({
+      added: new Set(['/bundle-o', '/regular-a']),
+      modified: new Set(),
+      deleted: new Set(),
+    });
+
+    Actions.createFile('/optional-b');
+    Actions.addDependency('/optional-b', '/regular-c');
+
+    /*
+    ┌───────────┐     ┌────────────┐
+    │ /bundle-o │ ──▶ │ /regular-a │
+    └───────────┘     └────────────┘
+          │
+          │
+          ▼
+    ┏━━━━━━━━━━━━━┓     ┏━━━━━━━━━━━━┓
+    ┃ /optional-b ┃ ──▶ ┃ /regular-c ┃
+    ┗━━━━━━━━━━━━━┛     ┗━━━━━━━━━━━━┛
+    */
+
+    expect(
+      getPaths(await localGraph.traverseDependencies([...files], localOptions)),
+    ).toEqual({
+      added: new Set(['/optional-b', '/regular-c']),
+      modified: new Set(['/bundle-o']),
+      deleted: new Set(),
+    });
+  });
 });
 
 describe('parallel edges', () => {
-  it('add twice w/ same name, build and remove once', async () => {
+  test('add twice w/ same name, build and remove once', async () => {
     // Create a second edge between /foo and /bar.
     Actions.addDependency('/foo', '/bar', {
       data: {
@@ -3664,7 +4026,7 @@ describe('parallel edges', () => {
     });
   });
 
-  it('add twice w/ same name, build and remove twice', async () => {
+  test('add twice w/ same name, build and remove twice', async () => {
     // Create a second edge between /foo and /bar.
     Actions.addDependency('/foo', '/bar', {
       data: {
@@ -3687,7 +4049,7 @@ describe('parallel edges', () => {
     });
   });
 
-  it('add twice w/ different names, build and remove once', async () => {
+  test('add twice w/ different names, build and remove once', async () => {
     // Create a second edge between /foo and /bar, with a different `name`.
     Actions.addDependency('/foo', '/bar', {name: 'bar-second'});
 
@@ -3705,7 +4067,7 @@ describe('parallel edges', () => {
     });
   });
 
-  it('add twice w/ different names, build and remove twice', async () => {
+  test('add twice w/ different names, build and remove twice', async () => {
     // Create a second edge between /foo and /bar, with a different `name`.
     Actions.addDependency('/foo', '/bar', {name: 'bar-second'});
 

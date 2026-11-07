@@ -1,9 +1,19 @@
 {
   "name": "buck-worker-tool",
-  "version": "0.80.9",
+  "version": "0.88.0",
   "description": "Implementation of the Buck worker protocol for Node.js.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/react/metro.git",
+    "directory": "packages/buck-worker-tool"
+  },
   "main": "src/worker-tool.js",
+  "exports": {
+    ".": "./src/worker-tool.js",
+    "./package.json": "./package.json",
+    "./private/*": "./src/*.js"
+  },
   "dependencies": {
     "duplexer": "^0.1.1",
     "flow-enums-runtime": "^0.0.6",
@@ -12,13 +22,13 @@
     "through": ">=2.2.7 <3"
   },
   "devDependencies": {
-    "metro-memory-fs": "0.80.9"
+    "metro-memory-fs": "*"
   },
   "scripts": {
     "prepare-release": "test -d build && rm -rf src.real && mv src src.real && mv build src",
     "cleanup-release": "test ! -e build && mv src build && mv src.real src"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^22.13.0 || ^24.3.0 || >= 26.0.0"
   }
 }

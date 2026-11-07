@@ -11,16 +11,16 @@
 
 'use strict';
 
-import type {HmrUpdate} from '../types.flow';
+import type {HmrUpdate} from '../types';
 
 const HMRClient = require('../HMRClient');
 
 let mockSocket: ?{
   onclose: () => void,
-  onmessage: ({data: string}) => void,
-  onerror: ({data: string}) => void,
+  onmessage: (event: {data: string}) => void,
+  onerror: (event: {data: string}) => void,
   close: () => void,
-  mockEmit: (string, {data: string}) => void,
+  mockEmit: (type: string, event: {data: string}) => void,
 } = null;
 let evaledCode = '';
 
@@ -29,8 +29,7 @@ beforeEach(() => {
   global.globalEvalWithSourceUrl = (code, sourceURL) => {
     evaledCode += '\n/* ' + sourceURL + ' */\n  ' + code;
   };
-  // $FlowFixMe[cannot-write]
-  global.WebSocket = jest.fn(() => {
+  const MockWebSocket = jest.fn(() => {
     mockSocket = {
       onerror: jest.fn(),
       onmessage: jest.fn(),
@@ -52,11 +51,11 @@ beforeEach(() => {
     };
     return mockSocket;
   });
+  jest.spyOn(global, 'WebSocket', 'get').mockReturnValue(MockWebSocket);
 });
 
 afterEach(() => {
-  // $FlowFixMe[cannot-write]
-  delete global.WebSocket;
+  jest.restoreAllMocks();
   delete global.globalEvalWithSourceUrl;
 });
 

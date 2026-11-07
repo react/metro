@@ -16,18 +16,18 @@ exports[`FileMap file system changes processing recovery from duplicate module I
 "
 `;
 
+exports[`FileMap throws on duplicate module ids if "failValidationOnConflicts" is set to true 1`] = `
+"Advice: Resolve conflicts of type \\"duplicate\\" by renaming one or both of the conflicting modules, or by excluding conflicting paths from Haste.
+
+1. Strawberry (duplicate)
+     /project/fruits/Strawberry.js
+     /project/fruits/another/Strawberry.js"
+`;
+
 exports[`FileMap tries to crawl using node as a fallback 1`] = `
 "metro-file-map: Watchman crawl failed. Retrying once with node crawler.
   Usually this happens when watchman isn't running. Create an empty \`.watchmanconfig\` file in your project's root folder or initialize a git or hg repository in your project.
   Error: watchman error"
-`;
-
-exports[`FileMap warns on duplicate mock files 1`] = `
-"metro-file-map: duplicate manual mock found: subdir/Blueberry
-  The following files share their name; please delete one of them:
-    * <rootDir>/fruits1/__mocks__/subdir/Blueberry.js
-    * <rootDir>/fruits2/__mocks__/subdir/Blueberry.js
-"
 `;
 
 exports[`FileMap warns on duplicate module ids 1`] = `

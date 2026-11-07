@@ -12,38 +12,59 @@
 import type {
   BuildParameters,
   CacheData,
-  CacheDelta,
   CacheManager,
+  CacheManagerFactoryOptions,
+  CacheManagerWriteOptions,
 } from '../flow-types';
 
 import rootRelativeCacheKeys from '../lib/rootRelativeCacheKeys';
-import {readFileSync, writeFileSync} from 'graceful-fs';
-import {tmpdir} from 'os';
-import path from 'path';
-import {deserialize, serialize} from 'v8';
+import debugModule from 'debug';
+import {promises as fsPromises} from 'node:fs';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {Timeout, clearTimeout, setTimeout} from 'node:timers';
+import {deserialize, serialize} from 'node:v8';
 
-type DiskCacheConfig = {
-  buildParameters: BuildParameters,
+const debug = debugModule('Metro:FileMapCache');
+
+type AutoSaveOptions = Readonly<{
+  debounceMs: number,
+}>;
+
+type DiskCacheConfig = Readonly<{
+  autoSave?: Partial<AutoSaveOptions> | boolean,
   cacheFilePrefix?: ?string,
   cacheDirectory?: ?string,
-};
+}>;
 
 const DEFAULT_PREFIX = 'metro-file-map';
 const DEFAULT_DIRECTORY = tmpdir();
+const DEFAULT_AUTO_SAVE_DEBOUNCE_MS = 5000;
 
 export class DiskCacheManager implements CacheManager {
-  _cachePath: string;
+  readonly #autoSaveOpts: ?AutoSaveOptions;
+  readonly #cachePath: string;
+  #debounceTimeout: ?Timeout = null;
+  #writePromise: Promise<void> = Promise.resolve();
+  #hasUnwrittenChanges: boolean = false;
+  #tryWrite: ?() => Promise<void>;
+  #stopListening: ?() => void;
 
-  constructor({
-    buildParameters,
-    cacheDirectory,
-    cacheFilePrefix,
-  }: DiskCacheConfig) {
-    this._cachePath = DiskCacheManager.getCacheFilePath(
+  constructor(opts: CacheManagerFactoryOptions, config: DiskCacheConfig) {
+    const {buildParameters} = opts;
+    const {autoSave = {}, cacheDirectory, cacheFilePrefix} = config;
+    this.#cachePath = DiskCacheManager.getCacheFilePath(
       buildParameters,
       cacheFilePrefix,
       cacheDirectory,
     );
+
+    // Normalise auto-save options.
+    if (autoSave) {
+      const {debounceMs = DEFAULT_AUTO_SAVE_DEBOUNCE_MS} =
+        autoSave === true ? {} : autoSave;
+      this.#autoSaveOpts = {debounceMs};
+    }
   }
 
   static getCacheFilePath(
@@ -63,12 +84,12 @@ export class DiskCacheManager implements CacheManager {
   }
 
   getCacheFilePath(): string {
-    return this._cachePath;
+    return this.#cachePath;
   }
 
   async read(): Promise<?CacheData> {
     try {
-      return deserialize(readFileSync(this._cachePath));
+      return deserialize(await fsPromises.readFile(this.#cachePath));
     } catch (e) {
       if (e?.code === 'ENOENT') {
         // Cache file not found - not considered an error.
@@ -80,11 +101,73 @@ export class DiskCacheManager implements CacheManager {
   }
 
   async write(
-    dataSnapshot: CacheData,
-    {changed, removed}: CacheDelta,
+    getSnapshot: () => CacheData,
+    opts: CacheManagerWriteOptions,
   ): Promise<void> {
-    if (changed.size > 0 || removed.size > 0) {
-      writeFileSync(this._cachePath, serialize(dataSnapshot));
+    const {changedSinceCacheRead, eventSource, onWriteError} = opts;
+    // Initialise a writer function using a promise queue to ensure writes are
+    // sequenced.
+    const tryWrite = (this.#tryWrite = () => {
+      this.#writePromise = this.#writePromise
+        .then(async () => {
+          if (!this.#hasUnwrittenChanges) {
+            return;
+          }
+          const data = getSnapshot();
+          this.#hasUnwrittenChanges = false;
+          const serialized = serialize(data);
+          try {
+            await fsPromises.writeFile(this.#cachePath, serialized);
+          } catch (e) {
+            if (e?.code !== 'ENOENT') {
+              throw e;
+            }
+            // The cache directory doesn't exist yet - create it and retry.
+            await fsPromises.mkdir(path.dirname(this.#cachePath), {
+              recursive: true,
+            });
+            await fsPromises.writeFile(this.#cachePath, serialized);
+          }
+          debug('Written cache to %s', this.#cachePath);
+        })
+        .catch(onWriteError);
+      return this.#writePromise;
+    });
+
+    // Set up auto-save on changes, if enabled.
+    if (this.#autoSaveOpts) {
+      const autoSave = this.#autoSaveOpts;
+      this.#stopListening?.();
+      this.#stopListening = eventSource.onChange(() => {
+        this.#hasUnwrittenChanges = true;
+        if (this.#debounceTimeout) {
+          this.#debounceTimeout.refresh();
+        } else {
+          this.#debounceTimeout = setTimeout(
+            () => tryWrite(),
+            autoSave.debounceMs,
+          ).unref();
+        }
+      });
     }
+
+    // Write immediately if state has changed since the cache was read.
+    if (changedSinceCacheRead) {
+      this.#hasUnwrittenChanges = true;
+      await tryWrite();
+    }
+  }
+
+  async end(): Promise<void> {
+    // Clear any timers
+    if (this.#debounceTimeout) {
+      clearTimeout(this.#debounceTimeout);
+    }
+
+    // Remove event listeners
+    this.#stopListening?.();
+
+    // Flush unwritten changes to disk (no-op if no changes)
+    await this.#tryWrite?.();
   }
 }

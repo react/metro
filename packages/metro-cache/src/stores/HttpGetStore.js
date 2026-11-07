@@ -4,26 +4,25 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict-local
+ * @format
+ * @oncall react_native
  */
 
-'use strict';
-
 import type HttpError from './HttpError';
+import type {Options as HttpOptions} from './HttpStore';
 import type NetworkError from './NetworkError';
-import type {HttpOptions} from 'metro-cache';
 
-const HttpStore = require('./HttpStore');
-const {Logger} = require('metro-core');
+import HttpStore from './HttpStore';
+import {Logger} from 'metro-core';
 
-class HttpGetStore<T> extends HttpStore<T> {
-  _warned: boolean;
+export default class HttpGetStore<T> extends HttpStore<T> {
+  #warned: boolean;
 
   constructor(options: HttpOptions) {
     super(options);
 
-    this._warned = false;
+    this.#warned = false;
   }
 
   async get(key: Buffer): Promise<?T> {
@@ -37,18 +36,16 @@ class HttpGetStore<T> extends HttpStore<T> {
         throw err;
       }
 
-      this._warn(err);
+      this.#warn(err);
 
       return null;
     }
   }
 
-  set(): Promise<void> {
-    return Promise.resolve(undefined);
-  }
+  async set(_key: Buffer, _value: T): Promise<void> {}
 
-  _warn(err: HttpError | NetworkError) {
-    if (!this._warned) {
+  #warn(err: HttpError | NetworkError) {
+    if (!this.#warned) {
       process.emitWarning(
         [
           'Could not connect to the HTTP cache.',
@@ -62,9 +59,7 @@ class HttpGetStore<T> extends HttpStore<T> {
           log_entry_label: `${err.message} (${err.code})`,
         }),
       );
-      this._warned = true;
+      this.#warned = true;
     }
   }
 }
-
-module.exports = HttpGetStore;

@@ -9,13 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {PerfLogger, RootPerfLogger} from '../types';
 
-import type {PerfLogger, RootPerfLogger} from '../configTypes.flow';
+export {default as defaultCreateModuleIdFactory} from './createModuleIdFactory';
 
-const defaultCreateModuleIdFactory = require('metro/src/lib/createModuleIdFactory');
-
-exports.assetExts = [
+export const assetExts: Array<string> = [
   // Image formats
   'bmp',
   'gif',
@@ -25,6 +23,7 @@ exports.assetExts = [
   'psd',
   'svg',
   'webp',
+  'xml',
   // Video formats
   'm4v',
   'mov',
@@ -51,23 +50,19 @@ exports.assetExts = [
   'zip',
 ];
 
-exports.assetResolutions = ['1', '1.5', '2', '3', '4'];
+export const assetResolutions: Array<string> = ['1', '1.5', '2', '3', '4'];
 
-exports.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx'];
+export const sourceExts: Array<string> = ['js', 'jsx', 'json', 'ts', 'tsx'];
 
-exports.additionalExts = ['cjs', 'mjs'];
+export const additionalExts: Array<string> = ['cjs', 'mjs'];
 
-exports.moduleSystem = (require.resolve(
-  'metro-runtime/src/polyfills/require.js',
-): string);
+export const moduleSystem: string = 'metro:runtime/polyfills/require';
 
-exports.platforms = ['ios', 'android', 'windows', 'web'];
+export const platforms: Array<string> = ['ios', 'android', 'windows', 'web'];
 
-exports.DEFAULT_METRO_MINIFIER_PATH = 'metro-minify-terser';
+export const DEFAULT_METRO_MINIFIER_PATH = 'metro-minify-terser';
 
-exports.defaultCreateModuleIdFactory = defaultCreateModuleIdFactory;
-
-exports.noopPerfLoggerFactory = (): RootPerfLogger => {
+export const noopPerfLoggerFactory = (): RootPerfLogger => {
   class Logger {
     start() {}
     end() {}

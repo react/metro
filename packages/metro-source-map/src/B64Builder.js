@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-const encode = require('./encode');
+import encode from './encode';
 
 const MAX_SEGMENT_LENGTH = 7;
 const ONE_MEG = 1024 * 1024;
@@ -30,7 +28,7 @@ const SEMICOLON = 0x3b;
  * For details about source map terminology and specification, check
  * https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit
  */
-class B64Builder {
+export default class B64Builder {
   buffer: Buffer;
   pos: number;
   hasSegment: boolean;
@@ -49,7 +47,7 @@ class B64Builder {
       return this;
     }
     this.hasSegment = false;
-    if (this.pos + n >= this.buffer.length) {
+    while (this.pos + n >= this.buffer.length) {
       this._realloc();
     }
     while (n--) {
@@ -104,5 +102,3 @@ class B64Builder {
     buffer.copy(this.buffer);
   }
 }
-
-module.exports = B64Builder;

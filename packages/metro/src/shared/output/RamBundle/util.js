@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {ModuleGroups, ModuleTransportLike} from '../../types.flow';
+import type {ModuleGroups, ModuleTransportLike} from '../../types';
 import type {
   BasicSourceMap,
   IndexMap,
@@ -20,8 +18,7 @@ import type {
 } from 'metro-source-map';
 
 import countLines from '../../../lib/countLines';
-
-const invariant = require('invariant');
+import invariant from 'invariant';
 
 function lineToLineSourceMap(
   source: string,
@@ -53,7 +50,7 @@ const Section = (line: number, column: number, map: MixedSourceMap) => ({
 type CombineOptions = {fixWrapperOffset: boolean, ...};
 
 function combineSourceMaps(
-  modules: $ReadOnlyArray<ModuleTransportLike>,
+  modules: ReadonlyArray<ModuleTransportLike>,
   moduleGroups?: ModuleGroups,
   options?: ?CombineOptions,
 ): IndexMap {
@@ -62,7 +59,7 @@ function combineSourceMaps(
 }
 
 function combineSourceMapsAddingOffsets(
-  modules: $ReadOnlyArray<ModuleTransportLike>,
+  modules: ReadonlyArray<ModuleTransportLike>,
   x_metro_module_paths: Array<string>,
   moduleGroups?: ?ModuleGroups,
   options?: ?CombineOptions,
@@ -78,12 +75,12 @@ function combineSourceMapsAddingOffsets(
 }
 
 function combineMaps(
-  modules: $ReadOnlyArray<ModuleTransportLike>,
+  modules: ReadonlyArray<ModuleTransportLike>,
   offsets: ?Array<number>,
   moduleGroups: ?ModuleGroups,
   options: ?CombineOptions,
 ): Array<IndexMapSection> {
-  const sections = [];
+  const sections: Array<IndexMapSection> = [];
 
   let line = 0;
   modules.forEach((moduleTransport: ModuleTransportLike) => {
@@ -102,7 +99,7 @@ function combineMaps(
       group = moduleGroups && moduleGroups.groups.get(id);
       if (group && moduleGroups) {
         const {modulesById} = moduleGroups;
-        const otherModules: $ReadOnlyArray<ModuleTransportLike> = Array.from(
+        const otherModules: ReadonlyArray<ModuleTransportLike> = Array.from(
           group || [],
         )
           .map((moduleId: number) => modulesById.get(moduleId))
@@ -121,6 +118,7 @@ function combineMaps(
       'Random Access Bundle source maps cannot be built from raw mappings',
     );
     sections.push(
+      // $FlowFixMe[incompatible-type]
       Section(line, column, map || lineToLineSourceMap(code, name)),
     );
     if (offsets != null && id != null) {
@@ -135,10 +133,12 @@ function combineMaps(
   return sections;
 }
 
-const joinModules = (modules: $ReadOnlyArray<{+code: string, ...}>): string =>
-  modules.map((m: {+code: string, ...}) => m.code).join('\n');
+const joinModules = (
+  modules: ReadonlyArray<{readonly code: string, ...}>,
+): string =>
+  modules.map((m: {readonly code: string, ...}) => m.code).join('\n');
 
-module.exports = {
+export {
   combineSourceMaps,
   combineSourceMapsAddingOffsets,
   countLines,

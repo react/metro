@@ -9,9 +9,7 @@
  * @oncall react_native
  */
 
-'use strict';
-
-function canonicalize(key: string, value: mixed): mixed {
+export default function canonicalize(key: string, value: unknown): unknown {
   if (
     // eslint-disable-next-line lint/strictly-null
     value === null ||
@@ -23,7 +21,7 @@ function canonicalize(key: string, value: mixed): mixed {
 
   const keys = Object.keys(value).sort();
   const length = keys.length;
-  const object: {[string]: mixed} = {};
+  const object: {[key: string]: unknown} = {};
 
   for (let i = 0; i < length; i++) {
     object[keys[i]] = value[keys[i]];
@@ -31,5 +29,3 @@ function canonicalize(key: string, value: mixed): mixed {
 
   return object;
 }
-
-module.exports = canonicalize;

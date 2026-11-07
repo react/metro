@@ -15,16 +15,16 @@ import MultipartResponse from '../MultipartResponse';
 import invariant from 'invariant';
 
 describe('MultipartResponse', () => {
-  it('forwards calls to response', () => {
+  test('forwards calls to response', () => {
     const {nreq, nres} = getMockedReqRes({accept: 'text/html'});
-    const res = MultipartResponse.wrapIfSupported((nreq: any), (nres: any));
+    const res = MultipartResponse.wrapIfSupported(nreq as any, nres as any);
 
     expect(res).toBe(nres);
   });
 
-  it('writes multipart response', () => {
+  test('writes multipart response', () => {
     const {nreq, nres} = getMockedReqRes();
-    const res = MultipartResponse.wrapIfSupported((nreq: any), (nres: any));
+    const res = MultipartResponse.wrapIfSupported(nreq as any, nres as any);
 
     expect(res).not.toBe(nres);
     expect(res).toBeInstanceOf(MultipartResponse);
@@ -64,9 +64,9 @@ describe('MultipartResponse', () => {
     );
   });
 
-  it('sends status code as last chunk header', () => {
+  test('sends status code as last chunk header', () => {
     const {nreq, nres} = getMockedReqRes();
-    const res = MultipartResponse.wrapIfSupported((nreq: any), (nres: any));
+    const res = MultipartResponse.wrapIfSupported(nreq as any, nres as any);
     invariant(res instanceof MultipartResponse, 'It must be MultipartResponse');
 
     res.writeChunk({foo: 'bar'}, 'first chunk');
@@ -96,9 +96,9 @@ describe('MultipartResponse', () => {
     );
   });
 
-  it('supports empty responses', () => {
+  test('supports empty responses', () => {
     const {nreq, nres} = getMockedReqRes();
-    const res = MultipartResponse.wrapIfSupported((nreq: any), (nres: any));
+    const res = MultipartResponse.wrapIfSupported(nreq as any, nres as any);
 
     res.writeHead(304, {
       'Content-Type': 'application/json; boundary="3beqjf3apnqeu3h5jqorms4i"',
@@ -122,9 +122,9 @@ describe('MultipartResponse', () => {
     );
   });
 
-  it('passes data directly through to the response object', () => {
+  test('passes data directly through to the response object', () => {
     const {nreq, nres} = getMockedReqRes();
-    const res = MultipartResponse.wrapIfSupported((nreq: any), (nres: any));
+    const res = MultipartResponse.wrapIfSupported(nreq as any, nres as any);
     invariant(res instanceof MultipartResponse, 'It must be MultipartResponse');
     const buffer = Buffer.from([1, 2, 3, 4]);
 

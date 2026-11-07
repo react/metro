@@ -9,8 +9,6 @@
  * @oncall react_native
  */
 
-'use strict';
-
 /* eslint-disable no-redeclare */
 
 // A type representing 0-based offsets.
@@ -27,7 +25,7 @@ declare function add(a: Number1, b: Number0): Number1;
 declare function add(a: Number0, b: Number1): Number1;
 declare function add(a: Number0, b: Number0): Number0;
 
-function add(a: number, b: number): number {
+export function add(a: number, b: number): number {
   return a + b;
 }
 
@@ -40,41 +38,41 @@ declare function sub(a: Number1, b: Number0): Number1;
 declare function sub(a: Number0, b: Number0): Number0;
 declare function sub(a: Number1, b: Number1): Number0;
 
-function sub(a: number, b: number): number {
+export function sub(a: number, b: number): number {
   return a - b;
 }
 
 // Get the underlying number of a 0-based offset, casting away the opaque type.
 declare function get0(x: Number0): number;
 declare function get0(x: void | null): void | null;
-function get0(x: number): number {
+export function get0(x: number): number {
   return x;
 }
 
 // Get the underlying number of a 1-based offset, casting away the opaque type.
 declare function get1(x: Number1): number;
 declare function get1(x: void | null): void | null;
-function get1(x: number): number {
+export function get1(x: number): number {
   return x;
 }
 
 // Add 1 to a 0-based offset, thus converting it to 1-based.
-function add1(x: Number0 | number): Number1 {
+export function add1(x: Number0 | number): Number1 {
   return x + 1;
 }
 
 // Subtract 1 from a 1-based offset, thus converting it to 0-based.
-function sub1(x: Number1): Number0 {
+export function sub1(x: Number1): Number0 {
   return x - 1;
 }
 
 // Negate a 0-based offset.
-function neg(x: Number0): Number0 {
+export function neg(x: Number0): Number0 {
   return -x;
 }
 
 // Cast a number to a 0-based offset.
-function add0(x: number): Number0 {
+export function add0(x: number): Number0 {
   return x;
 }
 
@@ -83,8 +81,6 @@ declare function inc(a: Number0): Number0;
 // Increment a 1-based offset.
 declare function inc(a: Number1): Number1;
 
-function inc(x: number): number {
+export function inc(x: number): number {
   return x + 1;
 }
-
-module.exports = {add, get0, get1, add1, sub1, sub, neg, add0, inc};

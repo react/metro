@@ -9,11 +9,10 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {Number0, Number1} from 'ob1';
 
-const {add0, add1} = require('ob1');
+import {add0, add1} from 'ob1';
+
 const FIRST_COLUMN: Number0 = add0(0);
 const FIRST_LINE: Number1 = add1(0);
 
@@ -25,7 +24,12 @@ export opaque type LookupBias = 'GREATEST_LOWER_BOUND' | 'LEAST_UPPER_BOUND';
 const GREATEST_LOWER_BOUND: LookupBias = 'GREATEST_LOWER_BOUND';
 const LEAST_UPPER_BOUND: LookupBias = 'LEAST_UPPER_BOUND';
 
-const EMPTY_POSITION = Object.freeze({
+const EMPTY_POSITION: Readonly<{
+  source: null,
+  name: null,
+  line: null,
+  column: null,
+}> = Object.freeze({
   source: null,
   name: null,
   line: null,
@@ -40,7 +44,7 @@ function lookupBiasToString(x: LookupBias): string {
   return x;
 }
 
-module.exports = {
+export {
   FIRST_COLUMN,
   FIRST_LINE,
   GENERATED_ORDER,

@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Determine if a file path should be considered an asset file based on the
@@ -17,7 +17,7 @@ import path from 'path';
  */
 export default function isAssetFile(
   filePath: string,
-  assetExts: $ReadOnlySet<string>,
+  assetExts: ReadonlySet<string>,
 ): boolean {
   const baseName = path.basename(filePath);
 

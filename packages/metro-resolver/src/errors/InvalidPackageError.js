@@ -9,13 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {FileCandidates} from '../types';
 
-const formatFileCandidates = require('./formatFileCandidates');
+import formatFileCandidates from './formatFileCandidates';
 
-class InvalidPackageError extends Error {
+export default class InvalidPackageError extends Error {
   /**
    * The file candidates we tried to find to resolve the `main` field of the
    * package. Ex. `/js/foo/beep(.js|.json)?` if `main` is specifying `./beep`
@@ -39,10 +37,10 @@ class InvalidPackageError extends Error {
   packageJsonPath: string;
 
   constructor(opts: {
-    +fileCandidates: FileCandidates,
-    +indexCandidates: FileCandidates,
-    +mainModulePath: string,
-    +packageJsonPath: string,
+    readonly fileCandidates: FileCandidates,
+    readonly indexCandidates: FileCandidates,
+    readonly mainModulePath: string,
+    readonly packageJsonPath: string,
   }) {
     super(
       `The package \`${opts.packageJsonPath}\` is invalid because it ` +
@@ -51,8 +49,7 @@ class InvalidPackageError extends Error {
         `  * ${formatFileCandidates(opts.fileCandidates)}\n` +
         `  * ${formatFileCandidates(opts.indexCandidates)}`,
     );
+    // $FlowFixMe[unsafe-object-assign]
     Object.assign(this, opts);
   }
 }
-
-module.exports = InvalidPackageError;

@@ -11,6 +11,6 @@
 declare module 'jest-snapshot-serializer-raw' {
   declare opaque type Wrapper;
   declare export function wrap(value: string): Wrapper;
-  declare export function test(value: mixed): boolean;
+  declare export function test(value: unknown): boolean;
   declare export function print(value: Wrapper): string;
 }

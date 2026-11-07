@@ -11,7 +11,7 @@
 'use strict';
 
 declare var __METRO_GLOBAL_PREFIX__: string;
-declare var __DOWNLOAD_AND_EXEC_FOR_TESTS__: (path: string) => Promise<mixed>;
+declare var __DOWNLOAD_AND_EXEC_FOR_TESTS__: (path: string) => Promise<unknown>;
 
 const key = `${global.__METRO_GLOBAL_PREFIX__ ?? ''}__loadBundleAsync`;
 

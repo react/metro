@@ -13,11 +13,9 @@
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 
-jest.unmock('cosmiconfig');
-
 jest.setTimeout(30 * 1000);
 
-it('builds a simple bundle', async () => {
+test('builds a simple bundle', async () => {
   const config = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
@@ -29,6 +27,31 @@ it('builds a simple bundle', async () => {
   const object = execBundle(result.code);
   const cjs = await object.asyncImportCJS;
 
+  expect(object.extraData.renamedObject).toBe(
+    'export-destructuring: RENAMED_OBJECT',
+  );
+  expect(object.extraData.objectRest).toEqual({
+    remaining: 'export-destructuring: OBJECT_REST',
+  });
+  expect(object.extraData.arrayFirst).toBe('export-destructuring: ARRAY_FIRST');
+  expect(object.extraData.arrayRest).toEqual([
+    'export-destructuring: ARRAY_REST',
+  ]);
+  expect(object.extraData.namespaceReExportDefault).toBe('export-2: DEFAULT');
+  expect(object.extraData.namespaceReExportFoo).toBe('export-2: FOO');
+  expect(object.extraData.exportStarDefault).toBe(
+    'export-star-overrides: DEFAULT',
+  );
+  expect(object.extraData.exportStarEvaluationOrder).toEqual([
+    'source module',
+    'barrel body',
+  ]);
+  expect(object.extraData.exportStarOverridden).toBe(
+    'export-star-overrides: OVERRIDDEN',
+  );
+  expect(object.extraData.exportStarSourceOnly).toBe(
+    'export-star-source: SOURCE_ONLY',
+  );
   expect(object).toMatchSnapshot();
   expect(cjs).toEqual(expect.objectContaining(cjs.default));
 

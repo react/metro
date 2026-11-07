@@ -9,19 +9,18 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {File} from '@babel/types';
 import type {BabelTransformerArgs} from 'metro-babel-transformer';
 
-const {getAssetData} = require('metro/src/Assets');
-const {generateAssetCodeFileAst} = require('metro/src/Bundler/util');
-const path = require('path');
+import {getAssetData} from 'metro/private/Assets';
+import {generateAssetCodeFileAst} from 'metro/private/Bundler/util';
+import path from 'node:path';
 
-async function transform(
+export async function transform(
   {filename, options, src}: BabelTransformerArgs,
   assetRegistryPath: string,
-  assetDataPlugins: $ReadOnlyArray<string>,
+  assetDataPlugins: ReadonlyArray<string>,
+  urlPath?: string,
 ): Promise<{ast: File, ...}> {
   options = options || {
     platform: '',
@@ -34,7 +33,7 @@ async function transform(
 
   const data = await getAssetData(
     absolutePath,
-    filename,
+    urlPath ?? filename,
     assetDataPlugins,
     options.platform,
     options.publicPath,
@@ -44,7 +43,3 @@ async function transform(
     ast: generateAssetCodeFileAst(assetRegistryPath, data),
   };
 }
-
-module.exports = {
-  transform,
-};

@@ -1,0 +1,55 @@
+# In order to be updated when nightlies fail, please subscribe for updates on PR:
+# ---> https://github.com/react/metro/pull/1314 <---
+# where comments will be published on fail.
+
+# This is a bit of a workaround tackling the lack of an organic way
+# to notify certain people when a Github workflow fails:
+# https://github.com/orgs/community/discussions/18039
+
+name: react/metro/nightly-tests
+on:
+  schedule:
+    # Daily at at 5:00 UTC
+    - cron:  '0 5 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      max-parallel: 1 # reduces the flakiness of these tests
+      fail-fast: false
+      matrix:
+        runs-on: ['ubuntu-latest', 'windows-latest', 'macos-latest']
+        # Sync with build-test-and-deploy.yml
+        node-version: [  # https://github.com/nodejs/release#release-schedule
+          '22.13.0', # minimum supported
+          'lts/*',   # latest lts
+          '*'        # latest stable node version ('latest' includes prereleases)
+        ]
+        no-lockfile: ['false', 'true']
+    uses: ./.github/workflows/test.yml
+    with:
+      node-version: ${{ matrix.node-version }}
+      runs-on: ${{ matrix.runs-on }}
+      no-lockfile: ${{ matrix.no-lockfile }}
+
+  comment-on-pr-for-failures:
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: ${{ always() && needs.test.result == 'failure' }}
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.issues.createComment({
+              // see https://github.com/react/metro/pull/1314
+              issue_number: 1314,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'The nightly workflow `${{ github.workflow }}` failed in [run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})!',
+            });

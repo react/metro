@@ -9,18 +9,15 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {Module, TransformInputOptions} from '../../types.flow';
+import type {Module, TransformInputOptions} from '../../types';
 import type {JsOutput} from 'metro-transform-worker';
 
 import CountingSet from '../../../lib/CountingSet';
-
-const getRamBundleInfo = require('../getRamBundleInfo');
+import getRamBundleInfo from '../getRamBundleInfo';
 
 function createModule(
   name: string,
-  dependencies: $ReadOnlyArray<string>,
+  dependencies: ReadonlyArray<string>,
   type: JsOutput['type'] = 'js/module',
 ): [string, Module<>] {
   return [
@@ -32,7 +29,10 @@ function createModule(
           dep,
           {
             absolutePath: `/root/${dep}.js`,
-            data: {data: {asyncType: null, locs: [], key: dep}, name: dep},
+            data: {
+              data: {asyncType: null, isESMImport: false, locs: [], key: dep},
+              name: dep,
+            },
           },
         ]),
       ),
@@ -52,7 +52,6 @@ function createModule(
 const transformOptions: TransformInputOptions = {
   customTransformOptions: {},
   dev: true,
-  hot: true,
   minify: true,
   platform: 'web',
   type: 'module',
@@ -77,77 +76,84 @@ const pre = [createModule('pre', [], 'js/script')[1]];
 const getRunModuleStatement = (moduleId: string | number) =>
   `require(${JSON.stringify(moduleId)});`;
 
-it('should return the RAM bundle info', async () => {
+const baseOptions = {
+  asyncRequireModulePath: '',
+  // $FlowFixMe[incompatible-type] createModuleId assumes numeric IDs - is this too strict?
+  createModuleId: (path: string): number => path,
+  dev: true,
+  excludeSource: false,
+  getRunModuleStatement,
+  getTransformOptions: async () => ({
+    preloadedModules: {},
+    ramGroups: [],
+  }),
+  globalPrefix: '',
+  includeAsyncPaths: false,
+  inlineSourceMap: false,
+  modulesOnly: false,
+  platform: null,
+  processModuleFilter: (module: Module<>) => true,
+  projectRoot: '/root',
+  reservedString: '_$$_METRO_',
+  runBeforeMainModule: [],
+  runModule: true,
+  serverRoot: '/root',
+  shouldAddToIgnoreList: () => false,
+  sourceMapUrl: 'http://localhost/bundle.map',
+  sourceUrl: null,
+  getSourceUrl: null,
+};
+
+test('should return the RAM bundle info', async () => {
   expect(
     await getRamBundleInfo(
       '/root/entry.js',
       pre,
       {...graph, entryPoints: new Set(['/root/entry.js'])},
-      {
-        asyncRequireModulePath: '',
-        // $FlowFixMe[incompatible-call] createModuleId assumes numeric IDs - is this too strict?
-        createModuleId: path => path,
-        dev: true,
-        excludeSource: false,
-        getRunModuleStatement,
-        getTransformOptions: async () => ({
-          preloadedModules: {},
-          ramGroups: [],
-        }),
-        includeAsyncPaths: false,
-        inlineSourceMap: false,
-        modulesOnly: false,
-        platform: null,
-        processModuleFilter: module => true,
-        projectRoot: '/root',
-        runBeforeMainModule: [],
-        runModule: true,
-        serverRoot: '/root',
-        shouldAddToIgnoreList: () => false,
-        sourceMapUrl: 'http://localhost/bundle.map',
-        sourceUrl: null,
-        getSourceUrl: null,
-      },
+      baseOptions,
     ),
   ).toMatchSnapshot();
 });
 
-it('emits x_google_ignoreList based on shouldAddToIgnoreList', async () => {
+test('passes a working transitive-dependency lookup to getTransformOptions', async () => {
+  let resolvedDeps: ?Array<string>;
+  await getRamBundleInfo(
+    '/root/entry.js',
+    pre,
+    {...graph, entryPoints: new Set(['/root/entry.js'])},
+    {
+      ...baseOptions,
+      getTransformOptions: async (entryPoints, opts, getDependenciesOf) => {
+        resolvedDeps = await getDependenciesOf('/root/foo.js');
+        return {preloadedModules: {}, ramGroups: []};
+      },
+    },
+  );
+  // foo depends on bar, baz, qux — the callback must return those, not [undefined].
+  if (resolvedDeps == null) {
+    throw new Error(
+      'getTransformOptions was not called with a dependency lookup',
+    );
+  }
+  expect([...resolvedDeps].sort()).toEqual([
+    '/root/bar.js',
+    '/root/baz.js',
+    '/root/qux.js',
+  ]);
+});
+
+test('emits x_google_ignoreList based on shouldAddToIgnoreList', async () => {
   expect(
     await getRamBundleInfo(
       '/root/entry.js',
       pre,
       {...graph, entryPoints: new Set(['/root/entry.js'])},
-      {
-        asyncRequireModulePath: '',
-        // $FlowFixMe[incompatible-call] createModuleId assumes numeric IDs - is this too strict?
-        createModuleId: path => path,
-        dev: true,
-        excludeSource: false,
-        getRunModuleStatement,
-        getTransformOptions: async () => ({
-          preloadedModules: {},
-          ramGroups: [],
-        }),
-        includeAsyncPaths: false,
-        inlineSourceMap: false,
-        modulesOnly: false,
-        platform: null,
-        processModuleFilter: module => true,
-        projectRoot: '/root',
-        runBeforeMainModule: [],
-        runModule: true,
-        serverRoot: '/root',
-        shouldAddToIgnoreList: () => true,
-        sourceMapUrl: 'http://localhost/bundle.map',
-        sourceUrl: null,
-        getSourceUrl: null,
-      },
+      {...baseOptions, shouldAddToIgnoreList: () => true},
     ),
   ).toMatchSnapshot();
 });
 
-it('should use the preloadedModules and ramGroup configs to build a RAM bundle', async () => {
+test('should use the preloadedModules and ramGroup configs to build a RAM bundle', async () => {
   const getTransformOptions = async () => ({
     preloadedModules: {'/root/entry2.js': true},
     ramGroups: ['/root/foo.js'],
@@ -158,26 +164,11 @@ it('should use the preloadedModules and ramGroup configs to build a RAM bundle',
     pre,
     {...graph, entryPoints: new Set(['/root/entry.js'])},
     {
-      asyncRequireModulePath: '',
-      // $FlowFixMe[incompatible-call] createModuleId assumes numeric IDs - is this too strict?
-      createModuleId: path => path,
-      dev: true,
-      excludeSource: false,
-      getRunModuleStatement,
+      ...baseOptions,
+      /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+       * https://fburl.com/workplace/6291gfvu */
       getTransformOptions,
-      includeAsyncPaths: false,
       inlineSourceMap: null,
-      modulesOnly: false,
-      platform: null,
-      processModuleFilter: module => true,
-      projectRoot: '/root',
-      runBeforeMainModule: [],
-      runModule: true,
-      serverRoot: '/root',
-      shouldAddToIgnoreList: () => false,
-      sourceMapUrl: 'http://localhost/bundle.map',
-      sourceUrl: null,
-      getSourceUrl: null,
     },
   );
 

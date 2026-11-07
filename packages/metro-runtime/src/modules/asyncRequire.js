@@ -9,28 +9,60 @@
  * @oncall react_native
  */
 
-type Options = {isPrefetchOnly: boolean, ...};
 type MetroRequire = {
-  (number): mixed,
-  importAll: number => mixed,
+  (moduleID: number): unknown,
+  importAll: <T>(moduleID: number) => T,
   ...
 };
 
 declare var require: MetroRequire;
 
-const DEFAULT_OPTIONS = {isPrefetchOnly: false};
+// When using `unstable_getAsyncDependencyPath`, path values may be any
+// JSON-serialisable value. By default, they are string URLs - otherwise a
+// custom `__loadBundleAsync` implementation must be provided.
+type ReadonlyJsonData =
+  | null
+  | boolean
+  | number
+  | string
+  | ReadonlyArray<ReadonlyJsonData>
+  | Readonly<{[key: string]: ReadonlyJsonData}>;
 
-type DependencyMapPaths = ?$ReadOnly<{[moduleID: number | string]: mixed}>;
+type DependencyMapPaths = ?Readonly<{
+  [moduleID: number | string]: ReadonlyJsonData,
+}>;
+
+type AsyncRequire = {
+  <T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): Promise<T>,
+  unstable_importMaybeSync<T>(
+    moduleID: number,
+    paths: DependencyMapPaths,
+  ): Promise<T> | T,
+  prefetch(
+    moduleID: number,
+    paths: DependencyMapPaths,
+    moduleName?: string,
+  ): void,
+  ...
+};
 
 declare var __METRO_GLOBAL_PREFIX__: string;
 
-async function asyncRequireImpl(
+// A later bundle in the same realm (e.g. a Module Federation remote) may
+// reassign `__METRO_GLOBAL_PREFIX__`. Read it once, so that this module keeps
+// using its own bundle's loader.
+const GLOBAL_PREFIX: string = __METRO_GLOBAL_PREFIX__;
+
+function maybeLoadBundle(
   moduleID: number,
   paths: DependencyMapPaths,
-  options: Options,
-): Promise<mixed> {
-  const loadBundle: (bundlePath: mixed) => Promise<void> =
-    global[`${__METRO_GLOBAL_PREFIX__}__loadBundleAsync`];
+): void | Promise<void> {
+  const loadBundle: (bundlePath: unknown) => Promise<void> =
+    global[`${GLOBAL_PREFIX}__loadBundleAsync`];
 
   if (loadBundle != null) {
     const stringModuleID = String(moduleID);
@@ -38,35 +70,55 @@ async function asyncRequireImpl(
       const bundlePath = paths[stringModuleID];
       if (bundlePath != null) {
         // NOTE: Errors will be swallowed by asyncRequire.prefetch
-        await loadBundle(bundlePath);
+        return loadBundle(bundlePath);
       }
     }
-  }
-
-  if (!options.isPrefetchOnly) {
-    return require.importAll(moduleID);
   }
 
   return undefined;
 }
 
-async function asyncRequire(
+function asyncRequireImpl<T>(
   moduleID: number,
   paths: DependencyMapPaths,
-  moduleName?: string,
-): Promise<mixed> {
-  return asyncRequireImpl(moduleID, paths, DEFAULT_OPTIONS);
+): Promise<T> | T {
+  const maybeLoadBundlePromise = maybeLoadBundle(moduleID, paths);
+  const importAll = () => require.importAll<T>(moduleID);
+
+  if (maybeLoadBundlePromise != null) {
+    return maybeLoadBundlePromise.then(importAll);
+  }
+
+  return importAll();
 }
+
+async function asyncRequire<T>(
+  moduleID: number,
+  paths: DependencyMapPaths,
+  moduleName?: string, // unused
+): Promise<T> {
+  return asyncRequireImpl<T>(moduleID, paths);
+}
+
+// Synchronous version of asyncRequire, which can still return a promise
+// if the module is split.
+asyncRequire.unstable_importMaybeSync = function unstable_importMaybeSync<T>(
+  moduleID: number,
+  paths: DependencyMapPaths,
+): Promise<T> | T {
+  return asyncRequireImpl(moduleID, paths);
+};
 
 asyncRequire.prefetch = function (
   moduleID: number,
   paths: DependencyMapPaths,
-  moduleName?: string,
+  moduleName?: string, // unused
 ): void {
-  asyncRequireImpl(moduleID, paths, {isPrefetchOnly: true}).then(
+  maybeLoadBundle(moduleID, paths)?.then(
     () => {},
     () => {},
   );
 };
 
-module.exports = asyncRequire;
+// The explicit type carries the statics through to generated type definitions.
+module.exports = asyncRequire as AsyncRequire;

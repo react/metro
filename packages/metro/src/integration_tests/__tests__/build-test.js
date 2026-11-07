@@ -11,18 +11,18 @@
 
 'use strict';
 
+import type {SerializerOptions} from '../../DeltaBundler/types';
+
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 const MetroConfig = require('metro-config');
-const path = require('path');
-
-jest.unmock('cosmiconfig');
+const path = require('node:path');
 
 jest.setTimeout(30 * 1000);
 
 const INPUT_PATH = path.resolve(__dirname, '../basic_bundle');
 
-it('builds a simple bundle', async () => {
+test('builds a simple bundle', async () => {
   const config = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
@@ -32,9 +32,110 @@ it('builds a simple bundle', async () => {
   });
 
   expect(execBundle(result.code)).toMatchSnapshot();
+
+  // Assets are not returned by default
+  expect(result.assets).toBeUndefined();
 });
 
-it('build a simple bundle with polyfills', async () => {
+test('builds a bundle that runs under a global prefix', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    transformer: {globalPrefix: 'app1'},
+  });
+
+  const prefixed = await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+  const unprefixed = await Metro.runBuild(baseConfig, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+
+  const context: {[string]: unknown} = {};
+  // Exports cross realms, so compare their serialized form.
+  expect(JSON.stringify(execBundle(prefixed.code, context))).toBe(
+    JSON.stringify(execBundle(unprefixed.code)),
+  );
+  expect(
+    Object.keys(context)
+      .filter(name => /__(r|c|d|registerSegment|accept)$/.test(name))
+      .sort(),
+  ).toEqual([
+    'app1__accept',
+    'app1__c',
+    'app1__d',
+    'app1__r',
+    'app1__registerSegment',
+  ]);
+});
+
+test('tells a custom serializer the reserved string', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  let reservedString;
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    serializer: {
+      customSerializer: async (
+        _entryPoint: string,
+        _preModules: unknown,
+        _graph: unknown,
+        options: SerializerOptions,
+      ) => {
+        reservedString = options.reservedString;
+        return 'code';
+      },
+    },
+  });
+
+  await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+
+  expect(reservedString).toBe('_$$_METRO_');
+});
+
+test.each([
+  ['Metro transformer', null, /^\/assets\/\[metro-watchFolders\]\/\d+$/],
+  // Doesn't forward the URL path, so uses the project-relative one.
+  [
+    'custom transformer wrapping Metro transformer',
+    'wrapper-transformer.js',
+    /^\/assets\/\.\.$/,
+  ],
+])(
+  'agrees with getAssets on the URL of an asset outside projectRoot (%s)',
+  async (_name, transformer, expectedLocation) => {
+    const projectRoot = path.join(INPUT_PATH, 'external-asset');
+    const baseConfig = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+    const config = MetroConfig.mergeConfig(baseConfig, {
+      projectRoot,
+      ...(transformer != null
+        ? {transformerPath: path.join(projectRoot, transformer)}
+        : null),
+    });
+
+    const result = await Metro.runBuild(config, {
+      entry: 'index.js',
+      assets: true,
+    });
+
+    // $FlowFixMe[incompatible-use] - the bundle evaluates to the asset data
+    const {httpServerLocation} = execBundle(result.code);
+    expect(httpServerLocation).toMatch(expectedLocation);
+    expect(result.assets?.map(asset => asset.httpServerLocation)).toEqual([
+      httpServerLocation,
+    ]);
+  },
+);
+
+test('build a simple bundle with polyfills', async () => {
   const baseConfig = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
@@ -50,7 +151,7 @@ it('build a simple bundle with polyfills', async () => {
   expect(execBundle(result.code)).toBe('POLYFILL_IS_INJECTED');
 });
 
-it('builds a bundle with BigInt and exponentiation syntax', async () => {
+test('builds a bundle with BigInt and exponentiation syntax', async () => {
   const config = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
@@ -61,4 +162,109 @@ it('builds a bundle with BigInt and exponentiation syntax', async () => {
 
   const BI = BigInt;
   expect(execBundle(result.code)).toBe(BI(8));
+});
+
+test('build a simple bundle with assets', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const result = await Metro.runBuild(config, {
+    assets: true,
+    entry: 'TestBundle.js',
+  });
+  expect(result.assets).toEqual([
+    {
+      __packager_asset: true,
+      fileSystemLocation: expect.stringMatching(/basic_bundle$/),
+      files: [expect.stringMatching(/test.png$/)],
+      hash: '77d45c1f7fa73c0f6c444a830dc42f67',
+      height: 8,
+      httpServerLocation: '/assets',
+      name: 'test',
+      scales: [1],
+      type: 'png',
+      width: 8,
+    },
+  ]);
+});
+
+test('allows specifying paths to save bundle and maps', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const mockSave = jest.fn();
+
+  await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    output: {
+      ...require('../../shared/output/bundle'),
+      save: mockSave,
+    },
+    sourceMapOut: 'TestBundle.custommap',
+    sourceMap: true,
+    bundleOut: 'TestBundle.jsbundle',
+  });
+
+  expect(mockSave).toBeCalledWith(
+    {
+      code: expect.any(String),
+      map: expect.any(String),
+    },
+    expect.objectContaining({
+      bundleOutput: 'TestBundle.jsbundle',
+      sourcemapOutput: 'TestBundle.custommap',
+    }),
+    expect.any(Function),
+  );
+});
+
+test('builds a bundle from a file in a directory literally named [metro-project]', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+
+  const result = await Metro.runBuild(config, {
+    entry: './[metro-project]/LiteralDir.js',
+  });
+
+  expect(execBundle(result.code)).toBe('from-literal-dir');
+});
+
+// $FlowFixMe[prop-missing] - test.failing is not in Flow's Jest types
+test.failing(
+  'runBuild resolves entry against projectRoot, not unstable_serverRoot',
+  async () => {
+    const baseConfig = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+    const config = MetroConfig.mergeConfig(baseConfig, {
+      server: {unstable_serverRoot: path.resolve(INPUT_PATH, '..')},
+    });
+
+    const result = await Metro.runBuild(config, {
+      entry: 'TestBundle.js',
+    });
+
+    expect(execBundle(result.code)).toBeDefined();
+  },
+);
+
+test('(unstable) allows specifying a transform profile', async () => {
+  const config = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const hermesResult = await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    minify: true,
+    unstable_transformProfile: 'hermes-stable',
+  });
+  const defaultResult = await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    minify: true,
+    unstable_transformProfile: 'default',
+  });
+
+  // Assumption: We won't minify JS for Hermes targets. Use this to infer that
+  // transform profile passes through to the transformer.
+  expect(hermesResult.code.length).toBeGreaterThan(defaultResult.code.length);
 });

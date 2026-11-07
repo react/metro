@@ -12,7 +12,7 @@
 import {planQuery} from '../planQuery';
 
 describe('planQuery with includeSymlinks: false', () => {
-  it('plans a "since" query when a clock and directories are given', () => {
+  test('plans a "since" query when a clock and directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: 'clock',
       directoryFilters: ['/dir1', '/dir2'],
@@ -33,7 +33,7 @@ describe('planQuery with includeSymlinks: false', () => {
     });
   });
 
-  it('plans a "since" query when a clock but no directories are given', () => {
+  test('plans a "since" query when a clock but no directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: 'clock',
       directoryFilters: [],
@@ -49,7 +49,7 @@ describe('planQuery with includeSymlinks: false', () => {
     });
   });
 
-  it('plans a "glob" query when directories but no clock are given', () => {
+  test('plans a "glob" query when directories but no clock are given', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: ['/dir1', '/dir2'],
@@ -66,7 +66,7 @@ describe('planQuery with includeSymlinks: false', () => {
     });
   });
 
-  it('plans a "suffix" query when no clock or directories are given', () => {
+  test('plans a "suffix" query when no clock or directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: [],
@@ -82,7 +82,7 @@ describe('planQuery with includeSymlinks: false', () => {
     });
   });
 
-  it('does not request content.sha1hex if includeSha1 == false', () => {
+  test('does not request content.sha1hex if includeSha1 == false', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: [],
@@ -99,7 +99,7 @@ describe('planQuery with includeSymlinks: false', () => {
   });
 });
 
-it('does not request type if includeSymlinks == false', () => {
+test('does not request type if includeSymlinks == false', () => {
   const {query, queryGenerator} = planQuery({
     since: null,
     directoryFilters: [],
@@ -116,7 +116,7 @@ it('does not request type if includeSymlinks == false', () => {
 });
 
 describe('planQuery with includeSymlinks: true', () => {
-  it('plans a "since" query when a clock and directories are given', () => {
+  test('plans a "since" query when a clock and directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: 'clock',
       directoryFilters: ['/dir1', '/dir2'],
@@ -140,7 +140,7 @@ describe('planQuery with includeSymlinks: true', () => {
     });
   });
 
-  it('plans a "since" query when a clock but no directories are given', () => {
+  test('plans a "since" query when a clock but no directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: 'clock',
       directoryFilters: [],
@@ -160,7 +160,7 @@ describe('planQuery with includeSymlinks: true', () => {
     });
   });
 
-  it('plans a "glob" query when directories but no clock are given', () => {
+  test('plans a "glob" query when directories but no clock are given', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: ['/dir1', '/dir2'],
@@ -181,7 +181,7 @@ describe('planQuery with includeSymlinks: true', () => {
     });
   });
 
-  it('plans an "all" query when no clock or directories are given', () => {
+  test('plans an "all" query when no clock or directories are given', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: [],
@@ -200,7 +200,7 @@ describe('planQuery with includeSymlinks: true', () => {
     });
   });
 
-  it('does not request content.sha1hex if includeSha1 == false', () => {
+  test('does not request content.sha1hex if includeSha1 == false', () => {
     const {query, queryGenerator} = planQuery({
       since: null,
       directoryFilters: [],

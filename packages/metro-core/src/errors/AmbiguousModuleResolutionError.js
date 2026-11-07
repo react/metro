@@ -9,11 +9,9 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {DuplicateHasteCandidatesError} from 'metro-file-map';
 
-class AmbiguousModuleResolutionError extends Error {
+export default class AmbiguousModuleResolutionError extends Error {
   fromModulePath: string;
   hasteError: DuplicateHasteCandidatesError;
 
@@ -29,5 +27,3 @@ class AmbiguousModuleResolutionError extends Error {
     this.hasteError = hasteError;
   }
 }
-
-module.exports = AmbiguousModuleResolutionError;

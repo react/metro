@@ -9,20 +9,19 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {RamBundleInfo} from '../../../DeltaBundler/Serializers/getRamBundleInfo';
-import type {ModuleTransportLike} from '../../../shared/types.flow';
-import type {OutputOptions} from '../../types.flow';
+import type {ModuleTransportLike} from '../../../shared/types';
+import type {OutputOptions} from '../../types';
 
-const relativizeSourceMapInline = require('../../../lib/relativizeSourceMap');
-const writeFile = require('../writeFile');
-const buildSourcemapWithMetadata = require('./buildSourcemapWithMetadata');
-const MAGIC_RAM_BUNDLE_NUMBER = require('./magic-number');
-const {joinModules} = require('./util');
-const writeSourceMap = require('./write-sourcemap');
-const fsPromises = require('fs').promises;
-const path = require('path');
+import relativizeSourceMapInline from '../../../lib/relativizeSourceMap';
+import writeFile from '../writeFile';
+import buildSourcemapWithMetadata from './buildSourcemapWithMetadata';
+import MAGIC_RAM_BUNDLE_NUMBER from './magic-number';
+import {joinModules} from './util';
+import writeSourceMap from './write-sourcemap';
+import {promises as fsPromises} from 'node:fs';
+import path from 'node:path';
+
 // must not start with a dot, as that won't go into the apk
 const MAGIC_RAM_BUNDLE_FILENAME = 'UNBUNDLE';
 const MODULES_DIR = 'js-modules';
@@ -30,15 +29,15 @@ const MODULES_DIR = 'js-modules';
 /**
  * Saves all JS modules of an app as single files
  * The startup code (prelude, polyfills etc.) are written to the file
- * designated by the `bundleOuput` option.
+ * designated by the `bundleOutput` option.
  * All other modules go into a 'js-modules' folder that in the same parent
  * directory as the startup file.
  */
-function saveAsAssets(
+export default function saveAsAssets(
   bundle: RamBundleInfo,
   options: OutputOptions,
   log: (...args: Array<string>) => void,
-): Promise<mixed> {
+): Promise<unknown> {
   const {
     bundleOutput,
     bundleEncoding: encoding,
@@ -101,27 +100,25 @@ function writeModuleFile(
   module: ModuleTransportLike,
   modulesDir: string,
   encoding: void | 'ascii' | 'utf16le' | 'utf8',
-): Promise<mixed> {
+): Promise<unknown> {
   const {code, id} = module;
   return writeFile(path.join(modulesDir, id + '.js'), code, encoding);
 }
 
 function writeModules(
-  modules: $ReadOnlyArray<ModuleTransportLike>,
+  modules: ReadonlyArray<ModuleTransportLike>,
   modulesDir: string,
   encoding: void | 'ascii' | 'utf16le' | 'utf8',
-): Promise<Array<mixed>> {
+): Promise<Array<unknown>> {
   const writeFiles = modules.map(
-    (module: ModuleTransportLike): Promise<mixed> =>
+    (module: ModuleTransportLike): Promise<unknown> =>
       writeModuleFile(module, modulesDir, encoding),
   );
   return Promise.all(writeFiles);
 }
 
-function writeMagicFlagFile(outputDir: string): Promise<mixed> {
+function writeMagicFlagFile(outputDir: string): Promise<unknown> {
   const buffer = Buffer.alloc(4);
   buffer.writeUInt32LE(MAGIC_RAM_BUNDLE_NUMBER, 0);
   return writeFile(path.join(outputDir, MAGIC_RAM_BUNDLE_FILENAME), buffer);
 }
-
-module.exports = saveAsAssets;

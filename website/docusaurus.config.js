@@ -23,7 +23,7 @@ const siteConfig = {
           editUrl: fbContent({
             internal:
               'https://www.internalfb.com/intern/diffusion/FBS/browse/master/xplat/js/tools/metro/docs/',
-            external: 'https://github.com/facebook/metro/edit/main/docs',
+            external: 'https://github.com/react/metro/edit/main/docs',
           }),
           sidebarPath: require.resolve('./sidebars.json'),
           showLastUpdateTime: fbContent({
@@ -46,20 +46,13 @@ const siteConfig = {
   plugins: ['docusaurus-plugin-sass'],
   title: 'Metro',
   tagline: '\ud83d\ude87 The JavaScript bundler for React Native',
-  organizationName: 'facebook',
+  organizationName: 'react',
   projectName: 'metro',
   url: 'https://metrobundler.dev',
   baseUrl: '/',
   favicon: 'img/favicon.png',
+  onBrokenAnchors: 'throw',
   themeConfig: {
-    announcementBar: {
-      id: 'support_ukraine',
-      content:
-        'Support Ukraine 🇺🇦 <a target="_blank" rel="noopener noreferrer" href="https://opensource.facebook.com/support-ukraine"> Help Provide Humanitarian Aid to Ukraine</a>.',
-      backgroundColor: '#20232a',
-      textColor: '#fff',
-      isCloseable: false,
-    },
     navbar: {
       title: 'Metro',
       logo: {
@@ -77,7 +70,7 @@ const siteConfig = {
         },
         {
           label: 'GitHub',
-          href: 'https://github.com/facebook/metro',
+          href: 'https://github.com/react/metro',
           position: 'right',
         },
       ],
@@ -102,7 +95,7 @@ const siteConfig = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/metro',
+              href: 'https://github.com/react/metro',
             },
             {
               label: 'Stack Overflow',
@@ -142,7 +135,7 @@ const siteConfig = {
       indexName: 'metro',
     },
     prism: {
-      additionalLanguages: ['flow'],
+      additionalLanguages: ['flow', 'bash', 'json', 'diff'],
     },
   },
   scripts: ['https://buttons.github.io/buttons.js'],

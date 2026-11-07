@@ -9,27 +9,26 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {Module} from '../types.flow';
+import type {Module} from '../types';
 import type {
   FBSourceFunctionMap,
   MetroSourceMapSegmentTuple,
+  VlqMap,
 } from 'metro-source-map';
 
-const {getJsOutput, isJsModule} = require('./helpers/js');
+import {getJsOutput, isJsModule} from './helpers/js';
 
-export type ExplodedSourceMap = $ReadOnlyArray<{
-  +map: Array<MetroSourceMapSegmentTuple>,
-  +firstLine1Based: number,
-  +functionMap: ?FBSourceFunctionMap,
-  +path: string,
+export type ExplodedSourceMap = ReadonlyArray<{
+  readonly map: Array<MetroSourceMapSegmentTuple> | VlqMap,
+  readonly firstLine1Based: number,
+  readonly functionMap: ?FBSourceFunctionMap,
+  readonly path: string,
 }>;
 
-function getExplodedSourceMap(
-  modules: $ReadOnlyArray<Module<>>,
+export function getExplodedSourceMap(
+  modules: ReadonlyArray<Module<>>,
   options: {
-    +processModuleFilter: (module: Module<>) => boolean,
+    readonly processModuleFilter: (module: Module<>) => boolean,
   },
 ): ExplodedSourceMap {
   const modulesToProcess = modules
@@ -47,7 +46,3 @@ function getExplodedSourceMap(
   }
   return result;
 }
-
-module.exports = {
-  getExplodedSourceMap,
-};

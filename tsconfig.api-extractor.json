@@ -1,0 +1,14 @@
+{
+  // TypeScript configuration used only by scripts/generateApiSnapshots.js.
+  // It mirrors the project tsconfig but adds the "dom" lib: API Extractor
+  // cannot follow ambient globals such as URLSearchParams when they resolve
+  // through @types/node, but treats them as built-ins when they come from a
+  // standard lib. This does not affect `tsc`/`flow` typechecking.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom"],
+    // api-extractor doesn't need a clean type check. yarn run typecheck-ts
+    // handles that.
+    "skipLibCheck": true
+  }
+}

@@ -9,38 +9,54 @@
  */
 
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
-import type {Dependency, TransformResultDependency} from '../types.flow';
+import type {
+  BundlerResolution,
+  ResolvedDependency,
+  TransformResultDependency,
+  VirtualSource,
+} from '../types';
 
+import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {buildSubgraph} from '../buildSubgraph';
+import {createPathNormalizer} from './test-utils';
 import nullthrows from 'nullthrows';
+
+const p = createPathNormalizer();
 
 const makeTransformDep = (
   name: string,
   asyncType: null | 'weak' | 'async' = null,
+  isESMImport: boolean = false,
   contextParams?: RequireContextParams,
 ): TransformResultDependency => ({
   name,
-  data: {key: 'key-' + name, asyncType, locs: [], contextParams},
+  data: {
+    key: 'key-' + name + (isESMImport ? '-import' : ''),
+    asyncType,
+    isESMImport,
+    locs: [],
+    contextParams,
+  },
 });
 
 class BadTransformError extends Error {}
 class DoesNotExistError extends Error {}
 
 describe('GraphTraversal', () => {
-  let transformDeps: Map<string, $ReadOnlyArray<TransformResultDependency>>;
+  let transformDeps: Map<string, ReadonlyArray<TransformResultDependency>>;
 
   let params;
 
   beforeEach(() => {
     transformDeps = new Map([
-      ['/bundle', [makeTransformDep('foo')]],
-      ['/foo', [makeTransformDep('bar'), makeTransformDep('baz')]],
-      ['/bar', []],
-      ['/baz', [makeTransformDep('qux', 'weak')]],
+      [p('/bundle'), [makeTransformDep('foo')]],
+      [p('/foo'), [makeTransformDep('bar'), makeTransformDep('baz')]],
+      [p('/bar'), []],
+      [p('/baz'), [makeTransformDep('qux', 'weak')]],
       [
-        '/entryWithContext',
+        p('/entryWithContext'),
         [
-          makeTransformDep('virtual', null, {
+          makeTransformDep('virtual', null, false, {
             filter: {
               pattern: 'contextMatch.*',
               flags: 'i',
@@ -51,10 +67,10 @@ describe('GraphTraversal', () => {
         ],
       ],
       [
-        '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+        p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
         [makeTransformDep('contextMatch')],
       ],
-      ['/contextMatch', []],
+      [p('/contextMatch'), []],
     ]);
     params = {
       resolve: jest.fn((from, dependency) => {
@@ -62,12 +78,12 @@ describe('GraphTraversal', () => {
           throw new DoesNotExistError();
         }
         return {
-          filePath: `/${dependency.name}`,
-          type: 'sourceFile',
+          filePath: p(`/${dependency.name}`),
+          type: 'sourceFile' as const,
         };
       }),
       transform: jest.fn(async (path, requireContext) => {
-        if (path === '/bad') {
+        if (path === p('/bad')) {
           throw new BadTransformError();
         }
         return {
@@ -77,107 +93,127 @@ describe('GraphTraversal', () => {
         };
       }),
       shouldTraverse: jest.fn(
-        (dependency: Dependency) => dependency.data.data.asyncType !== 'weak',
+        (dependency: ResolvedDependency, virtualSource: ?VirtualSource) =>
+          dependency.data.data.asyncType !== 'weak',
       ),
     };
   });
 
   test('traverses all nodes out from /bundle, except a weak dependency', async () => {
     const {moduleData} = await buildSubgraph(
-      new Set(['/bundle']),
+      new Set([p('/bundle')]),
       new Map(),
       params,
     );
-    expect([...moduleData.keys()]).toEqual(['/bundle', '/foo', '/bar', '/baz']);
-    expect(moduleData.get('/bundle')).toEqual({
+    expect([...moduleData.keys()]).toEqual([
+      p('/bundle'),
+      p('/foo'),
+      p('/bar'),
+      p('/baz'),
+    ]);
+    expect(moduleData.get(p('/bundle'))).toEqual({
       dependencies: new Map([
         [
           'key-foo',
           {
-            absolutePath: '/foo',
+            absolutePath: p('/foo'),
             data: makeTransformDep('foo'),
           },
         ],
       ]),
       getSource: expect.any(Function),
       output: [],
-      resolvedContexts: new Map(),
+      virtualSources: new Map(),
     });
   });
 
   test('resolves context and traverses context matches', async () => {
     const {moduleData} = await buildSubgraph(
-      new Set(['/entryWithContext']),
+      new Set([p('/entryWithContext')]),
       new Map(),
       params,
     );
     expect(params.transform).toHaveBeenCalledWith(
-      '/entryWithContext',
+      p('/entryWithContext'),
       undefined,
     );
     const expectedResolvedContext = {
       filter: /contextMatch.*/i,
-      from: '/virtual',
+      from: p('/virtual'),
       mode: 'sync',
       recursive: true,
     };
     expect(params.transform).toHaveBeenCalledWith(
-      '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
-      expectedResolvedContext,
+      p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
+      {type: 'requireContext', requireContext: expectedResolvedContext},
     );
-    expect(params.transform).toHaveBeenCalledWith('/contextMatch', undefined);
     expect(params.transform).toHaveBeenCalledWith(
-      '/entryWithContext',
+      p('/contextMatch'),
+      undefined,
+    );
+    expect(params.transform).toHaveBeenCalledWith(
+      p('/entryWithContext'),
       undefined,
     );
     expect(moduleData).toEqual(
       new Map([
         [
-          '/entryWithContext',
+          p('/entryWithContext'),
           {
             dependencies: new Map([
               [
                 'key-virtual',
                 {
-                  absolutePath:
+                  absolutePath: p(
                     '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
-                  data: nullthrows(transformDeps.get('/entryWithContext'))[0],
+                  ),
+                  data: nullthrows(
+                    transformDeps.get(p('/entryWithContext')),
+                  )[0],
                 },
               ],
             ]),
-            resolvedContexts: new Map([
-              ['key-virtual', expectedResolvedContext],
+            virtualSources: new Map([
+              [
+                'key-virtual',
+                {
+                  type: 'requireContext',
+                  requireContext: expectedResolvedContext,
+                },
+              ],
             ]),
             output: [],
             getSource: expect.any(Function),
           },
         ],
         [
-          '/contextMatch',
+          p('/contextMatch'),
           {
             dependencies: new Map(),
-            resolvedContexts: new Map(),
+            virtualSources: new Map(),
             output: [],
             getSource: expect.any(Function),
           },
         ],
         [
-          '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+          p('/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd'),
           {
             dependencies: new Map([
               [
                 'key-contextMatch',
                 {
-                  absolutePath: '/contextMatch',
+                  absolutePath: p('/contextMatch'),
                   data: nullthrows(
                     transformDeps.get(
-                      '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+                      p(
+                        '/virtual?ctx=af3bf59b8564d441084c02bdf04c4d662d74d3bd',
+                      ),
                     ),
                   )[0],
                 },
               ],
             ]),
-            resolvedContexts: new Map(),
+            virtualSources: new Map(),
             output: [],
             getSource: expect.any(Function),
           },
@@ -186,15 +222,91 @@ describe('GraphTraversal', () => {
     );
   });
 
+  test('transforms a virtual module as its virtual path and resolves its dependencies from there', async () => {
+    const virtualPath = p('/virtual.ts');
+    const source = Buffer.from('export default 1;');
+    const sha1 = 'b'.repeat(40);
+    const modulePath = deriveVirtualModulePath(virtualPath);
+    transformDeps.set(virtualPath, [makeTransformDep('foo')]);
+    const resolveFromVirtual = jest.fn(
+      (from: string, dep: TransformResultDependency): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: p('/foo'),
+      }),
+    );
+    const localParams = {
+      ...params,
+      resolve: (
+        from: string,
+        dep: TransformResultDependency,
+      ): BundlerResolution =>
+        from === p('/bundle')
+          ? {
+              type: 'virtualModule',
+              filePath: modulePath,
+              source,
+              sha1,
+            }
+          : resolveFromVirtual(from, dep),
+    };
+
+    const {moduleData} = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      localParams,
+    );
+
+    // The graph node is the virtual path in the virtual module namespace.
+    expect(moduleData.has(modulePath)).toBe(true);
+    // The transformer and the resolver see the virtual path itself, so that
+    // extension checks and relative resolution behave as for a file there.
+    expect(params.transform).toHaveBeenCalledWith(virtualPath, {
+      type: 'buffer',
+      source,
+      sha1,
+    });
+    expect(resolveFromVirtual).toHaveBeenCalledWith(
+      virtualPath,
+      expect.anything(),
+    );
+  });
+
+  test('does not treat a file resolution to a namespaced path as a virtual module', async () => {
+    const modulePath = deriveVirtualModulePath(p('/foo'));
+    transformDeps.set(modulePath, []);
+
+    await buildSubgraph(new Set([p('/bundle')]), new Map(), {
+      ...params,
+      resolve: (): BundlerResolution => ({
+        type: 'sourceFile',
+        filePath: modulePath,
+      }),
+    });
+
+    expect(params.transform).toHaveBeenCalledWith(modulePath, undefined);
+    expect(params.transform).not.toHaveBeenCalledWith(
+      p('/foo'),
+      expect.anything(),
+    );
+  });
+
   test('returns errors thrown by the transformer', async () => {
-    transformDeps.set('/bar', [makeTransformDep('bad')]);
-    const result = await buildSubgraph(new Set(['/bundle']), new Map(), params);
-    expect([...result.errors]).toEqual([['/bad', new BadTransformError()]]);
+    transformDeps.set(p('/bar'), [makeTransformDep('bad')]);
+    const result = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      params,
+    );
+    expect([...result.errors]).toEqual([[p('/bad'), new BadTransformError()]]);
   });
 
   test('returns errors thrown by the resolver', async () => {
-    transformDeps.set('/bar', [makeTransformDep('does-not-exist')]);
-    const result = await buildSubgraph(new Set(['/bundle']), new Map(), params);
-    expect([...result.errors]).toEqual([['/bar', new DoesNotExistError()]]);
+    transformDeps.set(p('/bar'), [makeTransformDep('does-not-exist')]);
+    const result = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      params,
+    );
+    expect([...result.errors]).toEqual([[p('/bar'), new DoesNotExistError()]]);
   });
 });

@@ -9,13 +9,11 @@
  * @oncall react_native
  */
 
-'use strict';
-
 /**
  * Thrown to indicate the command failed and already output relevant error
  * information on the console.
  */
-class CommandFailedError extends Error {
+export default class CommandFailedError extends Error {
   constructor() {
     super(
       'The Buck worker-tool command failed. Diagnostics should have ' +
@@ -23,5 +21,3 @@ class CommandFailedError extends Error {
     );
   }
 }
-
-module.exports = CommandFailedError;

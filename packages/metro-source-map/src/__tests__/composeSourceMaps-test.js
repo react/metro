@@ -9,15 +9,15 @@
  * @oncall react_native
  */
 
-'use strict';
 import type {BasicSourceMap, IndexMap, MixedSourceMap} from '../source-map';
 
-const composeSourceMaps = require('../composeSourceMaps');
-const Consumer = require('../Consumer');
-const fs = require('fs');
+import composeSourceMaps from '../composeSourceMaps';
+import Consumer from '../Consumer';
+import {add0, add1} from 'ob1';
+
 const invariant = require('invariant');
-const {add0, add1} = require('ob1');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const terser = require('terser');
 
 const {objectContaining} = expect;
@@ -65,7 +65,7 @@ function symbolicate(
 }
 
 describe('composeSourceMaps', () => {
-  const fixtures: {[string]: any} = {};
+  const fixtures: {[key: string]: any} = {};
 
   beforeAll(() => {
     for (const fixtureName of [
@@ -85,8 +85,8 @@ describe('composeSourceMaps', () => {
     }
   });
 
-  it('verifies merged source maps work the same as applying them separately', async () => {
-    // Apply two tranformations: compression, then mangling.
+  test('verifies merged source maps work the same as applying them separately', async () => {
+    // Apply two transformations: compression, then mangling.
     const stage1 = await terser.minify(
       {'test1.js': TestScript1, 'test2.js': TestScript2},
       {
@@ -136,8 +136,8 @@ describe('composeSourceMaps', () => {
     expect(mergedSymbolicated).toEqual(serialSymbolicated);
   });
 
-  it('preserves x_facebook_sources', () => {
-    const map1 = {
+  test('preserves x_facebook_sources', () => {
+    const map1: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -153,7 +153,7 @@ describe('composeSourceMaps', () => {
       ],
     };
 
-    const map2 = {
+    const map2: MixedSourceMap = {
       version: 3,
       sources: ['src-transformed.js'],
       names: ['gLoBAl'],
@@ -167,8 +167,8 @@ describe('composeSourceMaps', () => {
     ]);
   });
 
-  it('preserves and reindexes x_google_ignoreList', () => {
-    const map1 = {
+  test('preserves and reindexes x_google_ignoreList', () => {
+    const map1: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -184,7 +184,7 @@ describe('composeSourceMaps', () => {
       ],
     };
 
-    const map2 = {
+    const map2: MixedSourceMap = {
       version: 3,
       sources: ['src-transformed.js'],
       names: ['gLoBAl'],
@@ -201,8 +201,8 @@ describe('composeSourceMaps', () => {
     );
   });
 
-  it('x_google_ignoreList: a source with inconsistent ignore status is considered to be ignored', () => {
-    const map1 = {
+  test('x_google_ignoreList: a source with inconsistent ignore status is considered to be ignored', () => {
+    const map1: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -221,7 +221,7 @@ describe('composeSourceMaps', () => {
           map: {
             version: 3,
             sources: ['src.js', 'other.js'],
-            x_google_ignoreList: ([]: Array<number>),
+            x_google_ignoreList: [] as Array<number>,
             names: ['global'],
 
             mappings:
@@ -234,7 +234,7 @@ describe('composeSourceMaps', () => {
       ],
     };
 
-    const map2 = {
+    const map2: MixedSourceMap = {
       version: 3,
       sources: ['src-transformed.js'],
       names: ['gLoBAl'],
@@ -252,8 +252,8 @@ describe('composeSourceMaps', () => {
     );
   });
 
-  it('preserves sourcesContent', () => {
-    const map1 = {
+  test('preserves sourcesContent', () => {
+    const map1: MixedSourceMap = {
       version: 3,
       sections: [
         {
@@ -262,7 +262,7 @@ describe('composeSourceMaps', () => {
             version: 3,
             sources: ['1.js', '2.js'],
             sourcesContent: ['content of 1.js', 'content of 2.js'],
-            names: ([]: Array<string>),
+            names: [] as Array<string>,
             // One column from 2.js, one column from 1.js
             mappings: 'ACAA,CDAA',
           },
@@ -270,10 +270,10 @@ describe('composeSourceMaps', () => {
       ],
     };
 
-    const map2 = {
+    const map2: MixedSourceMap = {
       version: 3,
       sources: ['transformed.js'],
-      names: ([]: Array<string>),
+      names: [] as Array<string>,
       // Two consecutive columns from transformed.js
       mappings: 'AAAA,CAAC',
     };
@@ -286,7 +286,7 @@ describe('composeSourceMaps', () => {
     ]);
   });
 
-  it('merges two maps', () => {
+  test('merges two maps', () => {
     const mergedMap = composeSourceMaps([
       fixtures['1.json'],
       fixtures['2.json'],
@@ -294,7 +294,21 @@ describe('composeSourceMaps', () => {
     expect(mergedMap).toEqual(fixtures['merged_1_2.json']);
   });
 
-  it('merges two maps preserving unmapped regions in the first one', () => {
+  test('keeps only the last mapping at a generated column mapped more than once', () => {
+    const mergedMap = composeSourceMaps([
+      {version: 3, names: [], sources: ['a.js'], mappings: 'AAAA,KAAK'},
+      {version: 3, names: [], sources: ['b.js'], mappings: 'AAAA,AAAK'},
+    ]);
+    expect(
+      [...new Consumer(mergedMap).generatedMappings()].map(mapping => [
+        mapping.generatedColumn,
+        mapping.originalLine,
+        mapping.originalColumn,
+      ]),
+    ).toEqual([[0, 1, 5]]);
+  });
+
+  test('merges two maps preserving unmapped regions in the first one', () => {
     const mergedMap = composeSourceMaps([
       fixtures['ignore_1.json'],
       fixtures['ignore_2.json'],
@@ -302,7 +316,7 @@ describe('composeSourceMaps', () => {
     expect(mergedMap).toEqual(fixtures['merged_ignore.json']);
   });
 
-  it('merges two maps preserving unmapped regions in the second one', () => {
+  test('merges two maps preserving unmapped regions in the second one', () => {
     const mergedMap = composeSourceMaps([
       {version: 3, names: ['a'], sources: ['a.js'], mappings: 'AAACA,CAACA'},
       {
@@ -329,7 +343,41 @@ describe('composeSourceMaps', () => {
     `);
   });
 
-  it('Propagate x_hermes_function_offsets', () => {
+  test('composes a last map with multi-line sections at a column offset', () => {
+    const indexedMap: IndexMap = {
+      version: 3,
+      sections: [
+        {
+          offset: {line: 0, column: 0},
+          map: {version: 3, names: [], sources: ['a.js'], mappings: 'AAAA'},
+        },
+        {
+          offset: {line: 0, column: 4},
+          map: {
+            version: 3,
+            names: [],
+            sources: ['b.js'],
+            mappings: 'CAAA;AACA',
+          },
+        },
+      ],
+    };
+    const composed = new Consumer(composeSourceMaps([indexedMap]));
+    const indexed = new Consumer(indexedMap);
+    for (const [line, column] of [
+      [1, 0],
+      [1, 4],
+      [1, 5],
+      [2, 0],
+    ]) {
+      const position = {line: add1(line - 1), column: add0(column)};
+      expect(composed.originalPositionFor(position)).toEqual(
+        indexed.originalPositionFor(position),
+      );
+    }
+  });
+
+  test('Propagate x_hermes_function_offsets', () => {
     const map1 = {
       version: 3,
       sections: [
@@ -354,6 +402,8 @@ describe('composeSourceMaps', () => {
       x_hermes_function_offsets: {[0]: [20, 25, 36], [1]: [47, 220, 300]},
     };
 
+    /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+     * https://fburl.com/gdoc/y8dn025u */
     const mergedMap = composeSourceMaps([map1, map2]);
     expect(mergedMap.x_hermes_function_offsets).toEqual({
       [0]: [20, 25, 36],

@@ -11,7 +11,7 @@
 
 import type {AssetResolution, ResolutionContext} from './types';
 
-import path from 'path';
+import path from 'node:path';
 
 /**
  * Resolve a file path as an asset. Returns the set of files found after

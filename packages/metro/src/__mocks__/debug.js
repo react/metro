@@ -10,6 +10,18 @@
 
 'use strict';
 
-module.exports =
-  (namespace: string): ((...Array<mixed>) => void) =>
-  () => {};
+interface DebugFN {
+  (...args: Array<unknown>): void;
+  enabled: () => boolean;
+}
+
+function debug(namespace: string): DebugFN {
+  const fn = (...args: Array<unknown>) => {};
+  fn.enabled = () => false;
+  return fn;
+}
+
+debug.enable = (match: string) => {};
+debug.disable = () => {};
+
+module.exports = debug;

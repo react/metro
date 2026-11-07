@@ -17,14 +17,14 @@
 // In our third form, we symbolicate using a module ID, a line number, and
 // optionally a column.
 
-'use strict';
+import type {Readable, Writable} from 'node:stream';
+import type {ReadStream} from 'node:tty';
 
-const Symbolication = require('./Symbolication.js');
-const fs = require('fs');
-// flowlint-next-line untyped-import:off
-const SourceMapConsumer = require('source-map').SourceMapConsumer;
-// flowlint-next-line untyped-import:off
-const through2 = require('through2');
+import * as Symbolication from './Symbolication';
+import fs from 'node:fs';
+import {Transform} from 'node:stream';
+// $FlowFixMe[untyped-import] source-map
+import {SourceMapConsumer} from 'source-map';
 
 function printHelp() {
   const usages = [
@@ -48,20 +48,18 @@ function printHelp() {
   console.error(usages.join('\n'));
 }
 
-async function main(
+export default async function main(
   argvInput: Array<string> = process.argv.slice(2),
-  // prettier-ignore
   {
     stdin,
     stderr,
     stdout,
-  }: {
-    stdin: stream$Readable | tty$ReadStream,
-    stderr: stream$Writable,
-    stdout: stream$Writable,
+  }: Readonly<{
+    stdin: Readable | ReadStream,
+    stderr: Writable,
+    stdout: Writable,
     ...
-    // $FlowFixMe[class-object-subtyping]
-  } = process,
+  }> = process as $FlowFixMe,
 ): Promise<number> {
   const argv = argvInput.slice();
   function checkAndRemoveArg(arg: string, valuesPerArg: number = 0) {
@@ -123,17 +121,24 @@ async function main(
       outputColumnStart,
     };
     let context;
+    // $FlowFixMe[incompatible-type]
     if (fs.lstatSync(sourceMapFileName).isDirectory()) {
       context = Symbolication.unstable_createDirectoryContext(
         SourceMapConsumer,
+        // $FlowFixMe[incompatible-type]
         sourceMapFileName,
+        /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+         * https://fburl.com/workplace/6291gfvu */
         options,
       );
     } else {
+      // $FlowFixMe[incompatible-type]
       const content = fs.readFileSync(sourceMapFileName, 'utf8');
       context = Symbolication.createContext(
         SourceMapConsumer,
         content,
+        /* $FlowFixMe[incompatible-type] Natural Inference rollout. See
+         * https://fburl.com/workplace/6291gfvu */
         options,
       );
     }
@@ -164,35 +169,34 @@ async function main(
         ),
       );
     } else if (argv[0] === '--attribution') {
-      let buffer = '';
+      let lineBuffer = '';
+
+      const streamToLines: Transform = new Transform({
+        transform(data, _enc, callback) {
+          // Take arbitrary strings, output single lines
+          lineBuffer += data.toString();
+          const lines = lineBuffer.split('\n');
+          for (let i = 0, e = lines.length - 1; i < e; i++) {
+            streamToLines.push(lines[i]);
+          }
+          lineBuffer = lines[lines.length - 1];
+          callback();
+        },
+      });
+
+      const symbolicateLines: Transform = new Transform({
+        transform(data, enc, callback) {
+          // This is JSONL, so each line is a separate JSON object
+          const obj = JSON.parse(data.toString());
+          context.symbolicateAttribution(obj);
+          symbolicateLines.push(JSON.stringify(obj) + '\n');
+          callback();
+        },
+        objectMode: true,
+      });
+
       await waitForStream(
-        stdin
-          .pipe(
-            /* $FlowFixMe[missing-this-annot] The 'this' type annotation(s)
-             * required by Flow's LTI update could not be added via codemod */
-            through2(function (data, enc, callback) {
-              // Take arbitrary strings, output single lines
-              buffer += data;
-              const lines = buffer.split('\n');
-              for (let i = 0, e = lines.length - 1; i < e; i++) {
-                this.push(lines[i]);
-              }
-              buffer = lines[lines.length - 1];
-              callback();
-            }),
-          )
-          .pipe(
-            /* $FlowFixMe[missing-this-annot] The 'this' type annotation(s)
-             * required by Flow's LTI update could not be added via codemod */
-            through2.obj(function (data, enc, callback) {
-              // This is JSONL, so each line is a separate JSON object
-              const obj = JSON.parse(data);
-              context.symbolicateAttribution(obj);
-              this.push(JSON.stringify(obj) + '\n');
-              callback();
-            }),
-          )
-          .pipe(stdout),
+        stdin.pipe(streamToLines).pipe(symbolicateLines).pipe(stdout),
       );
     } else if (argv[0].endsWith('.cpuprofile')) {
       // NOTE: synchronous
@@ -211,7 +215,7 @@ async function main(
       const original = context.getOriginalPositionFor(
         +lineNumber,
         +columnNumber,
-        // $FlowFixMe context is a union here and so this parameter is a union
+        // $FlowFixMe[incompatible-type] context is a union here and so this parameter is a union
         moduleIds,
       );
       stdout.write(
@@ -229,7 +233,7 @@ async function main(
   return 0;
 }
 
-function readAll(stream: stream$Readable | tty$ReadStream) {
+function readAll(stream: Readable | ReadStream) {
   return new Promise<string>(resolve => {
     let data = '';
     if (stream.isTTY === true) {
@@ -239,10 +243,10 @@ function readAll(stream: stream$Readable | tty$ReadStream) {
 
     stream.setEncoding('utf8');
     stream.on('readable', () => {
-      let chunk;
-      // flowlint-next-line sketchy-null-string:off
-      while ((chunk = stream.read())) {
+      let chunk = stream.read();
+      while (chunk != null && chunk !== '') {
         data += chunk.toString();
+        chunk = stream.read();
       }
     });
     stream.on('end', () => {
@@ -256,5 +260,3 @@ function waitForStream(stream: $FlowFixMe) {
     stream.on('finish', resolve);
   });
 }
-
-module.exports = main;

@@ -4,13 +4,11 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
  * @flow strict
+ * @format
  */
 
-'use strict';
-
-class NetworkError extends Error {
+export default class NetworkError extends Error {
   code: string;
 
   constructor(message: string, code: string) {
@@ -19,5 +17,3 @@ class NetworkError extends Error {
     this.code = code;
   }
 }
-
-module.exports = NetworkError;

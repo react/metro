@@ -9,230 +9,133 @@
  * @oncall react_native
  */
 
-import type {
-  CanonicalPath,
-  Console,
-  CrawlerOptions,
-  FileData,
-  IgnoreMatcher,
-} from '../../flow-types';
+import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
 import {RootPathUtils} from '../../lib/RootPathUtils';
-import hasNativeFindSupport from './hasNativeFindSupport';
-import {spawn} from 'child_process';
-import * as fs from 'graceful-fs';
-import {platform} from 'os';
-import * as path from 'path';
+import fs from 'node:fs';
+import * as path from 'node:path';
 
-const debug = require('debug')('Metro:NodeCrawler');
-
-type Callback = (result: FileData) => void;
-
-function find(
-  roots: $ReadOnlyArray<string>,
-  extensions: $ReadOnlyArray<string>,
-  ignore: IgnoreMatcher,
-  includeSymlinks: boolean,
-  rootDir: string,
-  console: Console,
-  callback: Callback,
-): void {
+function find(options: CrawlerOptions): Promise<FileData> {
+  const {console, extensions, ignore, includeSymlinks, rootDir, roots} =
+    options;
   const result: FileData = new Map();
-  let activeCalls = 0;
   const pathUtils = new RootPathUtils(rootDir);
+  const exts = new Set(extensions);
 
-  function search(directory: string): void {
-    activeCalls++;
-    fs.readdir(directory, {withFileTypes: true}, (err, entries) => {
-      activeCalls--;
-      if (err) {
-        console.warn(
-          `Error "${err.code ?? err.message}" reading contents of "${directory}", skipping. Add this directory to your ignore list to exclude it.`,
-        );
-      } else {
-        entries.forEach((entry: fs.Dirent) => {
-          const file = path.join(directory, entry.name.toString());
+  return new Promise(resolve => {
+    let activeCalls = 0;
+    const resolveIfDone = () => {
+      if (activeCalls === 0) {
+        resolve(result);
+      }
+    };
 
-          if (ignore(file)) {
-            return;
-          }
+    // `dirPrefix` is `directory` with a trailing separator, which only a root
+    // may already have (a filesystem root, '/' or 'C:\\').
+    function search(
+      directory: string,
+      dirPrefix: string,
+      dirNormal: string,
+      isWithinRoot: boolean,
+    ): void {
+      activeCalls++;
+      fs.readdir(directory, {withFileTypes: true}, (err, entries) => {
+        activeCalls--;
+        if (err) {
+          console.warn(
+            `Error "${err.code ?? err.message}" reading contents of "${directory}", skipping. Add this directory to your ignore list to exclude it.`,
+          );
+        } else {
+          for (const entry of entries) {
+            const name = entry.name.toString();
+            const file = dirPrefix + name;
 
-          if (entry.isSymbolicLink() && !includeSymlinks) {
-            return;
-          }
+            const isSymbolicLink = entry.isSymbolicLink();
+            if (ignore(file) || (!includeSymlinks && isSymbolicLink)) {
+              continue;
+            }
 
-          if (entry.isDirectory()) {
-            search(file);
-            return;
-          }
+            // Within rootDir, a child's normal path is its parent's plus its
+            // name. Outside rootDir, normal paths begin with '..' and can
+            // collapse into rootDir, so derive them with absoluteToNormal
+            // until the walk enters rootDir itself.
+            const childNormal = !isWithinRoot
+              ? pathUtils.absoluteToNormal(file)
+              : dirNormal === ''
+                ? name
+                : dirNormal + path.sep + name;
 
-          activeCalls++;
+            if (entry.isDirectory()) {
+              search(
+                file,
+                file + path.sep,
+                childNormal,
+                isWithinRoot || childNormal === '',
+              );
+              continue;
+            }
 
-          fs.lstat(file, (err, stat) => {
-            activeCalls--;
+            const ext = path.extname(name).substr(1);
+            if (!isSymbolicLink && !exts.has(ext)) {
+              continue;
+            }
 
-            if (!err && stat) {
-              const ext = path.extname(file).substr(1);
-              if (stat.isSymbolicLink() || extensions.includes(ext)) {
-                result.set(pathUtils.absoluteToNormal(file), [
-                  '',
+            activeCalls++;
+            fs.lstat(file, (err, stat) => {
+              activeCalls--;
+
+              if (!err && stat) {
+                result.set(childNormal, [
                   stat.mtime.getTime(),
                   stat.size,
                   0,
-                  '',
                   null,
-                  stat.isSymbolicLink() ? 1 : 0,
+                  isSymbolicLink ? 1 : 0,
                 ]);
               }
-            }
-
-            if (activeCalls === 0) {
-              callback(result);
-            }
-          });
-        });
-      }
-
-      if (activeCalls === 0) {
-        callback(result);
-      }
-    });
-  }
-
-  if (roots.length > 0) {
-    roots.forEach(search);
-  } else {
-    callback(result);
-  }
-}
-
-function findNative(
-  roots: $ReadOnlyArray<string>,
-  extensions: $ReadOnlyArray<string>,
-  ignore: IgnoreMatcher,
-  includeSymlinks: boolean,
-  rootDir: string,
-  console: Console,
-  callback: Callback,
-): void {
-  // Examples:
-  // ( ( -type f ( -iname *.js ) ) )
-  // ( ( -type f ( -iname *.js -o -iname *.ts ) ) )
-  // ( ( -type f ( -iname *.js ) ) -o -type l )
-  // ( ( -type f ) -o -type l )
-  const extensionClause = extensions.length
-    ? `( ${extensions.map(ext => `-iname *.${ext}`).join(' -o ')} )`
-    : ''; // Empty inner expressions eg "( )" are not allowed
-  const expression = `( ( -type f ${extensionClause} ) ${
-    includeSymlinks ? '-o -type l ' : ''
-  })`;
-
-  const pathUtils = new RootPathUtils(rootDir);
-
-  const child = spawn('find', roots.concat(expression.split(' ')));
-  let stdout = '';
-  if (child.stdout == null) {
-    throw new Error(
-      'stdout is null - this should never happen. Please open up an issue at https://github.com/facebook/metro',
-    );
-  }
-  child.stdout.setEncoding('utf-8');
-  child.stdout.on('data', data => (stdout += data));
-
-  child.stdout.on('close', () => {
-    const lines = stdout
-      .trim()
-      .split('\n')
-      .filter(x => !ignore(x));
-    const result: FileData = new Map();
-    let count = lines.length;
-    if (!count) {
-      callback(new Map());
-    } else {
-      lines.forEach(path => {
-        fs.lstat(path, (err, stat) => {
-          if (!err && stat) {
-            result.set(pathUtils.absoluteToNormal(path), [
-              '',
-              stat.mtime.getTime(),
-              stat.size,
-              0,
-              '',
-              null,
-              stat.isSymbolicLink() ? 1 : 0,
-            ]);
+              resolveIfDone();
+            });
           }
-          if (--count === 0) {
-            callback(result);
-          }
-        });
+        }
+        resolveIfDone();
       });
     }
+
+    for (const givenRoot of roots) {
+      // Paths are built by concatenation, so the root must be normalised.
+      const root = path.resolve(givenRoot);
+      const rootNormal = pathUtils.absoluteToNormal(root);
+      const isWithinRoot =
+        rootNormal !== '..' && !rootNormal.startsWith('..' + path.sep);
+      search(
+        root,
+        root.endsWith(path.sep) ? root : root + path.sep,
+        rootNormal,
+        isWithinRoot,
+      );
+    }
+    // Resolve now if there were no roots to search.
+    resolveIfDone();
   });
 }
 
-module.exports = async function nodeCrawl(options: CrawlerOptions): Promise<{
-  removedFiles: Set<CanonicalPath>,
-  changedFiles: FileData,
-}> {
-  const {
-    console,
-    previousState,
-    extensions,
-    forceNodeFilesystemAPI,
-    ignore,
-    rootDir,
-    includeSymlinks,
-    perfLogger,
-    roots,
-    abortSignal,
-  } = options;
+export default async function nodeCrawl(
+  options: CrawlerOptions,
+): Promise<CrawlResult> {
+  const {abortSignal, perfLogger, previousState, subpath} = options;
 
   abortSignal?.throwIfAborted();
 
   perfLogger?.point('nodeCrawl_start');
-  const useNativeFind =
-    !forceNodeFilesystemAPI &&
-    platform() !== 'win32' &&
-    (await hasNativeFindSupport());
 
-  debug('Using system find: %s', useNativeFind);
+  const fileData = await find(options);
 
-  return new Promise((resolve, reject) => {
-    const callback: Callback = fileData => {
-      const difference = previousState.fileSystem.getDifference(fileData);
+  abortSignal?.throwIfAborted();
 
-      perfLogger?.point('nodeCrawl_end');
-
-      try {
-        // TODO: Use AbortSignal.reason directly when Flow supports it
-        abortSignal?.throwIfAborted();
-      } catch (e) {
-        reject(e);
-      }
-      resolve(difference);
-    };
-
-    if (useNativeFind) {
-      findNative(
-        roots,
-        extensions,
-        ignore,
-        includeSymlinks,
-        rootDir,
-        console,
-        callback,
-      );
-    } else {
-      find(
-        roots,
-        extensions,
-        ignore,
-        includeSymlinks,
-        rootDir,
-        console,
-        callback,
-      );
-    }
+  const difference = previousState.fileSystem.getDifference(fileData, {
+    subpath,
   });
-};
+
+  perfLogger?.point('nodeCrawl_end');
+  return difference;
+}

@@ -10,8 +10,8 @@
 
 'use strict';
 
-const {PassThrough} = require('stream');
-const zlib = require('zlib');
+const {PassThrough} = require('node:stream');
+const zlib = require('node:zlib');
 
 describe('HttpStore', () => {
   let HttpStore;
@@ -60,35 +60,36 @@ describe('HttpStore', () => {
       .resetModules()
       .resetAllMocks()
       .useFakeTimers({legacyFakeTimers: true}) // Legacy fake timers are reset by `resetAllMocks()`
-      .mock('http')
-      .mock('https');
+      .mock('node:http')
+      .mock('node:https');
 
     httpPassThrough = new PassThrough();
-    require('http').request.mockReturnValue(httpPassThrough);
-    require('https').request.mockReturnValue(httpPassThrough);
+    jest.requireMock('node:http').request.mockReturnValue(httpPassThrough);
+    jest.requireMock('node:https').request.mockReturnValue(httpPassThrough);
 
-    HttpStore = require('../HttpStore');
+    HttpStore = require('../HttpStore').default;
   });
 
-  it('works with HTTP and HTTPS', () => {
+  test('works with HTTP and HTTPS', () => {
     const httpStore = new HttpStore({endpoint: 'http://example.com'});
     const httpsStore = new HttpStore({endpoint: 'https://example.com'});
 
     httpStore.get(Buffer.from('foo'));
-    expect(require('http').request).toHaveBeenCalledTimes(1);
-    expect(require('https').request).not.toHaveBeenCalled();
+    expect(jest.requireMock('node:http').request).toHaveBeenCalledTimes(1);
+    expect(jest.requireMock('node:https').request).not.toHaveBeenCalled();
 
     jest.clearAllMocks();
 
     httpsStore.get(Buffer.from('foo'));
-    expect(require('http').request).not.toHaveBeenCalled();
-    expect(require('https').request).toHaveBeenCalledTimes(1);
+    expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
+    expect(jest.requireMock('node:https').request).toHaveBeenCalledTimes(1);
   });
 
-  it('gets using the network via GET method', async () => {
+  test('gets using the network via GET method', async () => {
     const store = new HttpStore({endpoint: 'http://www.example.com/endpoint'});
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
     expect(opts.host).toEqual('www.example.com');
@@ -101,10 +102,11 @@ describe('HttpStore', () => {
     expect(await promise).toEqual({foo: 42});
   });
 
-  it('rejects when an HTTP different from 200 is returned', done => {
+  test('rejects when an HTTP different from 200 is returned', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
 
@@ -119,10 +121,111 @@ describe('HttpStore', () => {
     });
   });
 
-  it('get() includes HTTP error body in rejection with debug: true', done => {
+  test('does not retry when maxAttempts==1', async () => {
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 1,
+      retryStatuses: [429],
+    });
+    const promise = store.get(Buffer.from('key'));
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
+
+    expect(opts.method).toEqual('GET');
+
+    callback(responseHttpError(429));
+    jest.runAllTimers();
+
+    let err = null;
+    try {
+      await promise;
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeInstanceOf(HttpStore.HttpError);
+    expect(err.message).toMatch(/HTTP error: 429 Too Many Requests/);
+    expect(err.code).toBe(429);
+    expect(jest.requireMock('node:http').request).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries http errors when maxAttempts>1 and status in retryStatuses', async () => {
+    jest.useRealTimers();
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 2,
+      retryStatuses: [429],
+    });
+    const {request} = jest.requireMock('node:http');
+
+    request.mockImplementation((opts, callback) => {
+      if (request.mock.calls.length === 1) {
+        callback(responseHttpError(429));
+      } else {
+        callback(responseHttpOk(JSON.stringify({foo: 42}), 200));
+      }
+      return httpPassThrough;
+    });
+
+    expect(await store.get(Buffer.from('key'))).toEqual({foo: 42});
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  test('throws when retries exceed maxAttempts', async () => {
+    jest.useRealTimers();
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 3,
+      retryStatuses: [429],
+    });
+    const {request} = jest.requireMock('node:http');
+
+    request.mockImplementation((opts, callback) => {
+      callback(responseHttpError(429));
+      return httpPassThrough;
+    });
+
+    let err;
+    try {
+      await store.get(Buffer.from('key'));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(HttpStore.HttpError);
+    expect(err.message).toMatch(/HTTP error: 429 Too Many Requests/);
+    expect(err.code).toBe(429);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  test('retries timeouts when maxAttempts>1 and retryNetworkErrors=true', async () => {
+    jest.useRealTimers();
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 2,
+      retryNetworkErrors: true,
+    });
+    const {request} = jest.requireMock('node:http');
+
+    request.mockImplementation((opts, callback) => {
+      if (request.mock.calls.length === 1) {
+        process.nextTick(() => {
+          httpPassThrough.emit('timeout');
+        });
+      } else {
+        callback(responseHttpOk(JSON.stringify({foo: 42}), 200));
+      }
+      return httpPassThrough;
+    });
+
+    expect(await store.get(Buffer.from('key'))).toEqual({foo: 42});
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  test('get() includes HTTP error body in rejection with debug: true', done => {
     const store = new HttpStore({endpoint: 'http://example.com', debug: true});
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
 
@@ -139,13 +242,14 @@ describe('HttpStore', () => {
     });
   });
 
-  it('get() resolves when the HTTP code is in additionalSuccessStatuses', async () => {
+  test('get() resolves when the HTTP code is in additionalSuccessStatuses', async () => {
     const store = new HttpStore({
       endpoint: 'http://www.example.com/endpoint',
       additionalSuccessStatuses: [419],
     });
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
     expect(opts.host).toEqual('www.example.com');
@@ -158,10 +262,11 @@ describe('HttpStore', () => {
     expect(await promise).toEqual({foo: 42});
   });
 
-  it('rejects when it gets an invalid JSON response', done => {
+  test('rejects when it gets an invalid JSON response', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
 
@@ -174,10 +279,11 @@ describe('HttpStore', () => {
     });
   });
 
-  it('rejects when the HTTP layer throws', done => {
+  test('rejects when the HTTP layer throws', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('GET');
 
@@ -191,10 +297,44 @@ describe('HttpStore', () => {
     });
   });
 
-  it('sets using the network via PUT method', done => {
+  test('set() retries use the set endpoint config, not the get endpoint', async () => {
+    jest.useRealTimers();
+    // Distinct read/write retry config: reads do not retry, writes retry 503s.
+    const store = new HttpStore({
+      getOptions: {endpoint: 'http://example.com', maxAttempts: 1},
+      setOptions: {
+        endpoint: 'http://example.com',
+        maxAttempts: 2,
+        retryStatuses: [503],
+      },
+    });
+    const {request} = jest.requireMock('node:http');
+
+    request.mockImplementation((opts, callback) => {
+      if (request.mock.calls.length === 1) {
+        callback(responseHttpError(503));
+      } else {
+        callback(responseHttpOk(''));
+      }
+      return new PassThrough();
+    });
+
+    let error;
+    try {
+      await store.set(Buffer.from('key-set'), {foo: 42});
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeUndefined();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  test('sets using the network via PUT method', done => {
     const store = new HttpStore({endpoint: 'http://www.example.com/endpoint'});
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
     const buf = [];
 
     expect(opts.method).toEqual('PUT');
@@ -216,10 +356,11 @@ describe('HttpStore', () => {
     });
   });
 
-  it('rejects when setting and HTTP fails', done => {
+  test('rejects when setting and HTTP fails', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('PUT');
 
@@ -233,13 +374,64 @@ describe('HttpStore', () => {
     });
   });
 
+  test('rejects with a NetworkError when the set request socket errors', async () => {
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 1,
+    });
+    const promise = store.set(Buffer.from('key-set'), {foo: 42});
+    const [opts] = jest.requireMock('node:http').request.mock.calls[0];
+
+    expect(opts.method).toEqual('PUT');
+
+    const err = new Error('read ECONNRESET');
+    err.code = 'ECONNRESET';
+    httpPassThrough.emit('error', err);
+
+    await expect(promise).rejects.toMatchObject({
+      constructor: HttpStore.NetworkError,
+      code: 'ECONNRESET',
+      message: 'read ECONNRESET',
+    });
+  });
+
+  test('set() retries a request socket error when retryNetworkErrors is set', async () => {
+    jest.useRealTimers();
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      maxAttempts: 2,
+      retryNetworkErrors: true,
+    });
+    const {request} = jest.requireMock('node:http');
+
+    request.mockImplementation((opts, callback) => {
+      const req = new PassThrough();
+
+      if (request.mock.calls.length === 1) {
+        const err = new Error('read ECONNRESET');
+        err.code = 'ECONNRESET';
+        process.nextTick(() => req.emit('error', err));
+      } else {
+        callback(responseHttpOk(''));
+        req.resume();
+      }
+
+      return req;
+    });
+
+    await store.set(Buffer.from('key-set'), {foo: 42});
+
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   test('set() resolves when the HTTP code is in additionalSuccessStatuses', done => {
     const store = new HttpStore({
       endpoint: 'http://www.example.com/endpoint',
       additionalSuccessStatuses: [403],
     });
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('PUT');
     expect(opts.host).toEqual('www.example.com');
@@ -257,10 +449,11 @@ describe('HttpStore', () => {
     });
   });
 
-  it('rejects when setting and HTTP returns an error response', done => {
+  test('rejects when setting and HTTP returns an error response', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('PUT');
 
@@ -275,10 +468,11 @@ describe('HttpStore', () => {
     });
   });
 
-  it('set() includes HTTP error body in rejection with debug: true', done => {
+  test('set() includes HTTP error body in rejection with debug: true', done => {
     const store = new HttpStore({endpoint: 'http://example.com', debug: true});
     const promise = store.set(Buffer.from('key-set'), {foo: 42});
-    const [opts, callback] = require('http').request.mock.calls[0];
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
 
     expect(opts.method).toEqual('PUT');
 
@@ -295,7 +489,7 @@ describe('HttpStore', () => {
     });
   });
 
-  it('gets the same value that was set', async () => {
+  test('gets the same value that was set', async () => {
     const store = new HttpStore({endpoint: 'http://www.example.com/endpoint'});
     const chunks = [];
     let storedValue;
@@ -307,7 +501,8 @@ describe('HttpStore', () => {
     httpPassThrough.on('end', () => {
       storedValue = zlib.gunzipSync(Buffer.concat(chunks));
 
-      const callbackSet = require('http').request.mock.calls[0][1];
+      const callbackSet =
+        jest.requireMock('node:http').request.mock.calls[0][1];
 
       callbackSet(responseHttpOk(''));
     });
@@ -315,14 +510,14 @@ describe('HttpStore', () => {
     await store.set(Buffer.from('key-set'), {foo: 42});
 
     const promiseGet = store.get(Buffer.from('key-set'));
-    const callbackGet = require('http').request.mock.calls[1][1];
+    const callbackGet = jest.requireMock('node:http').request.mock.calls[1][1];
 
     callbackGet(responseHttpOk(storedValue));
 
     expect(await promiseGet).toEqual({foo: 42});
   });
 
-  it('gets the same value that was set when storing buffers', async () => {
+  test('gets the same value that was set when storing buffers', async () => {
     const store = new HttpStore({endpoint: 'http://www.example.com/endpoint'});
     const chunks = [];
     let storedValue;
@@ -334,7 +529,8 @@ describe('HttpStore', () => {
     httpPassThrough.on('end', () => {
       storedValue = zlib.gunzipSync(Buffer.concat(chunks));
 
-      const callbackSet = require('http').request.mock.calls[0][1];
+      const callbackSet =
+        jest.requireMock('node:http').request.mock.calls[0][1];
 
       callbackSet(responseHttpOk(''));
     });
@@ -344,7 +540,7 @@ describe('HttpStore', () => {
     await store.set(Buffer.from('key-set'), bufferValue);
 
     const promiseGet = store.get(Buffer.from('key-set'));
-    const callbackGet = require('http').request.mock.calls[1][1];
+    const callbackGet = jest.requireMock('node:http').request.mock.calls[1][1];
 
     callbackGet(responseHttpOk(storedValue));
 

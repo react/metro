@@ -9,13 +9,14 @@
  * @oncall react_native
  */
 
-'use strict';
-
 import type {BasicSourceMap, IndexMap, MixedSourceMap} from 'metro-source-map';
 
-const {normalizeSourcePath} = require('metro-source-map');
+import {normalizeSourcePath} from 'metro-source-map';
 
-type SourceNameNormalizer = (string, {+sourceRoot?: ?string, ...}) => string;
+type SourceNameNormalizer = (
+  sourceInput: string,
+  map: {readonly sourceRoot?: ?string, ...},
+) => string;
 
 /**
   * Consumes the `x_google_ignoreList` metadata field from a source map and
@@ -31,7 +32,7 @@ type SourceNameNormalizer = (string, {+sourceRoot?: ?string, ...}) => string;
   *
   *     new GoogleIgnoreListConsumer(map, source => source) // Don't normalize
   */
-class GoogleIgnoreListConsumer {
+export default class GoogleIgnoreListConsumer {
   constructor(
     map: MixedSourceMap,
     normalizeSourceFn: SourceNameNormalizer = normalizeSourcePath,
@@ -52,7 +53,7 @@ class GoogleIgnoreListConsumer {
    * `SourceMapConsumer#originalPositionFor` to retrieve a source location,
    * then pass that location to `isIgnored`.
    */
-  isIgnored({source}: {+source: ?string, ...}): boolean {
+  isIgnored({source}: {readonly source: ?string, ...}): boolean {
     return source != null && this._getIgnoredSourceSet().has(source);
   }
 
@@ -63,7 +64,7 @@ class GoogleIgnoreListConsumer {
    * This array can be used as the `x_google_ignoreList` field of a map whose
    * `sources` field is the array that was passed into this method.
    */
-  toArray(sources: $ReadOnlyArray<?string>): Array<number> {
+  toArray(sources: ReadonlyArray<?string>): Array<number> {
     const ignoredSourceSet = this._getIgnoredSourceSet();
     const encoded = [];
     for (const [sourceIndex, source] of sources.entries()) {
@@ -77,7 +78,7 @@ class GoogleIgnoreListConsumer {
   /**
    * Prepares and caches a set of ignored sources for this map.
    */
-  _getIgnoredSourceSet(): $ReadOnlySet<string> {
+  _getIgnoredSourceSet(): ReadonlySet<string> {
     if (!this._ignoredSourceSet) {
       const ignoredSourceSet = new Set<string>();
 
@@ -130,5 +131,3 @@ class GoogleIgnoreListConsumer {
     }
   }
 }
-
-module.exports = GoogleIgnoreListConsumer;

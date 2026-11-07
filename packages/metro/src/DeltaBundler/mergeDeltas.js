@@ -9,11 +9,12 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {DeltaBundle} from 'metro-runtime/src/modules/types';
 
-import type {DeltaBundle} from 'metro-runtime/src/modules/types.flow';
-
-function mergeDeltas(delta1: DeltaBundle, delta2: DeltaBundle): DeltaBundle {
+export default function mergeDeltas(
+  delta1: DeltaBundle,
+  delta2: DeltaBundle,
+): DeltaBundle {
   const added1 = new Map(delta1.added);
   const modified1 = new Map(delta1.modified);
   const deleted1 = new Set(delta1.deleted);
@@ -70,5 +71,3 @@ function mergeDeltas(delta1: DeltaBundle, delta2: DeltaBundle): DeltaBundle {
     deleted: [...deleted],
   };
 }
-
-module.exports = mergeDeltas;

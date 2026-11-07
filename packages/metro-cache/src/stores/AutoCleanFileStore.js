@@ -4,104 +4,82 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
+ * @flow strict-local
  * @format
- * @flow
+ * @oncall react_native
  */
-
-'use strict';
 
 import type {Options} from './FileStore';
 
-const FileStore = require('./FileStore');
-const fs = require('fs');
-const path = require('path');
+import FileStore from './FileStore';
+import fs from 'node:fs';
+import path from 'node:path';
 
-type CleanOptions = {
+type CleanOptions = Readonly<{
   ...Options,
   intervalMs?: number,
   cleanupThresholdMs?: number,
-  ...
-};
-
-type FileList = {
-  path: string,
-  stats: fs.Stats,
-  ...
-};
-
-// List all files in a directory in Node.js recursively in a synchronous fashion
-const walkSync = function (
-  dir: string,
-  filelist: Array<FileList>,
-): Array<FileList> {
-  const files = fs.readdirSync(dir);
-  filelist = filelist || [];
-  files.forEach(function (file) {
-    const fullPath = path.join(dir, file);
-    const stats = fs.statSync(fullPath);
-    if (stats.isDirectory()) {
-      filelist = walkSync(fullPath + path.sep, filelist);
-    } else {
-      filelist.push({path: fullPath, stats});
-    }
-  });
-  return filelist;
-};
-
-function get<T>(property: ?T, defaultValue: T): T {
-  if (property == null) {
-    return defaultValue;
-  }
-
-  return property;
-}
+}>;
 
 /**
- * A FileStore that cleans itself up in a given interval
+ * A FileStore that, at a given interval, stats the content of the cache root
+ * and deletes any file last modified a set threshold in the past.
+ *
+ * @deprecated This is not efficiently implemented and may cause significant
+ * redundant I/O when caches are large. Prefer your own cleanup scripts, or a
+ * custom Metro cache that uses watches, hooks get/set, and/or implements LRU.
  */
-class AutoCleanFileStore<T> extends FileStore<T> {
-  _intervalMs: number;
-  _cleanupThresholdMs: number;
-  _root: string;
+export default class AutoCleanFileStore<T> extends FileStore<T> {
+  readonly #intervalMs: number;
+  readonly #cleanupThresholdMs: number;
+  readonly #root: string;
 
   constructor(opts: CleanOptions) {
     super({root: opts.root});
 
-    this._intervalMs = get(opts.intervalMs, 10 * 60 * 1000); // 10 minutes
-    this._cleanupThresholdMs = get(
-      opts.cleanupThresholdMs,
-      3 * 24 * 60 * 60 * 1000, // 3 days
-    );
+    this.#root = opts.root;
+    this.#intervalMs = opts.intervalMs ?? 10 * 60 * 1000; // 10 minutes
+    this.#cleanupThresholdMs =
+      opts.cleanupThresholdMs ?? 3 * 24 * 60 * 60 * 1000; // 3 days
 
-    this._scheduleCleanup();
+    this.#scheduleCleanup();
   }
 
-  _scheduleCleanup() {
-    // $FlowFixMe[method-unbinding] added when improving typing for this parameters
-    setTimeout(this._doCleanup.bind(this), this._intervalMs);
+  #scheduleCleanup() {
+    setTimeout(() => this.#doCleanup(), this.#intervalMs);
   }
 
-  _doCleanup() {
-    const files = walkSync(this._root, []);
+  #doCleanup() {
+    const dirents = fs.readdirSync(this.#root, {
+      recursive: true,
+      withFileTypes: true,
+    });
 
     let warned = false;
-    files.forEach(file => {
-      if (file.stats.mtimeMs < Date.now() - this._cleanupThresholdMs) {
+    const minModifiedTime = Date.now() - this.#cleanupThresholdMs;
+    dirents
+      .filter(dirent => dirent.isFile())
+      .forEach(dirent => {
+        const absolutePath = path.join(
+          dirent.parentPath,
+          dirent.name.toString(),
+        );
         try {
-          fs.unlinkSync(file.path);
+          if (fs.statSync(absolutePath).mtimeMs < minModifiedTime) {
+            fs.unlinkSync(absolutePath);
+          }
         } catch (e) {
           if (!warned) {
             console.warn(
-              'Problem cleaning up cache for ' + file.path + ': ' + e.message,
+              'Problem cleaning up cache for ' +
+                absolutePath +
+                ': ' +
+                e.message,
             );
             warned = true;
           }
         }
-      }
-    });
-
-    this._scheduleCleanup();
+      });
+    this.#scheduleCleanup();
   }
 }
-
-module.exports = AutoCleanFileStore;

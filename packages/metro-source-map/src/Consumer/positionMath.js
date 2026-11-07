@@ -9,17 +9,15 @@
  * @oncall react_native
  */
 
-'use strict';
-
-import type {GeneratedOffset} from './types.flow';
+import type {GeneratedOffset} from './types';
 import type {Number0, Number1} from 'ob1';
 
-const {add, add0, add1, neg} = require('ob1');
+import {add, add0, add1, neg} from 'ob1';
 
-function shiftPositionByOffset<
-  T: {
-    +line: ?Number1,
-    +column: ?Number0,
+export function shiftPositionByOffset<
+  T extends {
+    readonly line: ?Number1,
+    readonly column: ?Number0,
     ...
   },
 >(pos: T, offset: GeneratedOffset): T {
@@ -30,10 +28,10 @@ function shiftPositionByOffset<
   };
 }
 
-function subtractOffsetFromPosition<
-  T: {
-    +line: ?Number1,
-    +column: ?Number0,
+export function subtractOffsetFromPosition<
+  T extends {
+    readonly line: ?Number1,
+    readonly column: ?Number0,
     ...
   },
 >(pos: T, offset: GeneratedOffset): T {
@@ -48,5 +46,3 @@ function subtractOffsetFromPosition<
     columns: add0(0),
   });
 }
-
-module.exports = {shiftPositionByOffset, subtractOffsetFromPosition};

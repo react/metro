@@ -9,23 +9,21 @@
  * @oncall react_native
  */
 
-'use strict';
+import type {IConsumer} from './Consumer/types';
 
-import type {IConsumer} from './Consumer/types.flow';
-import type {BabelSourceMapSegment} from '@babel/generator';
-
-const {BundleBuilder, createIndexMap} = require('./BundleBuilder');
-const composeSourceMaps = require('./composeSourceMaps');
-const Consumer = require('./Consumer');
+import {BundleBuilder, createIndexMap} from './BundleBuilder';
+import composeSourceMaps from './composeSourceMaps';
+import Consumer from './Consumer';
 // We need to export this for `metro-symbolicate`
-const normalizeSourcePath = require('./Consumer/normalizeSourcePath');
-const {
+import normalizeSourcePath from './Consumer/normalizeSourcePath';
+import {
   functionMapBabelPlugin,
   generateFunctionMap,
-} = require('./generateFunctionMap');
-const Generator = require('./Generator');
+} from './generateFunctionMap';
+import Generator from './Generator';
+import nullthrows from 'nullthrows';
 // $FlowFixMe[untyped-import] - source-map
-const SourceMap = require('source-map');
+import SourceMap from 'source-map';
 
 export type {IConsumer};
 
@@ -34,35 +32,67 @@ type SourceMapping = [number, number, number, number];
 type SourceMappingWithName = [number, number, number, number, string];
 
 export type MetroSourceMapSegmentTuple =
-  | SourceMappingWithName
-  | SourceMapping
-  | GeneratedCodeMapping;
+  SourceMappingWithName | SourceMapping | GeneratedCodeMapping;
 
-export type HermesFunctionOffsets = {[number]: $ReadOnlyArray<number>, ...};
+// A single segment of a standard "decoded" source map (as produced by
+// `@babel/generator`'s `result.decodedMap` / `@jridgewell/gen-mapping`),
+// grouped by generated line. All fields are 0-based, including the source line
+// (unlike Metro's `MetroSourceMapSegmentTuple`, whose source line is 1-based):
+//   [generatedColumn]
+//   [generatedColumn, sourceIndex, sourceLine, sourceColumn]
+//   [generatedColumn, sourceIndex, sourceLine, sourceColumn, nameIndex]
+type BabelDecodedMapSegment =
+  | [number]
+  | [number, number, number, number]
+  | [number, number, number, number, number];
 
-export type FBSourcesArray = $ReadOnlyArray<?FBSourceMetadata>;
+export type BabelDecodedMap = {
+  readonly mappings: ReadonlyArray<ReadonlyArray<BabelDecodedMapSegment>>,
+  readonly names: ReadonlyArray<string>,
+  ...
+};
+
+export type VlqMap = {
+  readonly mappings: string,
+  readonly names: ReadonlyArray<string>,
+};
+
+export type HermesFunctionOffsets = {
+  [functionId: number]: ReadonlyArray<number>,
+  ...
+};
+
+export type FBSourcesArray = ReadonlyArray<?FBSourceMetadata>;
 export type FBSourceMetadata = [?FBSourceFunctionMap];
 export type FBSourceFunctionMap = {
-  +names: $ReadOnlyArray<string>,
-  +mappings: string,
+  readonly names: ReadonlyArray<string>,
+  readonly mappings: string,
 };
+
+export type BabelSourceMapSegment = Readonly<{
+  generated: Readonly<{column: number, line: number, ...}>,
+  original?: Readonly<{column: number, line: number, ...}>,
+  source?: ?string,
+  name?: ?string,
+  ...
+}>;
 
 export type FBSegmentMap = {[id: string]: MixedSourceMap, ...};
 
 export type BasicSourceMap = {
-  +file?: string,
-  +mappings: string,
-  +names: Array<string>,
-  +sourceRoot?: string,
-  +sources: Array<string>,
-  +sourcesContent?: Array<?string>,
-  +version: number,
-  +x_facebook_offsets?: Array<number>,
-  +x_metro_module_paths?: Array<string>,
-  +x_facebook_sources?: FBSourcesArray,
-  +x_facebook_segments?: FBSegmentMap,
-  +x_hermes_function_offsets?: HermesFunctionOffsets,
-  +x_google_ignoreList?: Array<number>,
+  readonly file?: string,
+  readonly mappings: string,
+  readonly names: Array<string>,
+  readonly sourceRoot?: string,
+  readonly sources: Array<string>,
+  readonly sourcesContent?: Array<?string>,
+  readonly version: number,
+  readonly x_facebook_offsets?: Array<number>,
+  readonly x_metro_module_paths?: Array<string>,
+  readonly x_facebook_sources?: FBSourcesArray,
+  readonly x_facebook_segments?: FBSegmentMap,
+  readonly x_hermes_function_offsets?: HermesFunctionOffsets,
+  readonly x_google_ignoreList?: Array<number>,
 };
 
 export type IndexMapSection = {
@@ -76,17 +106,17 @@ export type IndexMapSection = {
 };
 
 export type IndexMap = {
-  +file?: string,
-  +mappings?: void, // avoids SourceMap being a disjoint union
-  +sourcesContent?: void,
-  +sections: Array<IndexMapSection>,
-  +version: number,
-  +x_facebook_offsets?: Array<number>,
-  +x_metro_module_paths?: Array<string>,
-  +x_facebook_sources?: void,
-  +x_facebook_segments?: FBSegmentMap,
-  +x_hermes_function_offsets?: HermesFunctionOffsets,
-  +x_google_ignoreList?: void,
+  readonly file?: string,
+  readonly mappings?: void, // avoids SourceMap being a disjoint union
+  readonly sourcesContent?: void,
+  readonly sections: Array<IndexMapSection>,
+  readonly version: number,
+  readonly x_facebook_offsets?: Array<number>,
+  readonly x_metro_module_paths?: Array<string>,
+  readonly x_facebook_sources?: void,
+  readonly x_facebook_segments?: FBSegmentMap,
+  readonly x_hermes_function_offsets?: HermesFunctionOffsets,
+  readonly x_google_ignoreList?: void,
 };
 
 export type MixedSourceMap = IndexMap | BasicSourceMap;
@@ -100,18 +130,65 @@ type SourceMapConsumerMapping = {
   name: ?string,
 };
 
+export type RawMappingsModule = {
+  readonly map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
+  readonly functionMap: ?FBSourceFunctionMap,
+  readonly path: string,
+  readonly source: string,
+  readonly code: string,
+  readonly isIgnored: boolean,
+  readonly lineCount?: number,
+};
+
+// Common shape of the flat `Generator` and the indexed `IndexedSourceMapResult`,
+// so serializers can hold either and call `toMap`/`toString` uniformly.
+export interface SourceMapGenerator {
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap;
+  toString(file?: string, options?: {excludeSource?: boolean}): string;
+}
+
+/**
+ * Result of `fromRawMappingsIndexed`: a sectioned (indexed) source map where
+ * each module is one section. VLQ-stored modules pass through verbatim, which is
+ * why building this is cheap compared to flattening into a single map.
+ */
+class IndexedSourceMapResult implements SourceMapGenerator {
+  #sections: Array<IndexMapSection>;
+
+  constructor(sections: Array<IndexMapSection>) {
+    this.#sections = sections;
+  }
+
+  toMap(file?: string, options?: {excludeSource?: boolean}): MixedSourceMap {
+    const sections =
+      options?.excludeSource === true
+        ? this.#sections.map(section => {
+            // exclude source
+            const {sourcesContent: _, ...map} = section.map;
+            return {
+              ...section,
+              map,
+            };
+          })
+        : this.#sections;
+    return createIndexMap(file, sections);
+  }
+
+  toString(file?: string, options?: {excludeSource?: boolean}): string {
+    return JSON.stringify(this.toMap(file, options));
+  }
+}
+
+function isVlqMap(
+  map: ?ReadonlyArray<MetroSourceMapSegmentTuple> | VlqMap,
+): implies map is VlqMap {
+  return map != null && !Array.isArray(map) && typeof map.mappings === 'string';
+}
+
 function fromRawMappingsImpl(
   isBlocking: boolean,
-  onDone: Generator => void,
-  modules: $ReadOnlyArray<{
-    +map: ?Array<MetroSourceMapSegmentTuple>,
-    +functionMap: ?FBSourceFunctionMap,
-    +path: string,
-    +source: string,
-    +code: string,
-    +isIgnored: boolean,
-    +lineCount?: number,
-  }>,
+  onDone: (generator: Generator) => void,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number,
 ): void {
   const modulesToProcess = modules.slice();
@@ -123,9 +200,15 @@ function fromRawMappingsImpl(
       return true;
     }
 
-    const mod = modulesToProcess.shift();
+    const mod = nullthrows(modulesToProcess.shift());
     const {code, map} = mod;
-    if (Array.isArray(map)) {
+    if (isVlqMap(map)) {
+      // Modules may store their map compactly as VLQ. Decode it back to tuples
+      // just-in-time so it can be folded into the flat Generator like any other
+      // module. Decoding one module at a time keeps the transient tuple arrays
+      // short-lived, preserving the memory win of VLQ storage.
+      addMappingsForFile(generator, decodeVlqMap(map), mod, carryOver);
+    } else if (Array.isArray(map)) {
       addMappingsForFile(generator, map, mod, carryOver);
     } else if (map != null) {
       throw new Error(
@@ -171,15 +254,7 @@ function fromRawMappingsImpl(
  * the resulting bundle, e.g. by some prefix code.
  */
 function fromRawMappings(
-  modules: $ReadOnlyArray<{
-    +map: ?Array<MetroSourceMapSegmentTuple>,
-    +functionMap: ?FBSourceFunctionMap,
-    +path: string,
-    +source: string,
-    +code: string,
-    +isIgnored: boolean,
-    +lineCount?: number,
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number = 0,
 ): Generator {
   let generator: void | Generator;
@@ -198,15 +273,7 @@ function fromRawMappings(
 }
 
 async function fromRawMappingsNonBlocking(
-  modules: $ReadOnlyArray<{
-    +map: ?Array<MetroSourceMapSegmentTuple>,
-    +functionMap: ?FBSourceFunctionMap,
-    +path: string,
-    +source: string,
-    +code: string,
-    +isIgnored: boolean,
-    +lineCount?: number,
-  }>,
+  modules: ReadonlyArray<RawMappingsModule>,
   offsetLines: number = 0,
 ): Promise<Generator> {
   return new Promise(resolve => {
@@ -215,8 +282,73 @@ async function fromRawMappingsNonBlocking(
 }
 
 /**
+ * Like `fromRawMappings`, but produces an indexed (sectioned) source map with
+ * one section per module. VLQ-stored modules pass through verbatim — no
+ * decode/re-encode — which is the whole point: it's much cheaper to serialize
+ * than the flat path, at the cost of emitting an indexed map that consumers must
+ * understand. Per-module work is trivial, so this runs synchronously.
+ */
+function fromRawMappingsIndexed(
+  modules: ReadonlyArray<RawMappingsModule>,
+  offsetLines: number = 0,
+): IndexedSourceMapResult {
+  const sections: Array<IndexMapSection> = [];
+  let carryOver = offsetLines;
+
+  for (const mod of modules) {
+    if (mod.map != null) {
+      sections.push({
+        offset: {line: carryOver, column: 0},
+        map: toIndexMapSection(mod),
+      });
+    }
+    carryOver = carryOver + countLines(mod.code);
+  }
+
+  return new IndexedSourceMapResult(sections);
+}
+
+/**
+ * Builds a single section of an indexed source map. VLQ maps pass through
+ * verbatim, while tuple maps are encoded with a fresh per-section Generator.
+ */
+function toIndexMapSection(module: RawMappingsModule): BasicSourceMap {
+  const {map, path, source, functionMap, isIgnored} = module;
+
+  if (isVlqMap(map)) {
+    let sectionMap: BasicSourceMap = {
+      version: 3,
+      sources: [path],
+      sourcesContent: [source],
+      names: [...map.names],
+      mappings: map.mappings,
+    };
+    // The Generator bakes these in for tuple maps; for passthrough VLQ maps we
+    // have to attach them ourselves.
+    if (functionMap != null) {
+      sectionMap = {...sectionMap, x_facebook_sources: [[functionMap]]};
+    }
+    if (isIgnored) {
+      sectionMap = {...sectionMap, x_google_ignoreList: [0]};
+    }
+    return sectionMap;
+  }
+
+  if (Array.isArray(map)) {
+    const generator = new Generator();
+    addMappingsForFile(generator, map, module, 0);
+    return generator.toMap();
+  }
+
+  throw new Error(`Unexpected module with full source map found: ${path}`);
+}
+
+/**
  * Transforms a standard source map object into a Raw Mappings object, to be
  * used across the bundler.
+ *
+ * @deprecated Unused by Metro, and will be removed. `Consumer`'s
+ * `generatedMappings()` decodes a source map.
  */
 function toBabelSegments(
   sourceMap: BasicSourceMap,
@@ -254,6 +386,9 @@ function toBabelSegments(
   return rawMappings;
 }
 
+/**
+ * @deprecated Unused by Metro, and will be removed.
+ */
 function toSegmentTuple(
   mapping: BabelSourceMapSegment,
 ): MetroSourceMapSegmentTuple {
@@ -271,18 +406,57 @@ function toSegmentTuple(
   return [line, column, original.line, original.column, name];
 }
 
+/**
+ * Converts a Babel/gen-mapping "decoded" source map (`result.decodedMap` from
+ * `@babel/generator`) into raw mapping tuples, byte-identical to
+ * `result.rawMappings.map(toSegmentTuple)`.
+ *
+ * Preferred over `result.rawMappings` because `decodedMap` is computed eagerly
+ * during generation, whereas accessing `rawMappings` triggers a second decode
+ * (`allMappings`) that allocates ~4-5 objects per segment. No terminating
+ * mapping is appended (callers that need one use `countLinesAndTerminateMap`).
+ *
+ * @deprecated Unused by Metro, and will be removed.
+ */
+function tuplesFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+): Array<MetroSourceMapSegmentTuple> {
+  const {mappings, names} = decodedMap;
+  const tuples: Array<MetroSourceMapSegmentTuple> = [];
+  for (let line = 0, n = mappings.length; line < n; ++line) {
+    // Decoded mappings are grouped by generated line (0-based); tuples use
+    // 1-based generated lines.
+    const generatedLine = line + 1;
+    const segments = mappings[line];
+    for (let i = 0, m = segments.length; i < m; ++i) {
+      const segment = segments[i];
+      switch (segment.length) {
+        case 1:
+          tuples.push([generatedLine, segment[0]]);
+          break;
+        case 4:
+          // Decoded source lines are 0-based; tuples use 1-based source lines.
+          tuples.push([generatedLine, segment[0], segment[2] + 1, segment[3]]);
+          break;
+        case 5:
+          tuples.push([
+            generatedLine,
+            segment[0],
+            segment[2] + 1,
+            segment[3],
+            names[segment[4]],
+          ]);
+          break;
+      }
+    }
+  }
+  return tuples;
+}
+
 function addMappingsForFile(
   generator: Generator,
-  mappings: Array<MetroSourceMapSegmentTuple>,
-  module: {
-    +code: string,
-    +functionMap: ?FBSourceFunctionMap,
-    +map: ?Array<MetroSourceMapSegmentTuple>,
-    +path: string,
-    +source: string,
-    +isIgnored: boolean,
-    +lineCount?: number,
-  },
+  mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
+  module: RawMappingsModule,
   carryOver: number,
 ) {
   generator.startFile(module.path, module.source, module.functionMap, {
@@ -329,16 +503,125 @@ const newline = /\r\n?|\n|\u2028|\u2029/g;
 const countLines = (string: string): number =>
   (string.match(newline) || []).length + 1;
 
-module.exports = {
+/**
+ * Decodes a compact VLQ map back into raw mapping tuples — the inverse of
+ * `vlqMapFromTuples`, reusing Metro's existing source-map consumer.
+ */
+function decodeVlqMap(vlqMap: VlqMap): Array<MetroSourceMapSegmentTuple> {
+  return toBabelSegments({
+    version: 3,
+    sources: [''],
+    names: [...vlqMap.names],
+    mappings: vlqMap.mappings,
+  }).map(toSegmentTuple);
+}
+
+/**
+ * Encodes raw mapping tuples into a compact VLQ `mappings` string + `names`
+ * table. Decode the inverse via `decodeVlqMap` (or `toBabelSegments` +
+ * `toSegmentTuple`). Storing maps in this form uses far less memory than the
+ * equivalent decoded tuple arrays.
+ */
+function vlqMapFromTuples(
+  mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,
+): VlqMap {
+  const generator = new Generator();
+  generator.startFile('', '', null);
+  for (const mapping of mappings) {
+    addMapping(generator, mapping, 0);
+  }
+  generator.endFile();
+  const map = generator.toMap();
+  return {mappings: map.mappings, names: map.names};
+}
+
+/**
+ * Encodes a `VlqMap` directly from a Babel/gen-mapping "decoded" source map
+ * (`result.decodedMap` from `@babel/generator`), without ever materialising the
+ * intermediate `Array<MetroSourceMapSegmentTuple>`.
+ *
+ * `@babel/generator` computes `decodedMap` eagerly while generating, so reusing
+ * it avoids the separate, more expensive `result.rawMappings` decode (which
+ * allocates a flat array of segment objects) plus the per-segment tuple
+ * allocation that `vlqMapFromTuples` would otherwise consume. The result is
+ * byte-identical to `vlqMapFromTuples(decoded -> tuples)`.
+ *
+ * `terminatingMapping` is a `[generatedLine1Based, generatedColumn0Based]`
+ * generated-only mapping appended at the end (matching the transform worker's
+ * `countLinesAndTerminateMap`) unless the last real mapping already sits there.
+ */
+function vlqMapFromBabelDecodedMap(
+  decodedMap: BabelDecodedMap,
+  terminatingMapping: [number, number],
+): VlqMap {
+  const generator = new Generator();
+  generator.startFile('', '', null);
+  const {mappings, names} = decodedMap;
+  let lastGeneratedLine = -1;
+  let lastGeneratedColumn = -1;
+  for (let line = 0, n = mappings.length; line < n; ++line) {
+    // Decoded mappings are grouped by generated line (0-based); Generator
+    // expects 1-based generated lines.
+    const generatedLine = line + 1;
+    const segments = mappings[line];
+    for (let i = 0, m = segments.length; i < m; ++i) {
+      const segment = segments[i];
+      const generatedColumn = segment[0];
+      switch (segment.length) {
+        case 1:
+          generator.addSimpleMapping(generatedLine, generatedColumn);
+          break;
+        case 4:
+          // Decoded source lines are 0-based; Generator expects 1-based.
+          generator.addSourceMapping(
+            generatedLine,
+            generatedColumn,
+            segment[2] + 1,
+            segment[3],
+          );
+          break;
+        case 5:
+          generator.addNamedSourceMapping(
+            generatedLine,
+            generatedColumn,
+            segment[2] + 1,
+            segment[3],
+            names[segment[4]],
+          );
+          break;
+        default:
+          throw new Error(`Invalid mapping: [${segment.join(', ')}]`);
+      }
+      lastGeneratedLine = generatedLine;
+      lastGeneratedColumn = generatedColumn;
+    }
+  }
+  if (
+    lastGeneratedLine !== terminatingMapping[0] ||
+    lastGeneratedColumn !== terminatingMapping[1]
+  ) {
+    generator.addSimpleMapping(terminatingMapping[0], terminatingMapping[1]);
+  }
+  generator.endFile();
+  const map = generator.toMap();
+  return {mappings: map.mappings, names: map.names};
+}
+
+export {
   BundleBuilder,
   composeSourceMaps,
   Consumer,
   createIndexMap,
   generateFunctionMap,
   fromRawMappings,
+  fromRawMappingsIndexed,
   fromRawMappingsNonBlocking,
   functionMapBabelPlugin,
+  isVlqMap,
   normalizeSourcePath,
   toBabelSegments,
   toSegmentTuple,
+  tuplesFromBabelDecodedMap,
+  vlqMapFromBabelDecodedMap,
+  vlqMapFromTuples,
 };

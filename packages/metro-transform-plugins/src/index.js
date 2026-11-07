@@ -9,58 +9,61 @@
  * @oncall react_native
  */
 
+/* eslint-disable import/no-commonjs */
+
 'use strict';
 
 import typeof ConstantFoldingPlugin from './constant-folding-plugin';
 import typeof ImportExportPlugin from './import-export-plugin';
 import typeof InlinePlugin from './inline-plugin';
+import typeof InlineRequiresPlugin from './inline-requires-plugin';
 import typeof NormalizePseudoGlobalsFn from './normalizePseudoGlobals';
-export type {Options as InlinePluginOptions} from './inline-plugin';
 
-// TODO: Type this properly
-type InlineRequiresPlugin = $FlowFixMe;
+export type {Options as ImportExportPluginOptions} from './import-export-plugin';
+export type {Options as InlinePluginOptions} from './inline-plugin';
+export type {PluginOptions as InlineRequiresPluginOptions} from './inline-requires-plugin';
 
 type TransformPlugins = {
-  addParamsToDefineCall(string, ...Array<mixed>): string,
+  addParamsToDefineCall(code: string, ...paramsToAdd: Array<unknown>): string,
   constantFoldingPlugin: ConstantFoldingPlugin,
   importExportPlugin: ImportExportPlugin,
   inlinePlugin: InlinePlugin,
   inlineRequiresPlugin: InlineRequiresPlugin,
   normalizePseudoGlobals: NormalizePseudoGlobalsFn,
-  getTransformPluginCacheKeyFiles(): $ReadOnlyArray<string>,
+  getTransformPluginCacheKeyFiles(): ReadonlyArray<string>,
 };
 
-module.exports = ({
-  // $FlowIgnore[unsafe-getters-setters]
+module.exports = {
+  // $FlowFixMe[unsafe-getters-setters]
   get addParamsToDefineCall() {
-    return require('./addParamsToDefineCall');
+    return require('./addParamsToDefineCall').default;
   },
-  // $FlowIgnore[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get constantFoldingPlugin() {
-    return require('./constant-folding-plugin');
+    return require('./constant-folding-plugin').default;
   },
-  // $FlowIgnore[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get importExportPlugin() {
-    return require('./import-export-plugin');
+    return require('./import-export-plugin').default;
   },
-  // $FlowIgnore[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get inlinePlugin() {
-    return require('./inline-plugin');
+    return require('./inline-plugin').default;
   },
-  // $FlowIgnore[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get inlineRequiresPlugin() {
-    // $FlowFixMe[untyped-import]
-    return require('./inline-requires-plugin');
+    return require('./inline-requires-plugin').default;
   },
-  // $FlowIgnore[unsafe-getters-setters]
+  // $FlowFixMe[unsafe-getters-setters]
   get normalizePseudoGlobals() {
-    return require('./normalizePseudoGlobals');
+    return require('./normalizePseudoGlobals').default;
   },
   getTransformPluginCacheKeyFiles: () => [
     require.resolve(__filename),
     require.resolve('./constant-folding-plugin'),
     require.resolve('./import-export-plugin'),
     require.resolve('./inline-plugin'),
+    require.resolve('./inline-requires-plugin'),
     require.resolve('./normalizePseudoGlobals'),
   ],
-}: TransformPlugins);
+} as TransformPlugins;

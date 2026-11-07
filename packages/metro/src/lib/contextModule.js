@@ -14,11 +14,11 @@ import type {
   RequireContextParams,
 } from '../ModuleGraph/worker/collectDependencies';
 
-import crypto from 'crypto';
+import crypto from 'node:crypto';
+import path from 'node:path';
 import nullthrows from 'nullthrows';
-import path from 'path';
 
-export type RequireContext = $ReadOnly<{
+export type RequireContext = Readonly<{
   /* Should search for files recursively. Optional, default `true` when `require.context` is used */
   recursive: boolean,
   /* Filename filter pattern for use in `require.context`. Optional, default `.*` (any file) when `require.context` is used */

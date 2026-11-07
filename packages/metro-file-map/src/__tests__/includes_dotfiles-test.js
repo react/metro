@@ -10,7 +10,7 @@
  */
 
 import HasteMap from '../index';
-import path from 'path';
+import path from 'node:path';
 
 jest.useRealTimers();
 
@@ -19,7 +19,6 @@ const rootDir = path.join(__dirname, './test_dotfiles_root');
 const commonOptions = {
   extensions: ['js'],
   maxWorkers: 1,
-  platforms: [],
   resetCache: true,
   retainAllFiles: true,
   rootDir,

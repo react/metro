@@ -16,7 +16,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import classnames from 'classnames';
-import React from 'react';
+import * as React from 'react';
 import GitHubButton from 'react-github-btn';
 
 const contents = [
@@ -68,11 +68,11 @@ const HomeSplash = () => {
           <Button href={useBaseUrl('docs/api')}>Learn More</Button>
         </div>
         <GitHubButton
-          href="https://github.com/facebook/metro"
+          href="https://github.com/react/metro"
           data-icon="octicon-star"
           data-size="large"
           data-show-count="true"
-          aria-label="Star facebook/metro on GitHub">
+          aria-label="Star react/metro on GitHub">
           Star
         </GitHubButton>
       </div>

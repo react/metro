@@ -11,9 +11,9 @@
 
 'use strict';
 
-const fs = require('fs');
 const invariant = require('invariant');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function updateVersion(version /*: ?string */) {
   if (version == null) {
@@ -36,7 +36,7 @@ function updateVersion(version /*: ?string */) {
 function updateAllPackageManifests(
   metroDirPath /*: string */,
   newVersion /*: string */,
-  subPackageNameSet /*: $ReadOnlySet<string> */,
+  subPackageNameSet /*: ReadonlySet<string> */,
 ) {
   subPackageNameSet.forEach(pkgName => {
     const subPackagePackPath = path.join(
@@ -67,8 +67,8 @@ function updateAllPackageManifests(
 
 // given a dependency object (from package.json) update version for local pkgs
 function updateCrossDepsInline(
-  allDeps /*: {[string]: mixed, ...} */, // json object
-  subDeps /*: $ReadOnlySet<string> */,
+  allDeps /*: {[key: string]: unknown, ...} */, // json object
+  subDeps /*: ReadonlySet<string> */,
   version /*: string */,
 ) {
   if (allDeps) {
@@ -84,7 +84,7 @@ function updateCrossDepsInline(
 function mutateManifestFile(
   filePath /*: string */,
   mutator /*: (manifest: {
-    [string]: string | number | Array<mixed> | {[string]: mixed, ...},
+    [key: string]: string | number | Array<unknown> | {[key: string]: unknown, ...},
   }) => void */,
 ) {
   const manifest = JSON.parse(fs.readFileSync(filePath, 'utf8'));
