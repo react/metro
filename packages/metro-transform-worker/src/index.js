@@ -135,6 +135,7 @@ export type JsTransformOptions = Readonly<{
   customTransformOptions?: CustomTransformOptions,
   dev: boolean,
   experimentalImportSupport?: boolean,
+  /** Passed to the Babel transformer as `caller.inlinePlatform`. React Native's Babel preset reads it to inline `Platform.OS` and `Platform.select`. */
   inlinePlatform: boolean,
   inlineRequires: boolean,
   minify: boolean,
@@ -347,13 +348,7 @@ async function transformJS(
 
   plugins.push([
     metroTransformPlugins.inlinePlugin,
-    {
-      dev: options.dev,
-      inlinePlatform: options.inlinePlatform,
-      isWrapped: false,
-      // $FlowFixMe[incompatible-type] expects a string if inlinePlatform
-      platform: options.platform,
-    } as InlinePluginOptions,
+    {dev: options.dev} as InlinePluginOptions,
   ]);
 
   ast = nullthrows(

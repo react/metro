@@ -11,24 +11,13 @@
 
 import type {PluginObj} from '@babel/core';
 import type {Binding, NodePath, Scope} from '@babel/traverse';
-import type {
-  CallExpression,
-  MemberExpression,
-  Node,
-  ObjectExpression,
-} from '@babel/types';
+import type {MemberExpression, Node} from '@babel/types';
 // type only import. No runtime dependency
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-import createInlinePlatformChecks from './utils/createInlinePlatformChecks';
-
 export type Options = Readonly<{
   dev: boolean,
-  inlinePlatform: boolean,
-  isWrapped: boolean,
-  requireName?: string,
-  platform: string,
 }>;
 
 type State = {opts: Options};
@@ -43,19 +32,7 @@ export default function inlinePlugin(
   {types: t}: {types: Types},
   options: Options,
 ): PluginObj<State> {
-  const {
-    isIdentifier,
-    isMemberExpression,
-    isObjectExpression,
-    isObjectMethod,
-    isObjectProperty,
-    isSpreadElement,
-    isStringLiteral,
-  } = t;
-  const {isPlatformNode, isPlatformSelectNode} = createInlinePlatformChecks(
-    t,
-    options.requireName ?? 'require',
-  );
+  const {isIdentifier, isMemberExpression} = t;
 
   function isGlobal(binding: ?Binding): boolean {
     return !binding;
@@ -120,45 +97,6 @@ export default function inlinePlugin(
     isIdentifier(node, dev) &&
     isGlobalOrFlowDeclared(scope.getBinding(dev.name));
 
-  function findProperty(
-    objectExpression: ObjectExpression,
-    key: string,
-    fallback: () => Node,
-  ): Node {
-    // Object literal evaluation keeps the last definition of a duplicate key.
-    for (let i = objectExpression.properties.length - 1; i >= 0; i--) {
-      const p = objectExpression.properties[i];
-      if (!isObjectProperty(p) && !isObjectMethod(p)) {
-        continue;
-      }
-      if (
-        (isIdentifier(p.key) && p.key.name === key) ||
-        (isStringLiteral(p.key) && p.key.value === key)
-      ) {
-        if (isObjectProperty(p)) {
-          return p.value;
-        } else if (isObjectMethod(p)) {
-          return t.toExpression(p);
-        }
-      }
-    }
-
-    return fallback();
-  }
-
-  function hasStaticProperties(objectExpression: ObjectExpression): boolean {
-    return objectExpression.properties.every(p => {
-      if (p.computed === true || isSpreadElement(p)) {
-        return false;
-      }
-      if (isObjectMethod(p) && p.kind !== 'method') {
-        return false;
-      }
-
-      return isIdentifier(p.key) || isStringLiteral(p.key);
-    });
-  }
-
   return {
     visitor: {
       ReferencedIdentifier(path: NodePath<Node>, state: State): void {
@@ -171,38 +109,12 @@ export default function inlinePlugin(
         const scope = path.scope;
         const opts = state.opts;
 
-        if (!isWriteTarget(path)) {
-          if (
-            opts.inlinePlatform &&
-            isPlatformNode(node, scope, !!opts.isWrapped)
-          ) {
-            path.replaceWith(t.stringLiteral(opts.platform));
-          } else if (!opts.dev && isProcessEnvNodeEnv(node, scope)) {
-            path.replaceWith(
-              t.stringLiteral(opts.dev ? 'development' : 'production'),
-            );
-          }
-        }
-      },
-      CallExpression(path: NodePath<CallExpression>, state: State): void {
-        const node = path.node;
-        const scope = path.scope;
-        const arg = node.arguments[0];
-        const opts = state.opts;
-
         if (
-          opts.inlinePlatform &&
-          isPlatformSelectNode(node, scope, !!opts.isWrapped) &&
-          isObjectExpression(arg)
+          !opts.dev &&
+          !isWriteTarget(path) &&
+          isProcessEnvNodeEnv(node, scope)
         ) {
-          if (hasStaticProperties(arg)) {
-            const fallback = () =>
-              findProperty(arg, 'native', () =>
-                findProperty(arg, 'default', () => t.identifier('undefined')),
-              );
-
-            path.replaceWith(findProperty(arg, opts.platform, fallback));
-          }
+          path.replaceWith(t.stringLiteral('production'));
         }
       },
     },
