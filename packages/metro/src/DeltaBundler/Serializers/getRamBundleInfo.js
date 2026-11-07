@@ -143,7 +143,7 @@ async function _getRamOptions(
   getTransformOptions: ?GetTransformOptions,
 ): Promise<
   Readonly<{
-    preloadedModules: Readonly<{[string]: true, ...}>,
+    preloadedModules: Readonly<{[key: string]: true, ...}>,
     ramGroups: ReadonlyArray<string>,
   }>,
 > {

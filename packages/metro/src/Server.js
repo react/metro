@@ -96,7 +96,7 @@ const noopLogger: RootPerfLogger = {
   end: () => {},
 };
 
-export type SegmentLoadData = {[number]: [Array<number>, ?number], ...};
+export type SegmentLoadData = {[key: number]: [Array<number>, ?number], ...};
 export type BundleMetadata = {
   hash: string,
   otaBuildNumber: ?string,

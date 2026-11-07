@@ -16,7 +16,7 @@ export default function getPreludeCode({
   requireCycleIgnorePatterns,
   unstable_forceFullRefreshPatterns,
 }: {
-  readonly extraVars?: {[string]: unknown, ...},
+  readonly extraVars?: {[key: string]: unknown, ...},
   readonly isDev: boolean,
   readonly globalPrefix: string,
   readonly requireCycleIgnorePatterns: ReadonlyArray<RegExp>,
@@ -54,7 +54,9 @@ export default function getPreludeCode({
 
 const excluded = new Set(['__BUNDLE_START_TIME__', '__DEV__', 'process']);
 
-function formatExtraVars(extraVars: ?{[string]: unknown, ...}): Array<string> {
+function formatExtraVars(
+  extraVars: ?{[key: string]: unknown, ...},
+): Array<string> {
   const assignments = [];
 
   for (const key in extraVars) {

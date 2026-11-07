@@ -65,7 +65,7 @@ function symbolicate(
 }
 
 describe('composeSourceMaps', () => {
-  const fixtures: {[string]: any} = {};
+  const fixtures: {[key: string]: any} = {};
 
   beforeAll(() => {
     for (const fixtureName of [

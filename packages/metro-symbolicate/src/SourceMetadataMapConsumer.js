@@ -168,7 +168,7 @@ export default class SourceMetadataMapConsumer {
     if ('x_facebook_sources' in map) {
       const basicMap: BasicSourceMap = map;
       return (basicMap.x_facebook_sources || []).reduce<{
-        [string]: ?FBSourceMetadata,
+        [key: string]: ?FBSourceMetadata,
       }>((acc, metadata, index) => {
         let source = basicMap.sources[index];
         if (source != null) {

@@ -281,7 +281,7 @@ metroRequire.importDefault = metroImportDefault;
 
 function metroImportAll(
   moduleId: ModuleID | VerboseModuleNameForDev | number,
-): any | Exports | {[string]: any} {
+): any | Exports | {[key: string]: any} {
   if (__DEV__ && typeof moduleId === 'string') {
     const verboseName = moduleId;
     moduleId = getModuleIdForVerboseName(verboseName);
@@ -297,12 +297,12 @@ function metroImportAll(
   }
 
   const exports: Exports = metroRequire(moduleIdReallyIsNumber);
-  let importedAll: Exports | {[string]: any};
+  let importedAll: Exports | {[key: string]: any};
 
   if (exports && exports.__esModule) {
     importedAll = exports;
   } else {
-    importedAll = {} as {[string]: any};
+    importedAll = {} as {[key: string]: any};
 
     // Refrain from using Object.assign, it has to work in ES3 environments.
     if (exports) {

@@ -530,7 +530,7 @@ describe('LineIndexedMappings', () => {
     };
   };
 
-  const cases: {[string]: Array<MetroSourceMapSegmentTuple>} = {
+  const cases: {[key: string]: Array<MetroSourceMapSegmentTuple>} = {
     'single segment': [[1, 0, 10, 4]],
     'multiple segments on one line': [
       [1, 0, 10, 4],
