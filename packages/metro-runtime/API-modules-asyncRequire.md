@@ -17,6 +17,6 @@ export type AsyncRequire = {
 
 export type DependencyMapPaths = null | undefined | Readonly<{[moduleID: number | string]: ReadonlyJsonData}>;
 
-export type ReadonlyJsonData = null | boolean | number | string | ReadonlyArray<ReadonlyJsonData> | Readonly<{[$$Key$$: string]: ReadonlyJsonData}>;
+export type ReadonlyJsonData = null | boolean | number | string | ReadonlyArray<ReadonlyJsonData> | Readonly<{[key: string]: ReadonlyJsonData}>;
 
 ```

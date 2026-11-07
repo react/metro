@@ -28,7 +28,7 @@ export type FactoryFn = (
 
 export type InverseDependencyMap = {[key in ModuleID]: Array<ModuleID>};
 
-export function metroImportAll(moduleId: ModuleID | VerboseModuleNameForDev | number): any | Exports | {[$$Key$$: string]: any};
+export function metroImportAll(moduleId: ModuleID | VerboseModuleNameForDev | number): any | Exports | {[key: string]: any};
 
 export function metroImportDefault(moduleId: ModuleID | VerboseModuleNameForDev): any | Exports;
 
