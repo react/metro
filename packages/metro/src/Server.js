@@ -1329,10 +1329,12 @@ export default class Server {
             createModuleId: this._createModuleId,
             getRunModuleStatement:
               this._config.serializer.getRunModuleStatement,
+            globalPrefix: this._config.transformer.globalPrefix,
             includeAsyncPaths: graphOptions.lazy,
             dev: transformOptions.dev,
             projectRoot: this._config.projectRoot,
             modulesOnly: serializerOptions.modulesOnly,
+            reservedString: RESERVED_STRING,
             runBeforeMainModule:
               this._config.serializer.getModulesRunBeforeMainModule(
                 path.relative(this._config.projectRoot, entryFile),
@@ -1341,13 +1343,15 @@ export default class Server {
             sourceMapUrl: serializerOptions.sourceMapUrl,
             sourceUrl: serializerOptions.sourceUrl,
             inlineSourceMap: serializerOptions.inlineSourceMap,
-            serverRoot:
-              this._config.server.unstable_serverRoot ??
-              this._config.projectRoot,
+            serverRoot: this._rootUrlMap.serverRootDir,
             shouldAddToIgnoreList: (module: Module<>) =>
               this._shouldAddModuleToIgnoreList(module),
             getSourceUrl: (module: Module<>) =>
               this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
+            dependencyMapReservedName:
+              this._config.transformer.unstable_dependencyMapReservedName,
+            unstable_inlineDependencyMap:
+              this._config.serializer.unstable_inlineDependencyMap,
           },
         );
 
