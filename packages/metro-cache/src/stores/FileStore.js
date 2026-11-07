@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -17,6 +18,7 @@ import path from 'node:path';
 // files (e.g. write errors) are treated as cache misses.
 const BINARY_MARKER = 0x01;
 const BINARY_MARKER_BUFFER = Buffer.from([BINARY_MARKER]);
+const RENAME_CONFLICT_CODES = new Set(['EACCES', 'EBUSY', 'EPERM']);
 
 export type Options = Readonly<{
   root: string,
@@ -68,7 +70,29 @@ export default class FileStore<T> {
     } else {
       content = JSON.stringify(value) ?? JSON.stringify(null);
     }
-    await fs.promises.writeFile(filePath, content);
+    // Write to a unique temporary file and rename it into place, so that a
+    // concurrent reader (or writer) of the same key never sees a partially
+    // written entry. Writing in place truncates the file first, and a reader
+    // could then see a truncated entry.
+    const suffix = crypto.randomBytes(8).toString('hex');
+    const tempPath = `${filePath}.${process.pid}.${suffix}.tmp`;
+    try {
+      await fs.promises.writeFile(tempPath, content);
+      await fs.promises.rename(tempPath, filePath);
+    } catch (err) {
+      await fs.promises.rm(tempPath, {force: true}).catch(() => {});
+      // Edge case: On Windows, renaming over a file fails while another writer
+      // or reader has it open. Keys are content-addressed, i.e. the existing
+      // entry is equivalent, so losing this race is safe.
+      if (
+        err.syscall === 'rename' &&
+        RENAME_CONFLICT_CODES.has(err.code) &&
+        fs.existsSync(filePath)
+      ) {
+        return;
+      }
+      throw err;
+    }
   }
 
   clear() {
