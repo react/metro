@@ -49,7 +49,7 @@ const siteConfig = {
   organizationName: 'react',
   projectName: 'metro',
   url: 'https://metrobundler.dev',
-  baseUrl: '/',
+  baseUrl: process.env.WEBSITE_BASE_URL ?? '/',
   favicon: 'img/favicon.png',
   onBrokenAnchors: 'throw',
   themeConfig: {

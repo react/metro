@@ -1,0 +1,68 @@
+# Builds the website, which checks links between doc pages.
+#
+# In forks, also publishes a preview of the website from each pushed branch, at
+# https://<owner>.github.io/<repo>/<branch>/. To enable it, enable workflows in
+# the Actions tab, then set Settings > Pages > Source to "Deploy from a branch",
+# `gh-pages`, `/ (root)`.
+name: Preview website
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/preview-website.yml"
+      - ".github/actions/website-install/**"
+  push:
+    branches-ignore:
+      - "main"
+      - "gh-pages"
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/preview-website.yml"
+      - ".github/actions/website-install/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-website-${{ github.event_name == 'push' && 'gh-pages' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request' || github.repository != 'react/metro'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push previews to gh-pages
+
+    env:
+      WEBSITE_BASE_URL: ${{ github.event_name == 'push' && format('/{0}/{1}/', github.event.repository.name, github.ref_name) || '/' }}
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/website-install
+      - run: yarn build
+        working-directory: website
+      - name: Push preview to gh-pages
+        if: github.event_name == 'push'
+        env:
+          PREVIEW_DIR: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin gh-pages; then
+            git worktree add gh-pages FETCH_HEAD
+          else
+            git worktree add --orphan -b gh-pages gh-pages
+          fi
+          rm -rf "gh-pages/$PREVIEW_DIR"
+          mkdir -p "gh-pages/$PREVIEW_DIR"
+          cp -R website/build/. "gh-pages/$PREVIEW_DIR"
+          echo "$GITHUB_SHA" > "gh-pages/$PREVIEW_DIR/.sha"
+          touch gh-pages/.nojekyll
+          git -C gh-pages add -A
+          git -C gh-pages commit -m "Preview $PREVIEW_DIR at $GITHUB_SHA"
+          git -C gh-pages push origin HEAD:gh-pages
+          echo "Preview: https://${GITHUB_REPOSITORY_OWNER}.github.io${WEBSITE_BASE_URL}" >> "$GITHUB_STEP_SUMMARY"
