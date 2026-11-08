@@ -289,6 +289,23 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
+  test('does not wipe unused functions whose bindings are reassigned', () => {
+    const code = `
+      export function load() {
+        let cleanup = () => {};
+        cleanup = null;
+
+        var handler = function () {};
+        handler = null;
+
+        function callback() {}
+        callback = null;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
   test('recursively strips off functions', () => {
     const code = `
       function x() {}

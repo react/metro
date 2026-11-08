@@ -100,7 +100,11 @@ export default function constantFoldingPlugin(context: {
       const binding =
         path.node.id != null && path.scope.parent.getBinding(path.node.id.name);
 
-      if (binding && !binding.referenced) {
+      if (
+        binding &&
+        !binding.referenced &&
+        binding.constantViolations.length === 0
+      ) {
         state.stripped = true;
         path.remove();
       }
@@ -120,7 +124,11 @@ export default function constantFoldingPlugin(context: {
         if (isVariableDeclarator(parentNode) && parentNode.id.name != null) {
           const binding = parentPath?.scope.getBinding(parentNode.id.name);
 
-          if (binding && !binding.referenced) {
+          if (
+            binding &&
+            !binding.referenced &&
+            binding.constantViolations.length === 0
+          ) {
             state.stripped = true;
             parentPath?.remove();
           }
