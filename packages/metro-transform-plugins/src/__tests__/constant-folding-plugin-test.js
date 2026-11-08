@@ -300,10 +300,33 @@ describe('constant expressions', () => {
 
         function callback() {}
         callback = null;
+
+        function retry() {
+          retry = null;
+        }
+        retry = null;
       }
     `;
 
     compare([constantFoldingPlugin], code, code);
+  });
+
+  test('wipes unused functions that only reassign themselves', () => {
+    const code = `
+      function _devOnly() {
+        const data = require('dev-only');
+        _devOnly = function () {
+          return data;
+        };
+        return data;
+      }
+
+      var _lazy = function () {
+        _lazy = null;
+      };
+    `;
+
+    compare([constantFoldingPlugin], code, '');
   });
 
   test('recursively strips off functions', () => {

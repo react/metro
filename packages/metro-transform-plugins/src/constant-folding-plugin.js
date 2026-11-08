@@ -103,7 +103,9 @@ export default function constantFoldingPlugin(context: {
       if (
         binding &&
         !binding.referenced &&
-        binding.constantViolations.length === 0
+        binding.constantViolations.every(violation =>
+          violation.isDescendant(path),
+        )
       ) {
         state.stripped = true;
         path.remove();
@@ -127,7 +129,9 @@ export default function constantFoldingPlugin(context: {
           if (
             binding &&
             !binding.referenced &&
-            binding.constantViolations.length === 0
+            binding.constantViolations.every(violation =>
+              violation.isDescendant(path),
+            )
           ) {
             state.stripped = true;
             parentPath?.remove();
