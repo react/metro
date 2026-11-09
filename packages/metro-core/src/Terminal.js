@@ -115,20 +115,30 @@ export default class Terminal {
    * keep the process alive, so an ongoing update is flushed before the process
    * exits.
    */
-  #scheduleStatusUpdate() {
+  async #scheduleStatusUpdate(): Promise<void> {
     if (this.#updatePromise != null) {
       return;
     }
 
     process.on('beforeExit', this.#flushBeforeExit);
-    this.#updatePromise = this.#writeStatus().then(async () => {
-      while (this.#writtenStatus !== this.#status) {
+    const {promise, resolve, reject} = Promise.withResolvers<void>();
+    try {
+      this.#updatePromise = promise;
+      // An update is fire-and-forget: mark its rejection as handled, so
+      // a failed update doesn't crash the process when no one awaits it.
+      // Waiters still see the rejection through #updatePromise.
+      void promise.catch(() => {});
+      do {
         await this.#writeStatus();
-      }
+      } while (this.#writtenStatus !== this.#status);
+      resolve();
+    } catch (error: unknown) {
+      reject(error);
+    } finally {
       process.off('beforeExit', this.#flushBeforeExit);
       this.#updatePromise = null;
       this.#isFlushRequested = false;
-    });
+    }
   }
 
   /**
@@ -179,6 +189,10 @@ export default class Terminal {
     this.#lastWritePromise = new Promise(resolve =>
       this.#stream.write(chunk, () => resolve()),
     );
+    // A write is fire-and-forget: mark its rejection as handled, so a
+    // failed write doesn't crash the process when no one awaits it.
+    // Waiters still see the rejection through #lastWritePromise.
+    void this.#lastWritePromise.catch(() => {});
     this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
   }
 
@@ -313,7 +327,7 @@ export default class Terminal {
       ? chunkString(status, this.#ttyStream.columns).join('\n')
       : status;
 
-    this.#scheduleStatusUpdate();
+    void this.#scheduleStatusUpdate();
 
     return previousStatus;
   }
@@ -335,7 +349,7 @@ export default class Terminal {
       this.#write(line);
     }
 
-    this.#scheduleStatusUpdate();
+    void this.#scheduleStatusUpdate();
   }
 
   /**
