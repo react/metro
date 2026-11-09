@@ -221,7 +221,19 @@ export default class Terminal {
     void this.#delayStatus(
       this.#ttyStream ? STATUS_UPDATE_DELAY_MS : NON_TTY_STATUS_UPDATE_DELAY_MS,
     );
-    await this.#lastWritePromise;
+    const writePromise = this.#lastWritePromise;
+    try {
+      await writePromise;
+    } catch (error: unknown) {
+      if (
+        this.#lastWritePromise === writePromise &&
+        this.#writtenStatus === status
+      ) {
+        this.#writtenStatus = '';
+        this.#lastWritePromise = Promise.resolve();
+      }
+      throw error;
+    }
   }
 
   /**
