@@ -97,8 +97,10 @@ function hasProtoKey(source: string): boolean {
 }
 
 function jsonToCommonJS(source: string): string {
-  if (hasProtoKey(source)) {
-    return `module.exports = JSON.parse(${JSON.stringify(source)});`;
+  // Like Node, ignore a leading BOM, which `JSON.parse` would reject.
+  const json = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+  if (hasProtoKey(json)) {
+    return `module.exports = JSON.parse(${JSON.stringify(json)});`;
   }
   return `module.exports = ${source};`;
 }

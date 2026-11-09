@@ -200,6 +200,8 @@ test('defines a `__proto__` key in JSON as an own property, like JSON.parse', ()
 
   for (const source of sources) {
     expect(evaluateJsonModule(source)).toEqual(JSON.parse(source));
+    // Node ignores a leading BOM in JSON modules.
+    expect(evaluateJsonModule('\uFEFF' + source)).toEqual(JSON.parse(source));
   }
 
   const value: $FlowFixMe = evaluateJsonModule(sources[0]);
@@ -212,6 +214,7 @@ test('keeps JSON without a `__proto__` key as an object literal', () => {
     '{"a": 1}',
     '{"description": "__proto__ is not a key here", "e": "\\u00e9"}',
     '[{"__proto": 1}, "\\u005f"]',
+    '\uFEFF{"a": 1}',
   ];
 
   for (const source of sources) {
