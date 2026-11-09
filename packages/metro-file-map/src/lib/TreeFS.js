@@ -39,9 +39,9 @@ function isRegularFile(node: FileNode): boolean {
   return node[H.SYMLINK] === 0;
 }
 
-// The limit Linux applies when resolving a path. A count rather than a set of
-// visited targets because a symlink into itself (`a -> a/b`) gives a longer
-// target on every follow, and so never repeats one.
+// The limit Linux applies when resolving a path (`MAXSYMLINKS`). A count rather
+// than a set of visited targets because a symlink into itself (`a -> a/b`)
+// gives a longer target on every follow, and so never repeats one.
 const MAX_SYMLINK_FOLLOWS = 40;
 
 // Null if not within the ancestor ('' is the root).
