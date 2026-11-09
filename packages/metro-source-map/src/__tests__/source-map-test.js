@@ -131,6 +131,30 @@ describe('build map from raw mappings', () => {
     ).toMatchSnapshot();
   });
 
+  test('keeps generated-only mappings sourceless with a source root', () => {
+    expect(
+      toBabelSegments({
+        mappings: 'A,CAAA',
+        names: [],
+        sources: ['input.js'],
+        sourceRoot: '/src',
+        version: 3,
+      }),
+    ).toEqual([
+      {
+        generated: {line: 1, column: 0},
+        source: null,
+        name: null,
+      },
+      {
+        generated: {line: 1, column: 1},
+        original: {line: 1, column: 0},
+        source: '/src/input.js',
+        name: null,
+      },
+    ]);
+  });
+
   test('offsets the resulting source map by the provided offset argument', () => {
     const input = [
       {

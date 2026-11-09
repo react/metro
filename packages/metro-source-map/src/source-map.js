@@ -364,7 +364,7 @@ function toBabelSegments(
                 line: map.generatedLine,
                 column: map.generatedColumn,
               },
-              source: map.source,
+              source: null,
               name: map.name,
             }
           : {
