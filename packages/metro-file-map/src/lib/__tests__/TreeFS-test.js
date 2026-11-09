@@ -1137,6 +1137,28 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       });
     });
 
+    test('adds a file through a symlink to the root at its canonical path', () => {
+      tfs.addOrModify(p('link-to-root'), [0, 0, 0, null, '', null]);
+      const fileAdded = jest.fn();
+      tfs.addOrModify(p('link-to-root/new.js'), [1, 1, 0, null, 0, null], {
+        directoryAdded: jest.fn(),
+        directoryRemoved: jest.fn(),
+        fileAdded,
+        fileModified: jest.fn(),
+        fileRemoved: jest.fn(),
+      });
+      expect(fileAdded).toHaveBeenCalledWith(p('new.js'), [
+        1,
+        1,
+        0,
+        null,
+        0,
+        null,
+      ]);
+      expect(tfs.getAllFiles()).toContain(p('/project/new.js'));
+      expect(tfs.getAllFiles()).not.toContain(p('/new.js'));
+    });
+
     describe('bulkAddOrModify', () => {
       test('adds new files and modifies existing, new symlinks work', () => {
         tfs.bulkAddOrModify(
