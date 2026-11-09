@@ -579,9 +579,14 @@ export default class TreeFS implements MutableFileSystem {
       );
     }
     // Normalize the resulting path to account for the parent node being root.
-    const canonicalPath = this.#normalizePath(
-      parentDirNode.canonicalPath + path.sep + path.basename(normalPath),
-    );
+    // Its canonical path is '' if it was reached through a symlink to the root.
+    const basename = path.basename(normalPath);
+    const canonicalPath =
+      parentDirNode.canonicalPath === ''
+        ? basename
+        : this.#normalizePath(
+            parentDirNode.canonicalPath + path.sep + basename,
+          );
     this.bulkAddOrModify(new Map([[canonicalPath, metadata]]), changeListener);
   }
 
