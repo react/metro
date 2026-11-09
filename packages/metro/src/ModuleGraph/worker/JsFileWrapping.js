@@ -75,7 +75,31 @@ function wrapPolyfill(fileAst: BabelNodeFile): BabelNodeFile {
   return t.file(t.program([t.expressionStatement(iife)]));
 }
 
+// In an object literal, a non-computed `"__proto__": value` property sets the
+// prototype instead of defining an own property, unlike `JSON.parse`. Escaped
+// keys like `"__proto\u005f_"` behave the same, so check the parsed keys.
+function hasProtoKey(source: string): boolean {
+  if (!source.includes('__proto') && !source.includes('\\u')) {
+    return false;
+  }
+  let found = false;
+  try {
+    JSON.parse(source, (key: string, value: unknown) => {
+      if (key === '__proto__') {
+        found = true;
+      }
+      return value;
+    });
+  } catch {
+    return false;
+  }
+  return found;
+}
+
 function jsonToCommonJS(source: string): string {
+  if (hasProtoKey(source)) {
+    return `module.exports = JSON.parse(${JSON.stringify(source)});`;
+  }
   return `module.exports = ${source};`;
 }
 
