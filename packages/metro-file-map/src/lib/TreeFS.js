@@ -566,23 +566,48 @@ export default class TreeFS implements MutableFileSystem {
     changeListener?: FileSystemListener,
   ): void {
     const normalPath = this.#normalizePath(mixedPath);
+    const normalDirname = path.dirname(normalPath);
     // Walk the tree to find the *real* path of the parent node, creating
     // directories as we need.
-    const parentDirNode = this.#lookupByNormalPath(path.dirname(normalPath), {
-      ...LOOKUP_OPTIONS,
-      changeListener,
-      makeDirectories: true,
-    });
+    const parentDirNode = this.#lookupByNormalPath(
+      normalDirname === '.' ? '' : normalDirname,
+      {
+        ...LOOKUP_OPTIONS,
+        changeListener,
+        makeDirectories: true,
+      },
+    );
     if (!parentDirNode.exists) {
       throw new Error(
         `TreeFS: Failed to make parent directory entry for ${mixedPath}`,
       );
     }
-    // Normalize the resulting path to account for the parent node being root.
-    const canonicalPath = this.#normalizePath(
-      parentDirNode.canonicalPath + path.sep + path.basename(normalPath),
-    );
-    this.bulkAddOrModify(new Map([[canonicalPath, metadata]]), changeListener);
+    // As bulkAddOrModify does for each file, without walking to the parent
+    // directory a second time.
+    const {canonicalPath: dirname, node: directoryNode} = parentDirNode;
+    const basename = path.basename(normalPath);
+    const canonicalPath =
+      dirname === '' ? basename : dirname + path.sep + basename;
+    if (!isDirectory(directoryNode)) {
+      throw new Error(
+        `TreeFS: Could not add directory ${dirname}, adding ${canonicalPath}. ` +
+          `${dirname} already exists in the file map as a file.`,
+      );
+    }
+    if (changeListener != null) {
+      const existingNode = directoryNode.get(basename);
+      if (existingNode != null) {
+        invariant(
+          !isDirectory(existingNode),
+          'Detected addition or modification of file %s, but it is tracked as a non-empty directory',
+          canonicalPath,
+        );
+        changeListener.fileModified(canonicalPath, existingNode, metadata);
+      } else {
+        changeListener.fileAdded(canonicalPath, metadata);
+      }
+    }
+    directoryNode.set(basename, metadata);
   }
 
   bulkAddOrModify(
