@@ -14,6 +14,7 @@
 const JsFileWrapping = require('../JsFileWrapping');
 const {codeFromAst, comparableCode} = require('./test-helpers');
 const babylon = require('@babel/parser');
+const vm = require('node:vm');
 
 const defaultGlobalPrefix = '';
 
@@ -179,6 +180,48 @@ test('wraps a module with the static Hermes module factory and a global prefix',
         const a = require('b/lib/a');
       }));`),
   );
+});
+
+function evaluateJsonModule(source: string): unknown {
+  const module: {exports: unknown} = {exports: {}};
+  const factory = vm.runInThisContext(
+    `(function (module) {\n${JsFileWrapping.jsonToCommonJS(source)}\n})`,
+  );
+  factory(module);
+  return module.exports;
+}
+
+test('defines a `__proto__` key in JSON as an own property, like JSON.parse', () => {
+  const sources = [
+    '{"__proto__": {"x": 1}, "a": 2}',
+    '{"__proto\\u005f_": {"x": 1}, "a": 2}',
+    '{"inner": {"__proto__": {"x": 1}}}',
+  ];
+
+  for (const source of sources) {
+    expect(evaluateJsonModule(source)).toEqual(JSON.parse(source));
+    // Node ignores a leading BOM in JSON modules.
+    expect(evaluateJsonModule('\uFEFF' + source)).toEqual(JSON.parse(source));
+  }
+
+  const value: $FlowFixMe = evaluateJsonModule(sources[0]);
+  expect(Object.keys(value)).toEqual(['__proto__', 'a']);
+  expect(value.x).toBeUndefined();
+});
+
+test('keeps JSON without a `__proto__` key as an object literal', () => {
+  const sources = [
+    '{"a": 1}',
+    '{"description": "__proto__ is not a key here", "e": "\\u00e9"}',
+    '[{"__proto": 1}, "\\u005f"]',
+    '\uFEFF{"a": 1}',
+  ];
+
+  for (const source of sources) {
+    expect(JsFileWrapping.jsonToCommonJS(source)).toBe(
+      `module.exports = ${source};`,
+    );
+  }
 });
 
 test('wraps a JSON file with the static Hermes module factory', () => {
