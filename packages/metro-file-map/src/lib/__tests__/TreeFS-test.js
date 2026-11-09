@@ -208,6 +208,8 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       [p('/project/foo'), p('/project/foo'), []],
       [p('/project/foo/'), p('/project/foo'), []],
       [p('/project/root/outside'), p('/outside'), [p('/project/root')]],
+      [p('/project/foo/.'), p('/project/foo'), []],
+      [p('/project/foo/..'), p('/project'), []],
     ])(
       'returns type: d for %s',
       (givenPath, expectedRealPath, expectedSymlinks) => {
@@ -621,6 +623,30 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       expect(tfs.resolveSymlinks(p(mixedPath))).toEqual(p(expected));
     });
   });
+
+  test('hierarchicalLookup from a path ending in "." finds its own directory', () => {
+    expect(
+      tfs.hierarchicalLookup(p('/project/node_modules/pkg/.'), 'package.json', {
+        breakOnSegment: 'node_modules',
+        subpathType: 'f',
+      }),
+    ).toEqual({
+      absolutePath: p('/project/node_modules/pkg/package.json'),
+      containerRelativePath: '',
+    });
+  });
+
+  test.each([p('sub/.'), p('sub/..')])(
+    'hierarchicalLookup of a subpath ending in an indirection, %s',
+    subpath => {
+      expect(
+        tfs.hierarchicalLookup(p('/project/foo/.bar'), subpath, {
+          breakOnSegment: null,
+          subpathType: 'd',
+        }),
+      ).toBeNull();
+    },
+  );
 
   describe('hierarchicalLookup', () => {
     let tfs: TreeFSType;
