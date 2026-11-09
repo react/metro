@@ -54,7 +54,7 @@ test('builds a bundle that runs under a global prefix', async () => {
     dev: true,
   });
 
-  const context: {[string]: unknown} = {};
+  const context: {[key: string]: unknown} = {};
   // Exports cross realms, so compare their serialized form.
   expect(JSON.stringify(execBundle(prefixed.code, context))).toBe(
     JSON.stringify(execBundle(unprefixed.code)),
