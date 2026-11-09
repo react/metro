@@ -44,6 +44,53 @@ function isRegularFile(node: FileNode): boolean {
 // gives a longer target on every follow, and so never repeats one.
 const MAX_SYMLINK_FOLLOWS = 40;
 
+type LookupOptions = Readonly<{
+  collectAncestors: ?Array<{
+    ancestorOfRootIdx: ?number,
+    node: DirectoryNode,
+    normalPath: string,
+    segmentName: string,
+  }>,
+  // Record into which the canonical paths of traversed symlinks will be
+  // added, as `content`. Null for performance if not needed.
+  observations: ?Observations,
+
+  // Low-level callbacks called on mutations of TreeFS data.
+  // Null for performance if not needed.
+  changeListener: ?FileSystemListener,
+
+  // Like lstat vs stat, whether to follow a symlink at the basename of
+  // the given path, or return the details of the symlink itself.
+  followLeaf: boolean,
+  // Whether to (recursively) create missing directory nodes during
+  // traversal, useful when adding files. Will throw if an expected
+  // directory is already present as a file.
+  makeDirectories: boolean,
+  // Resume traversal from a known directory node, whose normal path is
+  // the prefix of the requested path ending at pathIdx - 1.
+  start: ?{
+    ancestorOfRootIdx: ?number,
+    node: DirectoryNode,
+    pathIdx: number,
+  },
+}>;
+
+// All fields of `LookupOptions` are required so that each lookup passes the same
+// object shape, which keeps reading them monomorphic on the hottest path in
+// resolution. Extend these rather than writing out new options.
+const LOOKUP_OPTIONS: LookupOptions = {
+  collectAncestors: null,
+  observations: null,
+  changeListener: null,
+  followLeaf: true,
+  makeDirectories: false,
+  start: null,
+};
+const LOOKUP_OPTIONS_NO_FOLLOW_LEAF: LookupOptions = {
+  ...LOOKUP_OPTIONS,
+  followLeaf: false,
+};
+
 // Null if not within the ancestor ('' is the root).
 function relativeToAncestor(
   normalPath: string,
@@ -187,9 +234,10 @@ export default class TreeFS implements MutableFileSystem {
    * Segments beyond the first missing one are kept as given.
    */
   resolveSymlinks(mixedPath: Path): Path {
-    const result = this.#lookupByNormalPath(this.#normalizePath(mixedPath), {
-      followLeaf: true,
-    });
+    const result = this.#lookupByNormalPath(
+      this.#normalizePath(mixedPath),
+      LOOKUP_OPTIONS,
+    );
     if (result.exists) {
       return this.#pathUtils.normalToAbsolute(result.canonicalPath);
     }
@@ -270,9 +318,10 @@ export default class TreeFS implements MutableFileSystem {
       // '..' holds files outside rootDir, which are not under this subpath
       rootNode = new Map([...this.#rootNode].filter(([name]) => name !== '..'));
     } else if (subpath != null) {
-      const lookupResult = this.#lookupByNormalPath(subpath, {
-        followLeaf: false,
-      });
+      const lookupResult = this.#lookupByNormalPath(
+        subpath,
+        LOOKUP_OPTIONS_NO_FOLLOW_LEAF,
+      );
       if (!lookupResult.exists) {
         // Directory doesn't exist, nothing to compare - all files are new
         return {changedFiles, removedFiles};
@@ -338,9 +387,7 @@ export default class TreeFS implements MutableFileSystem {
     mixedPath: Path,
   ): Promise<?{sha1: string, content?: Buffer}> {
     const normalPath = this.#normalizePath(mixedPath);
-    const result = this.#lookupByNormalPath(normalPath, {
-      followLeaf: true,
-    });
+    const result = this.#lookupByNormalPath(normalPath, LOOKUP_OPTIONS);
     if (!result.exists || isDirectory(result.node)) {
       return null;
     }
@@ -381,10 +428,10 @@ export default class TreeFS implements MutableFileSystem {
 
   lookup(mixedPath: Path, observations?: ?Observations): LookupResult {
     const normalPath = this.#normalizePath(mixedPath);
-    const result = this.#lookupByNormalPath(normalPath, {
-      observations,
-      followLeaf: true,
-    });
+    const result = this.#lookupByNormalPath(
+      normalPath,
+      observations == null ? LOOKUP_OPTIONS : {...LOOKUP_OPTIONS, observations},
+    );
     if (!result.exists) {
       if (observations) {
         observations.existence.add(result.canonicalMissingPath);
@@ -419,7 +466,10 @@ export default class TreeFS implements MutableFileSystem {
   }
 
   linkStats(mixedPath: Path): ?FileStats {
-    const fileMetadata = this.#getFileData(mixedPath, {followLeaf: false});
+    const fileMetadata = this.#getFileData(
+      mixedPath,
+      LOOKUP_OPTIONS_NO_FOLLOW_LEAF,
+    );
     if (fileMetadata == null) {
       return null;
     }
@@ -446,7 +496,10 @@ export default class TreeFS implements MutableFileSystem {
       rootDir = null,
     } = opts;
     const normalRoot = rootDir == null ? '' : this.#normalizePath(rootDir);
-    const contextRootResult = this.#lookupByNormalPath(normalRoot);
+    const contextRootResult = this.#lookupByNormalPath(
+      normalRoot,
+      LOOKUP_OPTIONS,
+    );
     if (!contextRootResult.exists) {
       return;
     }
@@ -516,6 +569,7 @@ export default class TreeFS implements MutableFileSystem {
     // Walk the tree to find the *real* path of the parent node, creating
     // directories as we need.
     const parentDirNode = this.#lookupByNormalPath(path.dirname(normalPath), {
+      ...LOOKUP_OPTIONS,
       changeListener,
       makeDirectories: true,
     });
@@ -542,6 +596,12 @@ export default class TreeFS implements MutableFileSystem {
     let lastDir: ?string;
     let directoryNode: DirectoryNode;
 
+    const directoryOptions: LookupOptions = {
+      ...LOOKUP_OPTIONS_NO_FOLLOW_LEAF,
+      changeListener,
+      makeDirectories: true,
+    };
+
     for (const [normalPath, metadata] of addedOrModifiedFiles) {
       const lastSepIdx = normalPath.lastIndexOf(path.sep);
       const dirname = lastSepIdx === -1 ? '' : normalPath.slice(0, lastSepIdx);
@@ -549,11 +609,7 @@ export default class TreeFS implements MutableFileSystem {
         lastSepIdx === -1 ? normalPath : normalPath.slice(lastSepIdx + 1);
 
       if (directoryNode == null || dirname !== lastDir) {
-        const lookup = this.#lookupByNormalPath(dirname, {
-          changeListener,
-          followLeaf: false,
-          makeDirectories: true,
-        });
+        const lookup = this.#lookupByNormalPath(dirname, directoryOptions);
         if (!lookup.exists) {
           // This should only be possible if the input is non-real and
           // lookup hits a broken symlink.
@@ -599,7 +655,10 @@ export default class TreeFS implements MutableFileSystem {
     normalPath: string,
     changeListener?: FileSystemListener,
   ): void {
-    const result = this.#lookupByNormalPath(normalPath, {followLeaf: false});
+    const result = this.#lookupByNormalPath(
+      normalPath,
+      LOOKUP_OPTIONS_NO_FOLLOW_LEAF,
+    );
     if (!result.exists) {
       return;
     }
@@ -652,36 +711,7 @@ export default class TreeFS implements MutableFileSystem {
    */
   #lookupByNormalPath(
     requestedNormalPath: string,
-    opts: {
-      collectAncestors?: Array<{
-        ancestorOfRootIdx: ?number,
-        node: DirectoryNode,
-        normalPath: string,
-        segmentName: string,
-      }>,
-      // Record into which the canonical paths of traversed symlinks will be
-      // added, as `content`. Omit for performance if not needed.
-      observations?: ?Observations,
-
-      // Low-level callbacks called on mutations of TreeFS data.
-      // Omit for performance if not needed.
-      changeListener?: FileSystemListener,
-
-      // Like lstat vs stat, whether to follow a symlink at the basename of
-      // the given path, or return the details of the symlink itself.
-      followLeaf?: boolean,
-      // Whether to (recursively) create missing directory nodes during
-      // traversal, useful when adding files. Will throw if an expected
-      // directory is already present as a file.
-      makeDirectories?: boolean,
-      // Resume traversal from a known directory node, whose normal path is
-      // the prefix of the requested path ending at pathIdx - 1.
-      start?: ?{
-        ancestorOfRootIdx: ?number,
-        node: DirectoryNode,
-        pathIdx: number,
-      },
-    } = {followLeaf: true, makeDirectories: false},
+    opts: LookupOptions,
   ):
     | {
         ancestorOfRootIdx: ?number,
@@ -973,6 +1003,7 @@ export default class TreeFS implements MutableFileSystem {
     }> = [];
     const normalPath = this.#normalizePath(mixedStartPath);
     const closestLookup = this.#lookupByNormalPath(normalPath, {
+      ...LOOKUP_OPTIONS,
       collectAncestors: ancestorsOfInput,
       observations,
     });
@@ -1206,6 +1237,7 @@ export default class TreeFS implements MutableFileSystem {
     const {normalPath: normalSubpath, collapsedSegments} =
       this.#pathUtils.joinNormalToRelative(normalCandidatePath, subpath);
     const lookupResult = this.#lookupByNormalPath(normalSubpath, {
+      ...LOOKUP_OPTIONS,
       observations,
       // Traverse only the subpath, starting from the candidate node. If the
       // join collapsed segments (e.g. '..' + 'root/package.json'), the
@@ -1347,9 +1379,10 @@ export default class TreeFS implements MutableFileSystem {
           // are at /foo/bar/baz where baz -> '..' - that should resolve to
           // /foo, not /foo/bar). We *can* use _lookupByNormalPath to walk to
           // the canonical symlink, and then to its target.
-          const resolved = this.#lookupByNormalPath(normalPathOfSymlink, {
-            followLeaf: true,
-          });
+          const resolved = this.#lookupByNormalPath(
+            normalPathOfSymlink,
+            LOOKUP_OPTIONS,
+          );
           if (!resolved.exists) {
             // Symlink goes nowhere, nothing to report.
             continue;
@@ -1392,12 +1425,10 @@ export default class TreeFS implements MutableFileSystem {
 
   #getFileData(
     filePath: Path,
-    opts: {followLeaf: boolean} = {followLeaf: true},
+    opts: LookupOptions = LOOKUP_OPTIONS,
   ): ?FileMetadata {
     const normalPath = this.#normalizePath(filePath);
-    const result = this.#lookupByNormalPath(normalPath, {
-      followLeaf: opts.followLeaf,
-    });
+    const result = this.#lookupByNormalPath(normalPath, opts);
     if (!result.exists || isDirectory(result.node)) {
       return null;
     }
