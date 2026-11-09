@@ -75,6 +75,30 @@ describe('cacheManager', () => {
     );
   });
 
+  test('creates different cache file paths under Bun', () => {
+    const nodePath = DiskCacheManager.getCacheFilePath(
+      buildParameters,
+      'file-prefix',
+      '/',
+    );
+    // `process.versions` is read-only, but its properties can be defined.
+    Object.defineProperty(process.versions, 'bun', {
+      configurable: true,
+      value: '1.3.0',
+    });
+    let bunPath;
+    try {
+      bunPath = DiskCacheManager.getCacheFilePath(
+        buildParameters,
+        'file-prefix',
+        '/',
+      );
+    } finally {
+      delete process.versions.bun;
+    }
+    expect(bunPath).toBe(nodePath + '-bun');
+  });
+
   test('creates different cache file paths for different roots', () => {
     const cacheManager1 = new DiskCacheManager(
       {
