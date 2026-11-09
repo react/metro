@@ -1341,7 +1341,8 @@ export default class TreeFS implements MutableFileSystem {
 
   /**
    * Enumerate paths under a given node, including symlinks and through
-   * symlinks (if `follow` is enabled).
+   * symlinks (if `follow` is enabled). One generator with an explicit stack,
+   * because a generator per directory level makes this several times slower.
    */
   *#pathIterator(
     iterationRootNode: DirectoryNode,
@@ -1358,17 +1359,32 @@ export default class TreeFS implements MutableFileSystem {
     followedLinks: ReadonlySet<FileMetadata> = new Set(),
   ): Iterable<Path> {
     const pathSep = opts.alwaysYieldPosix ? '/' : path.sep;
-    const prefixWithSep = pathPrefix === '' ? pathPrefix : pathPrefix + pathSep;
-    for (const [name, node] of this.#directoryNodeIterator(
-      iterationRootNode,
-      iterationRootParentNode,
-      ancestorOfRootIdx,
-    )) {
+    const stack = [
+      {
+        entries: this.#directoryNodeIterator(
+          iterationRootNode,
+          iterationRootParentNode,
+          ancestorOfRootIdx,
+        ),
+        parentNode: iterationRootParentNode,
+        ancestorOfRootIdx,
+        prefixWithSep: pathPrefix === '' ? '' : pathPrefix + pathSep,
+        followedLinks,
+      },
+    ];
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const next = frame.entries.next();
+      if (next.done === true) {
+        stack.pop();
+        continue;
+      }
+      const [name, node] = next.value;
       if (opts.subtreeOnly && name === '..') {
         continue;
       }
 
-      const nodePath = prefixWithSep + name;
+      const nodePath = frame.prefixWithSep + name;
       if (!isDirectory(node)) {
         if (isRegularFile(node)) {
           // regular file
@@ -1408,31 +1424,39 @@ export default class TreeFS implements MutableFileSystem {
           } else if (
             opts.recursive &&
             opts.follow &&
-            !followedLinks.has(node)
+            !frame.followedLinks.has(node)
           ) {
             // Symlink points to a directory - iterate over its contents using
             // the path where we found the symlink as a prefix.
-            yield* this.#pathIterator(
-              target,
-              resolved.parentNode,
-              resolved.ancestorOfRootIdx,
-              opts,
-              nodePath,
-              new Set([...followedLinks, node]),
-            );
+            stack.push({
+              entries: this.#directoryNodeIterator(
+                target,
+                resolved.parentNode,
+                resolved.ancestorOfRootIdx,
+              ),
+              parentNode: resolved.parentNode,
+              ancestorOfRootIdx: resolved.ancestorOfRootIdx,
+              prefixWithSep: nodePath + pathSep,
+              followedLinks: new Set([...frame.followedLinks, node]),
+            });
           }
         }
       } else if (opts.recursive) {
-        yield* this.#pathIterator(
-          node,
-          iterationRootParentNode,
-          ancestorOfRootIdx != null && ancestorOfRootIdx > 0
-            ? ancestorOfRootIdx - 1
-            : null,
-          opts,
-          nodePath,
-          followedLinks,
-        );
+        const childAncestorOfRootIdx =
+          frame.ancestorOfRootIdx != null && frame.ancestorOfRootIdx > 0
+            ? frame.ancestorOfRootIdx - 1
+            : null;
+        stack.push({
+          entries: this.#directoryNodeIterator(
+            node,
+            frame.parentNode,
+            childAncestorOfRootIdx,
+          ),
+          parentNode: frame.parentNode,
+          ancestorOfRootIdx: childAncestorOfRootIdx,
+          prefixWithSep: nodePath + pathSep,
+          followedLinks: frame.followedLinks,
+        });
       }
     }
   }
