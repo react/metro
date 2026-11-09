@@ -85,13 +85,27 @@ function find(options: CrawlerOptions): Promise<FileData> {
               activeCalls--;
 
               if (!err && stat) {
-                result.set(childNormal, [
-                  stat.mtime.getTime(),
-                  stat.size,
-                  0,
-                  null,
-                  isSymbolicLink ? 1 : 0,
-                ]);
+                // On Windows, readdir reports every reparse point as a link,
+                // including cloud placeholders (OneDrive, Dropbox) that lstat
+                // reports as regular files or directories, and that readlink
+                // rejects with EINVAL. Trust lstat over the dirent.
+                const isLink = isSymbolicLink && stat.isSymbolicLink();
+                if (isSymbolicLink && !isLink && stat.isDirectory()) {
+                  search(
+                    file,
+                    file + path.sep,
+                    childNormal,
+                    isWithinRoot || childNormal === '',
+                  );
+                } else if (isLink || exts.has(ext)) {
+                  result.set(childNormal, [
+                    stat.mtime.getTime(),
+                    stat.size,
+                    0,
+                    null,
+                    isLink ? 1 : 0,
+                  ]);
+                }
               }
               resolveIfDone();
             });
