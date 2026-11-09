@@ -1279,6 +1279,8 @@ export default class TreeFS implements MutableFileSystem {
     yield* this.#metadataIterator(this.#rootNode, opts);
   }
 
+  // One generator with an explicit stack, because a generator per directory
+  // level makes visiting every file several times slower.
   *#metadataIterator(
     rootNode: DirectoryNode,
     opts: Readonly<{includeSymlinks: boolean, includeNodeModules: boolean}>,
@@ -1288,7 +1290,16 @@ export default class TreeFS implements MutableFileSystem {
     canonicalPath: string,
     metadata: FileMetadata,
   }> {
-    for (const [name, node] of rootNode) {
+    const entriesStack = [rootNode.entries()];
+    const prefixStack = [prefix];
+    while (entriesStack.length > 0) {
+      const next = entriesStack[entriesStack.length - 1].next();
+      if (next.done === true) {
+        entriesStack.pop();
+        prefixStack.pop();
+        continue;
+      }
+      const [name, node] = next.value;
       if (
         !opts.includeNodeModules &&
         isDirectory(node) &&
@@ -1296,9 +1307,12 @@ export default class TreeFS implements MutableFileSystem {
       ) {
         continue;
       }
-      const prefixedName = prefix === '' ? name : prefix + path.sep + name;
+      const currentPrefix = prefixStack[prefixStack.length - 1];
+      const prefixedName =
+        currentPrefix === '' ? name : currentPrefix + path.sep + name;
       if (isDirectory(node)) {
-        yield* this.#metadataIterator(node, opts, prefixedName);
+        entriesStack.push(node.entries());
+        prefixStack.push(prefixedName);
       } else if (isRegularFile(node) || opts.includeSymlinks) {
         yield {baseName: name, canonicalPath: prefixedName, metadata: node};
       }
