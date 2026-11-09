@@ -204,9 +204,13 @@ test('defines a `__proto__` key in JSON as an own property, like JSON.parse', ()
     expect(evaluateJsonModule('\uFEFF' + source)).toEqual(JSON.parse(source));
   }
 
-  const value: $FlowFixMe = evaluateJsonModule(sources[0]);
+  const value = evaluateJsonModule(sources[0]);
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('Expected the JSON module to export an object');
+  }
   expect(Object.keys(value)).toEqual(['__proto__', 'a']);
-  expect(value.x).toBeUndefined();
+  // `in` also sees inherited properties, so this catches a polluted prototype.
+  expect('x' in value).toBe(false);
 });
 
 test('keeps JSON without a `__proto__` key as an object literal', () => {
