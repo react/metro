@@ -225,6 +225,41 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
+    test('symlink into itself is missing, rather than following it forever', () => {
+      const tfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('a'), [123, 0, 0, null, 'a/b', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(tfs.lookup(p('/project/a/file.js'))).toEqual({exists: false});
+    });
+
+    test.each([
+      [40, true],
+      [41, false],
+    ])('a chain of %i symlinks: exists %s', (length, exists) => {
+      const links: Array<[CanonicalPath, FileMetadata]> = [];
+      for (let i = 0; i < length; i++) {
+        const target = i === length - 1 ? 'file.js' : 'link' + (i + 1);
+        links.push([p('link' + i), [123, 0, 0, null, target, null]]);
+      }
+      const tfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('file.js'), [123, 0, 0, null, 0, null]],
+          ...links,
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(tfs.lookup(p('/project/link0'))).toMatchObject({exists});
+    });
+
     test('traversing the same symlink multiple times does not imply a cycle', () => {
       expect(
         tfs.lookup(p('/project/foo/owndir/owndir/another.js')),

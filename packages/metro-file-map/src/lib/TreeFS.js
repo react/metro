@@ -39,6 +39,11 @@ function isRegularFile(node: FileNode): boolean {
   return node[H.SYMLINK] === 0;
 }
 
+// The limit Linux applies when resolving a path. A count rather than a set of
+// visited targets because a symlink into itself (`a -> a/b`) gives a longer
+// target on every follow, and so never repeats one.
+const MAX_SYMLINK_FOLLOWS = 40;
+
 // Null if not within the ancestor ('' is the root).
 function relativeToAncestor(
   normalPath: string,
@@ -701,8 +706,7 @@ export default class TreeFS implements MutableFileSystem {
       } {
     // We'll update the target if we hit a symlink.
     let targetNormalPath = requestedNormalPath;
-    // Lazy-initialised set of seen target paths, to detect symlink cycles.
-    let seen: ?Set<string>;
+    let followedSymlinks = 0;
     // Pointer to the first character of the current path segment in
     // targetNormalPath.
     let fromIdx = opts.start?.pathIdx ?? 0;
@@ -892,12 +896,7 @@ export default class TreeFS implements MutableFileSystem {
         // onwards.
         unseenPathFromIdx = normalSymlinkTarget.lastIndexOf(path.sep) + 1;
 
-        if (seen == null) {
-          // Optimisation: set this lazily only when we've encountered a symlink
-          seen = new Set([requestedNormalPath]);
-        }
-        if (seen.has(targetNormalPath)) {
-          // TODO: Warn `Symlink cycle detected: ${[...seen, node].join(' -> ')}`
+        if (++followedSymlinks > MAX_SYMLINK_FOLLOWS) {
           return {
             canonicalMissingPath: targetNormalPath,
             exists: false,
@@ -905,7 +904,6 @@ export default class TreeFS implements MutableFileSystem {
             remainingPath: '',
           };
         }
-        seen.add(targetNormalPath);
         fromIdx = 0;
         parentNode = this.#rootNode;
         ancestorOfRootIdx = 0;
