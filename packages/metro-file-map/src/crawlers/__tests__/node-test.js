@@ -89,6 +89,35 @@ jest.mock('node:fs', () => {
             ]),
           0,
         );
+      } else if (dir === mockP('/project/cloud')) {
+        // On Windows, readdir reports cloud placeholders (OneDrive etc.) as
+        // links, though lstat says they are plain files and directories.
+        setTimeout(
+          () =>
+            callback(
+              null,
+              ['placeholder.js', 'notes.md', 'directory', 'symlink'].map(
+                name => ({
+                  isDirectory: () => false,
+                  isSymbolicLink: () => true,
+                  name,
+                }),
+              ),
+            ),
+          0,
+        );
+      } else if (dir === mockP('/project/cloud/directory')) {
+        setTimeout(
+          () =>
+            callback(null, [
+              {
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                name: 'inside.js',
+              },
+            ]),
+          0,
+        );
       } else if (dir === mockP('/project/prototype')) {
         setTimeout(
           () =>
@@ -287,6 +316,31 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
     expect(fs.readdir).toHaveBeenCalledTimes(2);
     // once for strawberry.js, once for tomato.js
     expect(fs.lstat).toHaveBeenCalledTimes(2);
+  });
+
+  test('trusts lstat over dirents that report placeholders as links', async () => {
+    nodeCrawl = require('../node').default;
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      includeSymlinks: true,
+      rootDir,
+      roots: [p('/project/cloud')],
+    });
+
+    // placeholder.js is a plain file, so it is not read as a link; notes.md
+    // is a plain file without a listed extension; directory is crawled; only
+    // the real symlink is recorded as one.
+    expect(changedFiles).toEqual(
+      createMap({
+        'cloud/placeholder.js': [expect.any(Number), 42, 0, null, 0],
+        'cloud/directory/inside.js': [expect.any(Number), 42, 0, null, 0],
+        'cloud/symlink': [expect.any(Number), 42, 0, null, 1],
+      }),
+    );
   });
 
   test('aborts the crawl on pre-aborted signal', async () => {
