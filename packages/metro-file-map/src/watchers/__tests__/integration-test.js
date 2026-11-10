@@ -247,13 +247,13 @@ describe.each(Object.keys(WATCHERS))(
               join(watchRoot, 'existing', 'to-move-out'),
               join(outsideDir, 'moved-out'),
             ),
-          watcherName === 'Native'
-            ? // NativeWatcher only emits an event for the directory, not contents
-              [[join('existing', 'to-move-out'), 'delete']]
-            : [
+          watcherName === 'Watchman'
+            ? [
                 [join('existing', 'to-move-out'), 'delete'],
                 [join('existing', 'to-move-out', 'file.js'), 'delete'],
-              ],
+              ]
+            : // Only the directory - the file map removes its contents
+              [[join('existing', 'to-move-out'), 'delete']],
           {rejectUnexpected: true},
         );
       },
