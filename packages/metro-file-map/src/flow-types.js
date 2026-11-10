@@ -343,8 +343,13 @@ export type IgnoreMatcher = (item: string) => boolean;
 export type FileData = Map<CanonicalPath, FileMetadata>;
 
 export type FileMetadata = [
+  // `mtime` and `size` are null for a regular file that hasn't been stat'd,
+  // as the node crawler lists regular files without a stat. Such a file has
+  // no derived data: its mtime and size are recorded, from a stat taken before
+  // it's read, when a SHA-1 or plugin data is first derived from it. So a file
+  // without an mtime has nothing that could be stale.
   /* mtime */ ?number,
-  /* size */ number,
+  /* size */ ?number,
   /* visited */ 0 | 1,
   /* sha1 */ ?string,
   // A string is the symlink's target, lexically resolved to a normal path with
@@ -425,6 +430,9 @@ export interface FileSystem {
   /**
    * Analogous to posix lstat. If the file at `file` is a symlink, return
    * information about the symlink without following it.
+   *
+   * `modifiedTime` and `size` are null for a regular file that hasn't been
+   * stat'd (see `FileMetadata`).
    */
   linkStats(file: Path): ?FileStats;
 
@@ -680,11 +688,15 @@ export type WorkerMessage = Readonly<{
   filePath: string,
   maybeReturnContent: boolean,
   pluginsToRun: ReadonlyArray<number>,
+  // Whether to stat the file before reading it, and return the result as
+  // `stats`. Set for a file that hasn't been stat'd (see `FileMetadata`).
+  returnStats: boolean,
 }>;
 
 export type WorkerMetadata = Readonly<{
   sha1?: ?string,
   content?: ?Buffer,
+  stats?: ?Readonly<{mtime: number, size: number}>,
   pluginData?: ReadonlyArray<V8Serializable>,
 }>;
 

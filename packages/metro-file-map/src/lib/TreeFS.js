@@ -359,6 +359,14 @@ export default class TreeFS implements MutableFileSystem {
           // Types and modified time match - not changed.
           changedFiles.delete(canonicalPath);
         } else if (
+          isRegularFile(metadata) &&
+          newMetadata[H.MTIME] == null &&
+          metadata[H.MTIME] == null
+        ) {
+          // A regular file not stat'd before or now, so nothing could be
+          // stale (see `FileMetadata`).
+          changedFiles.delete(canonicalPath);
+        } else if (
           newMetadata[H.SHA1] != null &&
           newMetadata[H.SHA1] === metadata[H.SHA1] &&
           metadata[H.VISITED] === 1
