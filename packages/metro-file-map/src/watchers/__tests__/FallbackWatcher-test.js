@@ -147,6 +147,36 @@ describe('FallbackWatcher', () => {
     expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
   });
 
+  // Every watch is established by the time `startWatching` resolves, on
+  // Windows too, so there's no need to wait for them to settle. (Not so on
+  // macOS, where `fs.watch` starts FSEvents streams asynchronously, but
+  // FallbackWatcher isn't used there.)
+  (process.platform === 'darwin' ? test.skip : test)(
+    'reports changes made as soon as it has started',
+    async () => {
+      const dirs = Array.from({length: 20}, (_, i) => join(watchRoot, `d${i}`));
+      for (const dir of dirs) {
+        await mkdir(dir);
+      }
+      const touched = new Set<string>();
+      watcher?.onFileEvent(event => {
+        if (event.event === 'touch' && event.metadata?.type === 'f') {
+          touched.add(event.relativePath);
+        }
+      });
+
+      await watcher?.startWatching();
+      for (const dir of dirs) {
+        await writeFile(join(dir, 'file.js'), '');
+      }
+
+      await waitFor(() => touched.size === dirs.length);
+      expect(touched).toEqual(
+        new Set(dirs.map((_, i) => join(`d${i}`, 'file.js'))),
+      );
+    },
+  );
+
   // A watch we cannot establish - one directory over the inotify limit, say -
   // must not cost us the files under it, which would silently truncate the
   // file map.
