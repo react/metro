@@ -264,6 +264,48 @@ describe('FallbackWatcher', () => {
     });
   });
 
+  describe('fed by a crawl', () => {
+    beforeEach(() => {
+      watcher = new FallbackWatcher(watchRoot, {
+        crawlFed: true,
+        included: null,
+        ignored: /ignored/,
+        watchmanDeferStates: [],
+      });
+    });
+
+    test('watches only what the crawl reports', async () => {
+      await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+      await mkdir(join(watchRoot, 'ignored', 'c'), {recursive: true});
+      await watcher?.startWatching();
+      expect(calls).toEqual([`watch:${watchRoot}`]);
+
+      const crawlWatcher = watcher?.getCrawlWatcher();
+      crawlWatcher?.onDirectory(join(watchRoot, 'a'));
+      crawlWatcher?.onDirectory(join(watchRoot, 'ignored'));
+      crawlWatcher?.onDirectory(join(watchRoot, 'ignored', 'c'));
+
+      expect(calls).toEqual([
+        `watch:${watchRoot}`,
+        `watch:${join(watchRoot, 'a')}`,
+      ]);
+    });
+
+    // end() may be called while the crawl is still listing directories
+    test('watches nothing once stopped', async () => {
+      await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+      await watcher?.startWatching();
+      const crawlWatcher = watcher?.getCrawlWatcher();
+      await watcher?.stopWatching();
+      calls = [];
+
+      crawlWatcher?.onDirectory(join(watchRoot, 'a'));
+      await crawlWatcher?.onSkippedDirectory(join(watchRoot, 'a'));
+
+      expect(calls.filter(call => call.startsWith('watch:'))).toEqual([]);
+    });
+  });
+
   describe('after a directory watcher errors', () => {
     let erroredWatcher: ErroredFSWatcher;
 
