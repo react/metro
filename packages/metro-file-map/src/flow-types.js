@@ -655,6 +655,14 @@ export type WatcherBackendChangeEvent =
       root: string,
     }>;
 
+// `Omit` of each member separately, so that each event keeps its own properties.
+type OmitRoot<Event> = Event extends {readonly root: string, ...}
+  ? Omit<Event, 'root'>
+  : Event;
+
+export type WatcherBackendChangeEventWithoutRoot =
+  OmitRoot<WatcherBackendChangeEvent>;
+
 export type WatcherBackendOptions = Readonly<{
   ignored: ?RegExp,
   included: ?WatcherIncludedFiles,

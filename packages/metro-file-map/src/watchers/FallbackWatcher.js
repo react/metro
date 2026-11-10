@@ -15,7 +15,7 @@
 
 import type {
   ChangeEventMetadata,
-  WatcherBackendChangeEvent,
+  WatcherBackendChangeEventWithoutRoot,
 } from '../flow-types';
 import type {FSWatcher, Stats} from 'node:fs';
 
@@ -454,7 +454,7 @@ export default class FallbackWatcher extends AbstractWatcher {
    *
    * See also note above for DEBOUNCE_MS.
    */
-  #emitEvent(change: Omit<WatcherBackendChangeEvent, 'root'>) {
+  #emitEvent(change: WatcherBackendChangeEventWithoutRoot) {
     const {event, relativePath} = change;
     const key = event + '-' + relativePath;
     const existingTimer = this.#changeTimers.get(key);
