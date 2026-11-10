@@ -9,7 +9,7 @@
  */
 
 import type {
-  WatcherBackendChangeEvent,
+  WatcherBackendChangeEventWithoutRoot,
   WatcherIncludedFiles,
 } from '../flow-types';
 import type {FSWatcher} from 'node:fs';
@@ -136,7 +136,7 @@ export default class NativeWatcher extends AbstractWatcher {
   async #handleEvent(
     event: string,
     relativePath: string,
-  ): Promise<?Omit<WatcherBackendChangeEvent, 'root'>> {
+  ): Promise<?WatcherBackendChangeEventWithoutRoot> {
     const absolutePath = path.resolve(this.root, relativePath);
     if (this.doIgnore(relativePath)) {
       debug(
