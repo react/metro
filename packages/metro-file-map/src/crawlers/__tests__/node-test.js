@@ -401,6 +401,37 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
     expect(fs.lstat).toHaveBeenCalledTimes(2);
   });
 
+  test("reports each root's directories and symlinks to its watcher", async () => {
+    nodeCrawl = require('../node').default;
+    const reported: Array<Array<string>> = [[], []];
+    const watcherFor = (i: number) => ({
+      onDirectory: (dir: string) => reported[i].push(dir),
+      onSkippedDirectory: async () => {},
+      onSymlink: (symlink: string) => reported[i].push(`link:${symlink}`),
+    });
+
+    await nodeCrawl(
+      {
+        console: global.console,
+        previousState: {fileSystem: emptyFS},
+        extensions: ['js'],
+        ignore: pearMatcher,
+        rootDir,
+        roots: [p('/project/fruits'), p('/project/prototype')],
+      },
+      [watcherFor(0), watcherFor(1)],
+    );
+
+    expect(reported).toEqual([
+      [
+        p('/project/fruits'),
+        p('/project/fruits/directory'),
+        `link:${p('/project/fruits/symlink')}`,
+      ],
+      [p('/project/prototype')],
+    ]);
+  });
+
   test('aborts the crawl on pre-aborted signal', async () => {
     nodeCrawl = require('../node').default;
     const err = new Error('aborted for test');
