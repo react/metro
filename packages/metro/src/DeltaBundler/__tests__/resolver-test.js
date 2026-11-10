@@ -559,6 +559,30 @@ function dep(name: string): TransformResultDependency {
         });
       });
 
+      test.each([
+        ['foo/.', 'lib/m.js'],
+        ['foo/lib/.', 'lib/index.js'],
+      ])(
+        'resolves %s, a package subpath ending in "."',
+        async (name, expected) => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {
+              foo: {
+                'package.json': JSON.stringify({name: 'foo', main: 'lib/m.js'}),
+                lib: {'m.js': '', 'index.js': ''},
+              },
+            },
+          });
+
+          resolver = await createResolver();
+          expect(resolver.resolve(p('/root/index.js'), dep(name))).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/node_modules/foo/' + expected),
+          });
+        },
+      );
+
       test('finds the appropriate node_modules folder', async () => {
         setMockFileSystem({
           node_modules: {

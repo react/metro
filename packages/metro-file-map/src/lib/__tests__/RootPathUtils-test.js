@@ -54,6 +54,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     p('/'),
     p('/outside'),
     p('/outside/'),
+    p('/project/..'),
+    p('/project/root/../..'),
+    p('/project/root/a.'),
+    p('/project/root/foo..'),
+    p('/project/root/...'),
   ])(`absoluteToNormal('%s') is correct and optimised`, absolutePath => {
     const rootDir = p('/project/root');
     pathUtils = new RootPathUtils(rootDir);
@@ -80,6 +85,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       p('/project/root/../a./foo'),
       p('/project/root/.././foo'),
       p('/project/root/.././foo/'),
+      p('/project/root/.'),
+      p('/project/root/baz/.'),
+      p('/project/root/baz/..'),
+      p('/project/root/../root2/.'),
+      p('/project/root/../root2/..'),
     ])(`absoluteToNormal('%s') falls back to path.relative`, absolutePath => {
       let expected = mockPathModule.relative(rootDir, absolutePath);
       // Unlike path.relative, we expect to preserve trailing separators.
@@ -136,6 +146,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
             p('../../project/root'),
             p('../../project/root/'),
             p('../../..'),
+            p('.'),
+            p('foo/.'),
+            p('foo/..'),
+            p('../root/.'),
+            p('../root/..'),
             // On POSIX, `..` at the root re-enters the root
             ...(platform === 'posix'
               ? [p('../../../normal/path'), p('../../../normal/path/')]
@@ -163,6 +178,20 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       },
     );
   });
+
+  test.each([
+    [p('..'), p('foo/.'), p('../foo/.')],
+    [p('..'), p('foo/..'), p('../foo/..')],
+  ])(
+    'joinNormalToRelative(%s, %s) keeps a final indirection, as %s',
+    (normalPath, relativePath, expected) => {
+      pathUtils = new RootPathUtils(p('/project/root'));
+      expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
+        collapsedSegments: 0,
+        normalPath: expected,
+      });
+    },
+  );
 
   if (platform === 'win32') {
     describe('cross-drive absolute paths (Windows)', () => {
