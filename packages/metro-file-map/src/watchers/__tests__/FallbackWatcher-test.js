@@ -129,6 +129,24 @@ describe('FallbackWatcher', () => {
     });
   });
 
+  test('starts without stat-ing what it finds', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'file.js'), '');
+    await fs.promises.symlink('file.js', join(watchRoot, 'a', 'link.js'));
+    // Windows reports a directory as changed when it is listed. Withhold those
+    // events, whose handling stats the directory.
+    for (const dir of ['', 'a', join('a', 'b')]) {
+      mutedDirs.add(join(watchRoot, dir));
+    }
+    const lstat = jest.spyOn(fs.promises, 'lstat');
+
+    await watcher?.startWatching();
+
+    // Types come from the listings
+    expect(lstat).not.toHaveBeenCalled();
+    expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
+  });
+
   // A watch we cannot establish - one directory over the inotify limit, say -
   // must not cost us the files under it, which would silently truncate the
   // file map.
