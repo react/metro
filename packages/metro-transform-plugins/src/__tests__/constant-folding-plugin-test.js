@@ -11,11 +11,13 @@
 
 'use strict';
 
-const {compare} = require('../__mocks__/test-helpers');
+const {compare, transformToAst} = require('../__mocks__/test-helpers');
 const constantFoldingPlugin = require('../constant-folding-plugin');
+const generate = require('@babel/generator').default;
 const nullishCoalescingOperatorPlugin =
   // $FlowFixMe[untyped-import] @babel/plugin-syntax-nullish-coalescing-operator (in OSS only)
   require('@babel/plugin-syntax-nullish-coalescing-operator').default;
+const vm = require('node:vm');
 
 describe('constant expressions', () => {
   test('can optimize conditional expressions with constant conditions', () => {
@@ -134,6 +136,25 @@ describe('constant expressions', () => {
     `;
 
     compare([constantFoldingPlugin], code, code);
+  });
+
+  test.each([
+    ['a parameter', '(function (undefined) { return void 0; })(123);'],
+    [
+      'an enclosing parameter',
+      '(function (undefined) { return () => void 0; })(123)();',
+    ],
+    [
+      'a lexical binding in its temporal dead zone',
+      '(() => { const value = void 0; let undefined = 123; return value; })();',
+    ],
+  ])('preserves void when undefined is shadowed by %s', (_name, code) => {
+    const ast = transformToAst([constantFoldingPlugin], code, {});
+    expect(vm.runInNewContext(generate(ast).code)).toBeUndefined();
+  });
+
+  test('folds literal void to undefined when it is not shadowed', () => {
+    compare([constantFoldingPlugin], 'void 0;', 'undefined;');
   });
 
   test('folds literal void expressions', () => {
