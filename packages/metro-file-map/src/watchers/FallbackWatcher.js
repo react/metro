@@ -17,7 +17,7 @@ import type {
   ChangeEventMetadata,
   WatcherBackendChangeEvent,
 } from '../flow-types';
-import type {FSWatcher, Stats} from 'node:fs';
+import type {Dirent, FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
 import * as common from './common';
@@ -41,9 +41,9 @@ const RECRAWL_EVENT = common.RECRAWL_EVENT;
 const DEBOUNCE_MS = 100;
 
 /**
- * The number of entries `recReaddir` visits at a time. Enough to keep the libuv
- * thread pool saturated, few enough that a large tree does not queue up an
- * unbounded number of fs requests.
+ * The number of directories `recReaddir` lists at a time. Enough to keep the
+ * libuv thread pool saturated, few enough that a large tree does not queue up
+ * an unbounded number of listings.
  */
 const CRAWL_CONCURRENCY = 32;
 
@@ -352,45 +352,10 @@ export default class FallbackWatcher extends AbstractWatcher {
         }
         await recReaddir(
           path.resolve(this.root, relativePath),
-          (dir, stats) => {
-            if (this.#watchdir(dir)) {
-              this.#emitEvent({
-                event: TOUCH_EVENT,
-                relativePath: path.relative(this.root, dir),
-                metadata: {
-                  modifiedTime: stats.mtime.getTime(),
-                  size: stats.size,
-                  type: 'd',
-                },
-              });
-            }
-          },
-          (file, stats) => {
-            if (this.#register(file, 'f')) {
-              this.#emitEvent({
-                event: TOUCH_EVENT,
-                relativePath: path.relative(this.root, file),
-                metadata: {
-                  modifiedTime: stats.mtime.getTime(),
-                  size: stats.size,
-                  type: 'f',
-                },
-              });
-            }
-          },
-          (symlink, stats) => {
-            if (this.#register(symlink, 'l')) {
-              this.emitFileEvent({
-                event: TOUCH_EVENT,
-                relativePath: path.relative(this.root, symlink),
-                metadata: {
-                  modifiedTime: stats.mtime.getTime(),
-                  size: stats.size,
-                  type: 'l',
-                },
-              });
-            }
-          },
+          dir => (this.#watchdir(dir) ? this.#touch(dir, 'd') : null),
+          file => (this.#register(file, 'f') ? this.#touch(file, 'f') : null),
+          symlink =>
+            this.#register(symlink, 'l') ? this.#touch(symlink, 'l') : null,
           this.#checkedEmitError,
           this.ignored,
         );
@@ -448,6 +413,32 @@ export default class FallbackWatcher extends AbstractWatcher {
   }
 
   /**
+   * Report an entry of a newly found directory, with its stats.
+   */
+  async #touch(
+    fullPath: string,
+    type: ChangeEventMetadata['type'],
+  ): Promise<void> {
+    let stats;
+    try {
+      stats = await fsPromises.lstat(fullPath);
+    } catch (error) {
+      this.#checkedEmitError(error);
+      return;
+    }
+    const change: Omit<WatcherBackendChangeEvent, 'root'> = {
+      event: TOUCH_EVENT,
+      relativePath: path.relative(this.root, fullPath),
+      metadata: {modifiedTime: stats.mtime.getTime(), size: stats.size, type},
+    };
+    if (type === 'l') {
+      this.emitFileEvent(change);
+    } else {
+      this.#emitEvent(change);
+    }
+  }
+
+  /**
    * Emits the given event after debouncing, to emit only the latest
    * information when we receive several events in quick succession. E.g.,
    * Linux emits two events for every new file.
@@ -480,6 +471,8 @@ export default class FallbackWatcher extends AbstractWatcher {
 function isIgnorableFileError(error: Error | {code: string}) {
   return (
     error.code === 'ENOENT' ||
+    // A directory replaced by a file, which its parent's watch reports.
+    error.code === 'ENOTDIR' ||
     // Workaround Windows EPERM on watched folder deletion, and when
     // reading locked files (pending further writes or pending deletion).
     // In such cases, we'll receive a subsequent event when the file is
@@ -491,49 +484,53 @@ function isIgnorableFileError(error: Error | {code: string}) {
 }
 
 /**
- * Traverse a directory recursively, reporting every entry with its stats.
+ * Traverse a directory recursively, reporting each entry by the type `readdir`
+ * gives it, without a stat. (Node stats an entry itself where the file system
+ * doesn't give its type.) The traversal waits for any promise a callback
+ * returns.
  *
- * Entries are visited depth-first by a bounded pool, so neither the queue of
- * pending entries nor the number of in-flight fs requests grows with the size
- * of the tree.
+ * Directories are visited depth-first by a bounded pool, so neither the queue
+ * of pending directories nor the number of listings in flight grows with the
+ * size of the tree.
  */
 async function recReaddir(
   root: string,
-  dirCallback: (dirPath: string, stats: Stats) => void,
-  fileCallback: (filePath: string, stats: Stats) => void,
-  symlinkCallback: (symlinkPath: string, stats: Stats) => void,
+  dirCallback: (dirPath: string) => ?Promise<void>,
+  fileCallback: (filePath: string) => ?Promise<void>,
+  symlinkCallback: (symlinkPath: string) => ?Promise<void>,
   errorCallback: (error: Error) => void,
   ignored: ?RegExp,
 ): Promise<void> {
+  const isIgnored = (dir: string) =>
+    ignored != null && common.posixPathMatchesPattern(ignored, dir);
+  if (isIgnored(root)) {
+    return;
+  }
   const pending = [root];
 
-  const visit = async (entry: string) => {
-    let stats;
-    let names;
+  const visit = async (dir: string) => {
+    // Report the directory before listing it. A consumer that starts watching
+    // here would otherwise miss anything written between the two.
+    const reported = [dirCallback(dir)];
+    let entries: ReadonlyArray<Dirent> = [];
     try {
-      stats = await fsPromises.lstat(entry);
-      if (!stats.isDirectory()) {
-        if (stats.isSymbolicLink()) {
-          symlinkCallback(entry, stats);
-        } else if (stats.isFile()) {
-          fileCallback(entry, stats);
-        }
-        return;
-      }
-      if (ignored != null && common.posixPathMatchesPattern(ignored, entry)) {
-        return;
-      }
-      // Report the directory before listing it. A consumer that starts watching
-      // here would otherwise miss anything written between the two.
-      dirCallback(entry, stats);
-      names = await fsPromises.readdir(entry);
+      entries = await fsPromises.readdir(dir, {withFileTypes: true});
     } catch (error) {
       errorCallback(error);
-      return;
     }
-    for (const name of names) {
-      pending.push(path.join(entry, name));
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name.toString());
+      if (entry.isDirectory()) {
+        if (!isIgnored(entryPath)) {
+          pending.push(entryPath);
+        }
+      } else if (entry.isSymbolicLink()) {
+        reported.push(symlinkCallback(entryPath));
+      } else if (entry.isFile()) {
+        reported.push(fileCallback(entryPath));
+      }
     }
+    await Promise.all(reported);
   };
 
   await new Promise((resolve, reject) => {
