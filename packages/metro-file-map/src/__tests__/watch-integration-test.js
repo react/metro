@@ -48,7 +48,13 @@ async function until(label: string, check: () => boolean): Promise<void> {
 
 const exists = (normalPath: string) => fileSystem.exists(abs(normalPath));
 
-function createFileMap({retainAllFiles}: {retainAllFiles: boolean}) {
+function createFileMap({
+  retainAllFiles,
+  roots = [rootDir],
+}: {
+  retainAllFiles: boolean,
+  roots?: ReadonlyArray<string>,
+}) {
   return new FileMap({
     cacheManagerFactory: () => ({
       read: async () => null,
@@ -67,7 +73,7 @@ function createFileMap({retainAllFiles}: {retainAllFiles: boolean}) {
     maxWorkers: 1,
     retainAllFiles,
     rootDir,
-    roots: [rootDir],
+    roots,
     useWatchman: false,
     watch: true,
   });
@@ -171,5 +177,31 @@ describe('FileMap in watch mode', () => {
     write('src/marker.js');
     await until('marker.js added', () => exists('src/marker.js'));
     expect(exists('ignored-dir/y.js')).toBe(false);
+  });
+
+  // The crawl skips node_modules without `retainAllFiles`, but changes in it
+  // are still reported in watch mode.
+  test('watches a directory the crawl skips', async () => {
+    write('node_modules/pkg/index.js');
+    await fileMap.end();
+    fileMap = createFileMap({retainAllFiles: false});
+    ({fileSystem} = await fileMap.build());
+    expect(exists('node_modules/pkg/index.js')).toBe(false);
+
+    write('node_modules/pkg/new.js');
+    await until('new.js added', () => exists('node_modules/pkg/new.js'));
+  });
+
+  // As Metro passes `watchFolders`, without normalizing them
+  test('watches every directory under a root given unnormalized', async () => {
+    await fileMap.end();
+    fileMap = createFileMap({
+      retainAllFiles: true,
+      roots: [rootDir + path.sep],
+    });
+    ({fileSystem} = await fileMap.build());
+
+    write('src/deep/a/b/c/new.js');
+    await until('new.js added', () => exists('src/deep/a/b/c/new.js'));
   });
 });
