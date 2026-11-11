@@ -78,7 +78,9 @@ import debugModule from 'debug';
 import * as jscSafeUrl from 'jsc-safe-url';
 import {Logger} from 'metro-core';
 import mime from 'mime-types';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import querystring from 'node:querystring';
@@ -138,6 +140,7 @@ export type ServerOptions = Readonly<{
 
 const DELTA_ID_HEADER = 'X-Metro-Delta-ID';
 const FILES_CHANGED_COUNT_HEADER = 'X-Metro-Files-Changed-Count';
+const PREWARM_COUNT = 3;
 
 type FetchTiming = {
   graphId: GraphId,
@@ -160,6 +163,10 @@ export default class Server {
   _rootUrlMap: RootUrlMap;
   _fetchTimings: Array<FetchTiming>;
   _activeFetchCount: number;
+  _prewarmQueue: Array<BundleOptions>;
+  _prewarmInFlight: Map<GraphId, Promise<void>>;
+  _prewarmActive: boolean;
+  _prewarmCancelled: boolean;
 
   constructor(config: ConfigT, options?: ServerOptions) {
     this._config = config;
@@ -190,6 +197,10 @@ export default class Server {
     this._isEnded = false;
     this._fetchTimings = [];
     this._activeFetchCount = 0;
+    this._prewarmQueue = [];
+    this._prewarmInFlight = new Map();
+    this._prewarmActive = true;
+    this._prewarmCancelled = false;
 
     // TODO(T34760917): These two properties should eventually be instantiated
     // elsewhere and passed as parameters, since they are also needed by
@@ -201,12 +212,193 @@ export default class Server {
       watch: options ? options.watch : undefined,
     });
     this._nextBundleBuildNumber = 1;
+    this._startPrewarm();
   }
 
   async end() {
+    this._cancelPrewarmRest();
     if (!this._isEnded) {
       await this._bundler.end();
       this._isEnded = true;
+    }
+  }
+
+  _prewarmStorePath(): string {
+    const projectHash = crypto
+      .createHash('sha1')
+      .update(this._config.projectRoot)
+      .digest('hex');
+    return path.join(
+      os.tmpdir(),
+      'metro-cache',
+      `recent-bundles-${projectHash}.json`,
+    );
+  }
+
+  _normalizeBundleOptions(options: BundleOptions): BundleOptions {
+    return {
+      ...Server.DEFAULT_BUNDLE_OPTIONS,
+      customResolverOptions: options.customResolverOptions,
+      customTransformOptions: options.customTransformOptions,
+      dev: options.dev,
+      entryFile: options.entryFile,
+      excludeSource: options.excludeSource,
+      inlineSourceMap: options.inlineSourceMap,
+      lazy: options.lazy,
+      minify: options.minify,
+      modulesOnly: options.modulesOnly,
+      onProgress: null,
+      platform: options.platform,
+      runModule: options.runModule,
+      shallow: options.shallow,
+      sourceMapUrl: null,
+      sourceUrl: null,
+      sourcePaths: options.sourcePaths,
+      unstable_transformProfile: options.unstable_transformProfile,
+    };
+  }
+
+  _bundleOptionsKey(options: BundleOptions): string {
+    return JSON.stringify(this._normalizeBundleOptions(options));
+  }
+
+  _readRecentBundles(): Array<BundleOptions> {
+    try {
+      const parsed = JSON.parse(
+        fs.readFileSync(this._prewarmStorePath(), 'utf8'),
+      );
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      const recent = [];
+      for (const entry of parsed) {
+        if (
+          entry != null &&
+          typeof entry === 'object' &&
+          typeof entry.entryFile === 'string'
+        ) {
+          recent.push(this._normalizeBundleOptions(entry));
+        }
+      }
+      return recent;
+    } catch {
+      return [];
+    }
+  }
+
+  _recordBundleUse(bundleOptions: BundleOptions): void {
+    try {
+      const key = this._bundleOptionsKey(bundleOptions);
+      const recent = this._readRecentBundles().filter(
+        entry => this._bundleOptionsKey(entry) !== key,
+      );
+      recent.unshift(this._normalizeBundleOptions(bundleOptions));
+      const storePath = this._prewarmStorePath();
+      fs.mkdirSync(path.dirname(storePath), {recursive: true});
+      fs.writeFileSync(
+        storePath,
+        JSON.stringify(recent.slice(0, PREWARM_COUNT)),
+      );
+    } catch {}
+  }
+
+  _cancelPrewarmRest(): void {
+    this._prewarmCancelled = true;
+    this._prewarmQueue = [];
+  }
+
+  _startPrewarm(): void {
+    this._prewarmQueue = this._readRecentBundles().slice(0, PREWARM_COUNT);
+    this._runPrewarm().catch(() => {});
+  }
+
+  async _runPrewarm(): Promise<void> {
+    try {
+      await this._bundler.ready();
+    } catch {
+      this._prewarmActive = false;
+      return;
+    }
+    if (this._prewarmCancelled) {
+      this._prewarmActive = false;
+      return;
+    }
+    while (this._prewarmQueue.length > 0) {
+      if (this._prewarmCancelled) {
+        break;
+      }
+      const options = this._prewarmQueue[0];
+      const {entryFile, graphOptions, resolverOptions, transformOptions} =
+        splitBundleOptions(options);
+      let resolvedEntryFilePath;
+      let graphId;
+      try {
+        resolvedEntryFilePath = await this._resolveRelativePath(entryFile, {
+          relativeTo: 'server',
+          resolverOptions,
+          transformOptions,
+        });
+        graphId = getGraphId(resolvedEntryFilePath, transformOptions, {
+          unstable_allowRequireContext:
+            this._config.transformer.unstable_allowRequireContext,
+          resolverOptions,
+          shallow: graphOptions.shallow,
+          lazy: graphOptions.lazy,
+        });
+      } catch {
+        this._prewarmQueue.shift();
+        continue;
+      }
+      if (this._prewarmCancelled || this._prewarmQueue[0] !== options) {
+        break;
+      }
+      if (this._bundler.getRevisionByGraphId(graphId) != null) {
+        this._prewarmQueue.shift();
+        continue;
+      }
+      const build = this._bundler
+        .initializeGraph(
+          resolvedEntryFilePath,
+          transformOptions,
+          resolverOptions,
+          {
+            onProgress: null,
+            shallow: graphOptions.shallow,
+            lazy: graphOptions.lazy,
+          },
+        )
+        .then(() => {});
+      this._prewarmInFlight.set(graphId, build);
+      this._prewarmQueue.shift();
+      try {
+        await build;
+      } catch {}
+      this._prewarmInFlight.delete(graphId);
+    }
+    this._prewarmQueue = [];
+    this._prewarmActive = false;
+  }
+
+  async _joinPrewarm(
+    graphId: GraphId,
+    bundleOptions: BundleOptions,
+  ): Promise<void> {
+    if (!this._prewarmActive) {
+      return;
+    }
+    const key = this._bundleOptionsKey(bundleOptions);
+    const queuedIndex = this._prewarmQueue.findIndex(
+      entry => this._bundleOptionsKey(entry) === key,
+    );
+    if (queuedIndex !== -1) {
+      this._prewarmQueue.splice(queuedIndex, 1);
+    }
+    this._cancelPrewarmRest();
+    const inFlight = this._prewarmInFlight.get(graphId);
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch {}
     }
   }
 
@@ -957,6 +1149,7 @@ export default class Server {
         this._fetchTimings.push(fetchTiming);
         this._activeFetchCount++;
 
+        await this._joinPrewarm(graphId, bundleOptions);
         result = await build(startContext);
       } catch (error) {
         const formattedError = formatBundlingError(error);
@@ -1184,7 +1377,15 @@ export default class Server {
         bundle: bundleCode,
       };
     },
-    finish({req, mres, serializerOptions, result, bundlePerfLogger}) {
+    finish: ({
+      req,
+      mres,
+      serializerOptions,
+      result,
+      bundleOptions,
+      bundlePerfLogger,
+    }) => {
+      this._recordBundleUse(bundleOptions);
       const bundleByteLength = Buffer.byteLength(result.bundle);
       bundlePerfLogger.annotate({
         int: {
