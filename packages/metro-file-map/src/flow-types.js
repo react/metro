@@ -51,7 +51,9 @@ export interface CacheManager {
    * crawler - i.e. internal state reflects the current file system state.
    *
    * getSnapshot may be retained and called at any time before end(), such as
-   * in response to eventSource 'change' events.
+   * in response to eventSource 'change' events. What it returns is the file
+   * map's own state, not a copy, and changes once control returns to the
+   * event loop. Serialize it before then, or copy it to keep it.
    */
   write(
     getSnapshot: () => CacheData,
@@ -392,6 +394,7 @@ export interface FileSystem {
     removedFiles: Set<string>,
     filesToStat: Map<string, number>,
   };
+  // The file system's own data, not a copy (see `CacheManager.write`).
   getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): ?string;
   getOrComputeSha1(file: Path): Promise<?{sha1: string, content?: Buffer}>;
