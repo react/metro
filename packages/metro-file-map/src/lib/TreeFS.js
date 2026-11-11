@@ -306,9 +306,11 @@ export default class TreeFS implements MutableFileSystem {
   ): {
     changedFiles: FileData,
     removedFiles: Set<string>,
+    filesToStat: Map<string, number>,
   } {
     const changedFiles: FileData = new Map(files);
     const removedFiles: Set<string> = new Set();
+    const filesToStat: Map<string, number> = new Map();
     const subpath = options?.subpath;
 
     // If a subpath is specified, start iteration from that node
@@ -324,13 +326,13 @@ export default class TreeFS implements MutableFileSystem {
       );
       if (!lookupResult.exists) {
         // Directory doesn't exist, nothing to compare - all files are new
-        return {changedFiles, removedFiles};
+        return {changedFiles, removedFiles, filesToStat};
       }
       if (!isDirectory(lookupResult.node)) {
         // A file or symlink has been replaced by this directory, so it is
         // removed and everything under the directory is new.
         removedFiles.add(lookupResult.canonicalPath);
-        return {changedFiles, removedFiles};
+        return {changedFiles, removedFiles, filesToStat};
       }
       rootNode = lookupResult.node;
       prefix = lookupResult.canonicalPath;
@@ -359,6 +361,14 @@ export default class TreeFS implements MutableFileSystem {
           // Types and modified time match - not changed.
           changedFiles.delete(canonicalPath);
         } else if (
+          isRegularFile(metadata) &&
+          newMetadata[H.MTIME] == null &&
+          metadata[H.MTIME] == null
+        ) {
+          // A regular file not stat'd before or now, so nothing could be
+          // stale (see `FileMetadata`).
+          changedFiles.delete(canonicalPath);
+        } else if (
           newMetadata[H.SHA1] != null &&
           newMetadata[H.SHA1] === metadata[H.SHA1] &&
           metadata[H.VISITED] === 1
@@ -367,6 +377,13 @@ export default class TreeFS implements MutableFileSystem {
           const updatedMetadata = [...metadata];
           updatedMetadata[H.MTIME] = newMetadata[H.MTIME];
           changedFiles.set(canonicalPath, updatedMetadata);
+        } else if (
+          isRegularFile(metadata) &&
+          newMetadata[H.MTIME] == null &&
+          metadata[H.MTIME] != null
+        ) {
+          // Stat'd before but not now, so it may be unmodified.
+          filesToStat.set(canonicalPath, metadata[H.MTIME]);
         }
       } else {
         removedFiles.add(canonicalPath);
@@ -375,6 +392,7 @@ export default class TreeFS implements MutableFileSystem {
     return {
       changedFiles,
       removedFiles,
+      filesToStat,
     };
   }
 
