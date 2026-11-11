@@ -13,6 +13,7 @@ import type {
   CacheData,
   ChangeEvent,
   CrawlerOptions,
+  FileData,
   FileMetadata,
   WatcherBackendOptions,
 } from '../flow-types';
@@ -28,6 +29,16 @@ jest.useRealTimers();
 let mockFiles: Map<string, number>;
 // Absolute path -> normal (rootDir-relative, POSIX) symlink target.
 let mockSymlinks: Map<string, string>;
+
+// What the node crawler returns of `getDifference`'s result.
+const toCrawlResult = ({
+  changedFiles,
+  removedFiles,
+}: {
+  changedFiles: FileData,
+  removedFiles: Set<string>,
+  ...
+}) => ({changedFiles, removedFiles});
 
 const mockNodeCrawler = jest.fn((options: CrawlerOptions) => {
   const path = require('node:path');
@@ -69,9 +80,11 @@ const mockNodeCrawler = jest.fn((options: CrawlerOptions) => {
     }
   }
   return Promise.resolve(
-    options.previousState.fileSystem.getDifference(files, {
-      subpath: options.subpath,
-    }),
+    toCrawlResult(
+      options.previousState.fileSystem.getDifference(files, {
+        subpath: options.subpath,
+      }),
+    ),
   );
 });
 
@@ -316,14 +329,16 @@ describe('FileMap.addRoot', () => {
           new Promise(resolve => {
             finishCrawl = () =>
               resolve(
-                options.previousState.fileSystem.getDifference(
-                  new Map([
-                    [
-                      path.relative(ROOT_DIR, EXTERNAL_FILE),
-                      [1, 42, 0, null, 0],
-                    ],
-                  ]),
-                  {subpath: options.subpath},
+                toCrawlResult(
+                  options.previousState.fileSystem.getDifference(
+                    new Map([
+                      [
+                        path.relative(ROOT_DIR, EXTERNAL_FILE),
+                        [1, 42, 0, null, 0],
+                      ],
+                    ]),
+                    {subpath: options.subpath},
+                  ),
                 ),
               );
             resolveStarted();
@@ -376,14 +391,16 @@ describe('FileMap.addRoot', () => {
     // Like Watchman, list a root's files under its real path.
     mockNodeCrawler.mockImplementationOnce(options =>
       Promise.resolve(
-        options.previousState.fileSystem.getDifference(
-          new Map([
-            [
-              path.relative(ROOT_DIR, path.join(SRC_DIR, 'index.js')),
-              [1, 42, 0, null, 0],
-            ],
-            [path.relative(ROOT_DIR, realFile), [1, 42, 0, null, 0]],
-          ]),
+        toCrawlResult(
+          options.previousState.fileSystem.getDifference(
+            new Map([
+              [
+                path.relative(ROOT_DIR, path.join(SRC_DIR, 'index.js')),
+                [1, 42, 0, null, 0],
+              ],
+              [path.relative(ROOT_DIR, realFile), [1, 42, 0, null, 0]],
+            ]),
+          ),
         ),
       ),
     );
