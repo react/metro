@@ -13,21 +13,26 @@
 const run = require('../run');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const METRO_CLI = path.resolve(__dirname, '../../../packages/metro/src/cli.js');
+const METRO_BABEL_CONFIG = path.resolve(__dirname, '../../../babel.config.js');
+const APP_DIR = path.join(os.tmpdir(), 'metro-benchmark-patches-app');
+const APP_MODULE_COUNT = 5000;
 
-const HELP = `  bundling_speed [--build-command=CMD] <entry>:<platform>...
-    Cold-builds each bundle in prod and dev from the current directory and
-    reports wall time, CPU time (user + sys) and bundle size, with Welch's t
+const HELP = `  bundling_speed [--build-command=CMD]
+    Cold-builds an app of ${APP_MODULE_COUNT} generated modules in prod and dev
+    and reports wall time, CPU time (user + sys) and bundle size, with Welch's t
     vs unpatched, and whether every run's bundle is byte-identical to
-    unpatched. Requires GNU time at /usr/bin/time.
+    unpatched. The app is generated in ${APP_DIR}.
+    The build's stdout and stderr are pipes. Requires GNU time at
+    /usr/bin/time.
 
-    <entry>:<platform>   Entry point as passed to \`metro build\`, and
-                         platform. E.g. index.js:ios
     --build-command=CMD  Space-separated command that builds a bundle and
                          accepts \`metro build\` arguments (default: this
-                         checkout's \`metro build\`).
+                         checkout's \`metro build\`). It runs from the app's
+                         directory, so paths in it must be absolute.
 `;
 
 const OPTIONS = {'build-command': {type: 'string'}};
@@ -49,52 +54,80 @@ function delta(sample, base) {
 }
 
 function parseTargets(specs, options) {
+  if (specs.length > 0) {
+    throw new Error(
+      `bundling_speed takes no targets, got "${specs.join(' ')}"`,
+    );
+  }
   const buildCommand = options['build-command']?.split(' ') ?? [
     process.execPath,
     METRO_CLI,
     'build',
   ];
-  return specs.flatMap(spec => {
-    const [entry, platform] = spec.split(':');
-    if (platform == null) {
-      throw new Error(`Missing platform in "${spec}"`);
-    }
-    return [false, true].map(dev => ({
-      buildCommand,
-      dev,
-      entry,
-      name: `${path.basename(entry, '.js')}-${platform}-${dev ? 'dev' : 'prod'}`,
-      platform,
-    }));
-  });
+  return [false, true].map(dev => ({
+    buildCommand,
+    dev,
+    name: `app-${dev ? 'dev' : 'prod'}`,
+  }));
+}
+
+// Generates the app: module i requires modules 2i + 1 and 2i + 2, so the
+// modules form a binary tree rooted at the entry point, m0.js.
+function setUp() {
+  fs.rmSync(APP_DIR, {force: true, recursive: true});
+  fs.mkdirSync(APP_DIR, {recursive: true});
+  fs.writeFileSync(
+    path.join(APP_DIR, 'package.json'),
+    '{"name": "app", "private": true}\n',
+  );
+  // Metro's polyfills are Flow source, compiled with Metro's Babel config
+  fs.writeFileSync(
+    path.join(APP_DIR, 'babel.config.js'),
+    `module.exports = require(${JSON.stringify(METRO_BABEL_CONFIG)});\n`,
+  );
+  fs.writeFileSync(path.join(APP_DIR, '.watchmanconfig'), '{}\n');
+  for (let i = 0; i < APP_MODULE_COUNT; i++) {
+    const children = [2 * i + 1, 2 * i + 2].filter(
+      child => child < APP_MODULE_COUNT,
+    );
+    fs.writeFileSync(
+      path.join(APP_DIR, `m${i}.js`),
+      [
+        ...children.map(child => `const m${child} = require('./m${child}');`),
+        `module.exports = function m${i}(n) {`,
+        `  return [n, ${children.map(child => `m${child}(n + 1)`).join(', ')}].join(',');`,
+        '};',
+        '',
+      ].join('\n'),
+    );
+  }
 }
 
 function measure(bundle, outDir) {
   const outFile = path.join(outDir, `${bundle.name}.js`);
   const timeFile = path.join(outDir, '.time');
-  const log = fs.openSync(path.join(outDir, `${bundle.name}.log`), 'w');
-  try {
-    run(
-      '/usr/bin/time',
-      [
-        '-f',
-        '%e %U %S',
-        '-o',
-        timeFile,
-        ...bundle.buildCommand,
-        '--reset-cache',
-        '--max-workers=16',
-        `--platform=${bundle.platform}`,
-        ...(bundle.dev ? ['--dev', '--no-minify'] : ['--no-dev', '--minify']),
-        '-O',
-        outFile,
-        bundle.entry,
-      ],
-      {stdio: ['ignore', log, log]},
-    );
-  } finally {
-    fs.closeSync(log);
-  }
+  const {stdout, stderr} = run(
+    '/usr/bin/time',
+    [
+      '-f',
+      '%e %U %S',
+      '-o',
+      timeFile,
+      ...bundle.buildCommand,
+      '--reset-cache',
+      '--max-workers=16',
+      '--platform=ios',
+      ...(bundle.dev ? ['--dev', '--no-minify'] : ['--no-dev', '--minify']),
+      '-O',
+      outFile,
+      'm0.js',
+    ],
+    {cwd: APP_DIR, maxBuffer: 1024 ** 3, stdio: ['ignore', 'pipe', 'pipe']},
+  );
+  fs.writeFileSync(
+    path.join(outDir, `${bundle.name}.log`),
+    Buffer.concat([stdout, stderr]),
+  );
   const [wall, user, sys] = fs
     .readFileSync(timeFile, 'utf8')
     .trim()
@@ -161,4 +194,5 @@ module.exports = {
   formatTable,
   measure,
   parseTargets,
+  setUp,
 };

@@ -20,9 +20,10 @@ const BENCHMARKS = {bundling_speed: bundlingSpeed};
 
 const DIST_DIR = path.join(__dirname, 'dist');
 const PATCHES_DIR = path.join(__dirname, 'patches');
+const BASE_PATCH = path.join(PATCHES_DIR, 'base.patch');
 const METRO_ROOT = path.resolve(__dirname, '../..');
 
-const HELP = `Usage: node benchmark-patches.js <benchmark> [--runs=N] <target>...
+const HELP = `Usage: node benchmark-patches.js <benchmark> [--runs=N] [<target>...]
 
 Runs <benchmark> on each target, unpatched and with every *.patch in the
 patches directory applied, and prints a table comparing each patch with
@@ -30,6 +31,10 @@ unpatched.
 
 Patches directory:
   ${PATCHES_DIR}
+
+base.patch in the patches directory, if present, is applied to every variant,
+including unpatched, and is not a variant itself. Other patches are diffs on
+top of it.
 
 Each target gets one unmeasured warmup run, then variants are interleaved in a
 rotating order. dist/ is cleared on start and holds the last run's outputs
@@ -101,21 +106,37 @@ function main() {
   if (!Number.isInteger(runs) || runs < 2) {
     throw new Error(`--runs must be an integer >= 2, got "${values.runs}"`);
   }
-  if (specs.length === 0) {
-    throw new Error(`Missing targets for ${benchmarkName}`);
-  }
   const targets = benchmark.parseTargets(specs, values);
   const variants = [
     {name: 'unpatched', patchFile: null},
     ...fs
       .readdirSync(PATCHES_DIR)
-      .filter(file => file.endsWith('.patch'))
+      .filter(file => file.endsWith('.patch') && file !== 'base.patch')
       .sort()
       .map(file => ({
         name: path.basename(file, '.patch'),
         patchFile: path.join(PATCHES_DIR, file),
       })),
   ];
+  const hasBasePatch = fs.existsSync(BASE_PATCH);
+
+  // Ctrl-C reaches the benchmark child; the finally blocks revert the patches.
+  process.on('SIGINT', () => {});
+
+  if (hasBasePatch) {
+    patch(BASE_PATCH, {dryRun: true});
+    patch(BASE_PATCH);
+  }
+  try {
+    measureVariants(benchmark, targets, variants, runs);
+  } finally {
+    if (hasBasePatch) {
+      patch(BASE_PATCH, {reverse: true});
+    }
+  }
+}
+
+function measureVariants(benchmark, targets, variants, runs) {
   for (const {patchFile} of variants) {
     if (patchFile != null) {
       patch(patchFile, {dryRun: true});
@@ -126,10 +147,7 @@ function main() {
   for (const variant of variants) {
     fs.mkdirSync(path.join(DIST_DIR, variant.name), {recursive: true});
   }
-
-  // Ctrl-C reaches the benchmark child; the finally block below reverts the
-  // patch.
-  process.on('SIGINT', () => {});
+  benchmark.setUp();
 
   const results = new Map(
     targets.map(target => [
