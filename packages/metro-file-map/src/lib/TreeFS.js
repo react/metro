@@ -210,6 +210,10 @@ export default class TreeFS implements MutableFileSystem {
     return this.#cloneTree(this.#rootNode);
   }
 
+  getSerializableState(): CacheData['fileSystemData'] {
+    return this.#rootNode;
+  }
+
   static fromDeserializedSnapshot(args: DeserializedSnapshotInput): TreeFS {
     const {rootDir, fileSystemData, processFile} = args;
     const tfs = new TreeFS({processFile, rootDir});

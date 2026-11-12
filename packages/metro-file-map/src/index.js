@@ -911,7 +911,7 @@ export default class FileMap extends EventEmitter {
    * 4. Serialize a snapshot of our raw data via the configured cache manager
    */
   async #takeSnapshotAndPersist(
-    fileSystem: FileSystem,
+    fileSystem: MutableFileSystem,
     clocks: WatchmanClocks,
     plugins: ReadonlyArray<IndexedPlugin>,
     changedSinceCacheRead: boolean,
@@ -920,7 +920,7 @@ export default class FileMap extends EventEmitter {
     await this.#cacheManager.write(
       () => ({
         clocks: new Map(clocks),
-        fileSystemData: fileSystem.getSerializableSnapshot(),
+        fileSystemData: fileSystem.getSerializableState(),
         plugins: new Map(
           plugins.map(({plugin}) => [
             plugin.name,
