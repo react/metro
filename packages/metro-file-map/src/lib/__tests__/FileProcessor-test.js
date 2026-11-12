@@ -20,6 +20,7 @@ import H from '../../constants';
 import DependencyPlugin from '../../plugins/DependencyPlugin';
 import HastePlugin from '../../plugins/HastePlugin';
 import path from 'node:path';
+import nullthrows from 'nullthrows';
 
 const MockJestWorker = jest.fn().mockImplementation(() => ({
   processFile: async () => ({}),
@@ -335,13 +336,16 @@ describe('processBatch', () => {
 
     test('built-in plugins only run on them when a SHA-1 is needed', async () => {
       const pluginWorkers = [
-        new HastePlugin({
-          enableHastePackages: true,
-          failValidationOnConflicts: false,
-          hasteImplModulePath: require.resolve('../../__tests__/haste_impl.js'),
-          platforms: new Set(),
-          rootDir: defaultOptions.rootDir,
-        }).getWorker(),
+        nullthrows(
+          new HastePlugin({
+            enableHastePackages: true,
+            failValidationOnConflicts: false,
+            hasteImplModulePath:
+              require.resolve('../../__tests__/haste_impl.js'),
+            platforms: new Set(),
+            rootDir: defaultOptions.rootDir,
+          }).getWorker(),
+        ),
         new DependencyPlugin({
           computeDependencies: true,
           dependencyExtractor: null,
