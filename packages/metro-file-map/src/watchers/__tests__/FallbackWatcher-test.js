@@ -50,6 +50,19 @@ describe('FallbackWatcher', () => {
     expect(indexOfCall('watch', dir)).toBeLessThan(indexOfCall('readdir', dir));
   };
 
+  // As Metro does, include only some files, so that a directory or symlink
+  // isn't included by name.
+  const createJsWatcher = () =>
+    new FallbackWatcher(watchRoot, {
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      ignored: null,
+      watchmanDeferStates: [],
+    });
+
   beforeEach(async () => {
     watchRoot = await createTempWatchRoot('Fallback', false);
     calls = [];
@@ -223,6 +236,116 @@ describe('FallbackWatcher', () => {
       }
     },
   );
+
+  test('reports the deletion of a directory it cannot watch', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'b', 'file.js'), '');
+    watchFailure = {code: 'ENOSPC', path: join(watchRoot, 'a')};
+    watcher = createJsWatcher();
+    watcher.onError(() => {});
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    await watcher?.startWatching();
+    // Wait until the root's watch is reporting changes
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    await rm(join(watchRoot, 'a'), {recursive: true});
+
+    // The file map removes everything under it
+    await waitFor(() => events.includes('delete:a'));
+    expect(events).toContain('delete:a');
+  });
+
+  // As npm replaces a linked package with a copy. The file map holds the
+  // symlink, so it must reconcile the path.
+  test('requests a recrawl of a symlink replaced by a directory', async () => {
+    const link = join(watchRoot, 'link');
+    await mkdir(join(watchRoot, 'target'));
+    await fs.promises.symlink(join(watchRoot, 'target'), link, 'junction');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher?.onFileEvent(event => {
+      events.push(event);
+    });
+    // Report the change only once the swap is complete
+    mutedDirs.add(watchRoot);
+    // A junction on Windows, which is removed as a directory
+    await (
+      process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
+    )(link);
+    await mkdir(link);
+    await writeFile(join(link, 'file.js'), '');
+    listeners.get(watchRoot)?.('rename', 'link');
+
+    await waitFor(() => events.some(event => event.event === 'recrawl'));
+    expect(events).toContainEqual({
+      event: 'recrawl',
+      relativePath: 'link',
+      root: watchRoot,
+    });
+  });
+
+  // As `ln -sfn` does. The file map holds the symlink, so it must be told of
+  // the new target.
+  test('reports a symlink retargeted in place', async () => {
+    const link = join(watchRoot, 'link');
+    await mkdir(join(watchRoot, 'a'));
+    await mkdir(join(watchRoot, 'b'));
+    await fs.promises.symlink(join(watchRoot, 'a'), link, 'junction');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher?.onFileEvent(event => {
+      events.push(event);
+    });
+    // Report the change only once the swap is complete
+    mutedDirs.add(watchRoot);
+    // A junction on Windows, which is removed as a directory
+    await (
+      process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
+    )(link);
+    await fs.promises.symlink(join(watchRoot, 'b'), link, 'junction');
+    listeners.get(watchRoot)?.('rename', 'link');
+
+    await waitFor(() => events.some(event => event.relativePath === 'link'));
+    expect(events).toContainEqual({
+      event: 'touch',
+      relativePath: 'link',
+      root: watchRoot,
+      metadata: expect.objectContaining({type: 'l'}),
+    });
+  });
+
+  // The file map removes everything under a directory reported deleted, so a
+  // deletion reported under it afterwards is redundant.
+  test('reports nothing under a directory once it is reported deleted', async () => {
+    await mkdir(join(watchRoot, 'a'));
+    await writeFile(join(watchRoot, 'a', 'file.js'), '');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    // Report the deletions in this order: the directory, then its file
+    mutedDirs.add(watchRoot);
+    mutedDirs.add(join(watchRoot, 'a'));
+    await rm(join(watchRoot, 'a'), {recursive: true});
+    listeners.get(watchRoot)?.('rename', 'a');
+    await waitFor(() => events.includes('delete:a'));
+    listeners.get(join(watchRoot, 'a'))?.('rename', 'file.js');
+    // Reported after anything from the file's deletion would be
+    mutedDirs.delete(watchRoot);
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    expect(events).toContain('delete:a');
+    expect(events).not.toContain(`delete:${join('a', 'file.js')}`);
+  });
 
   describe('after a directory watcher errors', () => {
     let erroredWatcher: ErroredFSWatcher;
