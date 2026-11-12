@@ -21,8 +21,9 @@ jest.useRealTimers();
 jest.setTimeout(10 * 1000);
 
 const {mkdir, rm, writeFile} = fs.promises;
-// Captured before any test replaces `fs.watch`.
+// Captured before any test replaces `fs.watch` or `fs.promises.readdir`.
 const {watch: unmockedWatch} = fs;
+const {readdir: unmockedReaddir} = fs.promises;
 
 // An `FSWatcher` after it has reported an error: Node closes the handle before
 // emitting 'error', so a subsequent `close()` returns early and emits nothing.
@@ -127,6 +128,44 @@ describe('FallbackWatcher', () => {
         expectWatchedBeforeListed(dir);
       }
     });
+  });
+
+  test('starts without stat-ing what it finds', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'file.js'), '');
+    await fs.promises.symlink('file.js', join(watchRoot, 'a', 'link.js'));
+    // Windows reports a directory as changed when it is listed. Withhold those
+    // events, whose handling stats the directory.
+    for (const dir of ['', 'a', join('a', 'b')]) {
+      mutedDirs.add(join(watchRoot, dir));
+    }
+    const lstat = jest.spyOn(fs.promises, 'lstat');
+
+    await watcher?.startWatching();
+
+    // Types come from the listings
+    expect(lstat).not.toHaveBeenCalled();
+    expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
+  });
+
+  // A directory's type comes from its parent's listing, so it may be replaced
+  // before it is visited, eg by a package manager. Its parent's watch reports
+  // the replacement.
+  test('starts past a directory replaced by a file before it is listed', async () => {
+    await mkdir(join(watchRoot, 'a'));
+    jest
+      .spyOn(fs.promises, 'readdir')
+      .mockImplementation(async (dir, ...args) => {
+        const entries = await unmockedReaddir(dir, ...args);
+        if (String(dir) === watchRoot) {
+          await rm(join(watchRoot, 'a'), {recursive: true});
+          await writeFile(join(watchRoot, 'a'), '');
+        }
+        return entries;
+      });
+
+    // Without an error listener, as Metro runs it
+    await expect(watcher?.startWatching()).resolves.toBeUndefined();
   });
 
   // A watch we cannot establish - one directory over the inotify limit, say -
