@@ -247,14 +247,22 @@ describe.each(Object.keys(WATCHERS))(
               join(watchRoot, 'existing', 'to-move-out'),
               join(outsideDir, 'moved-out'),
             ),
-          watcherName === 'Native'
-            ? // NativeWatcher only emits an event for the directory, not contents
-              [[join('existing', 'to-move-out'), 'delete']]
-            : [
+          watcherName === 'Watchman'
+            ? [
                 [join('existing', 'to-move-out'), 'delete'],
                 [join('existing', 'to-move-out', 'file.js'), 'delete'],
-              ],
-          {rejectUnexpected: true},
+              ]
+            : // The file map removes the directory's contents
+              [[join('existing', 'to-move-out'), 'delete']],
+          {
+            rejectUnexpected: true,
+            // FallbackWatcher may report what's under the directory before
+            // the directory itself
+            optionalEvents:
+              watcherName === 'Fallback'
+                ? [[join('existing', 'to-move-out', 'file.js'), 'delete']]
+                : [],
+          },
         );
       },
     );
@@ -343,17 +351,26 @@ describe.each(Object.keys(WATCHERS))(
           {rejectUnexpected: true},
         );
 
+        const deletedUnder: ReadonlyArray<
+          [string, 'touch' | 'delete' | 'recrawl'],
+        > = [
+          [join('app', 'subdir', 'subdir2'), 'delete'],
+          [join('app', 'subdir', 'deep.js'), 'delete'],
+          [join('app', 'subdir', 'subdir2', 'deeper.js'), 'delete'],
+        ];
         await eventHelpers.allEvents(
           async () => {
             await rm(join(appRoot, 'subdir'), {recursive: true});
           },
-          [
-            [join('app', 'subdir'), 'delete'],
-            [join('app', 'subdir', 'subdir2'), 'delete'],
-            [join('app', 'subdir', 'deep.js'), 'delete'],
-            [join('app', 'subdir', 'subdir2', 'deeper.js'), 'delete'],
-          ],
-          {rejectUnexpected: true},
+          watcherName === 'Fallback'
+            ? [[join('app', 'subdir'), 'delete']]
+            : [[join('app', 'subdir'), 'delete'], ...deletedUnder],
+          {
+            rejectUnexpected: true,
+            // FallbackWatcher reports what's under the directory only until it
+            // reports the directory - the file map removes it either way
+            optionalEvents: watcherName === 'Fallback' ? deletedUnder : [],
+          },
         );
       },
     );
