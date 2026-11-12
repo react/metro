@@ -50,6 +50,9 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
   let HasteMap: Class<HasteMapType>;
   let DuplicateHasteCandidatesError;
 
+  const hasteImplModulePath =
+    require.resolve('../../../__tests__/haste_impl.js');
+
   const opts = {
     enableHastePackages: false,
     hasteImplModulePath: null,
@@ -93,6 +96,29 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
       includeSymlinks: false,
     });
     expect(hasteMap.getModule('NameForFoo')).toEqual(p('/root/project/Foo.js'));
+  });
+
+  test.each([
+    ['a hasteImplModulePath', {hasteImplModulePath}],
+    ['Haste packages', {enableHastePackages: true}],
+  ])('has a worker with %s', (_, overrides) => {
+    expect(new HasteMap({...opts, ...overrides}).getWorker()).not.toBeNull();
+  });
+
+  test('has no worker or module names without a hasteImplModulePath or Haste packages', async () => {
+    const hasteMap = new HasteMap(opts);
+    expect(hasteMap.getWorker()).toBeNull();
+    const getOrComputeFileData = jest.fn();
+    await hasteMap.initialize({
+      files: {
+        fileIterator: jest.fn().mockReturnValue([]),
+        lookup: jest.fn(),
+      },
+      getOrComputeFileData,
+      pluginState: null,
+    });
+    expect(hasteMap.getModuleNameByPath(p('/root/Foo.js'))).toBeNull();
+    expect(getOrComputeFileData).not.toHaveBeenCalled();
   });
 
   describe('remove file', () => {
@@ -184,7 +210,7 @@ describe.each([['win32'], ['posix']])('HastePlugin on %s', platform => {
     let getOrComputeFileData;
 
     beforeEach(async () => {
-      hasteMap = new HasteMap(opts);
+      hasteMap = new HasteMap({...opts, hasteImplModulePath});
       getOrComputeFileData = jest.fn().mockReturnValue(null);
 
       await hasteMap.initialize({
