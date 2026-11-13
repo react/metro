@@ -174,7 +174,12 @@ export default function constantFoldingPlugin(context: {
         const result = evaluate(path);
 
         if (result.confident) {
-          path.replaceWith(t.valueToNode(result.value));
+          path.replaceWith(
+            typeof result.value === 'undefined' &&
+              path.scope.hasBinding('undefined', true)
+              ? path.scope.buildUndefinedNode()
+              : t.valueToNode(result.value),
+          );
           path.skip();
         }
       },
