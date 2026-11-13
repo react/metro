@@ -12,6 +12,7 @@
 import type {WatcherBackendChangeEvent} from '../../flow-types';
 
 import NativeWatcher from '../NativeWatcher';
+import EventEmitter from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import {join, resolve} from 'node:path';
@@ -59,17 +60,23 @@ function enoent(): Error {
 // Run every pending promise continuation, including those queued by others.
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+class MockFSWatcher extends EventEmitter {
+  close: JestMockFn<[], void> = jest.fn();
+}
+
 describe('NativeWatcher', () => {
   let watcher: NativeWatcher;
   let emitFsEvent: (event: string, relativePath: string) => void;
   let pendingStats: Map<string, Deferred<fs.Stats>>;
   let events: Array<WatcherBackendChangeEvent>;
+  let fsWatcher: MockFSWatcher;
 
   beforeEach(async () => {
     jest.spyOn(os, 'platform').mockReturnValue('darwin');
+    fsWatcher = new MockFSWatcher();
     jest.spyOn(fs, 'watch').mockImplementation((_root, _opts, listener) => {
       emitFsEvent = listener;
-      return {close: () => {}};
+      return fsWatcher;
     });
     pendingStats = new Map();
     jest.spyOn(fs.promises, 'lstat').mockImplementation(absolutePath => {
@@ -105,6 +112,40 @@ describe('NativeWatcher', () => {
       stat.resolve(result);
     }
   }
+
+  test.each([undefined, 'EIO', 'ENOSPC', 'EMFILE'])(
+    'reports a lost recursive root watch with recovery guidance (%s)',
+    code => {
+      const errors: Array<Error> = [];
+      watcher.onError(error => {
+        errors.push(error);
+      });
+      const error = new Error('Native watch failed');
+      // $FlowFixMe[prop-missing] Node filesystem errors include a code.
+      error.code = code;
+
+      expect(() => fsWatcher.emit('error', error)).not.toThrow();
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({cause: error, code});
+      expect(errors[0].message).toContain(ROOT);
+      expect(errors[0].message).toContain(
+        'Changes in this directory and its subdirectories will not be detected',
+      );
+      expect(errors[0].message).toContain('Restart Metro');
+    },
+  );
+
+  test('absorbs FSWatcher errors after stopping', async () => {
+    const onError = jest.fn();
+    watcher.onError(onError);
+    await watcher.stopWatching();
+
+    expect(() =>
+      fsWatcher.emit('error', new Error('Late native watch failure')),
+    ).not.toThrow();
+    expect(onError).not.toHaveBeenCalled();
+  });
 
   test('emits events in the order fs.watch reported them, however their stats settle', async () => {
     emitFsEvent('rename', join('app', 'moved-in', 'file.js'));

@@ -220,7 +220,7 @@ export default class FallbackWatcher extends AbstractWatcher {
       if (this.#watched[dir] === watcher) {
         delete this.#watched[dir];
       }
-      this.#checkedEmitError(error);
+      this.#checkedEmitError(new common.WatchLostError(dir, error));
     });
 
     if (this.root !== dir) {

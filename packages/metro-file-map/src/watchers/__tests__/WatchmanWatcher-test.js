@@ -20,8 +20,9 @@ import EventEmitter from 'node:events';
 
 class MockClient extends EventEmitter {
   command: JestMockFn<ReadonlyArray<$FlowFixMe>, unknown> = jest.fn();
+  end: JestMockFn<[], void> = jest.fn();
 }
-const mockClient = new MockClient();
+let mockClient = new MockClient();
 
 const cmdCallback = <T>(err: ?Error, result: Partial<T>): void => {
   expect(mockClient.command.mock.lastCall[1]).toEqual(expect.any(Function));
@@ -43,10 +44,205 @@ const wp: (filePath: string) => string = filePath =>
   process.platform === 'win32' ? filePath.replace(/^\//, 'C:/') : filePath;
 
 jest.mock('fb-watchman', () => ({
-  Client: jest.fn().mockImplementation(() => mockClient),
+  Client: jest.fn().mockImplementation(() => (mockClient = new MockClient())),
 }));
 
 describe('WatchmanWatcher', () => {
+  describe('connection lifecycle', () => {
+    let watcher: WatchmanWatcher;
+    let onError: JestMockFn<[Error], void>;
+
+    function completeSubscription() {
+      cmdCallback<WatchmanWatchResponse>(null, {watch: wp('/project')});
+      cmdCallback<WatchmanClockResponse>(null, {clock: 'c:123'});
+      cmdCallback<WatchmanSubscribeResponse>(null, {'asserted-states': []});
+    }
+
+    beforeEach(async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      watcher = new WatchmanWatcher(p('/project'), {
+        ignored: null,
+        included: null,
+        watchmanDeferStates: [],
+      });
+      onError = jest.fn();
+      watcher.onError(onError);
+      const started = watcher.startWatching();
+      completeSubscription();
+      await started;
+    });
+
+    afterEach(async () => {
+      await watcher.stopWatching();
+      jest.clearAllTimers();
+      jest.restoreAllMocks();
+    });
+
+    test('does not warn about missed changes on initial startup', () => {
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    test.each(['end', 'error'])(
+      'warns once about missed changes after recovering from %s',
+      event => {
+        const warn = jest.spyOn(console, 'warn');
+        mockClient.emit(event, new Error('Connection lost'));
+        warn.mockClear();
+        jest.advanceTimersByTime(1000);
+        mockClient.emit('error', new Error('Still unavailable'));
+        expect(console.warn).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(2000);
+        completeSubscription();
+
+        expect(console.warn).toHaveBeenCalledTimes(1);
+        const warning = warn.mock.calls[0][0];
+        expect(warning).toContain(p('/project'));
+        expect(warning).toContain(
+          'Changes made while disconnected may have been missed',
+        );
+        expect(warning).toContain('Restart Metro');
+
+        mockClient.emit('subscription', {
+          subscription: watcher.subscriptionName,
+          files: [],
+        });
+        expect(console.warn).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    test('warns again after a separate connection outage recovers', () => {
+      for (let outage = 0; outage < 2; outage++) {
+        mockClient.emit('error', new Error('Connection lost'));
+        jest.advanceTimersByTime(1000);
+        completeSubscription();
+      }
+      expect(console.warn).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not report recovery from a retired client', async () => {
+      const warn = jest.spyOn(console, 'warn');
+      mockClient.emit('end');
+      jest.advanceTimersByTime(1000);
+      cmdCallback<WatchmanWatchResponse>(null, {watch: wp('/project')});
+      cmdCallback<WatchmanClockResponse>(null, {clock: 'c:123'});
+      const onSubscribe = mockClient.command.mock.lastCall[1];
+      warn.mockClear();
+
+      await watcher.stopWatching();
+      onSubscribe(null, {});
+
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    test.each(['transport', 'watch-project', 'clock', 'subscribe'])(
+      'recovers after a failed reconnect at %s',
+      stage => {
+        const firstClient = mockClient;
+        firstClient.emit('end');
+        jest.advanceTimersByTime(1000);
+        const failedClient = mockClient;
+        const error = new Error('Watchman unavailable');
+        if (stage === 'transport') {
+          failedClient.emit('error', error);
+        } else {
+          if (stage !== 'watch-project') {
+            cmdCallback<WatchmanWatchResponse>(null, {watch: wp('/project')});
+          }
+          if (stage === 'subscribe') {
+            cmdCallback<WatchmanClockResponse>(null, {clock: 'c:123'});
+          }
+          cmdCallback(error, {});
+        }
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onError).toHaveBeenCalledWith(error);
+        expect(mockClient).toBe(failedClient);
+
+        jest.advanceTimersByTime(60000);
+        expect(mockClient).not.toBe(failedClient);
+        completeSubscription();
+        const onFileEvent = jest.fn();
+        watcher.onFileEvent(onFileEvent);
+        mockClient.emit('subscription', {
+          subscription: watcher.subscriptionName,
+          clock: 'c:124',
+          files: [{name: 'deleted.js', exists: false}],
+        });
+        expect(onFileEvent).toHaveBeenCalledWith({
+          event: 'delete',
+          relativePath: 'deleted.js',
+          root: p('/project'),
+          clock: [p('/project'), 'c:124'],
+        });
+      },
+    );
+
+    test('reconnects after an established client errors without an end event', () => {
+      const failedClient = mockClient;
+      failedClient.emit('error', new Error('Connection reset'));
+      expect(mockClient).toBe(failedClient);
+      jest.advanceTimersByTime(1000);
+      expect(mockClient).not.toBe(failedClient);
+      completeSubscription();
+    });
+
+    test('backs off repeated failures and resets the delay after recovery', () => {
+      mockClient.emit('error', new Error('Connection reset'));
+      const firstClient = mockClient;
+      jest.advanceTimersByTime(999);
+      expect(mockClient).toBe(firstClient);
+      jest.advanceTimersByTime(1);
+      const secondClient = mockClient;
+      secondClient.emit('error', new Error('Still unavailable'));
+      jest.advanceTimersByTime(1999);
+      expect(mockClient).toBe(secondClient);
+      jest.advanceTimersByTime(1);
+      expect(mockClient).not.toBe(secondClient);
+      completeSubscription();
+      const recoveredClient = mockClient;
+      recoveredClient.emit('error', new Error('Connection reset again'));
+      jest.advanceTimersByTime(1000);
+      expect(mockClient).not.toBe(recoveredClient);
+    });
+
+    test('absorbs late errors from a replaced client', () => {
+      const oldClient = mockClient;
+      oldClient.emit('end');
+      jest.advanceTimersByTime(1000);
+      expect(() =>
+        oldClient.emit('error', new Error('Late error')),
+      ).not.toThrow();
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    test('absorbs late client errors after stopping', async () => {
+      await watcher.stopWatching();
+      expect(() =>
+        mockClient.emit('error', new Error('Late error')),
+      ).not.toThrow();
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    test('cancels a scheduled reconnect on stop', async () => {
+      const oldClient = mockClient;
+      oldClient.emit('end');
+      await watcher.stopWatching();
+      jest.advanceTimersByTime(60000);
+      expect(mockClient).toBe(oldClient);
+    });
+
+    test('ignores an in-flight reconnect response after stopping', async () => {
+      mockClient.emit('end');
+      jest.advanceTimersByTime(1000);
+      const client = mockClient;
+      const callback = client.command.mock.lastCall[1];
+      await watcher.stopWatching();
+      client.command.mockClear();
+      callback(null, {watch: wp('/project')});
+      expect(client.command).not.toHaveBeenCalled();
+    });
+  });
+
   test('initializes with watch-project, clock, subscribe', () => {
     const watchmanWatcher = new WatchmanWatcher(p('/project/subdir/js'), {
       ignored: null,
