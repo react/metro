@@ -188,4 +188,36 @@ describe('Watcher resource-limit reporting', () => {
 
     expect(reportError).not.toHaveBeenCalled();
   });
+
+  test.each(['EIO', 'ENOSPC', 'EMFILE'])(
+    'reports a lost native root watch through the console (%s)',
+    async code => {
+      jest.spyOn(NativeWatcher, 'isSupported').mockReturnValue(true);
+      jest.spyOn(NativeWatcher, 'isLiveOnStart').mockReturnValue(true);
+      const handle = new MockFSWatcher();
+      jest.spyOn(fs, 'watch').mockReturnValue(handle);
+      const reportError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      await watcher.watch(() => {});
+      const error = new FilesystemError(code);
+
+      expect(() => handle.emit('error', error)).not.toThrow();
+
+      expect(reportError).toHaveBeenCalledTimes(1);
+      const [message, reported] = reportError.mock.calls[0];
+      expect(message).toContain(`native watcher error in ${root}`);
+      expect(reported.message).toContain(root);
+      expect(reported.message).toContain(
+        'Changes in this directory and its subdirectories will not be detected',
+      );
+      expect(reported.message).toContain('Restart Metro');
+      expect(reported.cause).toBe(error);
+      expect(reported.code).toBe(code);
+
+      await watcher.close();
+      expect(() => handle.emit('error', error)).not.toThrow();
+      expect(reportError).toHaveBeenCalledTimes(1);
+    },
+  );
 });

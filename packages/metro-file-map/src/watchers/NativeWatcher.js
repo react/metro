@@ -15,7 +15,7 @@ import type {
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {isIncluded, typeFromStat} from './common';
+import {WatchLostError, isIncluded, typeFromStat} from './common';
 import debugModule from 'debug';
 import {promises as fsPromises, watch} from 'node:fs';
 import {platform} from 'node:os';
@@ -115,7 +115,9 @@ export default class NativeWatcher extends AbstractWatcher {
         });
       },
     );
-    this.#fsWatcher.on('error', error => this.emitError(error));
+    this.#fsWatcher.on('error', error => {
+      this.emitError(new WatchLostError(this.root, error, true));
+    });
 
     debug('Watching %s', this.root);
   }

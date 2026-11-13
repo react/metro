@@ -44,6 +44,21 @@ export type WatcherOptions = Readonly<{
   watchmanPath?: string,
 }>;
 
+export class WatchLostError extends Error {
+  code: unknown;
+
+  constructor(dir: string, cause: Error, recursive: boolean = false) {
+    super(
+      `Watch lost for ${dir}: ${cause.message}. ` +
+        'Changes in this directory' +
+        (recursive ? ' and its subdirectories' : '') +
+        ' will not be detected. Restart Metro to resume watching.',
+      {cause},
+    );
+    this.code = (cause as interface {readonly code?: unknown}).code;
+  }
+}
+
 /**
  * Whether a watcher should report a change at the given relative path. Only
  * regular files are checked against `included`, and every file is included

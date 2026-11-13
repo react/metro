@@ -113,15 +113,28 @@ describe('NativeWatcher', () => {
     }
   }
 
-  test('forwards FSWatcher errors to the backend error listener', () => {
-    const onError = jest.fn();
-    watcher.onError(onError);
-    const error = new Error('Native watch failed');
+  test.each([undefined, 'EIO', 'ENOSPC', 'EMFILE'])(
+    'reports a lost recursive root watch with recovery guidance (%s)',
+    code => {
+      const errors: Array<Error> = [];
+      watcher.onError(error => {
+        errors.push(error);
+      });
+      const error = new Error('Native watch failed');
+      // $FlowFixMe[prop-missing] Node filesystem errors include a code.
+      error.code = code;
 
-    expect(() => fsWatcher.emit('error', error)).not.toThrow();
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(error);
-  });
+      expect(() => fsWatcher.emit('error', error)).not.toThrow();
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({cause: error, code});
+      expect(errors[0].message).toContain(ROOT);
+      expect(errors[0].message).toContain(
+        'Changes in this directory and its subdirectories will not be detected',
+      );
+      expect(errors[0].message).toContain('Restart Metro');
+    },
+  );
 
   test('absorbs FSWatcher errors after stopping', async () => {
     const onError = jest.fn();
