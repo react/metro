@@ -32,7 +32,7 @@ function sha1hex(content /*: string | Buffer */) /*: string */ {
 
 class Worker {
   // prettier-ignore
-  #plugins /*: ReadonlyArray<MetadataWorker> */;
+  #plugins /*: ReadonlyArray<MetadataWorker> */
 
   constructor({plugins = []} /*: WorkerSetupArgs */) {
     this.#plugins = plugins.map(({modulePath, setupArgs}) => {
