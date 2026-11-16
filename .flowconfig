@@ -8,6 +8,12 @@ packages/*/build/**
 # and crashes out as the test includes purposely malformed json
 **/node_modules/resolve/test/**
 **/node_modules/invariant/**
+# Workspace packages are mapped to their sources below. pnpm also links them
+# into each other's node_modules, forming cycles (metro -> metro-config ->
+# metro) that Flow would otherwise crawl forever.
+**/node_modules/metro*/**
+**/node_modules/ob1/**
+**/node_modules/buck-worker-tool/**
 
 [options]
 emoji=true
@@ -15,7 +21,9 @@ format.bracket_spacing=false
 
 munge_underscores=true
 
-module.name_mapper='\(metro-[^/]*\)' -> '<PROJECT_ROOT>/packages/\1/src/index.js'
+module.name_mapper='^metro-memory-fs$' -> '<PROJECT_ROOT>/private/metro-memory-fs'
+module.name_mapper='^\(metro\|metro-[a-z-]+\|ob1\|buck-worker-tool\)/\(private\|src\)/\(.*\)$' -> '<PROJECT_ROOT>/packages/\1/src/\3'
+module.name_mapper='^\(metro\|metro-[a-z-]+\|ob1\|buck-worker-tool\)$' -> '<PROJECT_ROOT>/packages/\1'
 
 [lints]
 sketchy-null-number=warn
