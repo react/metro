@@ -1396,12 +1396,14 @@ export default class TreeFS implements MutableFileSystem {
               ? nodePath
               : nodePath.replaceAll(pathSep, path.sep);
 
-          // Although both paths are normal, the node path may begin '..' so we
-          // can't simply concatenate.
-          const normalPathOfSymlink = path.join(
+          // When iterating from an ancestor of the project root, the root's
+          // canonical path ends '..' and the node path may re-enter the
+          // project root (e.g. '..' and 'project/link'), so the join must
+          // collapse those segments to give a normal path ('link').
+          const normalPathOfSymlink = this.#pathUtils.joinNormalToRelative(
             opts.canonicalPathOfRoot,
             nodePathWithSystemSeparators,
-          );
+          ).normalPath;
 
           // We can't resolve the symlink directly here because we only have
           // its normal path, and we need a canonical path for resolution
