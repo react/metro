@@ -451,6 +451,42 @@ function dep(name: string): TransformResultDependency {
       });
     });
 
+    describe('blockList config param', () => {
+      test('hides files matching a pattern in a blockList array', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'a.js': '',
+          'blocked.js': '',
+        });
+
+        resolver = await createResolver({
+          resolver: {blockList: [/blocked\.js$/]},
+        });
+
+        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+        });
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('./blocked')),
+        ).toThrow(/Unable to resolve module \.\/blocked/);
+      });
+
+      test('does not hide any file with an empty blockList array', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'a.js': '',
+        });
+
+        resolver = await createResolver({resolver: {blockList: []}});
+
+        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+        });
+      });
+    });
+
     describe('absolute paths', () => {
       test('supports requiring absolute paths', async () => {
         setMockFileSystem({

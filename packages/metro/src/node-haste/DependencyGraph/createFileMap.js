@@ -22,6 +22,11 @@ const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
   if (!Array.isArray(regexes)) {
     return regexes;
   }
+  // An empty list blocks nothing. Joining no patterns would give an empty
+  // RegExp, which matches every path.
+  if (regexes.length === 0) {
+    return /.^/;
+  }
   return new RegExp(
     regexes
       .map((regex, index) => {
