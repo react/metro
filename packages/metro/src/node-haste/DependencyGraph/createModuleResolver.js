@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {ResolutionObservations} from '../../DeltaBundler/types';
 import type {PackageCache} from '../PackageCache';
 import type {ConfigT} from 'metro-config';
 import type {FileSystem, HasteMap} from 'metro-file-map';
@@ -31,8 +32,11 @@ export default function createModuleResolver({
   hasteMap,
   packageCache,
 }: CreateModuleResolverOptions): ModuleResolver {
-  const fileSystemLookup = (filePath: string): ReturnType<FileSystemLookup> => {
-    const result = fileSystem.lookup(filePath);
+  const fileSystemLookup = (
+    filePath: string,
+    observations?: ?ResolutionObservations,
+  ): ReturnType<FileSystemLookup> => {
+    const result = fileSystem.lookup(filePath, observations);
     if (result.exists) {
       return {
         exists: true,
@@ -49,6 +53,10 @@ export default function createModuleResolver({
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
+    // Mirrors which files `HastePlugin` gives a name
+    isHasteEnabled:
+      config.resolver.enableGlobalPackages ||
+      config.resolver.hasteImplModulePath != null,
     getHasteModulePath: (name, platform) =>
       hasteMap.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
@@ -61,14 +69,21 @@ export default function createModuleResolver({
         return null;
       }
     },
-    getPackageForModule: (absolutePath: string) =>
-      packageCache.getPackageForModule(absolutePath),
+    getPackageForModule: (
+      absolutePath: string,
+      observations?: ?ResolutionObservations,
+    ) => packageCache.getPackageForModule(absolutePath, observations),
     mainFields: config.resolver.resolverMainFields,
     nodeModulesPaths: config.resolver.nodeModulesPaths,
     preferNativePlatform: true,
     projectRoot: config.projectRoot,
     reporter: config.reporter,
-    resolveAsset: (dirPath: string, assetName: string, extension: string) => {
+    resolveAsset: (
+      dirPath: string,
+      assetName: string,
+      extension: string,
+      observations?: ?ResolutionObservations,
+    ) => {
       const basePath = dirPath + path.sep + assetName;
       const assets = [
         basePath + extension,
@@ -77,7 +92,7 @@ export default function createModuleResolver({
         ),
       ]
         .map(assetPath => {
-          const result = fileSystemLookup(assetPath);
+          const result = fileSystemLookup(assetPath, observations);
           // A directory such as `node_modules/lodash.zip` is not an asset, and
           // must fall through to directory (package) resolution.
           return result.exists && result.type === 'f' ? result.realPath : null;

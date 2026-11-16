@@ -111,6 +111,11 @@ export type ChangedFileMetadata = Readonly<{
 export type ChangeEvent = Readonly<{
   logger?: ?RootPerfLogger,
   changes: ReadonlyFileSystemChanges<Readonly<ChangedFileMetadata>>,
+  /**
+   * What each plugin reported about this batch, by name, if anything. Read
+   * entries with `getPluginChanges`.
+   */
+  pluginChanges: ReadonlyMap<string, unknown>,
   rootDir: string,
 }>;
 
@@ -300,19 +305,25 @@ export type V8Serializable = V8SerializablePrimitive | V8SerializableCollection;
 export interface FileMapPlugin<
   in SerializableState extends void | V8Serializable = void | V8Serializable,
   in PerFileData extends void | V8Serializable = void | V8Serializable,
+  out ChangeSummary = void,
 > {
+  // Must be unique among the plugins of a file map.
   readonly name: string;
   initialize(
     initOptions: FileMapPluginInitOptions<SerializableState, PerFileData>,
   ): Promise<void>;
   assertValid(): void;
-  onChanged(changes: ReadonlyFileSystemChanges<?PerFileData>): void;
+  /**
+   * Update the plugin's state for a batch of changes, synchronously before it
+   * is emitted. May return a summary for `ChangeEvent.pluginChanges`.
+   */
+  onChanged(changes: ReadonlyFileSystemChanges<?PerFileData>): ChangeSummary;
   getSerializableSnapshot(): void | V8Serializable;
   getCacheKey(): string;
   getWorker(): ?FileMapPluginWorker;
 }
 
-export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+export type InputFileMapPlugin = FileMapPlugin<empty, empty, unknown>;
 
 export interface MetadataWorker {
   processFile(
@@ -438,20 +449,31 @@ export interface FileSystem {
    */
   lookup(mixedPath: Path, observations?: ?Observations): LookupResult;
 
-  matchFiles(opts: {
-    /* Filter relative paths against a pattern. */
-    filter?: RegExp | null,
-    /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
-    filterCompareAbsolute?: boolean,
-    /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
-    filterComparePosix?: boolean,
-    /* Follow symlinks when enumerating paths. (default: false) */
-    follow?: boolean,
-    /* Should search for files recursively. (default: true) */
-    recursive?: boolean,
-    /* Match files under a given root, or null for all files */
-    rootDir?: Path | null,
-  }): Iterable<Path>;
+  /**
+   * Enumerate the files under `rootDir` that match `filter`.
+   *
+   * If `observations` is given, records the paths the result depends upon as
+   * it is iterated: every directory enumerated, any symlink traversed or
+   * enumerated and what it resolved to, and either `rootDir` or the first
+   * segment of it that did not exist.
+   */
+  matchFiles(
+    opts: {
+      /* Filter relative paths against a pattern. */
+      filter?: RegExp | null,
+      /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
+      filterCompareAbsolute?: boolean,
+      /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
+      filterComparePosix?: boolean,
+      /* Follow symlinks when enumerating paths. (default: false) */
+      follow?: boolean,
+      /* Should search for files recursively. (default: true) */
+      recursive?: boolean,
+      /* Match files under a given root, or null for all files */
+      rootDir?: Path | null,
+    },
+    observations?: ?Observations,
+  ): Iterable<Path>;
 }
 
 export type JsonData =
