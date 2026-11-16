@@ -21,7 +21,7 @@ import type {MetadataWorker, WorkerMessage, V8Serializable, DependencyExtractor}
 
 class DependencyExtractorWorker /*:: implements MetadataWorker */ {
   // prettier-ignore
-  /*:: readonly  */ #dependencyExtractor /*: ?DependencyExtractor['extract'] */;
+  /*:: readonly  */ #dependencyExtractor /*: ?DependencyExtractor['extract'] */
 
   constructor(
     {dependencyExtractor} /*: Readonly<{dependencyExtractor: ?string}> */,
