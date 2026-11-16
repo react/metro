@@ -438,20 +438,31 @@ export interface FileSystem {
    */
   lookup(mixedPath: Path, observations?: ?Observations): LookupResult;
 
-  matchFiles(opts: {
-    /* Filter relative paths against a pattern. */
-    filter?: RegExp | null,
-    /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
-    filterCompareAbsolute?: boolean,
-    /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
-    filterComparePosix?: boolean,
-    /* Follow symlinks when enumerating paths. (default: false) */
-    follow?: boolean,
-    /* Should search for files recursively. (default: true) */
-    recursive?: boolean,
-    /* Match files under a given root, or null for all files */
-    rootDir?: Path | null,
-  }): Iterable<Path>;
+  /**
+   * Enumerate the files under `rootDir` that match `filter`.
+   *
+   * If `observations` is given, records the paths the result depends upon as
+   * it is iterated: every directory enumerated, any symlink traversed or
+   * enumerated and what it resolved to, and either `rootDir` or the first
+   * segment of it that did not exist.
+   */
+  matchFiles(
+    opts: {
+      /* Filter relative paths against a pattern. */
+      filter?: RegExp | null,
+      /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
+      filterCompareAbsolute?: boolean,
+      /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
+      filterComparePosix?: boolean,
+      /* Follow symlinks when enumerating paths. (default: false) */
+      follow?: boolean,
+      /* Should search for files recursively. (default: true) */
+      recursive?: boolean,
+      /* Match files under a given root, or null for all files */
+      rootDir?: Path | null,
+    },
+    observations?: ?Observations,
+  ): Iterable<Path>;
 }
 
 export type JsonData =

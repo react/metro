@@ -191,14 +191,17 @@ interface FileSystem_2 {
   ): null | undefined | {absolutePath: string; containerRelativePath: string};
   linkStats(file: Path): null | undefined | FileStats;
   lookup(mixedPath: Path, observations?: null | undefined | Observations): LookupResult;
-  matchFiles(opts: {
-    filter?: RegExp | null | undefined;
-    filterCompareAbsolute?: boolean | undefined;
-    filterComparePosix?: boolean | undefined;
-    follow?: boolean | undefined;
-    recursive?: boolean | undefined;
-    rootDir?: Path | null | undefined;
-  }): Iterable<Path>;
+  matchFiles(
+    opts: {
+      filter?: RegExp | null | undefined;
+      filterCompareAbsolute?: boolean | undefined;
+      filterComparePosix?: boolean | undefined;
+      follow?: boolean | undefined;
+      recursive?: boolean | undefined;
+      rootDir?: Path | null | undefined;
+    },
+    observations?: null | undefined | Observations,
+  ): Iterable<Path>;
 }
 export {FileSystem_2 as FileSystem};
 

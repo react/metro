@@ -1121,6 +1121,136 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         ),
       ).toEqual([]);
     });
+
+    describe('observations', () => {
+      function observe(opts: Parameters<TreeFSType['matchFiles']>[0]) {
+        const observations = emptyObservations();
+        const files = Array.from(tfs.matchFiles(opts, observations));
+        return {files, observations};
+      }
+
+      // Every symlink listed is resolved, to decide whether it is a file or a
+      // directory, so each is recorded with what it resolved to.
+      const topLevelSymlinks = [
+        p('/project/link-to-foo'),
+        p('/project/abs-link-out'),
+        p('/project/root'),
+        p('/project/link-to-nowhere'),
+        p('/project/link-to-self'),
+        p('/project/link-cycle-1'),
+        p('/project/link-cycle-2'),
+      ];
+      const topLevelSymlinkTargets = [
+        p('/project/foo'),
+        p('/outside'),
+        p('/'),
+        p('/project/nowhere'),
+        p('/project/link-to-self'),
+        p('/project/link-cycle-2'),
+        p('/project/link-cycle-1'),
+      ];
+
+      test.each([
+        [
+          'records the directory enumerated, non-recursively',
+          {recursive: false, rootDir: p('/project')},
+          [p('/project'), ...topLevelSymlinks],
+          topLevelSymlinkTargets,
+        ],
+        [
+          'records each directory enumerated, recursively',
+          {follow: false, recursive: true, rootDir: p('/project')},
+          [
+            p('/project'),
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+            ...topLevelSymlinks,
+            p('/project/node_modules'),
+            p('/project/node_modules/pkg'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+            ...topLevelSymlinkTargets,
+          ],
+        ],
+        [
+          'records a followed symlink to a directory by its target',
+          {follow: true, recursive: true, rootDir: p('/project/foo')},
+          [
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+          ],
+        ],
+        [
+          'records a symlink traversed to reach rootDir',
+          {follow: true, recursive: false, rootDir: p('/project/link-to-foo')},
+          [
+            p('/project/link-to-foo'),
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+          ],
+        ],
+        [
+          'records the first missing segment of a missing rootDir',
+          {rootDir: p('/project/missing/deeper')},
+          [],
+          [p('/project/missing')],
+        ],
+        [
+          'records a rootDir that is a file',
+          {rootDir: p('/project/bar.js')},
+          [],
+          [p('/project/bar.js')],
+        ],
+      ])('%s', (_name, opts, content, existence) => {
+        expect(observe(opts).observations).toEqual({
+          content: new Set(content.map(canonical)),
+          existence: new Set(existence.map(canonical)),
+        });
+      });
+
+      test('records directories outside the project root by canonical path', () => {
+        expect(
+          observe({follow: false, recursive: true, rootDir: p('/')})
+            .observations.content,
+        ).toEqual(
+          new Set(
+            [
+              p('/'),
+              p('/project'),
+              p('/project/foo'),
+              p('/project/node_modules'),
+              p('/project/node_modules/pkg'),
+              p('/outside'),
+            ].map(canonical),
+          ),
+        );
+      });
+
+      test('records only once iterated', () => {
+        const observations = emptyObservations();
+        tfs.matchFiles({rootDir: p('/project/foo')}, observations);
+        expect(observations).toEqual(emptyObservations());
+      });
+    });
   });
 
   test('compare absolute', () => {
