@@ -20,6 +20,7 @@ import H from '../../constants';
 import DependencyPlugin from '../../plugins/DependencyPlugin';
 import HastePlugin from '../../plugins/HastePlugin';
 import path from 'node:path';
+import nullthrows from 'nullthrows';
 
 const MockJestWorker = jest.fn().mockImplementation(() => ({
   processFile: async () => ({}),
@@ -276,6 +277,43 @@ describe('processBatch', () => {
     expect(mockWorkerFn).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['no plugins', [] as ReadonlyArray<FileMapPluginWorker>],
+    [
+      'only lazy plugins',
+      [
+        {
+          worker: {modulePath: 'mock-lazy-plugin', setupArgs: {}},
+          filter: () => true,
+          lazy: true,
+        },
+      ],
+    ],
+  ])(
+    'reads no file without a SHA-1 to compute and with %s',
+    async (_, pluginWorkers) => {
+      const readKeys: Array<string | symbol> = [];
+      const fileMetadata = new Proxy<FileMetadata>(
+        [123, 234, 0, null, 0, null],
+        {
+          get(target, key, receiver) {
+            readKeys.push(key);
+            return Reflect.get(target, key, receiver);
+          },
+        },
+      );
+      const processor = new FileProcessor({...defaultOptions, pluginWorkers});
+
+      await processor.processBatch([[p('src/index.js'), fileMetadata]], {
+        computeSha1: false,
+        maybeReturnContent: false,
+      });
+
+      expect(readKeys).toEqual([]);
+      expect(mockWorkerFn).not.toHaveBeenCalled();
+    },
+  );
+
   describe('node_modules files', () => {
     const nodeModulesFiles = (): Array<[string, FileMetadata]> => [
       [p('node_modules/pkg/index.js'), [123, 234, 0, null, 0, null]],
@@ -306,6 +344,7 @@ describe('processBatch', () => {
           filePath: p('/root/node_modules/pkg/index.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         });
       },
     );
@@ -334,13 +373,16 @@ describe('processBatch', () => {
 
     test('built-in plugins only run on them when a SHA-1 is needed', async () => {
       const pluginWorkers = [
-        new HastePlugin({
-          enableHastePackages: true,
-          failValidationOnConflicts: false,
-          hasteImplModulePath: require.resolve('../../__tests__/haste_impl.js'),
-          platforms: new Set(),
-          rootDir: defaultOptions.rootDir,
-        }).getWorker(),
+        nullthrows(
+          new HastePlugin({
+            enableHastePackages: true,
+            failValidationOnConflicts: false,
+            hasteImplModulePath:
+              require.resolve('../../__tests__/haste_impl.js'),
+            platforms: new Set(),
+            rootDir: defaultOptions.rootDir,
+          }).getWorker(),
+        ),
         new DependencyPlugin({
           computeDependencies: true,
           dependencyExtractor: null,
@@ -364,6 +406,7 @@ describe('processBatch', () => {
         filePath: p('/root/node_modules/pkg/package.json'),
         maybeReturnContent: false,
         pluginsToRun: [],
+        returnStats: false,
       });
     });
   });
@@ -399,6 +442,7 @@ describe('processBatch', () => {
         filePath: absolutePath,
         maybeReturnContent: false,
         pluginsToRun: [1],
+        returnStats: false,
       });
       expect(MockJestWorker).not.toHaveBeenCalled();
       // Only this plugin's slot is written. In particular the file is not
@@ -550,6 +594,7 @@ describe('processBatch', () => {
 describe('processRegularFile', () => {
   let FileProcessor;
   const mockReadFileSync = jest.fn();
+  const mockStatSync = jest.fn();
 
   beforeEach(() => {
     jest.resetModules();
@@ -557,6 +602,7 @@ describe('processRegularFile', () => {
     jest.unmock('../../worker.js');
     jest.mock('node:fs', () => ({
       readFileSync: mockReadFileSync,
+      statSync: mockStatSync,
     }));
     FileProcessor = require('../FileProcessor').FileProcessor;
   });
@@ -584,6 +630,29 @@ describe('processRegularFile', () => {
     });
 
     expect(metadata[H.SHA1]).toMatch(/^[a-f0-9]{40}$/);
+    // A known modified time is kept
+    expect(mockStatSync).not.toHaveBeenCalled();
+    expect(metadata[H.MTIME]).toBe(123);
+  });
+
+  test('records the stats of a file crawled without them', () => {
+    const processor = new FileProcessor(defaultOptions);
+    const metadata: FileMetadata = [null, null, 0, null, 0, null];
+
+    mockReadFileSync.mockReturnValue(Buffer.from('hello world'));
+    mockStatSync.mockReturnValue({mtime: new Date(1700000000000), size: 11});
+
+    processor.processRegularFile('file.js', metadata, {
+      computeSha1: true,
+      maybeReturnContent: false,
+    });
+
+    expect(mockStatSync).toHaveBeenCalledWith(
+      path.resolve(defaultOptions.rootDir, 'file.js'),
+    );
+    expect(metadata[H.SHA1]).toMatch(/^[a-f0-9]{40}$/);
+    expect(metadata[H.MTIME]).toBe(1700000000000);
+    expect(metadata[H.SIZE]).toBe(11);
   });
 });
 

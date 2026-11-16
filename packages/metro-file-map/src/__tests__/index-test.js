@@ -10,6 +10,7 @@
  */
 
 import type {InputOptions} from '..';
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   BuildResult,
   CanonicalPath,
@@ -156,6 +157,14 @@ class MockWatcher extends AbstractWatcher {
   static isSupported(): boolean {
     return true;
   }
+  // Stands in for FallbackWatcher too, which a node crawl may report to
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: () => {},
+      onSkippedDirectory: async () => {},
+      onSymlink: () => {},
+    };
+  }
 }
 
 jest.mock('../watchers/FallbackWatcher', () => MockWatcher);
@@ -252,6 +261,7 @@ const assertFileSystemEqual = (fileSystem: FileSystem, fileData: FileData) => {
   expect(fileSystem.getDifference(fileData)).toEqual({
     changedFiles: new Map(),
     removedFiles: new Set(),
+    filesToStat: new Map(),
   });
 };
 
@@ -1521,6 +1531,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Banana.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1529,6 +1540,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1537,6 +1549,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Strawberry.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1545,6 +1558,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/__mocks__/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1553,6 +1567,7 @@ describe('FileMap', () => {
           filePath: p('/project/vegetables/Melon.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
     ]);
@@ -1883,6 +1898,65 @@ describe('FileMap', () => {
         }
       },
     );
+
+    test.each([
+      [false, [p('/project/fruits'), p('/project/vegetables')]],
+      [true, []],
+    ])(
+      'starts watching while the cache is read (useWatchman: %s)',
+      async (useWatchman, watchedDuringRead) => {
+        let watchedRoots: ?Array<string> = null;
+        if (!useWatchman) {
+          mockNodeCrawler.mockImplementationOnce(async () => ({
+            changedFiles: new Map(),
+            removedFiles: new Set(),
+          }));
+        }
+        mockCacheManager.read.mockImplementationOnce(async () => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          watchedRoots = Object.keys(mockEmitters);
+          return null;
+        });
+
+        const {fileMap} = await buildNewFileMap({useWatchman, watch: true});
+        await fileMap.end();
+
+        // Watchman backends start after the crawl, from its clocks.
+        expect(watchedRoots).toEqual(watchedDuringRead);
+      },
+    );
+
+    test('end() while the cache is read stops the watch started meanwhile', async () => {
+      let finishRead: () => void = () => {};
+      mockCacheManager.read.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishRead = () => resolve(null);
+          }),
+      );
+      const fileMap = new FileMap({
+        ...defaultConfig,
+        plugins: [],
+        useWatchman: false,
+        watch: true,
+      });
+
+      const built = fileMap.build();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const backends = Object.values(mockEmitters);
+      expect(backends).toHaveLength(2);
+      const stops = backends.map(backend =>
+        jest.spyOn(backend, 'stopWatching'),
+      );
+      await fileMap.end();
+      finishRead();
+
+      await expect(built).rejects.toMatchObject({name: 'AbortError'});
+      for (const stop of stops) {
+        expect(stop).toHaveBeenCalled();
+      }
+      expect(mockNodeCrawler).not.toHaveBeenCalled();
+    });
 
     test('does not miss a change made while the file map is being built', async () => {
       mockNodeCrawler.mockImplementationOnce(async () => {

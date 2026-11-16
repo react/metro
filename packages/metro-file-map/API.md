@@ -177,9 +177,12 @@ interface FileSystem_2 {
     options?: Readonly<{
       subpath?: string | undefined;
     }>,
-  ): {changedFiles: FileData; removedFiles: Set<string>};
+  ): {
+    changedFiles: FileData;
+    removedFiles: Set<string>;
+    filesToStat: Map<string, number>;
+  };
   getOrComputeSha1(file: Path): Promise<null | undefined | {sha1: string; content?: Buffer | undefined}>;
-  getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): null | undefined | string;
   hierarchicalLookup(
     mixedStartPath: string,
@@ -252,7 +255,7 @@ export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null,
   getModuleNameByPath(mixedPath: Path): null | undefined | string;
   getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform?: null | undefined | boolean): null | undefined | Path;
   getSerializableSnapshot(): null;
-  getWorker(): FileMapPluginWorker;
+  getWorker(): null | undefined | FileMapPluginWorker;
   initialize(opts: FileMapPluginInitOptions<null, string | null>): Promise<void>;
   readonly name: 'haste';
   onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): HasteChanges | void;

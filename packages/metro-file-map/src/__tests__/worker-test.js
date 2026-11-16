@@ -17,6 +17,7 @@ import {HastePlugin} from '..';
 import {Worker} from '../worker';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
+import nullthrows from 'nullthrows';
 
 jest.mock('node:fs', () => {
   const path = require('node:path');
@@ -48,6 +49,16 @@ jest.mock('node:fs', () => {
 
   return {
     ...jest.createMockFromModule('node:fs'),
+    statSync: jest.fn((filePath: string) => {
+      const entry = mockFs[filePath];
+      if (entry == null) {
+        throw new Error(`Cannot stat path '${filePath}'.`);
+      }
+      return {
+        mtime: new Date(1700000000000),
+        size: typeof entry === 'string' ? entry.length : 8,
+      };
+    }),
     readFileSync: jest.fn((path, options) => {
       const entry = mockFs[path];
       if (entry) {
@@ -71,6 +82,7 @@ const defaults: WorkerMessage = {
   filePath: path.join('/project', 'notexist.js'),
   maybeReturnContent: false,
   pluginsToRun: [],
+  returnStats: false,
 };
 
 const defaultHasteConfig = {
@@ -87,10 +99,12 @@ function workerWithHaste(
 ) {
   return new Worker({
     plugins: [
-      new HastePlugin({
-        ...defaultHasteConfig,
-        ...hasteOverrides,
-      }).getWorker().worker,
+      nullthrows(
+        new HastePlugin({
+          ...defaultHasteConfig,
+          ...hasteOverrides,
+        }).getWorker(),
+      ).worker,
     ],
   }).processFile({
     ...message,
@@ -112,6 +126,7 @@ describe('worker', () => {
     filePath: path.join('/project', 'notexist.js'),
     maybeReturnContent: false,
     pluginsToRun: [],
+    returnStats: false,
   };
 
   test('simply computes SHA-1s when requested (works well with binary data)', async () => {
@@ -236,6 +251,44 @@ describe('worker', () => {
       pluginData: ['Pear'],
       sha1: undefined,
     });
+  });
+
+  test('returns the stats of the content it reads, when asked', async () => {
+    expect(
+      await worker({
+        ...defaults,
+        computeSha1: true,
+        filePath: path.join('/project', 'fruits', 'apple.png'),
+        returnStats: true,
+      }),
+    ).toEqual({
+      pluginData: [],
+      sha1: '4caece539b039b16e16206ea2478f8c5ffb2ca05',
+      stats: {mtime: 1700000000000, size: 8},
+    });
+  });
+
+  test('returns stats for data derived without reading content', async () => {
+    expect(
+      await workerWithHaste({
+        ...defaults,
+        filePath: path.join('/project', 'fruits', 'Pear.js'),
+        returnStats: true,
+      }),
+    ).toEqual({
+      pluginData: ['Pear'],
+      stats: {mtime: 1700000000000, size: expect.any(Number)},
+    });
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+  });
+
+  test('does not stat a file unless asked', async () => {
+    await worker({
+      ...defaults,
+      computeSha1: true,
+      filePath: path.join('/project', 'fruits', 'Banana.js'),
+    });
+    expect(fs.statSync).not.toHaveBeenCalled();
   });
 
   test('can be loaded directly without transpilation', async () => {
