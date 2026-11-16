@@ -1325,13 +1325,14 @@ export default class TreeFS implements MutableFileSystem {
   }
 
   // The nth ancestor of the root ('' is 0, '..' is 1, ...), reached through
-  // the '..' entries that link each ancestor to the next.
-  #getNthAncestorOfRoot(n: number): ?DirectoryNode {
+  // the '..' entries that link each ancestor to the next. An ancestor with
+  // nothing in the map has no entry, and is an empty directory, as in lookups.
+  #getNthAncestorOfRoot(n: number): DirectoryNode {
     let node: ?MixedNode = this.#rootNode;
     for (let i = 0; i < n && isDirectory(node); i++) {
       node = node.get('..');
     }
-    return isDirectory(node) ? node : null;
+    return isDirectory(node) ? node : new Map();
   }
 
   // An ancestor of the root does not hold the next ancestor down (or the root
@@ -1373,8 +1374,12 @@ export default class TreeFS implements MutableFileSystem {
     followedLinks: ReadonlySet<FileMetadata> = new Set(),
   ): Iterable<Path> {
     const pathSep = opts.alwaysYieldPosix ? '/' : path.sep;
+    // Symlinks are resolved from the canonical path of their directory. The
+    // path where they were found differs when it passes through followed
+    // symlinks, or re-enters the root from an ancestor ('..' + 'project/link').
     const makeFrame = (
       node: DirectoryNode,
+      canonicalPath: string,
       nodeAncestorOfRootIdx: ?number,
       prefixWithSep: string,
       frameFollowedLinks: ReadonlySet<FileMetadata>,
@@ -1390,6 +1395,7 @@ export default class TreeFS implements MutableFileSystem {
           ? this.#getNthAncestorOfRoot(nextAncestorOfRootIdx)
           : null;
       return {
+        canonicalPath,
         entries: this.#directoryNodeIterator(
           node,
           nodeAncestorOfRootIdx,
@@ -1404,6 +1410,7 @@ export default class TreeFS implements MutableFileSystem {
     const stack = [
       makeFrame(
         iterationRootNode,
+        opts.canonicalPathOfRoot,
         ancestorOfRootIdx,
         pathPrefix === '' ? '' : pathPrefix + pathSep,
         followedLinks,
@@ -1417,7 +1424,11 @@ export default class TreeFS implements MutableFileSystem {
         continue;
       }
       const [name, node] = next.value;
-      if (opts.subtreeOnly && name === '..') {
+      // With no rootDir, '..' entries list files outside the project root.
+      // Inside a followed symlink they are skipped: those files are listed
+      // anyway, and a path through one (e.g. 'link-to-root/..') can't be
+      // joined lexically.
+      if (name === '..' && (opts.subtreeOnly || frame.followedLinks.size > 0)) {
         continue;
       }
 
@@ -1427,29 +1438,11 @@ export default class TreeFS implements MutableFileSystem {
           // regular file
           yield nodePath;
         } else {
-          // symlink
-          const nodePathWithSystemSeparators =
-            pathSep === path.sep
-              ? nodePath
-              : nodePath.replaceAll(pathSep, path.sep);
-
-          // When iterating from an ancestor of the project root, the root's
-          // canonical path ends '..' and the node path may re-enter the
-          // project root (e.g. '..' and 'project/link'), so the join must
-          // collapse those segments to give a normal path ('link').
-          const normalPathOfSymlink = this.#pathUtils.joinNormalToRelative(
-            opts.canonicalPathOfRoot,
-            nodePathWithSystemSeparators,
-          ).normalPath;
-
-          // We can't resolve the symlink directly here because we only have
-          // its normal path, and we need a canonical path for resolution
-          // (imagine our normal path contains a symlink 'bar' -> '.', and we
-          // are at /foo/bar/baz where baz -> '..' - that should resolve to
-          // /foo, not /foo/bar). We *can* use _lookupByNormalPath to walk to
-          // the canonical symlink, and then to its target.
+          // symlink - look it up by its canonical path to resolve its target,
+          // which may itself be a symlink.
           const resolved = this.#lookupByNormalPath(
-            normalPathOfSymlink,
+            this.#pathUtils.joinNormalToRelative(frame.canonicalPath, name)
+              .normalPath,
             LOOKUP_OPTIONS,
           );
           if (!resolved.exists) {
@@ -1470,6 +1463,7 @@ export default class TreeFS implements MutableFileSystem {
             stack.push(
               makeFrame(
                 target,
+                resolved.canonicalPath,
                 resolved.ancestorOfRootIdx,
                 nodePath + pathSep,
                 new Set([...frame.followedLinks, node]),
@@ -1478,9 +1472,19 @@ export default class TreeFS implements MutableFileSystem {
           }
         }
       } else if (opts.recursive) {
+        // A '..' entry is always one level up, including past the top of a
+        // Windows drive, where it holds the other drives and a join would stop.
+        const canonicalPath =
+          name !== '..'
+            ? this.#pathUtils.joinNormalToRelative(frame.canonicalPath, name)
+                .normalPath
+            : frame.canonicalPath === ''
+              ? '..'
+              : frame.canonicalPath + path.sep + '..';
         stack.push(
           makeFrame(
             node,
+            canonicalPath,
             node === frame.nextAncestorNode
               ? frame.nextAncestorOfRootIdx
               : null,
