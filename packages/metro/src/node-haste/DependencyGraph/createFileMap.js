@@ -47,6 +47,14 @@ const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
   );
 };
 
+// The Haste map of a project in which no file has a Haste name.
+const EMPTY_HASTE_MAP: HasteMap = {
+  computeConflicts: () => [],
+  getModule: () => null,
+  getModuleNameByPath: () => null,
+  getPackage: () => null,
+};
+
 function isCIEnv() {
   const CI = process.env.CI;
   return typeof CI === 'string' && CI !== '' && CI !== '0' && CI !== 'false';
@@ -87,18 +95,26 @@ export default function createFileMap(
     plugins.push(dependencyPlugin);
   }
 
-  const hasteMap = new HastePlugin({
-    platforms: new Set([
-      ...config.resolver.platforms,
-      MetroFileMap.H.NATIVE_PLATFORM,
-    ]),
-    hasteImplModulePath: config.resolver.hasteImplModulePath,
-    enableHastePackages: config.resolver.enableGlobalPackages,
-    rootDir: config.projectRoot,
-    failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
-  });
-
-  plugins.push(hasteMap);
+  let hasteMap: HasteMap = EMPTY_HASTE_MAP;
+  // Add HastePlugin if any file can have a Haste name, which needs a
+  // `hasteImplModulePath` or, for `package.json` files, Haste packages.
+  if (
+    config.resolver.hasteImplModulePath != null ||
+    config.resolver.enableGlobalPackages
+  ) {
+    const hastePlugin = new HastePlugin({
+      platforms: new Set([
+        ...config.resolver.platforms,
+        MetroFileMap.H.NATIVE_PLATFORM,
+      ]),
+      hasteImplModulePath: config.resolver.hasteImplModulePath,
+      enableHastePackages: config.resolver.enableGlobalPackages,
+      rootDir: config.projectRoot,
+      failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
+    });
+    plugins.push(hastePlugin);
+    hasteMap = hastePlugin;
+  }
 
   const fileMap = new MetroFileMap({
     cacheManagerFactory:
