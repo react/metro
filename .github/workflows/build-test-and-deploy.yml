@@ -65,6 +65,40 @@ jobs:
       node-version: ${{ matrix.node-version }}
       runs-on: ${{ matrix.runs-on }}
 
+  # Yarn hoists everything into the root node_modules, which can hide
+  # undeclared dependencies. pnpm's isolated node_modules catches them.
+  test-pnpm:
+    runs-on: ubuntu-latest
+    name: "Tests [pnpm, isolated node_modules]"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          check-latest: true
+      # yarn.lock is the source of truth - generate pnpm-lock.yaml from it
+      - run: pnpm import
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run typecheck-ts
+      - run: pnpm run lint
+      - name: Run Jest Tests
+        run: |
+          max_attempts=3
+          attempt=1
+          until pnpm exec jest --ci --maxWorkers 4; do
+            if [ $attempt -ge $max_attempts ]; then
+              echo "Tests failed after $max_attempts attempts"
+              exit 1
+            fi
+            echo "Attempt $attempt failed, retrying..."
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+
   deploy:
     # runs only on tag pushes
     if: ${{ github.ref_type == 'tag' }}
