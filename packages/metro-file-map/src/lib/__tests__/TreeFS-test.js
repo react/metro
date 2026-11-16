@@ -1029,6 +1029,28 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ]);
     });
 
+    test('ancestor of project root follows a symlink in a directory ending in a dot', () => {
+      const dotTfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo./x.js'), [0, 0, 0, null, 0, null]],
+          [p('foo./link'), [0, 0, 0, null, 'foo.', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          dotTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([p('/project/foo./x.js'), p('/project/foo./link/x.js')]);
+    });
+
     test.each([
       [
         '/a/b',
