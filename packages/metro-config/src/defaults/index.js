@@ -149,6 +149,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     unstable_compactOutput: false,
     unstable_disableInputAstCloning: true,
     unstable_memoizeInlineRequires: false,
+    unstable_shareTransformResults: true,
     unstable_workerThreads: false,
   },
   watcher: {

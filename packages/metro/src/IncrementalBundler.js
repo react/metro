@@ -21,6 +21,7 @@ import type {ConfigT} from 'metro-config';
 
 import Bundler from './Bundler';
 import DeltaBundler from './DeltaBundler';
+import {sharesTransformResults} from './DeltaBundler/Transformer';
 import ResourceNotFoundError from './IncrementalBundler/ResourceNotFoundError';
 import getGraphId from './lib/getGraphId';
 import getPrependedScripts from './lib/getPrependedScripts';
@@ -74,7 +75,11 @@ export default class IncrementalBundler {
   constructor(config: ConfigT, options?: IncrementalBundlerOptions) {
     this._config = config;
     this._bundler = new Bundler(config, options);
-    this._deltaBundler = new DeltaBundler(this._bundler.getWatcher());
+    this._deltaBundler = new DeltaBundler(this._bundler.getWatcher(), {
+      onModulesReleased: sharesTransformResults(config)
+        ? released => this._bundler.releaseSharedTransformResults(released)
+        : null,
+    });
   }
 
   async end(): Promise<void> {

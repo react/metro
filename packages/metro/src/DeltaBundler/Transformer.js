@@ -9,14 +9,21 @@
  * @oncall react_native
  */
 
-import type {TransformResult, TransformResultWithSource} from '../DeltaBundler';
+import type {
+  MixedOutput,
+  TransformResult,
+  TransformResultWithSource,
+} from '../DeltaBundler';
 import type {DynamicRoot} from '../lib/dynamicRoots';
+import type {Computed} from './SharedTransformResults';
+import type {ReleasedModules} from './types';
 import type {TransformerConfig, TransformOptions} from './Worker';
 import type {ConfigT} from 'metro-config';
 
 import {getAssetUrlPath} from '../Assets';
 import {normalizePathSeparatorsToPosix} from '../lib/pathUtils';
 import getTransformCacheKey from './getTransformCacheKey';
+import SharedTransformResults from './SharedTransformResults';
 import WorkerFarm from './WorkerFarm';
 import debugModule from 'debug';
 import {Cache, stableHash} from 'metro-cache';
@@ -37,6 +44,7 @@ export default class Transformer {
   _baseHash: string;
   _getDynamicRoots: () => ReadonlyArray<DynamicRoot>;
   _getSha1: GetOrComputeSha1Fn;
+  _sharedResults: ?SharedTransformResults<MixedOutput>;
   _workerFarm: WorkerFarm;
 
   constructor(
@@ -52,6 +60,9 @@ export default class Transformer {
     this._cache = new Cache(config.cacheStores);
     this._getDynamicRoots = opts.getDynamicRoots ?? (() => []);
     this._getSha1 = opts.getOrComputeSha1;
+    this._sharedResults = sharesTransformResults(config)
+      ? new SharedTransformResults()
+      : null;
 
     // Remove the transformer config params that we don't want to pass to the
     // transformer. We should change the config object and move them away so we
@@ -59,6 +70,7 @@ export default class Transformer {
     const {
       getTransformOptions: _getTransformOptions,
       transformVariants: _transformVariants,
+      unstable_shareTransformResults: _shareTransformResults,
       unstable_supportsInlineModules: _supportsInlineModules,
       unstable_workerThreads: _workerThreads,
       ...transformerConfig
@@ -162,7 +174,7 @@ export default class Transformer {
     ]);
 
     let sha1: string;
-    let content: ?Buffer;
+    let content: Buffer | void;
     if (fileBuffer) {
       // Shortcut for virtual modules which provide the contents with the filename.
       sha1 = crypto.createHash('sha1').update(fileBuffer).digest('hex');
@@ -175,62 +187,107 @@ export default class Transformer {
       }
     }
 
-    let fullKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
-    let result;
-    try {
-      result = await cache.get(fullKey);
-    } catch (error) {
-      this._config.reporter.update({
-        type: 'cache_read_error',
-        error,
+    const requestedKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
+
+    const getOrTransform = async (): Promise<Computed<MixedOutput>> => {
+      let fullKey = requestedKey;
+      let result;
+      try {
+        result = await cache.get(fullKey);
+      } catch (error) {
+        this._config.reporter.update({
+          type: 'cache_read_error',
+          error,
+        });
+        throw error;
+      }
+
+      // A valid result from the cache is used directly; otherwise we call into
+      // the transformer to compute the corresponding result.
+      const data: Readonly<{
+        result: TransformResult<>,
+        sha1: string,
+      }> = result
+        ? {result, sha1}
+        : await this._workerFarm.transform(
+            projectRelativePath,
+            transformerOptions,
+            content,
+            assetUrlPath ?? undefined,
+          );
+
+      // Only re-compute the full key if the SHA-1 changed. This is because
+      // references are used by the cache implementation in a weak map to keep
+      // track of the cache that returned the result.
+      if (sha1 !== data.sha1) {
+        fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
+      }
+
+      // Fire-and-forget cache set promise.
+      cache.set(fullKey, data.result).catch(error => {
+        this._config.reporter.update({
+          type: 'cache_write_error',
+          error,
+        });
       });
-      throw error;
-    }
 
-    // A valid result from the cache is used directly; otherwise we call into
-    // the transformer to computed the corresponding result.
-    const data: Readonly<{
-      result: TransformResult<>,
-      sha1: string,
-    }> = result
-      ? {result, sha1}
-      : await this._workerFarm.transform(
-          projectRelativePath,
-          transformerOptions,
-          content,
-          assetUrlPath ?? undefined,
-        );
+      return {key: fullKey, result: data.result};
+    };
 
-    // Only re-compute the full key if the SHA-1 changed. This is because
-    // references are used by the cache implementation in a weak map to keep
-    // track of the cache that returned the result.
-    if (sha1 !== data.sha1) {
-      fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
-    }
-
-    // Fire-and-forget cache set promise.
-    cache.set(fullKey, data.result).catch(error => {
-      this._config.reporter.update({
-        type: 'cache_write_error',
-        error,
-      });
-    });
+    const {key, result} =
+      this._sharedResults != null
+        ? await this._sharedResults.getOrCompute(
+            {key: requestedKey, moduleKey: partialKey, path: filePath},
+            getOrTransform,
+          )
+        : await getOrTransform();
 
     return {
-      ...data.result,
-      unstable_transformResultKey: fullKey.toString(),
-      getSource(): Buffer {
-        if (fileBuffer) {
-          return fileBuffer;
-        }
-        return fs.readFileSync(filePath);
-      },
+      ...result,
+      unstable_transformResultKey: key.toString(),
+      getSource: createGetSource(filePath, fileBuffer),
     };
+  }
+
+  /**
+   * Drops the shared transform results of released modules that no graph
+   * holds any more.
+   */
+  releaseSharedResults(released: ReleasedModules<MixedOutput>): void {
+    const shared = this._sharedResults;
+    if (shared == null) {
+      return;
+    }
+    const before = shared.countEntries();
+    shared.release(released);
+    debug(
+      'Released %d of %d shared transform results',
+      before - shared.countEntries(),
+      before,
+    );
   }
 
   async end(): Promise<void> {
     await this._workerFarm.kill();
   }
+}
+
+/**
+ * Whether `Transformer` shares results between graphs. Empty `cacheStores`
+ * disables caching, which sharing would bypass.
+ */
+export function sharesTransformResults(config: ConfigT): boolean {
+  return (
+    config.transformer.unstable_shareTransformResults &&
+    config.cacheStores.length > 0
+  );
+}
+
+// Defined outside `transformFile` because closures created in one scope share
+// a context. There, `getSource`, which a graph holds for the module's lifetime,
+// would retain what `getOrTransform` captures, including the file's contents.
+function createGetSource(filePath: string, fileBuffer: ?Buffer): () => Buffer {
+  return () => fileBuffer ?? fs.readFileSync(filePath);
 }
 
 function verifyRootExists(root: string): void {
