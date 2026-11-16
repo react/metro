@@ -76,7 +76,6 @@ type WatcherOptions = {
   healthCheckFilePrefix: string,
   ignoreForCrawl: (filePath: string) => boolean,
   ignorePatternForWatch: RegExp,
-  previousState: CrawlerOptions['previousState'],
   perfLogger: ?PerfLogger,
   roots: ReadonlyArray<string>,
   rootDir: string,
@@ -107,6 +106,9 @@ export class Watcher extends EventEmitter {
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
   readonly #options: WatcherOptions;
+  // What prepareCrawl() started, resolving to the node crawl's watchers, if
+  // any.
+  #prepared: ?Promise<?ReadonlyArray<?CrawlWatcher>>;
   readonly #pendingHealthChecks: Map<
     /* basename */ string,
     /* resolve */ () => void,
@@ -122,36 +124,59 @@ export class Watcher extends EventEmitter {
     this.#useWatchmanWatcher = options.useWatchman;
   }
 
-  async crawl(): Promise<CrawlResult> {
+  /**
+   * Start anything that must be running before the crawl begins, which in
+   * watch mode without Watchman is the backends, with their watches
+   * confirmed. crawl() waits for this, and calling it earlier lets other work,
+   * such as reading a cache, overlap with it.
+   */
+  async prepareCrawl(): Promise<void> {
+    await this.#prepareCrawl();
+  }
+
+  #prepareCrawl(): Promise<?ReadonlyArray<?CrawlWatcher>> {
+    this.#prepared ??= (async () => {
+      const options = this.#options;
+      options.perfLogger?.point('prepareCrawl_start');
+      // Non-Watchman backends have no clock to subscribe `since`, so they must
+      // already be watching before the crawl begins, and their events
+      // buffered, for changes made while crawling not to be missed. Watchman
+      // backends are started by watch(), which subscribes `since` the crawl's
+      // clock to cover the same window. If the Watchman crawl falls back to
+      // the node crawler, there is no clock, so #crawl() starts non-Watchman
+      // backends before the node crawl instead.
+      let crawlWatchers: ?ReadonlyArray<?CrawlWatcher> = null;
+      if (!options.useWatchman) {
+        // The node crawler lists every directory under the roots, so a
+        // FallbackWatcher started for it can watch each just before it is
+        // listed, instead of walking the roots again.
+        const crawlFed =
+          options.crawl == null && this.#getBackendClass() === FallbackWatcher;
+        await this.#startBackendsBeforeCrawl({crawlFed});
+        if (crawlFed) {
+          crawlWatchers = this.#backends.map(backend =>
+            backend instanceof FallbackWatcher
+              ? backend.getCrawlWatcher()
+              : null,
+          );
+        }
+      }
+      options.perfLogger?.point('prepareCrawl_end');
+      return crawlWatchers;
+    })();
+    return this.#prepared;
+  }
+
+  async crawl(
+    previousState: CrawlerOptions['previousState'],
+  ): Promise<CrawlResult> {
     this.#options.perfLogger?.point('crawl_start');
     const options = this.#options;
-
-    // Non-Watchman backends have no clock to subscribe `since`, so they must
-    // already be watching before the crawl begins, and their events buffered,
-    // for changes made while crawling not to be missed. Watchman backends are
-    // started by watch(), which subscribes `since` the crawl's clock to cover
-    // the same window. If the Watchman crawl falls back to the node crawler,
-    // there is no clock, so #crawl() starts non-Watchman backends before the
-    // node crawl instead.
-    //
-    // The node crawler lists every directory under the roots, so a
-    // FallbackWatcher started for it can watch each just before it is listed,
-    // instead of walking the roots again.
-    let crawlWatchers: ?ReadonlyArray<?CrawlWatcher> = null;
-    if (!options.useWatchman) {
-      const crawlFed =
-        options.crawl == null && this.#getBackendClass() === FallbackWatcher;
-      await this.#startBackendsBeforeCrawl({crawlFed});
-      if (crawlFed) {
-        crawlWatchers = this.#backends.map(backend =>
-          backend instanceof FallbackWatcher ? backend.getCrawlWatcher() : null,
-        );
-      }
-    }
+    const crawlWatchers = await this.#prepareCrawl();
 
     const result = await this.#crawl({
       crawlWatchers,
-      previousState: options.previousState,
+      previousState,
       roots: options.roots,
       useWatchman: options.useWatchman,
     });
