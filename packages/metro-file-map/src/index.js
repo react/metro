@@ -172,7 +172,7 @@ export type {
 // This should be bumped whenever a code change to `metro-file-map` itself
 // would cause a change to the cache data structure and/or content (for a given
 // filesystem state and build parameters).
-const CACHE_BREAKER = '15';
+const CACHE_BREAKER = '16';
 
 const CHANGE_INTERVAL = 30;
 

@@ -108,14 +108,16 @@ export default class HastePlugin
         await new Promise(setImmediate);
       }
     }
-    this.#getModuleNameByPath = mixedPath => {
-      const result = opts.getOrComputeFileData(mixedPath);
-      return result.exists &&
-        result.type === 'f' &&
-        typeof result.data === 'string'
-        ? result.data
-        : null;
-    };
+    this.#getModuleNameByPath = this.#hasHasteNames()
+      ? mixedPath => {
+          const result = opts.getOrComputeFileData(mixedPath);
+          return result.exists &&
+            result.type === 'f' &&
+            typeof result.data === 'string'
+            ? result.data
+            : null;
+        }
+      : () => null;
     this.#perfLogger?.point('constructHasteMap_end');
     this.#perfLogger?.annotate({int: {hasteFiles}});
   }
@@ -491,7 +493,17 @@ export default class HastePlugin
     ]);
   }
 
-  getWorker(): FileMapPluginWorker {
+  // Files have Haste names only through `hasteImplModulePath` or, for
+  // `package.json`, Haste packages.
+  #hasHasteNames(): boolean {
+    return this.#hasteImplModulePath != null || this.#enableHastePackages;
+  }
+
+  getWorker(): ?FileMapPluginWorker {
+    if (!this.#hasHasteNames()) {
+      // Nothing to compute, so no file needs reading for this plugin.
+      return null;
+    }
     return {
       worker: {
         modulePath: require.resolve('./haste/worker.js'),

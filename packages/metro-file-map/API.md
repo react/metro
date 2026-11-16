@@ -233,7 +233,7 @@ export class HastePlugin implements HasteMap, FileMapPlugin<null, string | null>
   getModuleNameByPath(mixedPath: Path): null | undefined | string;
   getPackage(name: string, platform: null | undefined | string, _supportsNativePlatform?: null | undefined | boolean): null | undefined | Path;
   getSerializableSnapshot(): null;
-  getWorker(): FileMapPluginWorker;
+  getWorker(): null | undefined | FileMapPluginWorker;
   initialize(opts: FileMapPluginInitOptions<null, string | null>): Promise<void>;
   readonly name: 'haste';
   onChanged(delta: ReadonlyFileSystemChanges<null | undefined | string>): void;

@@ -53,6 +53,8 @@ const NODE_MODULES_SEP = 'node_modules' + sep;
 const MAX_FILES_PER_WORKER = 100;
 
 export class FileProcessor {
+  // Whether any plugin's worker runs on a batch, rather than on demand.
+  #hasEagerPluginWorker: boolean;
   #maxFilesPerWorker: number;
   #maxWorkers: number;
   #perfLogger: ?PerfLogger;
@@ -72,6 +74,9 @@ export class FileProcessor {
     this.#maxFilesPerWorker = opts.maxFilesPerWorker ?? MAX_FILES_PER_WORKER;
     this.#maxWorkers = opts.maxWorkers;
     this.#pluginWorkers = opts.pluginWorkers ?? [];
+    this.#hasEagerPluginWorker = this.#pluginWorkers.some(
+      plugin => plugin.lazy !== true,
+    );
     this.#inBandWorker = new Worker({
       plugins: this.#pluginWorkers.map(plugin => plugin.worker),
     });
@@ -89,6 +94,17 @@ export class FileProcessor {
     }>,
   }> {
     const errors = [];
+
+    if (req.maybeReturnContent) {
+      throw new Error(
+        'Batch processing does not support returning file contents',
+      );
+    }
+
+    if (!req.computeSha1 && !this.#hasEagerPluginWorker) {
+      // No file needs a worker.
+      return {errors};
+    }
 
     const workerJobs = files
       .map(([normalFilePath, fileMetadata]) => {
@@ -109,12 +125,6 @@ export class FileProcessor {
       Math.ceil(workerJobs.length / this.#maxFilesPerWorker),
     );
     const batchWorker = this.#getBatchWorker(numWorkers);
-
-    if (req.maybeReturnContent) {
-      throw new Error(
-        'Batch processing does not support returning file contents',
-      );
-    }
 
     await Promise.all(
       workerJobs.map(([workerInput, fileMetadata]) => {

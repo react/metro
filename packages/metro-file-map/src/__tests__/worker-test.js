@@ -17,6 +17,7 @@ import {HastePlugin} from '..';
 import {Worker} from '../worker';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
+import nullthrows from 'nullthrows';
 
 jest.mock('node:fs', () => {
   const path = require('node:path');
@@ -98,10 +99,12 @@ function workerWithHaste(
 ) {
   return new Worker({
     plugins: [
-      new HastePlugin({
-        ...defaultHasteConfig,
-        ...hasteOverrides,
-      }).getWorker().worker,
+      nullthrows(
+        new HastePlugin({
+          ...defaultHasteConfig,
+          ...hasteOverrides,
+        }).getWorker(),
+      ).worker,
     ],
   }).processFile({
     ...message,
