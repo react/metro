@@ -59,6 +59,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     p('/project/root/a.'),
     p('/project/root/foo..'),
     p('/project/root/...'),
+    p('/project/root/a./foo'),
+    p('/project/root/foo../bar'),
+    p('/project/root/.../bar'),
+    p('/project/root/../a./foo'),
+    p('/project/root/../../project/root/a./foo.js'),
   ])(`absoluteToNormal('%s') is correct and optimised`, absolutePath => {
     const rootDir = p('/project/root');
     pathUtils = new RootPathUtils(rootDir);
@@ -82,7 +87,7 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       p('/project/root/../root2/../root3/foo'),
       p('/project/root/./baz/foo/bar'),
       p('/project/root/a./../foo'),
-      p('/project/root/../a./foo'),
+      p('/project/root/a./.'),
       p('/project/root/.././foo'),
       p('/project/root/.././foo/'),
       p('/project/root/.'),
@@ -151,6 +156,8 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
             p('foo/..'),
             p('../root/.'),
             p('../root/..'),
+            p('a./foo'),
+            p('../root/a./foo'),
             // On POSIX, `..` at the root re-enters the root
             ...(platform === 'posix'
               ? [p('../../../normal/path'), p('../../../normal/path/')]
@@ -188,6 +195,21 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       pathUtils = new RootPathUtils(p('/project/root'));
       expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
         collapsedSegments: 0,
+        normalPath: expected,
+      });
+    },
+  );
+
+  test.each([
+    [p('..'), p('root/a./foo'), p('a./foo'), 1],
+    [p('../..'), p('project/root/foo../bar'), p('foo../bar'), 2],
+    [p('..'), p('sibling./foo'), p('../sibling./foo'), 0],
+  ])(
+    'joinNormalToRelative(%s, %s) collapses past a name ending in a dot, as %s',
+    (normalPath, relativePath, expected, collapsedSegments) => {
+      pathUtils = new RootPathUtils(p('/project/root'));
+      expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
+        collapsedSegments,
         normalPath: expected,
       });
     },

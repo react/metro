@@ -49,6 +49,26 @@ const CURRENT_FRAGMENT = '.' + path.sep;
 const IS_WIN32 = path.sep === '\\';
 const ROOT_BASE_IDX = IS_WIN32 ? 0 : 1;
 
+// The index of the first "./" at or after `fromIdx` that ends a "." or ".."
+// segment, rather than a name such as "foo.", or -1 if there is none.
+function indexOfIndirectionSegment(fullPath: string, fromIdx: number): number {
+  for (
+    let idx = fullPath.indexOf(CURRENT_FRAGMENT, fromIdx);
+    idx !== -1;
+    idx = fullPath.indexOf(CURRENT_FRAGMENT, idx + CURRENT_FRAGMENT.length)
+  ) {
+    if (
+      idx === 0 ||
+      fullPath[idx - 1] === path.sep ||
+      (fullPath[idx - 1] === '.' &&
+        (idx === 1 || fullPath[idx - 2] === path.sep))
+    ) {
+      return idx;
+    }
+  }
+  return -1;
+}
+
 export class RootPathUtils {
   #rootDir: string;
   #rootDirnames: ReadonlyArray<string>;
@@ -256,7 +276,15 @@ export class RootPathUtils {
     // or on any "./" that isn't a "../".
     for (let pos = startOfRelativePart; ; pos += UP_FRAGMENT_SEP_LENGTH) {
       const nextIndirection = fullPath.indexOf(CURRENT_FRAGMENT, pos);
-      if (nextIndirection === -1) {
+      if (nextIndirection !== pos + 1 || fullPath[pos] !== '.') {
+        // Past the leading "../" fragments, fall back on any "." or ".."
+        // segment, but not on a "./" that ends a name, e.g. in "foo./".
+        if (
+          nextIndirection !== -1 &&
+          indexOfIndirectionSegment(fullPath, nextIndirection) !== -1
+        ) {
+          return null;
+        }
         // The search above doesn't find a final '.' or '..' segment, as no
         // separator follows it. Fall back for those too, unless the '..' is
         // one of the leading indirections, e.g. for /project/root/foo/. or
@@ -343,13 +371,6 @@ export class RootPathUtils {
       // paths need to survive this.
       if (totalUpIndirections < this.#rootParts.length - ROOT_BASE_IDX) {
         totalUpIndirections++;
-      }
-
-      if (
-        nextIndirection !== pos + 1 || // Fallback when ./ later in the path, or leading
-        fullPath[pos] !== '.' // and for anything other than a leading ../
-      ) {
-        return null;
       }
     }
   }
