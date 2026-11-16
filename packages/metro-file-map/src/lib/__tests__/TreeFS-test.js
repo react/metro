@@ -1003,7 +1003,30 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
             rootDir: p('/'),
           }),
         ),
-      ).toEqual([p('/project/bar.js')]);
+      ).toEqual([p('/project/bar.js'), p('/project/root/project/bar.js')]);
+    });
+
+    test('ancestor of project root follows symlinks within the project root', () => {
+      expect(
+        Array.from(
+          tfs.matchFiles({
+            filter: new RegExp(/\/another\.js$/),
+            filterComparePosix: true,
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([
+        p('/project/foo/another.js'),
+        p('/project/foo/owndir/another.js'),
+        p('/project/link-to-foo/another.js'),
+        p('/project/link-to-foo/owndir/another.js'),
+        p('/project/root/project/foo/another.js'),
+        p('/project/root/project/foo/owndir/another.js'),
+        p('/project/root/project/link-to-foo/another.js'),
+        p('/project/root/project/link-to-foo/owndir/another.js'),
+      ]);
     });
 
     test('recursive', () => {
