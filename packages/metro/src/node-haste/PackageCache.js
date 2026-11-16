@@ -9,12 +9,16 @@
  * @oncall react_native
  */
 
+import type {ResolutionObservations} from '../DeltaBundler/types';
 import type {PackageJson} from 'metro-resolver/private/types';
 
 import {readFileSync} from 'node:fs';
 import {dirname} from 'node:path';
 
-type GetClosestPackageFn = (absoluteFilePath: string) => ?{
+type GetClosestPackageFn = (
+  absoluteFilePath: string,
+  observations?: ?ResolutionObservations,
+) => ?{
   packageJsonPath: string,
   packageRelativePath: string,
 };
@@ -70,8 +74,11 @@ export class PackageCache {
    * The closest package is looked up on every call rather than remembered per
    * module path. Only the parsed contents of each `package.json` are cached.
    */
-  getPackageForModule(absoluteModulePath: string): ?PackageForModule {
-    const closest = this.#getClosestPackage(absoluteModulePath);
+  getPackageForModule(
+    absoluteModulePath: string,
+    observations?: ?ResolutionObservations,
+  ): ?PackageForModule {
+    const closest = this.#getClosestPackage(absoluteModulePath, observations);
     if (closest == null) {
       return null;
     }
