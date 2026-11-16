@@ -1029,6 +1029,60 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ]);
     });
 
+    test.each([
+      [
+        '/a/b',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+        ],
+      ],
+      [
+        '/a',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+      [
+        '/',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+    ])(
+      'ancestor %s of a deeper project root includes each level once',
+      (rootDir, expected) => {
+        const deepTfs = new TreeFS({
+          rootDir: p('/a/b/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+            [p('link-to-foo'), [0, 0, 0, null, 'foo', null]],
+            [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+            [p('../../c/z.js'), [0, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          Array.from(
+            deepTfs.matchFiles({
+              follow: true,
+              recursive: true,
+              rootDir: p(rootDir),
+            }),
+          ),
+        ).toEqual(expected.map(p));
+      },
+    );
+
     test('recursive', () => {
       expect(
         Array.from(

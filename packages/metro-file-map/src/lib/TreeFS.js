@@ -507,7 +507,6 @@ export default class TreeFS implements MutableFileSystem {
       ancestorOfRootIdx,
       canonicalPath: rootRealPath,
       node: contextRoot,
-      parentNode: contextRootParent,
     } = contextRootResult;
     if (!isDirectory(contextRoot)) {
       return;
@@ -526,7 +525,6 @@ export default class TreeFS implements MutableFileSystem {
 
     for (const relativePathForComparison of this.#pathIterator(
       contextRoot,
-      contextRootParent,
       ancestorOfRootIdx,
       {
         alwaysYieldPosix: filterComparePosix,
@@ -1326,15 +1324,32 @@ export default class TreeFS implements MutableFileSystem {
       : this.#pathUtils.relativeToNormal(relativeOrAbsolutePath);
   }
 
+  // The nth ancestor of the root ('' is 0, '..' is 1, ...), reached through
+  // the '..' entries that link each ancestor to the next.
+  #getNthAncestorOfRoot(n: number): ?DirectoryNode {
+    let node: ?MixedNode = this.#rootNode;
+    for (let i = 0; i < n && isDirectory(node); i++) {
+      node = node.get('..');
+    }
+    return isDirectory(node) ? node : null;
+  }
+
+  // An ancestor of the root does not hold the next ancestor down (or the root
+  // itself) as an entry, so for the nth ancestor, the (n-1)th is yielded first,
+  // under its basename.
   *#directoryNodeIterator(
     node: DirectoryNode,
-    parent: ?DirectoryNode,
     ancestorOfRootIdx: ?number,
+    nextAncestorNode: ?DirectoryNode,
   ): IteratorObject<[string, MixedNode]> {
-    if (ancestorOfRootIdx != null && ancestorOfRootIdx > 0 && parent) {
+    if (
+      ancestorOfRootIdx != null &&
+      ancestorOfRootIdx > 0 &&
+      nextAncestorNode != null
+    ) {
       yield [
         this.#pathUtils.getBasenameOfNthAncestor(ancestorOfRootIdx - 1),
-        parent,
+        nextAncestorNode,
       ] as [string, MixedNode];
     }
     yield* node.entries();
@@ -1346,7 +1361,6 @@ export default class TreeFS implements MutableFileSystem {
    */
   *#pathIterator(
     iterationRootNode: DirectoryNode,
-    iterationRootParentNode: ?DirectoryNode,
     ancestorOfRootIdx: ?number,
     opts: Readonly<{
       alwaysYieldPosix: boolean,
@@ -1359,18 +1373,41 @@ export default class TreeFS implements MutableFileSystem {
     followedLinks: ReadonlySet<FileMetadata> = new Set(),
   ): Iterable<Path> {
     const pathSep = opts.alwaysYieldPosix ? '/' : path.sep;
-    const stack = [
-      {
+    const makeFrame = (
+      node: DirectoryNode,
+      nodeAncestorOfRootIdx: ?number,
+      prefixWithSep: string,
+      frameFollowedLinks: ReadonlySet<FileMetadata>,
+    ) => {
+      // Only the next ancestor down is itself an ancestor of the root. Every
+      // other entry of an ancestor is not.
+      const nextAncestorOfRootIdx =
+        nodeAncestorOfRootIdx != null && nodeAncestorOfRootIdx > 0
+          ? nodeAncestorOfRootIdx - 1
+          : null;
+      const nextAncestorNode =
+        nextAncestorOfRootIdx != null
+          ? this.#getNthAncestorOfRoot(nextAncestorOfRootIdx)
+          : null;
+      return {
         entries: this.#directoryNodeIterator(
-          iterationRootNode,
-          iterationRootParentNode,
-          ancestorOfRootIdx,
+          node,
+          nodeAncestorOfRootIdx,
+          nextAncestorNode,
         ),
-        parentNode: iterationRootParentNode,
+        nextAncestorNode,
+        nextAncestorOfRootIdx,
+        prefixWithSep,
+        followedLinks: frameFollowedLinks,
+      };
+    };
+    const stack = [
+      makeFrame(
+        iterationRootNode,
         ancestorOfRootIdx,
-        prefixWithSep: pathPrefix === '' ? '' : pathPrefix + pathSep,
+        pathPrefix === '' ? '' : pathPrefix + pathSep,
         followedLinks,
-      },
+      ),
     ];
     while (stack.length > 0) {
       const frame = stack[stack.length - 1];
@@ -1430,35 +1467,27 @@ export default class TreeFS implements MutableFileSystem {
           ) {
             // Symlink points to a directory - iterate over its contents using
             // the path where we found the symlink as a prefix.
-            stack.push({
-              entries: this.#directoryNodeIterator(
+            stack.push(
+              makeFrame(
                 target,
-                resolved.parentNode,
                 resolved.ancestorOfRootIdx,
+                nodePath + pathSep,
+                new Set([...frame.followedLinks, node]),
               ),
-              parentNode: resolved.parentNode,
-              ancestorOfRootIdx: resolved.ancestorOfRootIdx,
-              prefixWithSep: nodePath + pathSep,
-              followedLinks: new Set([...frame.followedLinks, node]),
-            });
+            );
           }
         }
       } else if (opts.recursive) {
-        const childAncestorOfRootIdx =
-          frame.ancestorOfRootIdx != null && frame.ancestorOfRootIdx > 0
-            ? frame.ancestorOfRootIdx - 1
-            : null;
-        stack.push({
-          entries: this.#directoryNodeIterator(
+        stack.push(
+          makeFrame(
             node,
-            frame.parentNode,
-            childAncestorOfRootIdx,
+            node === frame.nextAncestorNode
+              ? frame.nextAncestorOfRootIdx
+              : null,
+            nodePath + pathSep,
+            frame.followedLinks,
           ),
-          parentNode: frame.parentNode,
-          ancestorOfRootIdx: childAncestorOfRootIdx,
-          prefixWithSep: nodePath + pathSep,
-          followedLinks: frame.followedLinks,
-        });
+        );
       }
     }
   }
