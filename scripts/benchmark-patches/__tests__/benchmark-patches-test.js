@@ -32,7 +32,7 @@ test('rejects invalid arguments', () => {
   const noBenchmark = runScript('Entry.js:ios');
   expect(noBenchmark.status).not.toBe(0);
   expect(noBenchmark.stderr).toContain(
-    'Unknown benchmark "Entry.js:ios", expected one of: bundling_speed',
+    'Unknown benchmark "Entry.js:ios", expected one of: bundling_speed, lazy_bundling',
   );
 
   const badRuns = runScript('bundling_speed', '--runs=1', 'Entry.js:ios');
