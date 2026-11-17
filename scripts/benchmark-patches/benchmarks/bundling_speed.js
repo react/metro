@@ -11,6 +11,7 @@
 'use strict';
 
 const run = require('../run');
+const {delta, stats} = require('../stats');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -31,22 +32,6 @@ const HELP = `  bundling_speed [--build-command=CMD] <entry>:<platform>...
 `;
 
 const OPTIONS = {'build-command': {type: 'string'}};
-
-function stats(values) {
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const variance =
-    values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1);
-  return {mean, n: values.length, sd: Math.sqrt(variance), variance};
-}
-
-// Percent change vs base, with Welch's t statistic.
-function delta(sample, base) {
-  const pct = (sample.mean / base.mean - 1) * 100;
-  const t =
-    (sample.mean - base.mean) /
-    Math.sqrt(sample.variance / sample.n + base.variance / base.n);
-  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% (t ${t.toFixed(1)})`;
-}
 
 function parseTargets(specs, options) {
   const buildCommand = options['build-command']?.split(' ') ?? [

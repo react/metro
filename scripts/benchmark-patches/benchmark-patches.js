@@ -11,12 +11,16 @@
 'use strict';
 
 const bundlingSpeed = require('./benchmarks/bundling_speed');
+const lazyBundling = require('./benchmarks/lazy_bundling');
 const run = require('./run');
 const fs = require('node:fs');
 const path = require('node:path');
 const {parseArgs} = require('node:util');
 
-const BENCHMARKS = {bundling_speed: bundlingSpeed};
+const BENCHMARKS = {
+  bundling_speed: bundlingSpeed,
+  lazy_bundling: lazyBundling,
+};
 
 const DIST_DIR = path.join(__dirname, 'dist');
 const PATCHES_DIR = path.join(__dirname, 'patches');
@@ -72,7 +76,7 @@ function rotate(items, offset) {
   return items.map((_, i) => items[(offset + i) % items.length]);
 }
 
-function main() {
+async function main() {
   const benchmarkOptions = Object.assign(
     {},
     ...Object.values(BENCHMARKS).map(benchmark => benchmark.OPTIONS),
@@ -138,7 +142,7 @@ function main() {
     ]),
   );
   for (const target of targets) {
-    const warmup = benchmark.measure(
+    const warmup = await benchmark.measure(
       target,
       path.join(DIST_DIR, variants[0].name),
     );
@@ -155,7 +159,10 @@ function main() {
         }
         let result;
         try {
-          result = benchmark.measure(target, path.join(DIST_DIR, variant.name));
+          result = await benchmark.measure(
+            target,
+            path.join(DIST_DIR, variant.name),
+          );
         } finally {
           if (variant.patchFile != null) {
             patch(variant.patchFile, {reverse: true});
@@ -176,7 +183,10 @@ function main() {
 }
 
 if (require.main === module) {
-  main();
+  main().catch(error => {
+    process.exitCode = 1;
+    console.error(error);
+  });
 }
 
 module.exports = {BENCHMARKS, rotate};
