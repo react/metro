@@ -38,6 +38,12 @@ type Entry<T> = Readonly<{
  * about to hold. Later graphs then get a second copy of that module, until the
  * module changes or the building graph ends.
  *
+ * Only graphs that `DeltaBundler` registers release their paths. Entries added
+ * by graphs it never registers, i.e. those built by `getDependencies` and a
+ * first build that fails, stay until a later result for the same module
+ * replaces them or a live graph releases their path. This keeps prepended
+ * scripts, which every graph's revision holds, shared between graphs.
+ *
  * Callers must treat `output` and `dependencies` as read-only, as their types
  * declare, since every graph holding a result sees a write to it.
  */
