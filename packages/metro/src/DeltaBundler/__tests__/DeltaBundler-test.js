@@ -174,6 +174,32 @@ describe('DeltaBundler', () => {
       expect(heldOutputs[0]).toBe(sharedOutputInB);
     });
 
+    test('is called with the source paths of released virtual modules', async () => {
+      const virtualOutputInA = [{type: 'js/module', data: {}}];
+      const virtualOutputInB = [{type: 'js/module', data: {}}];
+      const graphWithVirtual = (entry: string, output: typeof outputA) => ({
+        dependencies: new Map([
+          [entry, {output: [{type: 'js/module', data: {}}]}],
+          ['virtual:/v', {output}],
+        ]),
+        entryPoints: [entry],
+      });
+      const virtualGraphA = graphWithVirtual('/a', virtualOutputInA);
+      const virtualGraphB = graphWithVirtual('/b', virtualOutputInB);
+      DeltaCalculator.prototype.getGraph
+        .mockReturnValueOnce(virtualGraphA)
+        .mockReturnValueOnce(virtualGraphB);
+      const a = await deltaBundler.buildGraph(['/a'], options);
+      await deltaBundler.buildGraph(['/b'], options);
+
+      deltaBundler.endGraph(a);
+
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toEqual(['/a', '/v']);
+      expect(heldOutputs).toHaveLength(1);
+      expect(heldOutputs[0]).toBe(virtualOutputInB);
+    });
+
     test('is not called after a delta that releases nothing', async () => {
       const [a] = await buildGraphs();
       DeltaCalculator.prototype.getDelta.mockResolvedValueOnce({

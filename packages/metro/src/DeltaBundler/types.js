@@ -212,10 +212,12 @@ export type DeltaResult<T = MixedOutput> = {
 
 // Modules that graphs released, with the outputs live graphs still hold.
 export type ReleasedModules<T = MixedOutput> = Readonly<{
-  // The released modules' paths, or null if they aren't known, in which case
-  // `heldOutputs` covers every module of every live graph.
+  // The source paths the released modules were transformed as, or null if they
+  // aren't known, in which case `heldOutputs` covers every module of every live
+  // graph.
   paths: ?ReadonlyArray<string>,
-  // The outputs live graphs hold at `paths`, or at any path if it's null.
+  // The outputs live graphs hold at the released modules, or at any module if
+  // `paths` is null.
   heldOutputs: ReadonlySet<ReadonlyArray<T>>,
 }>;
 

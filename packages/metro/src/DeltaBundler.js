@@ -21,6 +21,7 @@ import type {
 import type EventEmitter from 'node:events';
 
 import DeltaCalculator from './DeltaBundler/DeltaCalculator';
+import {getModuleSourcePath} from './lib/modulePath';
 import debugModule from 'debug';
 
 const debug = debugModule('Metro:DeltaBundler');
@@ -185,7 +186,12 @@ export default class DeltaBundler<T = MixedOutput> {
         }
       }
     }
-    onModulesReleased({paths, heldOutputs});
+    onModulesReleased({
+      // A module is transformed as its source path, which differs from its
+      // graph path for a virtual module.
+      paths: paths == null ? null : paths.map(getModuleSourcePath),
+      heldOutputs,
+    });
     debug(
       'Released %s modules, %d outputs still held, in %dms',
       paths?.length ?? 'all',

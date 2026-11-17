@@ -44,16 +44,20 @@ class CopyingMemoryStore {
   }
 }
 
-async function createBundler(unstable_shareTransformResults) {
+async function createBundler({
+  unstable_shareTransformResults = true,
+  resolver = {},
+}) {
   const store = new CopyingMemoryStore();
   const baseConfig = await Metro.loadConfig({
     config: require.resolve('../metro.config.js'),
   });
   const config = MetroConfig.mergeConfig(baseConfig, {
     cacheStores: [store],
+    resolver,
     transformer: {unstable_shareTransformResults},
   });
-  return {bundler: new IncrementalBundler(config), store};
+  return {bundler: new IncrementalBundler(config, {watch: false}), store};
 }
 
 async function buildGraphs(bundler) {
@@ -78,7 +82,7 @@ test.each([
 ])(
   'with transformer.unstable_shareTransformResults: %s, graphs share module outputs: %s',
   async (unstable_shareTransformResults, expectShared) => {
-    const {bundler} = await createBundler(unstable_shareTransformResults);
+    const {bundler} = await createBundler({unstable_shareTransformResults});
     try {
       const {test, bar} = await buildGraphs(bundler);
       for (const modulePath of [barPath, fooPath]) {
@@ -94,7 +98,7 @@ test.each([
 );
 
 test('drops shared results once every graph holding them has ended', async () => {
-  const {bundler, store} = await createBundler(true);
+  const {bundler, store} = await createBundler({});
   try {
     const {test, bar} = await buildGraphs(bundler);
     // Builds a graph of Foo.js, which `bar` holds, and counts cache reads.
@@ -117,6 +121,59 @@ test('drops shared results once every graph holding them has ended', async () =>
     // Ending the last graph that holds it drops it, so it's read again.
     await bundler.endGraph(bar.graphId);
     expect(await readsToBuildFoo()).toBeGreaterThan(0);
+  } finally {
+    await bundler.end();
+  }
+});
+
+test('drops shared results of virtual modules once every graph holding them has ended', async () => {
+  // Answers one specifier with a virtual module at the importer's own path,
+  // and one with a virtual module at a path no file has.
+  const resolveRequest = (context, moduleName, platform) => {
+    switch (moduleName) {
+      case 'test:bump':
+        return {
+          type: 'virtualModule',
+          virtualPath: context.originModulePath,
+          source: `import {increment} from './subdir/counter';
+export default n => increment() + n;`,
+        };
+      case 'test:typed':
+        return {
+          type: 'virtualModule',
+          virtualPath: path.join(
+            path.dirname(context.originModulePath),
+            'typed.ts',
+          ),
+          source: 'export default (n: number): number => n * 2;',
+        };
+      default:
+        return context.resolveRequest(context, moduleName, platform);
+    }
+  };
+  const {bundler, store} = await createBundler({
+    resolver: {resolveRequest, unstable_allowVirtualModules: true},
+  });
+  try {
+    const build = () =>
+      bundler.initializeGraph(
+        path.join(INPUT_PATH, 'virtual-module/index.js'),
+        transformOptions,
+        resolverOptions,
+      );
+    const {revision: first} = await build();
+    expect(
+      Array.from(first.graph.dependencies.keys()).filter(modulePath =>
+        modulePath.startsWith('virtual:'),
+      ),
+    ).toHaveLength(3);
+    await bundler.endGraph(first.graphId);
+
+    // No graph holds any of its modules, so every one is read again.
+    const readsBefore = store.reads;
+    const {revision: second} = await build();
+    expect(store.reads - readsBefore).toBe(second.graph.dependencies.size);
+    await bundler.endGraph(second.graphId);
   } finally {
     await bundler.end();
   }
