@@ -21,7 +21,7 @@ import path from 'node:path';
 export type CreateModuleResolverOptions = Readonly<{
   config: ConfigT,
   fileSystem: FileSystem,
-  hasteMap: HasteMap,
+  hasteMap: ?HasteMap,
   packageCache: PackageCache,
 }>;
 
@@ -50,9 +50,9 @@ export default function createModuleResolver({
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
     getHasteModulePath: (name, platform) =>
-      hasteMap.getModule(name, platform, true),
+      hasteMap?.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
-      hasteMap.getPackage(name, platform, true),
+      hasteMap?.getPackage(name, platform, true),
     getPackage: (packageJsonPath: string) => {
       try {
         return packageCache.getPackage(packageJsonPath).packageJson ?? null;
