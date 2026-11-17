@@ -31,8 +31,12 @@ type Entry<T> = Readonly<{
  * Entries use the cache stores' key, so they can only be stale where a store
  * hit would be, and need no invalidation of their own. Each module, i.e. each
  * file and set of transform options, holds only its latest result, so editing
- * a file replaces its entry. `release` drops the entries of modules that no
- * graph holds any more. A dropped entry is only a miss.
+ * a file replaces its entry. `release` drops the entries at released paths
+ * whose output no live graph holds, and the next request for a dropped entry
+ * reads the cache stores or transforms again. A graph that is still building is
+ * not yet live, so a release during its build can drop an entry that it is
+ * about to hold. Later graphs then get a second copy of that module, until the
+ * module changes or the building graph ends.
  *
  * Callers must treat `output` and `dependencies` as read-only, as their types
  * declare, since every graph holding a result sees a write to it.
