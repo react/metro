@@ -194,7 +194,7 @@ declare module 'fb-watchman' {
         error: ?Error,
         response: ?{
           version: string,
-          capabilities: Readonly<{[string]: boolean}>,
+          capabilities: Readonly<{[key: string]: boolean}>,
         },
       ) => void,
     ): void;
