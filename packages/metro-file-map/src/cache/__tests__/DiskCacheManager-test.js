@@ -215,6 +215,33 @@ describe('cacheManager', () => {
     );
   });
 
+  test('serialises the snapshot before anything can change it', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    // The file map's own state, which may change at the next `await`.
+    const fileSystemData = new Map<string, unknown>();
+    const snapshot: CacheData = {
+      clocks: new Map(),
+      fileSystemData,
+      plugins: new Map(),
+    };
+    const written = serialize(snapshot);
+    const getSnapshot = () => {
+      queueMicrotask(() => {
+        fileSystemData.set('later.js', [0, 0, 0, null, 0]);
+      });
+      return snapshot;
+    };
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError: () => {},
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      cacheManager.getCacheFilePath(),
+      written,
+    );
+  });
+
   test('creates the cache directory if it does not exist', async () => {
     const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
     const getSnapshot = jest.fn(
