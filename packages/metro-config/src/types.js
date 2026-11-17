@@ -166,6 +166,9 @@ type TransformerConfigT = {
   // TODO(moti): Remove this Meta-internal option from Metro's public config
   transformVariants: {readonly [name: string]: Partial<ExtraTransformOptions>},
   publicPath: string,
+  // Share one in-memory copy of each transform result between graphs with
+  // equal transform options. Experimental.
+  unstable_shareTransformResults: boolean,
   unstable_workerThreads: boolean,
 };
 

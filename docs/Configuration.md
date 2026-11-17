@@ -682,6 +682,16 @@ Type: `boolean`
 
 Enables `require.context()`, which imports all the files in a directory that match a pattern. Defaults to `false`.
 
+#### `unstable_shareTransformResults` <div class="label experimental">Experimental</div>
+
+Type: `boolean`
+
+Whether graphs with equal transform options share one in-memory copy of each module's transform output. Each lazy bundle is served by its own graph, so without sharing, every module it has in common with its parent is held once per graph. Defaults to `true`.
+
+A module's `output` and its dependencies' `data` are read-only, and with sharing on, every graph that uses a module holds the same objects. Code that reads modules, such as a [custom serializer](#customserializer), serializer plugins, or a wrapper around the bundler's `transformFile`, must not write to them: a write through one graph's module changes it in every other graph. Set this option to `false` if code you depend on writes to them.
+
+A shared result is reused whenever a module's transform cache key is unchanged, even where a cache store declines to store it. Also set this option to `false` if a transformer's output depends on inputs outside the cache key, and it relies on a store not storing its results so that the module is transformed again.
+
 #### `unstable_workerThreads` <div class="label experimental">Experimental</div>
 
 Type: `boolean`

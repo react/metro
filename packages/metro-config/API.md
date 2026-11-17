@@ -217,12 +217,13 @@ export type SymbolicatorConfigT = {
   customizeStack: (symbolicatedStack: Array<IntermediateStackFrame>, extraData: unknown) => Array<IntermediateStackFrame> | Promise<Array<IntermediateStackFrame>>;
 };
 
-export type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_workerThreads'> & {
+export type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_shareTransformResults' | 'unstable_workerThreads'> & {
   getTransformOptions: GetTransformOptions;
   transformVariants: {
     readonly [name: string]: Partial<ExtraTransformOptions>;
   };
   publicPath: string;
+  unstable_shareTransformResults: boolean;
   unstable_workerThreads: boolean;
 };
 

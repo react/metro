@@ -210,6 +210,17 @@ export type DeltaResult<T = MixedOutput> = {
   readonly reset: boolean,
 };
 
+// Modules that graphs released, with the outputs live graphs still hold.
+export type ReleasedModules<T = MixedOutput> = Readonly<{
+  // The source paths the released modules were transformed as, or null if they
+  // aren't known, in which case `heldOutputs` covers every module of every live
+  // graph.
+  paths: ?ReadonlyArray<string>,
+  // The outputs live graphs hold at the released modules, or at any module if
+  // `paths` is null.
+  heldOutputs: ReadonlySet<ReadonlyArray<T>>,
+}>;
+
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: (absolutePath: string) => number,

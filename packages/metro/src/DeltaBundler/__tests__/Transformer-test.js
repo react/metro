@@ -142,6 +142,228 @@ describe('Transformer', function () {
     },
   );
 
+  test('keeps transformer.unstable_shareTransformResults out of the keyed worker config', () => {
+    // eslint-disable-next-line no-new
+    new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get: jest.fn(), set: jest.fn()}],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const {transformerConfig} = require('../getTransformCacheKey').mock
+      .calls[0][0].transformerConfig;
+    expect(
+      Object.hasOwn(transformerConfig, 'unstable_shareTransformResults'),
+    ).toBe(false);
+  });
+
+  test.each([
+    [true, 1, true],
+    [false, 2, false],
+  ])(
+    'with transformer.unstable_shareTransformResults: %s, two transforms of one file read the cache %s time(s), sharing output: %s',
+    async (unstable_shareTransformResults, expectedReads, expectShared) => {
+      const result = {
+        dependencies: [],
+        output: [{type: 'js/module', data: {code: '__d(function() {});'}}],
+      };
+      // Return a new copy on each read, as a deserializing store does.
+      const get = jest.fn(() => structuredClone(result));
+      const transformerInstance = new Transformer(
+        {
+          ...commonOptions,
+          cacheStores: [{get, set: jest.fn()}],
+          transformer: {
+            ...commonOptions.transformer,
+            unstable_shareTransformResults,
+          },
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+
+      const first = await transformerInstance.transformFile('./foo.js', {});
+      const second = await transformerInstance.transformFile('./foo.js', {});
+
+      expect(get).toHaveBeenCalledTimes(expectedReads);
+      expect(second.output === first.output).toBe(expectShared);
+      expect(second.output).toEqual(first.output);
+      expect(second.unstable_transformResultKey).toBe(
+        first.unstable_transformResultKey,
+      );
+    },
+  );
+
+  test('with transformer.unstable_shareTransformResults, does not share between transform options', async () => {
+    const get = jest.fn(() => ({
+      dependencies: [],
+      output: [{type: 'js/module', data: {code: ''}}],
+    }));
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set: jest.fn()}],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const dev = await transformerInstance.transformFile('./foo.js', {
+      dev: true,
+    });
+    const prod = await transformerInstance.transformFile('./foo.js', {
+      dev: false,
+    });
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(prod.output).not.toBe(dev.output);
+    expect(prod.unstable_transformResultKey).not.toBe(
+      dev.unstable_transformResultKey,
+    );
+  });
+
+  test('with transformer.unstable_shareTransformResults, releaseSharedResults drops released results whose output is not held', async () => {
+    const get = jest.fn(() => ({
+      dependencies: [],
+      output: [{type: 'js/module', data: {code: ''}}],
+    }));
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set: jest.fn()}],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const first = await transformerInstance.transformFile('./foo.js', {});
+    transformerInstance.releaseSharedResults({
+      paths: ['./foo.js'],
+      heldOutputs: new Set([first.output]),
+    });
+    await transformerInstance.transformFile('./foo.js', {});
+    expect(get).toHaveBeenCalledTimes(1);
+
+    transformerInstance.releaseSharedResults({
+      paths: ['./foo.js'],
+      heldOutputs: new Set(),
+    });
+    const third = await transformerInstance.transformFile('./foo.js', {});
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(third.output).not.toBe(first.output);
+  });
+
+  test('with transformer.unstable_shareTransformResults and empty cacheStores, transforms once and shares the result', async () => {
+    const transform = require('../WorkerFarm').default.prototype.transform;
+    transform.mockClear();
+    transform.mockImplementation(async () => ({
+      sha1: '0123456789012345678901234567890123456789',
+      result: {dependencies: [], output: [{type: 'js/module', data: {}}]},
+    }));
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const first = await transformerInstance.transformFile('./foo.js', {});
+    const second = await transformerInstance.transformFile('./foo.js', {});
+
+    expect(transform).toHaveBeenCalledTimes(1);
+    expect(second.output).toBe(first.output);
+    transform.mockReset();
+  });
+
+  test('with transformer.unstable_shareTransformResults, keys a result by the SHA-1 the worker transformed', async () => {
+    const set = jest.fn();
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get: jest.fn(), set}],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+    // The file changed between hashing and transforming it.
+    require('../WorkerFarm').default.prototype.transform.mockReturnValue({
+      sha1: 'abcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      result: {dependencies: [], output: [{type: 'js/module', data: {}}]},
+    });
+
+    const result = await transformerInstance.transformFile('./foo.js', {});
+
+    expect(set).toHaveBeenCalledTimes(1);
+    expect(set.mock.calls[0][0].toString('hex')).toMatch(
+      'abcdefabcdefabcdefabcdefabcdefabcdefabcd',
+    );
+    expect(result.unstable_transformResultKey).toBe(
+      set.mock.calls[0][0].toString(),
+    );
+  });
+
+  test('with transformer.unstable_shareTransformResults, reports one cache read error for concurrent requests', async () => {
+    const readError = new Error('Cache read error');
+    const get = jest.fn(async () => {
+      throw readError;
+    });
+    const mockReporter = {update: jest.fn()};
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        reporter: mockReporter,
+        cacheStores: [{get, set: jest.fn()}],
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: true,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+
+    const results = await Promise.allSettled([
+      transformerInstance.transformFile('./foo.js', {}),
+      transformerInstance.transformFile('./foo.js', {}),
+    ]);
+
+    expect(results).toEqual([
+      {status: 'rejected', reason: readError},
+      {status: 'rejected', reason: readError},
+    ]);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(mockReporter.update).toHaveBeenCalledTimes(1);
+    expect(mockReporter.update).toBeCalledWith({
+      type: 'cache_read_error',
+      error: readError,
+    });
+  });
+
   test('logs cache read errors to reporter', async () => {
     const readError = new Error('Cache write error');
     const get = jest.fn().mockImplementation(() => {

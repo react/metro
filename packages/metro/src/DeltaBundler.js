@@ -16,10 +16,15 @@ import type {
   MixedOutput,
   Options,
   ReadOnlyGraph,
+  ReleasedModules,
 } from './DeltaBundler/types';
 import type EventEmitter from 'node:events';
 
 import DeltaCalculator from './DeltaBundler/DeltaCalculator';
+import {getModuleSourcePath} from './lib/modulePath';
+import debugModule from 'debug';
+
+const debug = debugModule('Metro:DeltaBundler');
 
 export type {
   DeltaResult,
@@ -40,12 +45,23 @@ export type {
  * concurrent clients requesting their own deltas. This is done through the
  * `clientId` param (which maps a client to a specific delta transformer).
  */
+export type DeltaBundlerOptions<T> = Readonly<{
+  // Called after a graph releases modules or ends, with the outputs that live
+  // graphs still hold at the released paths.
+  onModulesReleased?: ?(released: ReleasedModules<T>) => void,
+}>;
+
 export default class DeltaBundler<T = MixedOutput> {
   _changeEventSource: EventEmitter;
   _deltaCalculators: Map<Graph<T>, DeltaCalculator<T>> = new Map();
+  readonly #onModulesReleased: ?(released: ReleasedModules<T>) => void;
 
-  constructor(changeEventSource: EventEmitter) {
+  constructor(
+    changeEventSource: EventEmitter,
+    options?: DeltaBundlerOptions<T>,
+  ) {
     this._changeEventSource = changeEventSource;
+    this.#onModulesReleased = options?.onModulesReleased;
   }
 
   end(): void {
@@ -109,7 +125,14 @@ export default class DeltaBundler<T = MixedOutput> {
       throw new Error('Graph not found');
     }
 
-    return await deltaCalculator.getDelta({reset, shallow});
+    const delta = await deltaCalculator.getDelta({reset, shallow});
+    if (delta.reset) {
+      // A reset delta doesn't say which modules the build released.
+      this.#notifyModulesReleased(null);
+    } else if (delta.deleted.size > 0) {
+      this.#notifyModulesReleased(Array.from(delta.deleted));
+    }
+    return delta;
   }
 
   listen(graph: Graph<T>, callback: () => Promise<void>): () => void {
@@ -136,5 +159,44 @@ export default class DeltaBundler<T = MixedOutput> {
     deltaCalculator.end();
 
     this._deltaCalculators.delete(graph);
+    this.#notifyModulesReleased(Array.from(graph.dependencies.keys()));
+  }
+
+  // Collects the outputs that live graphs hold at `paths`, or anywhere if
+  // `paths` is null, so the cost scales with what was released rather than
+  // with the size of every graph.
+  #notifyModulesReleased(paths: ?ReadonlyArray<string>): void {
+    const onModulesReleased = this.#onModulesReleased;
+    if (onModulesReleased == null) {
+      return;
+    }
+    const start = performance.now();
+    const heldOutputs = new Set<ReadonlyArray<T>>();
+    for (const graph of this._deltaCalculators.keys()) {
+      if (paths == null) {
+        for (const module of graph.dependencies.values()) {
+          heldOutputs.add(module.output);
+        }
+      } else {
+        for (const path of paths) {
+          const module = graph.dependencies.get(path);
+          if (module != null) {
+            heldOutputs.add(module.output);
+          }
+        }
+      }
+    }
+    onModulesReleased({
+      // A module is transformed as its source path, which differs from its
+      // graph path for a virtual module.
+      paths: paths == null ? null : paths.map(getModuleSourcePath),
+      heldOutputs,
+    });
+    debug(
+      'Released %s modules, %d outputs still held, in %dms',
+      paths?.length ?? 'all',
+      heldOutputs.size,
+      Math.round(performance.now() - start),
+    );
   }
 }
