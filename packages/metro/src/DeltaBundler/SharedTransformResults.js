@@ -28,8 +28,11 @@ type Entry<T> = Readonly<{
  * Shares transform results in memory between callers that request the same
  * transform cache key, i.e. between graphs with equal transform options.
  *
- * Entries use the cache stores' key, so they can only be stale where a store
- * hit would be, and need no invalidation of their own. Each module, i.e. each
+ * Entries use the cache stores' key and need no invalidation of their own, as a
+ * hit returns what a store hit for the same key would. Unlike a store, this
+ * keeps every result it is given. A transform whose output depends on inputs
+ * outside its key, and which relies on a store declining its result so that
+ * it runs again, gets its earlier result instead. Each module, i.e. each
  * file and set of transform options, holds only its latest result, so editing
  * a file replaces its entry. `release` drops the entries at released paths
  * whose output no live graph holds, and the next request for a dropped entry
@@ -38,9 +41,10 @@ type Entry<T> = Readonly<{
  * about to hold. Later graphs then get a second copy of that module, until the
  * module changes or the building graph ends.
  *
- * Only graphs that `DeltaBundler` registers release their paths. Entries added
- * by graphs it never registers, i.e. those built by `getDependencies` and a
- * first build that fails, stay until a later result for the same module
+ * Only changes that a registered graph commits release paths. Entries for
+ * modules that no graph commits, i.e. those added by graphs that `DeltaBundler`
+ * never registers (`getDependencies` and a first build that fails) and by a
+ * failed update of a live graph, stay until a later result for the same module
  * replaces them or a live graph releases their path. This keeps prepended
  * scripts, which every graph's revision holds, shared between graphs.
  *
