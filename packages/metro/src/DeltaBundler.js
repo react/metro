@@ -17,6 +17,7 @@ import type {
   Options,
   ReadOnlyGraph,
   ReleasedModules,
+  TransformFn,
 } from './DeltaBundler/types';
 import type EventEmitter from 'node:events';
 
@@ -47,7 +48,8 @@ export type {
  */
 export type DeltaBundlerOptions<T> = Readonly<{
   // Called after a graph releases modules or ends, with the outputs that live
-  // graphs still hold at the released paths.
+  // graphs still hold at the released paths. A graph releases the modules that
+  // its failed updates transformed once it commits an update or ends.
   onModulesReleased?: ?(released: ReleasedModules<T>) => void,
 }>;
 
@@ -55,6 +57,9 @@ export default class DeltaBundler<T = MixedOutput> {
   _changeEventSource: EventEmitter;
   _deltaCalculators: Map<Graph<T>, DeltaCalculator<T>> = new Map();
   readonly #onModulesReleased: ?(released: ReleasedModules<T>) => void;
+  // The paths each live graph has transformed since it last committed an
+  // update, recorded only if `onModulesReleased` is set.
+  #transformedPaths: Map<Graph<T>, Set<string>> = new Map();
 
   constructor(
     changeEventSource: EventEmitter,
@@ -69,6 +74,7 @@ export default class DeltaBundler<T = MixedOutput> {
       deltaCalculator.end(),
     );
     this._deltaCalculators = new Map();
+    this.#transformedPaths = new Map();
   }
 
   async getDependencies(
@@ -95,16 +101,28 @@ export default class DeltaBundler<T = MixedOutput> {
     entryPoints: ReadonlyArray<string>,
     options: Options<T>,
   ): Promise<Graph<T>> {
+    const transformedPaths = new Set<string>();
+    const recordingTransform: TransformFn<T> = (modulePath, virtualSource) => {
+      transformedPaths.add(modulePath);
+      return options.transform(modulePath, virtualSource);
+    };
     const deltaCalculator = new DeltaCalculator(
       new Set(entryPoints),
       this._changeEventSource,
-      options,
+      this.#onModulesReleased == null
+        ? options
+        : {...options, transform: recordingTransform},
     );
 
     await deltaCalculator.getDelta({reset: true, shallow: options.shallow});
     const graph = deltaCalculator.getGraph();
 
     this._deltaCalculators.set(graph, deltaCalculator);
+    if (this.#onModulesReleased != null) {
+      // The graph holds every module that its first build transformed.
+      transformedPaths.clear();
+      this.#transformedPaths.set(graph, transformedPaths);
+    }
     return graph;
   }
 
@@ -125,12 +143,17 @@ export default class DeltaBundler<T = MixedOutput> {
       throw new Error('Graph not found');
     }
 
+    // A failed update throws here and releases nothing, so what it transformed
+    // stays shared until the graph commits an update or ends.
     const delta = await deltaCalculator.getDelta({reset, shallow});
+    const uncommittedPaths = this.#takeUncommittedPaths(graph).filter(
+      modulePath => !delta.deleted.has(modulePath),
+    );
     if (delta.reset) {
       // A reset delta doesn't say which modules the build released.
       this.#notifyModulesReleased(null);
-    } else if (delta.deleted.size > 0) {
-      this.#notifyModulesReleased(Array.from(delta.deleted));
+    } else if (delta.deleted.size > 0 || uncommittedPaths.length > 0) {
+      this.#notifyModulesReleased([...delta.deleted, ...uncommittedPaths]);
     }
     return delta;
   }
@@ -159,7 +182,27 @@ export default class DeltaBundler<T = MixedOutput> {
     deltaCalculator.end();
 
     this._deltaCalculators.delete(graph);
-    this.#notifyModulesReleased(Array.from(graph.dependencies.keys()));
+    const uncommittedPaths = this.#takeUncommittedPaths(graph);
+    this.#transformedPaths.delete(graph);
+    this.#notifyModulesReleased([
+      ...graph.dependencies.keys(),
+      ...uncommittedPaths,
+    ]);
+  }
+
+  // Returns the paths that `graph` has transformed since it last committed an
+  // update and doesn't hold, such as what its failed updates transformed, and
+  // starts recording afresh.
+  #takeUncommittedPaths(graph: Graph<T>): Array<string> {
+    const transformedPaths = this.#transformedPaths.get(graph);
+    if (transformedPaths == null || transformedPaths.size === 0) {
+      return [];
+    }
+    const uncommittedPaths = Array.from(transformedPaths).filter(
+      modulePath => !graph.dependencies.has(modulePath),
+    );
+    transformedPaths.clear();
+    return uncommittedPaths;
   }
 
   // Collects the outputs that live graphs hold at `paths`, or anywhere if
