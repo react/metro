@@ -420,6 +420,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           p('abs-link-out'),
           p('root'),
         ]),
+        filesToStat: new Map(),
       });
     });
 
@@ -441,6 +442,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           p('foo/link-to-bar.js'),
           p('foo/link-to-another.js'),
         ]),
+        filesToStat: new Map(),
       });
     });
 
@@ -484,6 +486,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           [p('nonexistent/file.js'), [123, 0, 0, null, 0, null]],
         ]),
         removedFiles: new Set(),
+        filesToStat: new Map(),
       });
     });
 
@@ -500,9 +503,42 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         expect(tfs.getDifference(newFiles, {subpath})).toEqual({
           changedFiles: newFiles,
           removedFiles: new Set([subpath]),
+          filesToStat: new Map(),
         });
       },
     );
+
+    test('returns regular files given without an mtime that had one, with that mtime', () => {
+      const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([
+        // Stat'd before, not now
+        [p('foo/another.js'), [null, null, 0, null, 0, null]],
+        // Stat'd before with an mtime of 0, outside rootDir, not now
+        [p('../outside/external.js'), [null, null, 0, null, 0, null]],
+        // Stat'd before and now, with the same mtime
+        [p('bar.js'), [234, 3, 0, null, 0, null]],
+        // A symlink before, not stat'd now
+        [p('link-to-self'), [null, null, 0, null, 0, null]],
+        // New, not stat'd
+        [p('new-file.js'), [null, null, 0, null, 0, null]],
+      ]);
+
+      const {changedFiles, filesToStat} = tfs.getDifference(newFiles);
+
+      expect(filesToStat).toEqual(
+        new Map([
+          [p('foo/another.js'), 123],
+          [p('../outside/external.js'), 0],
+        ]),
+      );
+      expect([...changedFiles.keys()].sort()).toEqual(
+        [
+          p('foo/another.js'),
+          p('../outside/external.js'),
+          p('link-to-self'),
+          p('new-file.js'),
+        ].sort(),
+      );
+    });
 
     test('with empty subpath only considers files under the root', () => {
       const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([

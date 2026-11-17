@@ -252,6 +252,7 @@ const assertFileSystemEqual = (fileSystem: FileSystem, fileData: FileData) => {
   expect(fileSystem.getDifference(fileData)).toEqual({
     changedFiles: new Map(),
     removedFiles: new Set(),
+    filesToStat: new Map(),
   });
 };
 
@@ -1503,6 +1504,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Banana.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1511,6 +1513,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1519,6 +1522,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Strawberry.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1527,6 +1531,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/__mocks__/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1535,6 +1540,7 @@ describe('FileMap', () => {
           filePath: p('/project/vegetables/Melon.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
     ]);

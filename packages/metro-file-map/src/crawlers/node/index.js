@@ -11,13 +11,25 @@
 
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
+import H from '../../constants';
 import {RootPathUtils} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
 function find(options: CrawlerOptions): Promise<FileData> {
-  const {console, extensions, ignore, includeSymlinks, rootDir, roots} =
-    options;
+  const {
+    console,
+    extensions,
+    ignore,
+    includeSymlinks,
+    rootDir,
+    roots,
+    subpath,
+  } = options;
+  // A recrawl while watching diffs against the live file system, whose
+  // consumers (e.g. a package.json cache) may hold contents read without a
+  // stat, so it stats every file.
+  const statRegularFiles = subpath != null;
   const result: FileData = new Map();
   const pathUtils = new RootPathUtils(rootDir);
   const exts = new Set(extensions);
@@ -80,6 +92,14 @@ function find(options: CrawlerOptions): Promise<FileData> {
               continue;
             }
 
+            if (!isSymbolicLink && !statRegularFiles) {
+              // Not stat'd (see `FileMetadata`). Those that were stat'd before
+              // are stat'd once the difference is known, by
+              // `dropUnmodifiedFiles`.
+              result.set(childNormal, [null, null, 0, null, 0]);
+              continue;
+            }
+
             activeCalls++;
             fs.lstat(file, (err, stat) => {
               activeCalls--;
@@ -132,10 +152,54 @@ export default async function nodeCrawl(
 
   abortSignal?.throwIfAborted();
 
-  const difference = previousState.fileSystem.getDifference(fileData, {
-    subpath,
-  });
+  const {changedFiles, removedFiles, filesToStat} =
+    previousState.fileSystem.getDifference(fileData, {subpath});
+  await dropUnmodifiedFiles(options.rootDir, changedFiles, filesToStat);
 
   perfLogger?.point('nodeCrawl_end');
-  return difference;
+  return {changedFiles, removedFiles};
+}
+
+/**
+ * Changed files crawled without a stat that were stat'd before may have data
+ * derived from what they held then. Stat those, drop any whose mtime matches,
+ * and record the stats of the rest.
+ */
+async function dropUnmodifiedFiles(
+  rootDir: string,
+  changedFiles: FileData,
+  // Each with the mtime it had before
+  filesToStat: ReadonlyMap<string, number>,
+): Promise<void> {
+  // None if the previous file map is empty, as on a cold start
+  if (filesToStat.size === 0) {
+    return;
+  }
+  const pathUtils = new RootPathUtils(rootDir);
+  const stats: Array<Promise<void>> = [];
+  for (const [normalPath, metadata] of changedFiles) {
+    const modifiedTime = filesToStat.get(normalPath);
+    if (modifiedTime == null) {
+      continue;
+    }
+    stats.push(
+      new Promise(resolve => {
+        fs.lstat(pathUtils.normalToAbsolute(normalPath), (err, stat) => {
+          if (!err && stat) {
+            const mtime = stat.mtime.getTime();
+            if (mtime === modifiedTime) {
+              changedFiles.delete(normalPath);
+            } else {
+              metadata[H.MTIME] = mtime;
+              metadata[H.SIZE] = stat.size;
+            }
+          }
+          // Otherwise deleted since it was crawled, which processing will
+          // discover.
+          resolve();
+        });
+      }),
+    );
+  }
+  await Promise.all(stats);
 }

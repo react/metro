@@ -176,7 +176,11 @@ interface FileSystem_2 {
     options?: Readonly<{
       subpath?: string | undefined;
     }>,
-  ): {changedFiles: FileData; removedFiles: Set<string>};
+  ): {
+    changedFiles: FileData;
+    removedFiles: Set<string>;
+    filesToStat: Map<string, number>;
+  };
   getOrComputeSha1(file: Path): Promise<null | undefined | {sha1: string; content?: Buffer | undefined}>;
   getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): null | undefined | string;
