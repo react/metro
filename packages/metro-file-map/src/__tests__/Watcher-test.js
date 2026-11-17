@@ -39,14 +39,18 @@ type MockBackend = {
   root: string,
   clocks: ?Map<string, string>,
   emit: (event: WatcherBackendChangeEvent) => void,
+  isWatching: () => boolean,
 };
 const mockStartedBackends: Array<MockBackend> = [];
+const mockStartWatching = jest.fn<[string], Promise<void>>();
+const mockStopWatching = jest.fn<[string], Promise<void>>();
 let mockNativeLiveOnStart = true;
 function mockBackendClass(kind: MockBackend['kind']) {
   return class {
     #root: string;
     #clocks: ?Map<string, string>;
     #listener: ?(event: WatcherBackendChangeEvent) => void;
+    #isWatching: boolean = false;
     static isSupported(): boolean {
       return true;
     }
@@ -66,9 +70,16 @@ function mockBackendClass(kind: MockBackend['kind']) {
         root: this.#root,
         clocks: this.#clocks,
         emit: event => this.#listener?.(event),
+        isWatching: () => this.#isWatching,
       });
+      await mockStartWatching(this.#root);
+      this.#isWatching = true;
     }
-    async stopWatching() {}
+    async stopWatching() {
+      this.#isWatching = false;
+      this.#listener = null;
+      await mockStopWatching(this.#root);
+    }
     getPauseReason(): ?string {
       return null;
     }
@@ -110,6 +121,7 @@ function createWatcher(
   useWatchman: boolean,
   crawl?: ?Crawler,
   watch: boolean = false,
+  roots: ReadonlyArray<string> = [rootDir],
 ): Watcher {
   return new Watcher({
     abortSignal: new AbortController().signal,
@@ -132,7 +144,7 @@ function createWatcher(
       }),
     },
     rootDir,
-    roots: [rootDir],
+    roots,
     useWatchman,
     watch,
     watchmanDeferStates: [],
@@ -144,11 +156,156 @@ beforeEach(() => {
   mockNativeLiveOnStart = true;
   mockWatchmanCrawl.mockReset();
   mockNodeCrawl.mockReset();
+  mockStartWatching.mockReset();
+  mockStartWatching.mockImplementation(async () => {});
+  mockStopWatching.mockReset();
+  mockStopWatching.mockImplementation(async () => {});
   jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
+  jest.clearAllTimers();
   jest.restoreAllMocks();
+});
+
+describe('Watcher startup cleanup', () => {
+  test('rejects with the startup error and closes the backend', async () => {
+    const error = new Error('Cannot start watcher');
+    mockStartWatching.mockImplementation(async () => {
+      throw error;
+    });
+
+    await expect(createWatcher(false, null, true).crawl()).rejects.toBe(error);
+
+    expect(mockStopWatching).toHaveBeenCalledWith(rootDir);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('closes a timed-out backend, including a late startup completion', async () => {
+    let finishStart = () => {};
+    mockStartWatching.mockImplementation(
+      () => new Promise(resolve => (finishStart = resolve)),
+    );
+    const watcher = createWatcher(false, null, true);
+    const starting = watcher.crawl();
+    const rejected = expect(starting).rejects.toThrow(
+      'Failed to start watch mode.',
+    );
+
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(240000);
+    await rejected;
+    expect(mockStopWatching).toHaveBeenCalledWith(rootDir);
+
+    finishStart();
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(0);
+    expect(mockStartedBackends[0].isWatching()).toBe(false);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('lets a slow backend finish before the existing deadline', async () => {
+    let finishStart = () => {};
+    mockStartWatching.mockImplementation(
+      () => new Promise(resolve => (finishStart = resolve)),
+    );
+    mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+    const watcher = createWatcher(false, null, true);
+    const starting = watcher.crawl();
+
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(239999);
+    expect(mockStopWatching).not.toHaveBeenCalled();
+    finishStart();
+    await expect(starting).resolves.toEqual(crawlResult([]));
+    expect(mockStartedBackends[0].isWatching()).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+    await watcher.close();
+  });
+
+  test('closes successful roots when another root fails to start', async () => {
+    const secondRoot = path.join(rootDir, 'second');
+    const error = new Error('Second watcher failed');
+    mockStartWatching.mockImplementation(async root => {
+      if (root === secondRoot) {
+        throw error;
+      }
+    });
+
+    await expect(
+      createWatcher(false, null, true, [rootDir, secondRoot]).crawl(),
+    ).rejects.toBe(error);
+
+    expect(mockStartedBackends.every(backend => !backend.isWatching())).toBe(
+      true,
+    );
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('cancels other pending roots after one fails', async () => {
+    const secondRoot = path.join(rootDir, 'second');
+    const error = new Error('First watcher failed');
+    let finishStart = () => {};
+    mockStartWatching.mockImplementation(async root => {
+      if (root === rootDir) {
+        throw error;
+      }
+      await new Promise(resolve => (finishStart = resolve));
+    });
+
+    await expect(
+      createWatcher(false, null, true, [rootDir, secondRoot]).crawl(),
+    ).rejects.toBe(error);
+    expect(mockStopWatching).toHaveBeenCalledWith(secondRoot);
+    finishStart();
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(0);
+    expect(mockStartedBackends.every(backend => !backend.isWatching())).toBe(
+      true,
+    );
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('close waits for a pending backend to stop', async () => {
+    let finishStart = () => {};
+    let finishStop = () => {};
+    const stopping = new Promise<void>(resolve => (finishStop = resolve));
+    mockStartWatching.mockImplementation(
+      () => new Promise(resolve => (finishStart = resolve)),
+    );
+    mockStopWatching.mockImplementation(() => stopping);
+    const watcher = createWatcher(false, null, true);
+    const rejected = expect(watcher.crawl()).rejects.toThrow('Watcher closed');
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(0);
+    let closed = false;
+    const closing = watcher.close().then(() => {
+      closed = true;
+    });
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(0);
+    expect(closed).toBe(false);
+    finishStop();
+    await closing;
+    await rejected;
+    finishStart();
+    // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
+    await jest.advanceTimersByTimeAsync(0);
+    expect(mockStartedBackends[0].isWatching()).toBe(false);
+  });
+
+  test('keeps the startup error when cleanup also fails', async () => {
+    const error = new Error('Cannot start watcher');
+    mockStartWatching.mockImplementation(async () => {
+      throw error;
+    });
+    mockStopWatching.mockImplementation(async () => {
+      throw new Error('Cannot stop watcher');
+    });
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(createWatcher(false, null, true).crawl()).rejects.toBe(error);
+  });
 });
 
 describe('Watcher crawl fallback', () => {

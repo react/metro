@@ -455,6 +455,37 @@ describe('FileMap', () => {
     expect(FileMap.H).toBe(require('../constants').default);
   });
 
+  test('clears change polling when watcher startup fails', async () => {
+    jest.useFakeTimers();
+    const error = new Error('Watcher startup failed');
+    const startWatching = jest
+      .spyOn(MockWatcher.prototype, 'startWatching')
+      .mockRejectedValueOnce(error);
+    const fileMap = new FileMap({...defaultConfig, watch: true});
+    try {
+      await expect(fileMap.build()).rejects.toBe(error);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      await fileMap.end();
+      startWatching.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+
+  test('keeps change polling until a successfully started file map ends', async () => {
+    jest.useFakeTimers();
+    const fileMap = new FileMap({...defaultConfig, watch: true});
+    try {
+      await fileMap.build();
+      expect(jest.getTimerCount()).toBe(1);
+      await fileMap.end();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      await fileMap.end();
+      jest.useRealTimers();
+    }
+  });
+
   test('getOrComputeFileData records a file found as content, as well as what lookup records', async () => {
     const {dependencyPlugin} = await buildNewFileMap();
     if (dependencyPlugin == null) {

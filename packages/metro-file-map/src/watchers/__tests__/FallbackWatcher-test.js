@@ -23,6 +23,7 @@ jest.setTimeout(10 * 1000);
 const {mkdir, rm, writeFile} = fs.promises;
 // Captured before any test replaces `fs.watch`.
 const {watch: unmockedWatch} = fs;
+const {readdir: unmockedReaddir} = fs.promises;
 
 // An `FSWatcher` after it has reported an error: Node closes the handle before
 // emitting 'error', so a subsequent `close()` returns early and emits nothing.
@@ -97,6 +98,32 @@ describe('FallbackWatcher', () => {
     await watcher?.stopWatching();
     jest.restoreAllMocks();
     await rm(watchRoot, {recursive: true});
+  });
+
+  test('does not open new watches when a startup read finishes after stopping', async () => {
+    const child = join(watchRoot, 'child');
+    mutedDirs.add(watchRoot);
+    await mkdir(child);
+    let releaseRead = () => {};
+    const reading = new Promise(resolve => (releaseRead = resolve));
+    jest
+      .spyOn(fs.promises, 'readdir')
+      .mockImplementation(async (dir, ...args) => {
+        calls.push(`readdir:${String(dir)}`);
+        const entries = await unmockedReaddir(dir, ...args);
+        if (dir === watchRoot) {
+          await reading;
+        }
+        return entries;
+      });
+    const starting = watcher?.startWatching();
+    await waitFor(() => indexOfCall('readdir', watchRoot) >= 0);
+
+    await watcher?.stopWatching();
+    releaseRead();
+    await starting;
+
+    expect(indexOfCall('watch', child)).toBe(-1);
   });
 
   // A file written into a directory after it has been listed but before it is
