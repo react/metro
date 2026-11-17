@@ -409,10 +409,13 @@ export default class FileMap extends EventEmitter {
     this.#startupPerfLogger?.point('build_start');
     if (!this.#buildPromise) {
       this.#buildPromise = (async () => {
-        let initialData: ?CacheData;
-        if (this.#options.resetCache !== true) {
-          initialData = await this.read();
-        }
+        // Neither the Watchman capability check nor what must be running
+        // before the crawl (in watch mode without Watchman, a confirmed watch)
+        // depends on the cache, so both start while the cache is read.
+        const [initialData] = await Promise.all([
+          this.#options.resetCache !== true ? this.read() : null,
+          this.#createWatcher().then(watcher => watcher.prepareCrawl()),
+        ]);
         if (!initialData) {
           debug('Not using a cache');
         } else {
@@ -726,14 +729,7 @@ export default class FileMap extends EventEmitter {
     return data;
   }
 
-  /**
-   * 2. crawl the file system.
-   */
-  async #buildFileDelta(
-    previousState: CrawlerOptions['previousState'],
-  ): Promise<CrawlResult> {
-    this.#startupPerfLogger?.point('buildFileDelta_start');
-
+  async #createWatcher(): Promise<Watcher> {
     const {
       computeSha1,
       enableSymlinks,
@@ -763,7 +759,6 @@ export default class FileMap extends EventEmitter {
       },
       ignorePatternForWatch: ignorePattern,
       perfLogger: this.#startupPerfLogger,
-      previousState,
       rootDir,
       roots,
       // A supplied crawler makes the Watchman capability probe - which spawns
@@ -773,10 +768,20 @@ export default class FileMap extends EventEmitter {
       watchmanDeferStates,
     });
     const watcher = this.#watcher;
-
     watcher.on('status', status => this.emit('status', status));
+    return watcher;
+  }
 
-    const result = await watcher.crawl();
+  /**
+   * 2. crawl the file system.
+   */
+  async #buildFileDelta(
+    previousState: CrawlerOptions['previousState'],
+  ): Promise<CrawlResult> {
+    this.#startupPerfLogger?.point('buildFileDelta_start');
+    const watcher = this.#watcher;
+    invariant(watcher != null, 'Expected #createWatcher() to have been called');
+    const result = await watcher.crawl(previousState);
     this.#startupPerfLogger?.point('buildFileDelta_end');
     return result;
   }
