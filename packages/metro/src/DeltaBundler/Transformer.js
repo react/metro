@@ -273,14 +273,10 @@ export default class Transformer {
 }
 
 /**
- * Whether `Transformer` shares results between graphs. Empty `cacheStores`
- * disables caching, which sharing would bypass.
+ * Whether `Transformer` shares results between graphs.
  */
 export function sharesTransformResults(config: ConfigT): boolean {
-  return (
-    config.transformer.unstable_shareTransformResults &&
-    config.cacheStores.length > 0
-  );
+  return config.transformer.unstable_shareTransformResults;
 }
 
 // Defined outside `transformFile` because closures created in one scope share

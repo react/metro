@@ -268,7 +268,7 @@ describe('Transformer', function () {
     expect(third.output).not.toBe(first.output);
   });
 
-  test('with transformer.unstable_shareTransformResults and empty cacheStores, transforms on every request', async () => {
+  test('with transformer.unstable_shareTransformResults and empty cacheStores, transforms once and shares the result', async () => {
     const transform = require('../WorkerFarm').default.prototype.transform;
     transform.mockClear();
     transform.mockImplementation(async () => ({
@@ -291,8 +291,8 @@ describe('Transformer', function () {
     const first = await transformerInstance.transformFile('./foo.js', {});
     const second = await transformerInstance.transformFile('./foo.js', {});
 
-    expect(transform).toHaveBeenCalledTimes(2);
-    expect(second.output).not.toBe(first.output);
+    expect(transform).toHaveBeenCalledTimes(1);
+    expect(second.output).toBe(first.output);
     transform.mockReset();
   });
 
