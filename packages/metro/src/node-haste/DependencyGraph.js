@@ -67,7 +67,7 @@ export default class DependencyGraph extends EventEmitter {
   _haste: MetroFileMap;
   _fileSystem: FileSystem;
   #packageCache: PackageCache;
-  _hasteMap: HasteMap;
+  _hasteMap: ?HasteMap;
   #dependencyPlugin: ?DependencyPlugin;
   _moduleResolver: ModuleResolver;
   _resolutionCache: Map<
@@ -372,7 +372,7 @@ export default class DependencyGraph extends EventEmitter {
   };
 
   getHasteName(filePath: string): string {
-    const hasteName = this._hasteMap.getModuleNameByPath(filePath);
+    const hasteName = this._hasteMap?.getModuleNameByPath(filePath);
 
     if (hasteName) {
       return hasteName;
