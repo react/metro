@@ -111,21 +111,12 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     const {deserialize, serialize} = require('node:v8');
     const deserialized = TreeFS.fromDeserializedSnapshot({
       rootDir: p('/project'),
-      fileSystemData: deserialize(serialize(tfs.getSerializableSnapshot())),
+      fileSystemData: deserialize(serialize(tfs.getSerializableState())),
       processFile: () => {
         throw new Error('Not implemented');
       },
     });
     expect(deserialized.exists(p('/project/foo/another.js'))).toBe(true);
-  });
-
-  test('getSerializableSnapshot returns a copy, getSerializableState does not', () => {
-    const snapshot = tfs.getSerializableSnapshot();
-    const state = tfs.getSerializableState();
-    expect(snapshot).toEqual(state);
-    tfs.addOrModify(p('/project/foo/new.js'), [0, 1, 0, null, 0, null]);
-    expect(snapshot).not.toEqual(tfs.getSerializableSnapshot());
-    expect(state).toEqual(tfs.getSerializableSnapshot());
   });
 
   test('implements linkStats()', () => {
@@ -2014,13 +2005,13 @@ describe('snapshot portability between operating systems', () => {
       processFile: () => {
         throw new Error('Not implemented');
       },
-    }).getSerializableSnapshot();
+    }).getSerializableState();
 
     const TreeFSTo = loadTreeFS(to);
     const loaded = TreeFSTo.fromDeserializedSnapshot({
       rootDir: rootFor(to),
       // Snapshots are typed opaquely for the cache; this one came from
-      // getSerializableSnapshot, so it is a DirectoryNode.
+      // getSerializableState, so it is a DirectoryNode.
       // $FlowFixMe[incompatible-type]
       fileSystemData: snapshot,
       processFile: () => {

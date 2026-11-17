@@ -206,10 +206,6 @@ export default class TreeFS implements MutableFileSystem {
     }
   }
 
-  getSerializableSnapshot(): CacheData['fileSystemData'] {
-    return this.#cloneTree(this.#rootNode);
-  }
-
   getSerializableState(): CacheData['fileSystemData'] {
     return this.#rootNode;
   }
@@ -1528,17 +1524,5 @@ export default class TreeFS implements MutableFileSystem {
       return null;
     }
     return result.node;
-  }
-
-  #cloneTree(root: DirectoryNode): DirectoryNode {
-    const clone: DirectoryNode = new Map();
-    for (const [name, node] of root) {
-      if (isDirectory(node)) {
-        clone.set(name, this.#cloneTree(node));
-      } else {
-        clone.set(name, [...node]);
-      }
-    }
-    return clone;
   }
 }
