@@ -1500,6 +1500,39 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         });
       });
 
+      test('records a followed symlink target, and directories beneath it, by canonical path', () => {
+        tfs = new TreeFS({
+          rootDir: p('/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('src/index.js'), [0, 0, 0, null, 0, null]],
+            [p('src/link-to-lib'), [0, 0, 0, null, 'lib', null]],
+            [p('lib/nested/deep.js'), [0, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          observe({follow: true, recursive: true, rootDir: p('/project/src')}),
+        ).toEqual({
+          files: [
+            p('/project/src/index.js'),
+            p('/project/src/link-to-lib/nested/deep.js'),
+          ],
+          observations: {
+            content: new Set(
+              [
+                p('/project/src'),
+                p('/project/src/link-to-lib'),
+                p('/project/lib'),
+                p('/project/lib/nested'),
+              ].map(canonical),
+            ),
+            existence: new Set([p('/project/lib')].map(canonical)),
+          },
+        });
+      });
+
       test('records only once iterated', () => {
         const observations = emptyObservations();
         tfs.matchFiles({rootDir: p('/project/foo')}, observations);
