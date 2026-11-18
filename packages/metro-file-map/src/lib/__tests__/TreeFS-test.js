@@ -1048,8 +1048,162 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
             rootDir: p('/'),
           }),
         ),
-      ).toEqual([p('/project/bar.js')]);
+      ).toEqual([p('/project/bar.js'), p('/project/root/project/bar.js')]);
     });
+
+    test('ancestor of project root follows symlinks within the project root', () => {
+      expect(
+        Array.from(
+          tfs.matchFiles({
+            filter: new RegExp(/\/another\.js$/),
+            filterComparePosix: true,
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([
+        p('/project/foo/another.js'),
+        p('/project/foo/owndir/another.js'),
+        p('/project/link-to-foo/another.js'),
+        p('/project/link-to-foo/owndir/another.js'),
+        p('/project/root/project/foo/another.js'),
+        p('/project/root/project/foo/owndir/another.js'),
+        p('/project/root/project/link-to-foo/another.js'),
+        p('/project/root/project/link-to-foo/owndir/another.js'),
+      ]);
+    });
+
+    test('ancestor of project root follows a symlink in a directory ending in a dot', () => {
+      const dotTfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo./x.js'), [0, 0, 0, null, 0, null]],
+          [p('foo./link'), [0, 0, 0, null, 'foo.', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          dotTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([p('/project/foo./x.js'), p('/project/foo./link/x.js')]);
+    });
+
+    test.each([
+      [
+        '/a/b',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+        ],
+      ],
+      [
+        '/a',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+      [
+        '/',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+    ])(
+      'ancestor %s of a deeper project root includes each level once',
+      (rootDir, expected) => {
+        const deepTfs = new TreeFS({
+          rootDir: p('/a/b/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+            [p('link-to-foo'), [0, 0, 0, null, 'foo', null]],
+            [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+            [p('../../c/z.js'), [0, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          Array.from(
+            deepTfs.matchFiles({
+              follow: true,
+              recursive: true,
+              rootDir: p(rootDir),
+            }),
+          ),
+        ).toEqual(expected.map(p));
+      },
+    );
+
+    test('follows a symlink to two levels above the project root', () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('up2'), [0, 0, 0, null, '../..', null]],
+          [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/a/b/project'),
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/project/up2/b/project/foo/x.js'),
+        p('/a/b/project/up2/b/sib/y.js'),
+      ]);
+    });
+
+    test.each([['/a/b/project'], ['/a'], ['/']])(
+      '%s lists the project root with nothing above it in the map',
+      rootDir => {
+        const deepTfs = new TreeFS({
+          rootDir: p('/a/b/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+            [p('up2'), [0, 0, 0, null, '../..', null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          Array.from(
+            deepTfs.matchFiles({
+              follow: true,
+              recursive: true,
+              rootDir: p(rootDir),
+            }),
+          ),
+        ).toEqual([
+          p('/a/b/project/foo/x.js'),
+          p('/a/b/project/up2/b/project/foo/x.js'),
+        ]);
+      },
+    );
 
     test('recursive', () => {
       expect(
@@ -1152,6 +1306,58 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           }),
         ),
       ).toEqual([p('/outside/external.js')]);
+    });
+
+    test('null rootDir follows a symlink outside the root to its ancestor', () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('../sib/to-a'), [0, 0, 0, null, '../..', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: null,
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/sib/to-a/b/project/foo/x.js'),
+      ]);
+    });
+
+    test("null rootDir doesn't list outside the root through a symlink", () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('link-to-root'), [0, 0, 0, null, '', null]],
+          [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: null,
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/project/link-to-root/foo/x.js'),
+        p('/a/b/sib/y.js'),
+      ]);
     });
 
     test('outside root, rootDir set to root has no matches', () => {
@@ -1728,6 +1934,31 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           type: 'f',
           realPath: 'D:\\external\\file.js',
         });
+      });
+
+      test('matchFiles() with no rootDir follows a symlink on another drive', () => {
+        const tfsLink = new TreeFS({
+          rootDir: 'C:\\project',
+          files: new Map<CanonicalPath, FileMetadata>([
+            ['..\\..\\D:\\external\\file.js', externalMeta],
+            [
+              '..\\..\\D:\\external\\self',
+              [0, 0, 0, null, '../../D:/external', null],
+            ],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        // Only the suffix is checked: paths on another drive are joined
+        // lexically to the project root (C:\D:\...).
+        expect(
+          Array.from(
+            tfsLink.matchFiles({follow: true, recursive: true, rootDir: null}),
+          ),
+        ).toContainEqual(
+          expect.stringMatching(/\\D:\\external\\self\\file\.js$/),
+        );
       });
     });
   }
