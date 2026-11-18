@@ -69,6 +69,18 @@ describe('HttpGetStore', () => {
     expect(warningMessages.length).toBe(0);
   });
 
+  test('treats a getParams that throws as a miss', async () => {
+    const store = new HttpGetStore({
+      endpoint: 'http://www.example.com/endpoint',
+      getParams: () => {
+        throw new Error('token file missing');
+      },
+    });
+
+    expect(await store.get(Buffer.from('key'))).toBe(null);
+    expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
+  });
+
   test("doesn't throw any error and doesn't warn on http status 404 errors", async () => {
     const store = new HttpGetStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));

@@ -44,10 +44,12 @@ Metro provides these stores for use with [`cacheStores`](./Configuration.md#cach
 - **`HttpStore(options)`** is a bare-bones remote cache client that reads (`GET`) and writes (`PUT`) compressed cache artifacts over HTTP or HTTPS.
   - **`options.endpoint: string`**: Base URL of the cache server. For example, with `'http://www.example.com/endpoint'`, requests go to URLs such as `http://www.example.com/endpoint/c083bff944879d9f528cf185eba0f4962fd4e5b1a6a7d2a1c0bd42c3c0d5f0e1b6a9e7c8` (the hex-encoded cache key).
   - **`options.timeout: number`**: Request timeout in milliseconds. Defaults to 5000.
+  - **`options.maxSockets: number`**: Maximum concurrent connections to the cache server. Requests beyond this wait for a free connection, and that wait counts towards the request's duration. Defaults to 64.
   - **`options.family: 4 | 6`**: Same as the `family` parameter to Node's [`http.request`](https://nodejs.org/api/http.html#httprequesturl-options-callback).
   - **`options.cert`, `options.ca`, `options.key`**: HTTPS options passed directly to [Node's built-in HTTPS client](https://nodejs.org/api/https.html).
   - **`options.headers: {[string]: string}`**: HTTP headers sent with every request.
   - **`options.params: URLSearchParams`**: Query parameters appended to every request URL.
+  - **`options.getParams: () => Promise<URLSearchParams>`**: Called before every request (and retry); the parameters it resolves to are added to `options.params`. Use it for short-lived credentials such as auth tokens that need refreshing. If it throws or rejects, the request fails with a network error.
   - **`options.additionalSuccessStatuses: Array<number>`**: Additional HTTP status codes treated as success.
   - **`options.maxAttempts: number`**: Maximum attempts per request, with exponential backoff. Defaults to 1 (no retries).
   - **`options.retryStatuses: Set<number>`**: HTTP status codes that trigger a retry.
