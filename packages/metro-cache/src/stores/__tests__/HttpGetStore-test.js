@@ -81,6 +81,42 @@ describe('HttpGetStore', () => {
     expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
   });
 
+  test('returns a miss without a request once maxInFlightReads are in flight', async () => {
+    const store = new HttpGetStore({
+      endpoint: 'http://example.com',
+      maxInFlightReads: 1,
+    });
+    const {request} = jest.requireMock('node:http');
+    const first = store.get(Buffer.from('key1'));
+
+    expect(await store.get(Buffer.from('key2'))).toBe(null);
+    expect(request).toHaveBeenCalledTimes(1);
+
+    request.mock.calls[0][1](responseHttpOk(JSON.stringify({foo: 42})));
+    expect(await first).toEqual({foo: 42});
+
+    const third = store.get(Buffer.from('key3'));
+    expect(request).toHaveBeenCalledTimes(2);
+    request.mock.calls[1][1](responseHttpOk(JSON.stringify({bar: 1})));
+    expect(await third).toEqual({bar: 1});
+  });
+
+  test('honours maxInFlightReads set beside getOptions', async () => {
+    const store = new HttpGetStore({
+      getOptions: {endpoint: 'http://example.com'},
+      setOptions: {endpoint: 'http://example.com'},
+      maxInFlightReads: 1,
+    });
+    const {request} = jest.requireMock('node:http');
+    const first = store.get(Buffer.from('key1'));
+
+    expect(await store.get(Buffer.from('key2'))).toBe(null);
+    expect(request).toHaveBeenCalledTimes(1);
+
+    request.mock.calls[0][1](responseHttpOk(JSON.stringify({foo: 42})));
+    expect(await first).toEqual({foo: 42});
+  });
+
   test("doesn't throw any error and doesn't warn on http status 404 errors", async () => {
     const store = new HttpGetStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));
