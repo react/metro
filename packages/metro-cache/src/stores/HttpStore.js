@@ -28,6 +28,11 @@ type EndpointOptions = {
   family?: 4 | 6,
   timeout?: number,
   maxSockets?: number,
+  /**
+   * `HttpGetStore` only: once this many reads are in flight, further reads
+   * return a miss right away instead of waiting for a socket.
+   */
+  maxInFlightReads?: number,
   key?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   cert?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   ca?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,

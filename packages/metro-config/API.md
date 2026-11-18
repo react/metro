@@ -101,6 +101,7 @@ export type MetalConfigT = {
   projectRoot: string;
   stickyWorkers: boolean;
   transformerPath: string;
+  unstable_hedgeCacheReadsAfterMs: null | undefined | number;
   reporter: Reporter;
   resetCache: boolean;
   watchFolders: ReadonlyArray<string>;

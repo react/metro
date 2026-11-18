@@ -561,4 +561,180 @@ describe('Transformer', function () {
     ).toThrow(error);
     expect(WorkerFarm).not.toBeCalled();
   });
+
+  describe('with unstable_hedgeCacheReadsAfterMs', () => {
+    const SLOW_SHA1 = 'ffffffffffffffffffffffffffffffffffffffff';
+    const local = {
+      sha1: '0123456789012345678901234567890123456789',
+      result: {output: 'local'},
+    };
+    let transform;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      transform = require('../WorkerFarm').default.prototype.transform;
+      transform.mockReset();
+      transform.mockResolvedValue(local);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function createTransformer(get) {
+      return new Transformer(
+        {
+          ...commonOptions,
+          cacheStores: [{get, set: jest.fn()}],
+          unstable_hedgeCacheReadsAfterMs: 100,
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+    }
+
+    function after(ms, value) {
+      return new Promise(resolve => setTimeout(() => resolve(value), ms));
+    }
+
+    test('uses a cache hit that arrives within the delay', async () => {
+      const transformer = createTransformer(() => after(50, {output: 'cache'}));
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(50);
+
+      expect(await promise).toMatchObject({output: 'cache'});
+      expect(transform).not.toHaveBeenCalled();
+    });
+
+    test('transforms immediately on a cache miss within the delay', async () => {
+      const transformer = createTransformer(() => after(50, null));
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(50);
+
+      expect(await promise).toMatchObject({output: 'local'});
+      expect(transform).toHaveBeenCalledTimes(1);
+    });
+
+    test('uses the local transform when the cache is slower', async () => {
+      const transformer = createTransformer(() =>
+        after(1000, {output: 'cache'}),
+      );
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(100);
+
+      expect(await promise).toMatchObject({output: 'local'});
+      expect(transform).toHaveBeenCalledTimes(1);
+    });
+
+    test('uses a slow cache hit that beats the local transform', async () => {
+      transform.mockImplementation(() => after(1000, local));
+      const transformer = createTransformer(() =>
+        after(200, {output: 'cache'}),
+      );
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(200);
+
+      expect(await promise).toMatchObject({output: 'cache'});
+    });
+
+    test('does not start queued speculative transforms once the cache answers', async () => {
+      // Two slots (maxWorkers * 2) are busy with required transforms.
+      transform.mockImplementation(() => after(1000, local));
+      const transformer = new Transformer(
+        {
+          ...commonOptions,
+          maxWorkers: 1,
+          cacheStores: [
+            {
+              get: key =>
+                key.toString('hex').endsWith(SLOW_SHA1)
+                  ? after(300, {output: 'cache'})
+                  : Promise.resolve(null),
+              set: jest.fn(),
+            },
+          ],
+          unstable_hedgeCacheReadsAfterMs: 100,
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+      const busy = [
+        transformer.transformFile('./a.js', {}),
+        transformer.transformFile('./b.js', {}),
+      ];
+      getOrComputeSha1.mockReturnValueOnce({sha1: SLOW_SHA1});
+      const slow = transformer.transformFile('./slow.js', {});
+      await jest.advanceTimersByTimeAsync(300);
+
+      expect(await slow).toMatchObject({output: 'cache'});
+      await jest.advanceTimersByTimeAsync(1000);
+      await Promise.all(busy);
+      expect(transform).toHaveBeenCalledTimes(2);
+    });
+
+    test('uses a slow cache hit when the local transform fails first', async () => {
+      transform.mockImplementation(() =>
+        after(50, null).then(() => {
+          throw new Error('worker crashed');
+        }),
+      );
+      const transformer = createTransformer(() =>
+        after(300, {output: 'cache'}),
+      );
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(300);
+
+      expect(await promise).toMatchObject({output: 'cache'});
+    });
+
+    test('fails with the local error when the cache then misses', async () => {
+      transform.mockImplementation(() =>
+        after(50, null).then(() => {
+          throw new Error('worker crashed');
+        }),
+      );
+      const transformer = createTransformer(() => after(300, null));
+      const promise = transformer.transformFile('./foo.js', {}).catch(e => e);
+      await jest.advanceTimersByTimeAsync(300);
+
+      expect(await promise).toEqual(new Error('worker crashed'));
+    });
+
+    test('does not start a queued speculative transform after the cache read fails', async () => {
+      // Two slots (maxWorkers * 2) are busy with required transforms.
+      transform.mockImplementation(() => after(1000, local));
+      const transformer = new Transformer(
+        {
+          ...commonOptions,
+          maxWorkers: 1,
+          cacheStores: [
+            {
+              get: key =>
+                key.toString('hex').endsWith(SLOW_SHA1)
+                  ? after(300, null).then(() => {
+                      throw new Error('cache unavailable');
+                    })
+                  : Promise.resolve(null),
+              set: jest.fn(),
+            },
+          ],
+          unstable_hedgeCacheReadsAfterMs: 100,
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+      const busy = [
+        transformer.transformFile('./a.js', {}),
+        transformer.transformFile('./b.js', {}),
+      ];
+      getOrComputeSha1.mockReturnValueOnce({sha1: SLOW_SHA1});
+      const slow = transformer.transformFile('./slow.js', {}).catch(e => e);
+      await jest.advanceTimersByTimeAsync(300);
+
+      expect(await slow).toEqual(new Error('cache unavailable'));
+      await jest.advanceTimersByTimeAsync(1000);
+      await Promise.all(busy);
+      expect(transform).toHaveBeenCalledTimes(2);
+    });
+  });
 });

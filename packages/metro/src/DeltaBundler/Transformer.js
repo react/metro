@@ -31,12 +31,89 @@ import assert from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import nullthrows from 'nullthrows';
 
 const debug = debugModule('Metro:Transformer');
 
 type GetOrComputeSha1Fn = (
   filePath: string,
 ) => Promise<Readonly<{content?: Buffer, sha1: string}>>;
+
+type TransformedData = Readonly<{
+  result: TransformResult<>,
+  sha1: string,
+}>;
+
+type SlotRequest = {
+  start: () => void,
+  state: 'queued' | 'started' | 'withdrawn',
+};
+
+// Limits how many local transforms run at once. Required transforms run first,
+// oldest first. Speculative ones (racing a slow cache read) run newest first,
+// because the cache answers the oldest reads first, and can be withdrawn or
+// promoted to required until they start.
+class TransformSlots {
+  #free: number;
+  #required: Array<SlotRequest> = [];
+  #speculative: Array<SlotRequest> = [];
+
+  constructor(size: number) {
+    this.#free = Math.max(1, size);
+  }
+
+  run<T>(
+    task: () => Promise<T>,
+    speculative: boolean,
+  ): {
+    promise: Promise<T>,
+    promote: () => void,
+    withdraw: () => void,
+  } {
+    let request: ?SlotRequest;
+    const promise = new Promise<void>(resolve => {
+      request = {start: resolve, state: 'queued'};
+    }).then(async () => {
+      try {
+        return await task();
+      } finally {
+        this.#free++;
+        this.#drain();
+      }
+    });
+    const queued = nullthrows(request);
+    (speculative ? this.#speculative : this.#required).push(queued);
+    this.#drain();
+    return {
+      promise,
+      promote: () => {
+        if (queued.state === 'queued') {
+          this.#required.push(queued);
+          this.#drain();
+        }
+      },
+      withdraw: () => {
+        if (queued.state === 'queued') {
+          queued.state = 'withdrawn';
+        }
+      },
+    };
+  }
+
+  #drain() {
+    while (this.#free > 0) {
+      const next = this.#required.shift() ?? this.#speculative.pop();
+      if (next == null) {
+        return;
+      }
+      if (next.state === 'queued') {
+        next.state = 'started';
+        this.#free--;
+        next.start();
+      }
+    }
+  }
+}
 
 export default class Transformer {
   _config: ConfigT;
@@ -46,6 +123,7 @@ export default class Transformer {
   _getSha1: GetOrComputeSha1Fn;
   _sharedResults: ?SharedTransformResults<MixedOutput>;
   _workerFarm: WorkerFarm;
+  _transformSlots: TransformSlots;
 
   constructor(
     config: ConfigT,
@@ -96,6 +174,10 @@ export default class Transformer {
     const baseHashBuffer = stableHash([globalCacheKey]);
     this._baseHash = baseHashBuffer.toString('binary');
     debug('Base hash: %s', baseHashBuffer.toString('hex'));
+
+    // One queued transform per worker keeps workers busy while the main thread
+    // hands out the next one.
+    this._transformSlots = new TransformSlots(config.maxWorkers * 2);
 
     // Start workers last - nothing can end them if the constructor throws.
     this._workerFarm = new WorkerFarm(config, transformerOptions);
@@ -188,33 +270,28 @@ export default class Transformer {
     }
 
     const requestedKey = Buffer.concat([partialKey, Buffer.from(sha1, 'hex')]);
+    const transformLocally = () =>
+      this._workerFarm.transform(
+        projectRelativePath,
+        transformerOptions,
+        content,
+        assetUrlPath ?? undefined,
+      );
+    const hedgeMs = this._config.unstable_hedgeCacheReadsAfterMs;
 
     const getOrTransform = async (): Promise<Computed<MixedOutput>> => {
       let fullKey = requestedKey;
-      let result;
-      try {
-        result = await cache.get(fullKey);
-      } catch (error) {
-        this._config.reporter.update({
-          type: 'cache_read_error',
-          error,
-        });
-        throw error;
-      }
-
       // A valid result from the cache is used directly; otherwise we call into
       // the transformer to compute the corresponding result.
-      const data: Readonly<{
-        result: TransformResult<>,
-        sha1: string,
-      }> = result
-        ? {result, sha1}
-        : await this._workerFarm.transform(
-            projectRelativePath,
-            transformerOptions,
-            content,
-            assetUrlPath ?? undefined,
-          );
+      const data: TransformedData =
+        hedgeMs == null
+          ? await this._getCachedOrTransform(fullKey, sha1, transformLocally)
+          : await this._getCachedOrTransformHedged(
+              fullKey,
+              sha1,
+              transformLocally,
+              hedgeMs,
+            );
 
       // Only re-compute the full key if the SHA-1 changed. This is because
       // references are used by the cache implementation in a weak map to keep
@@ -265,6 +342,86 @@ export default class Transformer {
       before - shared.countEntries(),
       before,
     );
+  }
+
+  async _readCache(fullKey: Buffer): Promise<?TransformResult<>> {
+    try {
+      return await this._cache.get(fullKey);
+    } catch (error) {
+      this._config.reporter.update({
+        type: 'cache_read_error',
+        error,
+      });
+      throw error;
+    }
+  }
+
+  async _getCachedOrTransform(
+    fullKey: Buffer,
+    sha1: string,
+    transformLocally: () => Promise<TransformedData>,
+  ): Promise<TransformedData> {
+    const result = await this._readCache(fullKey);
+    return result ? {result, sha1} : await transformLocally();
+  }
+
+  // Waits up to `hedgeMs` for the cache; after that, also queues a speculative
+  // local transform and uses whichever result comes first. A cache miss turns
+  // the speculative transform into a required one.
+  async _getCachedOrTransformHedged(
+    fullKey: Buffer,
+    sha1: string,
+    transformLocally: () => Promise<TransformedData>,
+    hedgeMs: number,
+  ): Promise<TransformedData> {
+    const cached = this._readCache(fullKey);
+    let timer;
+    const early = await Promise.race([
+      cached.then(result => ({result})),
+      new Promise<void>(resolve => {
+        timer = setTimeout(resolve, hedgeMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (early != null) {
+      return early.result
+        ? {result: early.result, sha1}
+        : await this._transformSlots.run(transformLocally, false).promise;
+    }
+
+    const local = this._transformSlots.run(transformLocally, true);
+    return await new Promise((resolve, reject) => {
+      let cacheMissed = false;
+      let localFailure: ?{error: unknown} = null;
+      cached.then(
+        result => {
+          if (result) {
+            local.withdraw();
+            resolve({result, sha1});
+          } else if (localFailure != null) {
+            reject(localFailure.error);
+          } else {
+            cacheMissed = true;
+            local.promote();
+          }
+        },
+        error => {
+          // A failed read fails the transform, as it does without hedging, so
+          // nothing would use the speculative transform's result.
+          local.withdraw();
+          reject(error);
+        },
+      );
+      local.promise.then(resolve, error => {
+        // A local failure decides only once the cache has missed: without
+        // hedging, a hit would have served this file.
+        if (cacheMissed) {
+          reject(error);
+        } else {
+          localFailure = {error};
+        }
+      });
+    });
   }
 
   async end(): Promise<void> {

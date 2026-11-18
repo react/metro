@@ -45,6 +45,7 @@ Metro provides these stores for use with [`cacheStores`](./Configuration.md#cach
   - **`options.endpoint: string`**: Base URL of the cache server. For example, with `'http://www.example.com/endpoint'`, requests go to URLs such as `http://www.example.com/endpoint/c083bff944879d9f528cf185eba0f4962fd4e5b1a6a7d2a1c0bd42c3c0d5f0e1b6a9e7c8` (the hex-encoded cache key).
   - **`options.timeout: number`**: Request timeout in milliseconds. Defaults to 5000.
   - **`options.maxSockets: number`**: Maximum concurrent connections to the cache server. Requests beyond this wait for a free connection, and that wait counts towards the request's duration. Defaults to 64.
+  - **`options.maxInFlightReads: number`**: `HttpGetStore` only. Once this many reads are in flight, further reads return a miss right away instead of waiting, so Metro transforms those files locally. Pair it with [`unstable_hedgeCacheReadsAfterMs`](./Configuration.md#unstable_hedgecachereadsafterms) so a slow link can't make builds slower than not using the cache. Defaults to no limit.
   - **`options.family: 4 | 6`**: Same as the `family` parameter to Node's [`http.request`](https://nodejs.org/api/http.html#httprequesturl-options-callback).
   - **`options.cert`, `options.ca`, `options.key`**: HTTPS options passed directly to [Node's built-in HTTPS client](https://nodejs.org/api/https.html).
   - **`options.headers: {[string]: string}`**: HTTP headers sent with every request.
