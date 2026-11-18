@@ -6,7 +6,12 @@
 # This workflow holds no model credentials and never checks out PR code. It
 # validates the payload, drops reviews of a head that is no longer current,
 # then edits a single summary comment in place and adds inline comments for
-# findings not posted before. It never approves or requests changes.
+# findings not posted before. It never approves or requests changes. A
+# payload can also add or remove labels from a fixed allowlist, e.g. marking a
+# PR the bot skipped (a dependency bot PR or a mechanical tooling update) with
+# no comment at all. It can delete the bot's own comments (a whole review, or
+# single findings it has withdrawn), and reply in the threads of its own
+# findings. It only ever deletes or replies to comments by github-actions[bot].
 name: react/metro/review-post
 
 on:
@@ -36,6 +41,13 @@ jobs:
             const zlib = require('node:zlib');
             const MARKER = '<!-- metro-review-bot -->';
             const BOT = 'github-actions[bot]';
+            // The only labels a payload may add or remove.
+            const LABELS = {
+              'Auto review: Skipped': {
+                color: 'ededed',
+                description: 'The Metro review bot skipped this PR (a dependency bot PR or a mechanical tooling update)',
+              },
+            };
 
             // #region Validate the payload
 
@@ -50,11 +62,26 @@ jobs:
             if (p.v !== 1) return fail('unsupported version');
             if (!Number.isInteger(p.pr) || p.pr < 1) return fail('bad pr');
             if (!/^[0-9a-f]{40}$/.test(p.head_sha ?? '')) return fail('bad head_sha');
-            if (typeof p.summary !== 'string' || !p.summary.startsWith(MARKER) || p.summary.length > 60000) {
+            const addLabels = Array.isArray(p.labels?.add) ? p.labels.add : [];
+            const removeLabels = Array.isArray(p.labels?.remove) ? p.labels.remove : [];
+            if ([...addLabels, ...removeLabels].some(l => !Object.hasOwn(LABELS, l))) return fail('label not allowed');
+            const hasSummary = p.summary != null;
+            if (hasSummary && (typeof p.summary !== 'string' || !p.summary.startsWith(MARKER) || p.summary.length > 60000)) {
               return fail('bad summary');
             }
             const comments = Array.isArray(p.comments) ? p.comments : [];
+            const deleteIds = Array.isArray(p.delete_ids) ? p.delete_ids : [];
+            const replies = Array.isArray(p.replies) ? p.replies : [];
+            const retract = p.retract === true;
+            if (!hasSummary && (comments.length || deleteIds.length || replies.length || (!retract && !addLabels.length && !removeLabels.length))) {
+              return fail('a payload without a summary may only change labels or retract');
+            }
+            if (retract && (hasSummary || comments.length)) return fail('retract can only be combined with labels');
             if (comments.length > 15) return fail('too many comments');
+            if (deleteIds.length > 30 || deleteIds.some(id => !/^[0-9a-f]{8}$/.test(id))) return fail('bad delete_ids');
+            if (replies.length > 15 || replies.some(r => !/^[0-9a-f]{8}$/.test(r?.id ?? '') || typeof r.body !== 'string' || r.body.length > 3000)) {
+              return fail('bad replies');
+            }
             for (const c of comments) {
               const ok =
                 /^[0-9a-f]{8}$/.test(c.id ?? '') &&
@@ -95,6 +122,54 @@ jobs:
               return core.notice(`#${p.pr} moved to ${pr.head.sha.slice(0, 7)}; stale review of ${p.head_sha.slice(0, 7)} dropped`);
             }
 
+            // #endregion
+            // #region Labels
+
+            for (const name of addLabels) {
+              try {
+                await github.rest.issues.getLabel({owner, repo, name});
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                await github.rest.issues.createLabel({owner, repo, name, ...LABELS[name]});
+              }
+            }
+            if (addLabels.length) await github.rest.issues.addLabels({owner, repo, issue_number: p.pr, labels: addLabels});
+            for (const name of removeLabels) {
+              try {
+                await github.rest.issues.removeLabel({owner, repo, issue_number: p.pr, name});
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
+            }
+            const labelNote = [addLabels.length ? `labels added: ${addLabels.join(', ')}` : null, removeLabels.length ? `labels removed: ${removeLabels.join(', ')}` : null].filter(Boolean).join('; ');
+
+            // #endregion
+            // #region Retract and delete
+
+            const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.pr, per_page: 100});
+            const ownSummaries = issueComments.filter(c => c.user.login === BOT && c.body.startsWith(MARKER));
+            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: p.pr, per_page: 100});
+            const own = reviewComments.filter(c => c.user.login === BOT);
+            // A finding's inline comment carries its id in the footer. The bot's
+            // replies in a thread don't.
+            const findingId = c => c.body.match(/id `([0-9a-f]{8})`/)?.[1];
+            const deleted = new Set();
+            for (const c of own) {
+              const id = findingId(c);
+              if (retract || (id && deleteIds.includes(id))) {
+                await github.rest.pulls.deleteReviewComment({owner, repo, comment_id: c.id});
+                deleted.add(c.id);
+              }
+            }
+            if (retract) {
+              for (const c of ownSummaries) await github.rest.issues.deleteComment({owner, repo, comment_id: c.id});
+              return core.notice(`#${p.pr}: review retracted (${ownSummaries.length} summary and ${deleted.size} inline comment(s) deleted)${labelNote ? `; ${labelNote}` : ''}`);
+            }
+            if (!hasSummary) return core.notice(`#${p.pr}: ${labelNote}`);
+
+            // #endregion
+            // #region Post
+
             // Head-side lines a comment can anchor to, per file.
             const anchors = new Map();
             for (const f of await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: p.pr, per_page: 100})) {
@@ -108,11 +183,7 @@ jobs:
               anchors.set(f.filename, lines);
             }
 
-            // #endregion
-            // #region Post
-
-            const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: p.pr, per_page: 100});
-            const existing = issueComments.find(c => c.user.login === BOT && c.body.startsWith(MARKER));
+            const existing = ownSummaries[0];
             const summary = defuse(p.summary);
             if (existing) {
               await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: summary});
@@ -120,13 +191,8 @@ jobs:
               await github.rest.issues.createComment({owner, repo, issue_number: p.pr, body: summary});
             }
 
-            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: p.pr, per_page: 100});
-            const posted = new Set(
-              reviewComments
-                .filter(c => c.user.login === BOT)
-                .map(c => c.body.match(/id `([0-9a-f]{8})`/)?.[1])
-                .filter(Boolean),
-            );
+            const remaining = own.filter(c => !deleted.has(c.id));
+            const posted = new Set(remaining.map(findingId).filter(Boolean));
             const fresh = comments.filter(c => !posted.has(c.id) && anchors.get(c.path)?.has(c.line));
             const skipped = comments.length - fresh.length;
             if (fresh.length) {
@@ -139,6 +205,15 @@ jobs:
                 comments: fresh.map(c => ({path: c.path, line: c.line, side: 'RIGHT', body: defuse(c.body)})),
               });
             }
-            core.notice(`#${p.pr}: summary ${existing ? 'updated' : 'created'}, ${fresh.length} inline comment(s) posted, ${skipped} already posted or unanchorable`);
+            // Replies go in the thread of the bot's own finding with that id.
+            let replied = 0;
+            for (const r of replies) {
+              const target = remaining.find(c => findingId(c) === r.id && c.in_reply_to_id == null);
+              if (!target) continue;
+              await github.rest.pulls.createReplyForReviewComment({owner, repo, pull_number: p.pr, comment_id: target.id, body: defuse(r.body)});
+              replied++;
+            }
+            const extra = [deleted.size ? `${deleted.size} deleted` : null, replied ? `${replied} replied` : null, labelNote || null].filter(Boolean).join('; ');
+            core.notice(`#${p.pr}: summary ${existing ? 'updated' : 'created'}, ${fresh.length} inline comment(s) posted, ${skipped} already posted or unanchorable${extra ? `; ${extra}` : ''}`);
 
             // #endregion
