@@ -77,7 +77,6 @@ describe('FallbackWatcher', () => {
       const override = watchOverride;
       if (override != null && dir === override.path) {
         watchOverride = null;
-        // $FlowFixMe[incompatible-type] - models an errored FSWatcher
         return override.watcher;
       }
       const failure = watchFailure;

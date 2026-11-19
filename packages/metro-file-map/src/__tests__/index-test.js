@@ -908,7 +908,6 @@ describe('FileMap', () => {
       buildNewFileMap(
         {},
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -916,7 +915,6 @@ describe('FileMap', () => {
           failValidationOnConflicts: true,
         },
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
