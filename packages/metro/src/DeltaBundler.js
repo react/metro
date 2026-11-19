@@ -22,7 +22,7 @@ import type {
 import type EventEmitter from 'node:events';
 
 import DeltaCalculator from './DeltaBundler/DeltaCalculator';
-import {getModuleSourcePath} from './lib/modulePath';
+import {deriveVirtualModulePath, getModuleSourcePath} from './lib/modulePath';
 import debugModule from 'debug';
 
 const debug = debugModule('Metro:DeltaBundler');
@@ -103,7 +103,12 @@ export default class DeltaBundler<T = MixedOutput> {
   ): Promise<Graph<T>> {
     const transformedPaths = new Set<string>();
     const recordingTransform: TransformFn<T> = (modulePath, virtualSource) => {
-      transformedPaths.add(modulePath);
+      // Record the graph path, which for a virtual module is namespaced.
+      transformedPaths.add(
+        virtualSource?.type === 'buffer'
+          ? deriveVirtualModulePath(modulePath)
+          : modulePath,
+      );
       return options.transform(modulePath, virtualSource);
     };
     const deltaCalculator = new DeltaCalculator(

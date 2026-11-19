@@ -44,8 +44,8 @@ type Entry<T> = Readonly<{
  * Only registered graphs release paths. A live graph's failed update releases
  * nothing, so what it transformed stays shared while the error persists, and
  * the graph releases those paths once it commits an update or ends. Entries
- * that only graphs `DeltaBundler` never registers add, i.e. those of
- * `getDependencies` and of a first build that fails, stay until a later result
+ * added only by graphs that `DeltaBundler` never registers, i.e. by
+ * `getDependencies` and by a first build that fails, stay until a later result
  * for the same module replaces them or a live graph releases their path. This
  * keeps prepended scripts, which every graph's revision holds, shared between
  * graphs.

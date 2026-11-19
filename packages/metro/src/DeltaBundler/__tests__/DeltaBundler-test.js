@@ -227,12 +227,7 @@ describe('DeltaBundler', () => {
 
     test('is not called after a delta that releases nothing', async () => {
       const [a] = await buildGraphs();
-      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce({
-        added: new Map(),
-        modified: new Map(),
-        deleted: new Set(),
-        reset: false,
-      });
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce(emptyDelta);
 
       await deltaBundler.getDelta(a, {reset: false, shallow: false});
 
@@ -278,6 +273,37 @@ describe('DeltaBundler', () => {
       onModulesReleased.mockClear();
       DeltaCalculator.prototype.getDelta.mockResolvedValueOnce(emptyDelta);
       await deltaBundler.getDelta(b, {reset: false, shallow: false});
+      expect(onModulesReleased).not.toHaveBeenCalled();
+    });
+
+    test('is not called for a virtual module that the graph holds after a committed update transforms it', async () => {
+      const graph = {
+        dependencies: new Map([
+          ['/c', {output: outputA}],
+          ['virtual:/c-virtual', {output: sharedOutputInA}],
+        ]),
+        entryPoints: ['/c'],
+      };
+      DeltaCalculator.prototype.getGraph.mockReturnValueOnce(graph);
+      const c = await deltaBundler.buildGraph(graph.entryPoints, {
+        ...options,
+        transform: jest.fn(),
+      });
+      const {transform} = jest
+        .requireMock('../DeltaCalculator')
+        .default.mock.calls.at(-1)[2];
+      DeltaCalculator.prototype.getDelta.mockImplementationOnce(async () => {
+        // A virtual module is transformed as its source path.
+        await transform('/c-virtual', {
+          type: 'buffer',
+          source: Buffer.from(''),
+          sha1: 'sha1',
+        });
+        return emptyDelta;
+      });
+
+      await deltaBundler.getDelta(c, {reset: false, shallow: false});
+
       expect(onModulesReleased).not.toHaveBeenCalled();
     });
 
