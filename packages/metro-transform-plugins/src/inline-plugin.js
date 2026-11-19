@@ -28,10 +28,11 @@ const processId = {name: 'process'};
 
 const dev = {name: '__DEV__'};
 
-export default function inlinePlugin(
-  {types: t}: {types: Types},
-  options: Options,
-): PluginObj<State> {
+export default function inlinePlugin({
+  types: t,
+}: {
+  types: Types,
+}): PluginObj<State> {
   const {isIdentifier, isMemberExpression} = t;
 
   function isGlobal(binding: ?Binding): boolean {
@@ -101,18 +102,14 @@ export default function inlinePlugin(
     visitor: {
       ReferencedIdentifier(path: NodePath<Node>, state: State): void {
         if (!state.opts.dev && isDev(path.node, path.parent, path.scope)) {
-          path.replaceWith(t.booleanLiteral(state.opts.dev));
+          path.replaceWith(t.booleanLiteral(false));
         }
       },
       MemberExpression(path: NodePath<MemberExpression>, state: State): void {
-        const node = path.node;
-        const scope = path.scope;
-        const opts = state.opts;
-
         if (
-          !opts.dev &&
-          !isWriteTarget(path) &&
-          isProcessEnvNodeEnv(node, scope)
+          !state.opts.dev &&
+          isProcessEnvNodeEnv(path.node, path.scope) &&
+          !isWriteTarget(path)
         ) {
           path.replaceWith(t.stringLiteral('production'));
         }

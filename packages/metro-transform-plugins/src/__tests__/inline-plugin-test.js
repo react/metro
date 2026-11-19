@@ -210,7 +210,11 @@ describe('inline constants', () => {
       var c = require('react-native').Platform.OS;
     `;
 
-    compare([inlinePlugin], code, code, {dev: false});
+    compare([inlinePlugin], code, code, {
+      dev: false,
+      inlinePlatform: true,
+      platform: 'ios',
+    });
   });
 
   test('works with flow-declared variables', () => {

@@ -135,7 +135,7 @@ export type JsTransformOptions = Readonly<{
   customTransformOptions?: CustomTransformOptions,
   dev: boolean,
   experimentalImportSupport?: boolean,
-  /** Passed to the Babel transformer as `caller.inlinePlatform`. React Native's Babel preset reads it to inline `Platform.OS` and `Platform.select`. */
+  /** Passed to the Babel transformer, which `metro-babel-transformer` exposes as `caller.inlinePlatform`. React Native's Babel preset reads it to inline `Platform.OS` and `Platform.select`. */
   inlinePlatform: boolean,
   inlineRequires: boolean,
   minify: boolean,
