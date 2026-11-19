@@ -81,7 +81,6 @@ export default class MappingsConsumer
       invariant(
         generatedPosition.bias === GREATEST_LOWER_BOUND,
         `Unimplemented lookup bias: ${lookupBiasToString(
-          // $FlowFixMe[incompatible-type]
           generatedPosition.bias,
         )}`,
       );
