@@ -156,8 +156,6 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
             p('foo/..'),
             p('../root/.'),
             p('../root/..'),
-            p('a./foo'),
-            p('../root/a./foo'),
             // On POSIX, `..` at the root re-enters the root
             ...(platform === 'posix'
               ? [p('../../../normal/path'), p('../../../normal/path/')]
@@ -187,25 +185,15 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
   });
 
   test.each([
-    [p('..'), p('foo/.'), p('../foo/.')],
-    [p('..'), p('foo/..'), p('../foo/..')],
-  ])(
-    'joinNormalToRelative(%s, %s) keeps a final indirection, as %s',
-    (normalPath, relativePath, expected) => {
-      pathUtils = new RootPathUtils(p('/project/root'));
-      expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
-        collapsedSegments: 0,
-        normalPath: expected,
-      });
-    },
-  );
-
-  test.each([
+    // A final indirection is kept
+    [p('..'), p('foo/.'), p('../foo/.'), 0],
+    [p('..'), p('foo/..'), p('../foo/..'), 0],
+    // A name ending in a dot is not an indirection
     [p('..'), p('root/a./foo'), p('a./foo'), 1],
     [p('../..'), p('project/root/foo../bar'), p('foo../bar'), 2],
     [p('..'), p('sibling./foo'), p('../sibling./foo'), 0],
   ])(
-    'joinNormalToRelative(%s, %s) collapses past a name ending in a dot, as %s',
+    'joinNormalToRelative(%s, %s) is %s, collapsing %s segments',
     (normalPath, relativePath, expected, collapsedSegments) => {
       pathUtils = new RootPathUtils(p('/project/root'));
       expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({

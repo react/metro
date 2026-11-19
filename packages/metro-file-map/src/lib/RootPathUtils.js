@@ -272,13 +272,11 @@ export class RootPathUtils {
     let collapsedSegments = 0;
     // Allow any sequence of indirection fragments at the start of the
     // unmatched suffix e.g /project/[../../foo], but bail out to Node's
-    // path.relative if we find a possible indirection after any later segment,
-    // or on any "./" that isn't a "../".
+    // path.relative on any later "." or ".." segment. A "./" that ends a name,
+    // e.g. in "foo./", is not an indirection.
     for (let pos = startOfRelativePart; ; pos += UP_FRAGMENT_SEP_LENGTH) {
       const nextIndirection = fullPath.indexOf(CURRENT_FRAGMENT, pos);
       if (nextIndirection !== pos + 1 || fullPath[pos] !== '.') {
-        // Past the leading "../" fragments, fall back on any "." or ".."
-        // segment, but not on a "./" that ends a name, e.g. in "foo./".
         if (
           nextIndirection !== -1 &&
           indexOfIndirectionSegment(fullPath, nextIndirection) !== -1
