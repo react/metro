@@ -436,8 +436,9 @@ function decodeVlqMap(vlqMap: VlqMap): Array<MetroSourceMapSegmentTuple> {
 
 /**
  * Encodes raw mapping tuples into a compact VLQ `mappings` string + `names`
- * table. Decode the inverse via `decodeVlqMap`. Storing maps in this form uses
- * far less memory than the equivalent decoded tuple arrays.
+ * table. Decode the inverse via `decodeVlqMap`, or with `Consumer` outside this
+ * module. Storing maps in this form uses far less memory than the equivalent
+ * decoded tuple arrays.
  */
 function vlqMapFromTuples(
   mappings: ReadonlyArray<MetroSourceMapSegmentTuple>,

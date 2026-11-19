@@ -384,8 +384,6 @@ describe('fromRawMappingsIndexed', () => {
 });
 
 describe('vlqMapFromTuples', () => {
-  const decode = decodeTuples;
-
   test('encodes tuples into a VlqMap', () => {
     const vlqMap = vlqMapFromTuples([
       [1, 2],
@@ -406,7 +404,7 @@ describe('vlqMapFromTuples', () => {
       [11, 12, 13, 14, 'pears'],
       [11, 20, 30, 40],
     ];
-    expect(decode(vlqMapFromTuples(tuples))).toEqual(tuples);
+    expect(decodeTuples(vlqMapFromTuples(tuples))).toEqual(tuples);
   });
 
   test('round-trips multi-line, multi-segment maps', () => {
@@ -417,13 +415,13 @@ describe('vlqMapFromTuples', () => {
       [3, 4, 3, 2, 'bar'],
       [5, 0],
     ];
-    expect(decode(vlqMapFromTuples(tuples))).toEqual(tuples);
+    expect(decodeTuples(vlqMapFromTuples(tuples))).toEqual(tuples);
   });
 
   test('encodes an empty map', () => {
     const vlqMap = vlqMapFromTuples([]);
     expect(vlqMap.mappings).toBe('');
-    expect(decode(vlqMap)).toEqual([]);
+    expect(decodeTuples(vlqMap)).toEqual([]);
   });
 });
 
@@ -472,10 +470,9 @@ describe('vlqMapFromBabelDecodedMap', () => {
 });
 
 describe('LineIndexedMappings', () => {
-  // Reference lookup: decode to tuples via Consumer,
-  // then greatestLowerBound over (generatedLine, generatedColumn), returning the
-  // original position only when the matched segment is on the target line and
-  // carries source info.
+  // Reference lookup: greatestLowerBound over the tuples' (generatedLine,
+  // generatedColumn), returning the original position only when the matched
+  // segment is on the target line and carries source info.
   const referenceOriginalPositionFor = (
     tuples: Array<MetroSourceMapSegmentTuple>,
     line1Based: number,
@@ -535,8 +532,6 @@ describe('LineIndexedMappings', () => {
     test(`matches the tuple path exactly across a position grid: ${name}`, () => {
       const tuples = cases[name];
       const vlqMap = vlqMapFromTuples(tuples);
-      // The exact tuples the old path would have produced from this VLQ map.
-      const reference = decodeTuples(vlqMap);
 
       const decoded = new LineIndexedMappings(vlqMap.mappings);
 
@@ -544,7 +539,7 @@ describe('LineIndexedMappings', () => {
       for (let line = 1; line <= maxLine; line++) {
         for (let column = 0; column <= 24; column++) {
           expect(decoded.originalPositionFor(line, column)).toEqual(
-            referenceOriginalPositionFor(reference, line, column),
+            referenceOriginalPositionFor(tuples, line, column),
           );
         }
       }
