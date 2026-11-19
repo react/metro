@@ -284,6 +284,8 @@ export default class FileMap extends EventEmitter {
   readonly #crawler: ?Crawler;
   // Roots added by `addRoot`, mapped to the completion of each addition.
   readonly #dynamicRoots: Map<string, Promise<void>> = new Map();
+  // Roots added by `addRoot` whose files have been applied to the file system.
+  readonly #mappedDynamicRoots: Set<string> = new Set();
   #fileSystem: ?TreeFS;
   // Applies and emits watcher events waiting on the change interval. Set in
   // watch mode.
@@ -449,8 +451,9 @@ export default class FileMap extends EventEmitter {
                 fileSystemData: initialData.fileSystemData,
                 processFile,
                 rootDir,
+                roots: this.#mappedRoots(),
               })
-            : new TreeFS({processFile, rootDir});
+            : new TreeFS({processFile, rootDir, roots: this.#mappedRoots()});
         this.#startupPerfLogger?.point('constructFileSystem_end');
 
         const plugins = this.#plugins;
@@ -597,6 +600,12 @@ export default class FileMap extends EventEmitter {
     return this.#roots;
   }
 
+  // The roots whose every retained file the file system holds: configured
+  // roots, and added roots once their crawl has been applied.
+  #mappedRoots(): ReadonlyArray<string> {
+    return [...this.#options.roots, ...this.#mappedDynamicRoots];
+  }
+
   #updateRoots(): void {
     this.#roots = [
       ...this.#roots.filter(root => !root.dynamic),
@@ -691,6 +700,8 @@ export default class FileMap extends EventEmitter {
         crawlResult,
       );
       abortSignal.throwIfAborted();
+      this.#mappedDynamicRoots.add(absoluteRoot);
+      fileSystem.setRoots(this.#mappedRoots());
       if (changeAggregator.getSize() === 0) {
         return;
       }

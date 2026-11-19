@@ -21,6 +21,7 @@ import type {
 import type FileMapT from '../index';
 
 import {AbstractWatcher} from '../watchers/AbstractWatcher';
+import invariant from 'invariant';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -234,6 +235,29 @@ describe('FileMap.addRoot', () => {
     );
   });
 
+  test('a path in the root is unmapped until its crawl is applied', async () => {
+    const {fileSystem} = await fileMap.build();
+    const missingIsMapped = (filePath: string) => {
+      const result = fileSystem.lookup(filePath);
+      invariant(!result.exists, 'Expected %s to be missing', filePath);
+      return fileSystem.isMapped(result.canonicalMissingPath);
+    };
+    const missing = path.join(EXTERNAL_DIR, 'missing.js');
+    expect(missingIsMapped(missing)).toBe(false);
+    expect(missingIsMapped(path.join(SRC_DIR, 'missing.js'))).toBe(true);
+
+    let mappedAtChange;
+    fileMap.on('change', () => {
+      mappedAtChange = missingIsMapped(missing);
+    });
+    const added = fileMap.addRoot(EXTERNAL_DIR);
+    expect(missingIsMapped(missing)).toBe(false);
+    await added;
+    // Mapped by the time the change event reports the root's files.
+    expect(mappedAtChange).toBe(true);
+    expect(missingIsMapped(missing)).toBe(true);
+  });
+
   test('is idempotent, including for concurrent calls', async () => {
     await fileMap.build();
     await Promise.all([
@@ -288,13 +312,16 @@ describe('FileMap.addRoot', () => {
     ]);
   });
 
-  test('a failed crawl rejects, and the root is not reported', async () => {
-    await fileMap.build();
+  test('a failed crawl rejects, and the root is not reported or mapped', async () => {
+    const {fileSystem} = await fileMap.build();
     mockNodeCrawler.mockImplementationOnce(() =>
       Promise.reject(new Error('crawl failed')),
     );
     await expect(fileMap.addRoot(EXTERNAL_DIR)).rejects.toThrow('crawl failed');
     expect(rootPaths(fileMap)).toEqual([SRC_DIR]);
+    const missing = fileSystem.lookup(path.join(EXTERNAL_DIR, 'missing.js'));
+    invariant(!missing.exists, 'Expected a missing path');
+    expect(fileSystem.isMapped(missing.canonicalMissingPath)).toBe(false);
     // A later attempt may succeed.
     await fileMap.addRoot(EXTERNAL_DIR);
     expect(rootPaths(fileMap)).toEqual([SRC_DIR, EXTERNAL_DIR]);

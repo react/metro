@@ -372,6 +372,14 @@ export interface FileSystem {
   getAllFiles(): Array<Path>;
 
   /**
+   * Whether a canonical path, such as a lookup's `canonicalMissingPath`, is
+   * within a mapped root: one whose every retained file this file system
+   * holds, such as a root from `addRoot` once its crawl is applied. If not,
+   * its absence here says nothing about the disk.
+   */
+  isMapped(canonicalPath: CanonicalPath): boolean;
+
+  /**
    * Given a map of files, determine which of them are new or modified
    * (changedFiles), and which of them are missing from the input
    * (removedFiles), vs the current state of this instance of FileSystem.
@@ -479,10 +487,15 @@ export type JsonData =
 
 export type LookupResult =
   | {
-      // The node is missing from the FileSystem implementation (note this
-      // could indicate an unwatched path, or a directory containing no watched
-      // files).
+      // The node is missing from the FileSystem implementation: absent from
+      // the disk, a directory containing no watched files, or outside every
+      // root (see `isMapped`).
       exists: false,
+      // The topmost missing path, relative to the root, with symlinks
+      // resolved.
+      canonicalMissingPath: CanonicalPath,
+      // The normal path following canonicalMissingPath, or '' if none.
+      remainingPath: string,
     }
   | {
       exists: true,
@@ -534,6 +547,16 @@ export interface Observations {
    * the result.
    */
   readonly content: Set<CanonicalPath>;
+
+  /**
+   * Paths that queries looked for and found missing, where the path is
+   * outside every mapped root (see `isMapped`): the topmost missing path (as in
+   * `existence`) followed by the rest of the path looked for. Their absence
+   * here says nothing about the disk, so a query that observed one may have a
+   * different answer once the path is mapped (e.g. by adding a root that
+   * contains it). Recorded only if the record has this bucket.
+   */
+  readonly unmapped?: ?Set<CanonicalPath>;
 }
 
 export interface MockMap {

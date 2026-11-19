@@ -87,6 +87,11 @@ export class RootPathUtils {
     return this.#rootParts;
   }
 
+  // The number of ancestors of the root ('/' is 0, '/foo' is 1).
+  getDepth(): number {
+    return this.#rootDepth;
+  }
+
   // absolutePath may be any well-formed absolute path.
   absoluteToNormal(absolutePath: string): string {
     let endOfMatchingPrefix = 0;

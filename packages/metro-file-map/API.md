@@ -193,6 +193,7 @@ interface FileSystem_2 {
     },
     observations?: null | undefined | Observations,
   ): null | undefined | {absolutePath: string; containerRelativePath: string};
+  isMapped(canonicalPath: CanonicalPath): boolean;
   linkStats(file: Path): null | undefined | FileStats;
   lookup(mixedPath: Path, observations?: null | undefined | Observations): LookupResult;
   matchFiles(opts: {
