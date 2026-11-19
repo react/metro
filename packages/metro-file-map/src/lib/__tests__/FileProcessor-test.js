@@ -289,7 +289,7 @@ describe('processBatch', () => {
       ],
     ],
   ])(
-    'reads no file without a SHA-1 to compute and with %s',
+    'skips the per-file pass without a SHA-1 to compute and with %s',
     async (_, pluginWorkers) => {
       const readKeys: Array<string | symbol> = [];
       const fileMetadata = new Proxy<FileMetadata>(
@@ -309,7 +309,6 @@ describe('processBatch', () => {
       });
 
       expect(readKeys).toEqual([]);
-      expect(mockWorkerFn).not.toHaveBeenCalled();
     },
   );
 

@@ -53,8 +53,8 @@ const NODE_MODULES_SEP = 'node_modules' + sep;
 const MAX_FILES_PER_WORKER = 100;
 
 export class FileProcessor {
-  // Whether any plugin's worker runs on a batch, rather than on demand.
-  #hasEagerPluginWorker: boolean;
+  // Indices of the plugins whose workers run on a batch, rather than on demand.
+  #eagerPluginIdxs: ReadonlyArray<number>;
   #maxFilesPerWorker: number;
   #maxWorkers: number;
   #perfLogger: ?PerfLogger;
@@ -74,8 +74,8 @@ export class FileProcessor {
     this.#maxFilesPerWorker = opts.maxFilesPerWorker ?? MAX_FILES_PER_WORKER;
     this.#maxWorkers = opts.maxWorkers;
     this.#pluginWorkers = opts.pluginWorkers ?? [];
-    this.#hasEagerPluginWorker = this.#pluginWorkers.some(
-      plugin => plugin.lazy !== true,
+    this.#eagerPluginIdxs = this.#pluginWorkers.flatMap((plugin, idx) =>
+      plugin.lazy === true ? [] : [idx],
     );
     this.#inBandWorker = new Worker({
       plugins: this.#pluginWorkers.map(plugin => plugin.worker),
@@ -101,7 +101,7 @@ export class FileProcessor {
       );
     }
 
-    if (!req.computeSha1 && !this.#hasEagerPluginWorker) {
+    if (!req.computeSha1 && this.#eagerPluginIdxs.length === 0) {
       // No file needs a worker.
       return {errors};
     }
@@ -210,16 +210,9 @@ export class FileProcessor {
       (nodeModulesIdx > 0 && normalPath[nodeModulesIdx - 1] === sep);
 
     // Indices of plugins with a passing filter
-    const pluginsToRun =
-      this.#pluginWorkers?.reduce((prev, plugin, idx) => {
-        if (
-          plugin.lazy !== true &&
-          plugin.filter({isNodeModules, normalPath})
-        ) {
-          prev.push(idx);
-        }
-        return prev;
-      }, [] as Array<number>) ?? [];
+    const pluginsToRun = this.#eagerPluginIdxs.filter(idx =>
+      this.#pluginWorkers[idx].filter({isNodeModules, normalPath}),
+    );
 
     if (!computeSha1 && pluginsToRun.length === 0) {
       // Nothing to process
