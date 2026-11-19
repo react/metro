@@ -119,6 +119,12 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     expect(deserialized.exists(p('/project/foo/another.js'))).toBe(true);
   });
 
+  test('getSerializableState returns the live tree, not a copy', () => {
+    const state = tfs.getSerializableState();
+    tfs.addOrModify(p('/project/foo/new.js'), [0, 1, 0, null, 0, null]);
+    expect(state).toEqual(tfs.getSerializableState());
+  });
+
   test('implements linkStats()', () => {
     expect(tfs.linkStats(p('/project/link-to-foo/another.js'))).toEqual({
       fileType: 'f',
