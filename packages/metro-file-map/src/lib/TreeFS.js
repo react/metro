@@ -561,7 +561,7 @@ export default class TreeFS implements MutableFileSystem {
         alwaysYieldPosix: filterComparePosix,
         canonicalPathOfRoot: rootRealPath,
         follow,
-        observations: observations ?? null,
+        observations,
         recursive,
         subtreeOnly: rootDir != null,
       },
@@ -1410,6 +1410,8 @@ export default class TreeFS implements MutableFileSystem {
   ): Iterable<Path> {
     const pathSep = opts.alwaysYieldPosix ? '/' : path.sep;
     const {observations} = opts;
+    const symlinkLookupOptions =
+      observations == null ? LOOKUP_OPTIONS : {...LOOKUP_OPTIONS, observations};
     // Symlinks are resolved from the canonical path of their directory. The
     // path where they were found differs when it passes through followed
     // symlinks, or re-enters the root from an ancestor ('..' + 'project/link').
@@ -1482,9 +1484,7 @@ export default class TreeFS implements MutableFileSystem {
           const resolved = this.#lookupByNormalPath(
             this.#pathUtils.joinNormalToRelative(frame.canonicalPath, name)
               .normalPath,
-            observations == null
-              ? LOOKUP_OPTIONS
-              : {...LOOKUP_OPTIONS, observations},
+            symlinkLookupOptions,
           );
           if (!resolved.exists) {
             // Symlink goes nowhere, nothing to report.
