@@ -29,7 +29,7 @@ export default async function minifier(
   return {
     code: result.code,
     // Terser encodes its map only when `result.map` is read.
-    // flowlint-next-line unsafe-getters-setters:off
+    // $FlowFixMe[unsafe-getters-setters]
     get map(): BasicSourceMap {
       if (map == null) {
         map = {...JSON.parse(getMap()), sources: [options.filename]};
