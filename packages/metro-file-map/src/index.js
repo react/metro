@@ -409,9 +409,8 @@ export default class FileMap extends EventEmitter {
     this.#startupPerfLogger?.point('build_start');
     if (!this.#buildPromise) {
       this.#buildPromise = (async () => {
-        // Neither the Watchman capability check nor what must be running
-        // before the crawl (in watch mode without Watchman, a confirmed watch)
-        // depends on the cache, so both start while the cache is read.
+        // Creating and preparing the watcher doesn't depend on the cache, so
+        // it runs while the cache is read.
         const [initialData] = await Promise.all([
           this.#options.resetCache !== true ? this.read() : null,
           this.#createWatcher().then(watcher => watcher.prepareCrawl()),
