@@ -58,7 +58,7 @@ describe('Minification:', () => {
     /* $FlowFixMe[incompatible-type](>=0.99.0 site=react_native_fb) This comment suppresses an
      * error found when Flow v0.99 was deployed. To see the error, delete this
      * comment and run Flow. */
-    terser.minify.mockResolvedValue({code: '', map: '{}'});
+    terser.minify.mockResolvedValue({code: ''});
     map = getFakeMap();
   });
 
@@ -85,7 +85,7 @@ describe('Minification:', () => {
     /* $FlowFixMe[incompatible-type](>=0.99.0 site=react_native_fb) This comment suppresses an
      * error found when Flow v0.99 was deployed. To see the error, delete this
      * comment and run Flow. */
-    terser.minify.mockResolvedValue({code, map: '{}'});
+    terser.minify.mockResolvedValue({code});
     const result = await minify(baseOptions);
     expect(result.code).toBe(code);
   });

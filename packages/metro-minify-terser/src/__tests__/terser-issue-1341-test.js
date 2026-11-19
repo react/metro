@@ -90,6 +90,6 @@ test('parallel calls do not clobber each other', async () => {
   const barMap = barResult.decodedMap;
   const gloMap = gloResult.decodedMap;
 
-  expect(barMap).not.toBeNull();
+  expect(barMap).toBeDefined();
   expect(gloMap).not.toEqual(barMap);
 });

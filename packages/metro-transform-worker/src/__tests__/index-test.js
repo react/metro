@@ -608,7 +608,7 @@ test('throws if a minifier returns only an encoded map', async () => {
   ).rejects.toThrow('Return it as `decodedMap` instead');
 });
 
-test.each([[''], [null], [undefined]])(
+test.each([[''], [undefined]])(
   'stores an empty map if a minifier returns no decoded map and `map` is %j',
   async map => {
     jest

@@ -26,17 +26,7 @@ export default async function minifier(
 
 async function minify({code, map, reserved, config}: MinifierOptions): Promise<{
   code: string,
-  decodedMap: ?{
-    mappings: Array<
-      Array<
-        | [number]
-        | [number, number, number, number]
-        | [number, number, number, number, number],
-      >,
-    >,
-    names: Array<string>,
-    ...
-  },
+  decodedMap: MinifierResult['decodedMap'],
 }> {
   const options = {
     ...config,
