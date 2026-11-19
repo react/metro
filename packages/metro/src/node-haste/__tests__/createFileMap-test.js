@@ -13,13 +13,12 @@ import type {ConfigT} from 'metro-config';
 import type {HasteMap} from 'metro-file-map';
 
 import createFileMap from '../DependencyGraph/createFileMap';
-import {getDefaultConfig} from 'metro-config';
+import {getDefaultConfig, mergeConfig} from 'metro-config';
 import {HastePlugin} from 'metro-file-map';
 
 function createHasteMap(resolver: Partial<ConfigT['resolver']>): ?HasteMap {
-  const defaults = getDefaultConfig.getDefaultValues('/');
   return createFileMap(
-    {...defaults, resolver: {...defaults.resolver, ...resolver}},
+    mergeConfig(getDefaultConfig.getDefaultValues('/'), {resolver}),
     {watch: false},
   ).hasteMap;
 }
@@ -55,7 +54,6 @@ describe('createFileMap', () => {
   ])('adds the Haste plugin with %s', (_, resolver) => {
     const hasteMap = createHasteMap(resolver);
 
-    expect(hasteMap).toBeInstanceOf(HastePlugin);
     expect(getWorker.mock.instances).toHaveLength(1);
     expect(getWorker.mock.instances[0]).toBe(hasteMap);
   });

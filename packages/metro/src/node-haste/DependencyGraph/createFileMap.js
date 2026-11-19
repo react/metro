@@ -94,7 +94,7 @@ export default function createFileMap(
     config.resolver.hasteImplModulePath != null ||
     config.resolver.enableGlobalPackages
   ) {
-    const hastePlugin = new HastePlugin({
+    hasteMap = new HastePlugin({
       platforms: new Set([
         ...config.resolver.platforms,
         MetroFileMap.H.NATIVE_PLATFORM,
@@ -104,8 +104,7 @@ export default function createFileMap(
       rootDir: config.projectRoot,
       failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
     });
-    plugins.push(hastePlugin);
-    hasteMap = hastePlugin;
+    plugins.push(hasteMap);
   }
 
   const fileMap = new MetroFileMap({
