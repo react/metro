@@ -711,6 +711,37 @@ describe('indexed (sectioned) maps', () => {
       expect(consumer.sourceContentFor('a.js', true)).toBe('content of a.js');
     });
 
+    test('uses the first section with content', () => {
+      const consumer = new Consumer({
+        version: 3,
+        sections: [
+          {
+            offset: {line: 0, column: 0},
+            map: {
+              version: 3,
+              mappings: '',
+              names: [],
+              sources: ['a.js'],
+              sourcesContent: ['content in section 0'],
+            },
+          },
+          {
+            offset: {line: 1, column: 0},
+            map: {
+              version: 3,
+              mappings: '',
+              names: [],
+              sources: ['./a.js'],
+              sourcesContent: ['content in section 1'],
+            },
+          },
+        ],
+      });
+      expect(consumer.sourceContentFor('a.js', true)).toBe(
+        'content in section 0',
+      );
+    });
+
     test('skips sections without sourcesContent', () => {
       const consumer = new Consumer({
         version: 3,
