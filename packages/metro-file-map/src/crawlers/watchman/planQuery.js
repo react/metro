@@ -115,7 +115,7 @@ export function planQuery({
       ]);
     }
   } else if (directoryFilters.length > 0) {
-    // Use the `glob` generator and filter only by extension.
+    // Use the `glob` generator and filter only by the file term.
     query.glob = directoryFilters.map(directory => `${directory}/**`);
     query.glob_includedotfiles = true;
     queryGenerator = 'glob';
@@ -126,8 +126,8 @@ export function planQuery({
     query.suffix = [...extensions, ...extraSuffixes];
     queryGenerator = 'suffix';
   } else {
-    // Fall back to `all` if we need symlinks and don't have a clock or
-    // directory filters.
+    // Fall back to `all` if we need symlinks or an extension-less basename,
+    // and don't have a clock or directory filters.
     queryGenerator = 'all';
   }
 
