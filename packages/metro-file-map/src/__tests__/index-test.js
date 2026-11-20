@@ -1780,7 +1780,7 @@ describe('FileMap', () => {
       'publishes what each plugin reports about a batch on the change event',
       async ({fileMap, hasteMap}) => {
         const getPluginChanges = require('../lib/getPluginChanges').default;
-        const fruitsRoot = path.join('/', 'project', 'fruits');
+        const fruitsRoot = p('/project/fruits');
         mockFs[path.join(fruitsRoot, 'Tomato.js')] = '// Tomato!';
         mockEmitters[fruitsRoot].emitFileEvent({
           event: 'touch',
