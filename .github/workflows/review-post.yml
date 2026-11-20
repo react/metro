@@ -12,22 +12,53 @@
 # no comment at all. It can delete the bot's own comments (a whole review, or
 # single findings it has withdrawn), and reply in the threads of its own
 # findings. It only ever deletes or replies to comments by github-actions[bot].
+#
+# Each review also carries a verdict label (Good, Nits, Discuss, Change). A
+# push to the PR removes it until the new head is reviewed, so the label never
+# describes an older head.
 name: react/metro/review-post
 
 on:
   repository_dispatch:
     types: [metro-review]
+  # Only removes labels: it never checks out or runs PR code.
+  pull_request_target:
+    types: [synchronize]
 
 permissions:
   contents: read
 
 concurrency:
-  group: metro-review-post-${{ github.event.client_payload.pr }}
+  group: metro-review-post-${{ github.event.client_payload.pr || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
+  clear-verdict:
+    if: github.repository == 'react/metro' && github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const VERDICT_LABELS = ['Auto review: Good', 'Auto review: Nits', 'Auto review: Discuss', 'Auto review: Change'];
+            const {owner, repo} = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const present = new Set(context.payload.pull_request.labels.map(l => l.name));
+            for (const name of VERDICT_LABELS.filter(l => present.has(l))) {
+              try {
+                await github.rest.issues.removeLabel({owner, repo, issue_number, name});
+                core.notice(`#${issue_number}: removed ${name} after a push`);
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
+            }
+
   post:
-    if: github.repository == 'react/metro'
+    if: github.repository == 'react/metro' && github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -47,6 +78,10 @@ jobs:
                 color: 'ededed',
                 description: 'The Metro review bot skipped this PR (a dependency bot PR or a mechanical tooling update)',
               },
+              'Auto review: Good': {color: '0e8a16', description: 'The Metro review bot found nothing to change at this head'},
+              'Auto review: Nits': {color: 'c2e0c6', description: 'The Metro review bot found only nits at this head'},
+              'Auto review: Discuss': {color: 'fbca04', description: 'The Metro review bot raised questions for a maintainer at this head'},
+              'Auto review: Change': {color: 'd93f0b', description: 'The Metro review bot suggested changes at this head'},
             };
 
             // #region Validate the payload
