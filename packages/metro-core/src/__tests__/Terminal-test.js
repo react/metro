@@ -277,6 +277,141 @@ describe.each([false, true])(
       expect(process.listenerCount('beforeExit')).toBe(beforeExitListenerCount);
     });
 
+    test('does not crash on a failed write during the beforeExit flush', async () => {
+      const beforeExitListenerCount = process.listenerCount('beforeExit');
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.status('status');
+      terminal.status('status2');
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      process.emit('beforeExit', 0);
+      await jest.advanceTimersByTimeAsync(100);
+      await null;
+      await null;
+      stream.write = write;
+      expect(process.listenerCount('beforeExit')).toBe(beforeExitListenerCount);
+    });
+
+    test('does not lose a status set just after an update finishes', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.log('foo');
+      await null;
+      terminal.status('status');
+      await settle(terminal.waitForUpdates());
+      expect(stream.buffer.join('').trim()).toEqual('foo       status');
+    });
+
+    test('does not crash on a failed status write with no waiter', async () => {
+      const {terminal, stream} = prepare({isTTY: true, ttyPrint});
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.status('status');
+      await null;
+      await null;
+      stream.write = write;
+    });
+
+    test('recovers after a failed status write', async () => {
+      const beforeExitListenerCount = process.listenerCount('beforeExit');
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.status('status');
+      await expect(terminal.waitForUpdates()).rejects.toThrow('write failed');
+      stream.write = write;
+      expect(process.listenerCount('beforeExit')).toBe(beforeExitListenerCount);
+      terminal.status('status2');
+      expect(process.listenerCount('beforeExit')).toBe(
+        beforeExitListenerCount + 1,
+      );
+      await settle(terminal.waitForUpdates());
+      expect(process.listenerCount('beforeExit')).toBe(beforeExitListenerCount);
+      expect(stream.buffer.join('').trim()).toEqual('status2');
+    });
+
+    test('recovery after a failed status write does not erase earlier logs', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.log('foo');
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.status('status');
+      await expect(terminal.waitForUpdates()).rejects.toThrow('write failed');
+      stream.write = write;
+      terminal.status('status2');
+      await settle(terminal.waitForUpdates());
+      expect(stream.buffer.join('').trim()).toEqual('foo       status2');
+    });
+
+    test('retries the same status after a failed status write', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.status('status');
+      await expect(terminal.waitForUpdates()).rejects.toThrow('write failed');
+      stream.write = write;
+      terminal.status('status');
+      await settle(terminal.waitForUpdates());
+      expect(stream.buffer.join('').trim()).toEqual('status');
+    });
+
+    test('flush does not reject with a stale error after a failed status write', async () => {
+      const {terminal, stream} = prepare({isTTY: true, ttyPrint});
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.status('status');
+      await expect(terminal.waitForUpdates()).rejects.toThrow('write failed');
+      stream.write = write;
+      await terminal.flush();
+    });
+
+    test('flush does not reject with a stale error after a failed log write', async () => {
+      const {terminal, stream} = prepare({isTTY: true, ttyPrint});
+      const write = stream.write;
+      stream.write = () => {
+        throw new Error('write failed');
+      };
+      terminal.log('x');
+      stream.write = write;
+      await null;
+      await null;
+      await terminal.flush();
+    });
+
+    test('a failed log redraw does not erase earlier output on recovery', async () => {
+      const {stream, terminal} = prepare({isTTY: true, ttyPrint});
+      terminal.log('foo');
+      terminal.status('status');
+      await settle(terminal.flush());
+      const write = stream.write;
+      let calls = 0;
+      stream.write = (str, callback = () => {}) => {
+        if (++calls === 2) {
+          throw new Error('write failed');
+        }
+        return write.call(stream, str, callback);
+      };
+      terminal.log('bar');
+      stream.write = write;
+      await null;
+      await null;
+      terminal.status('status2');
+      await settle(terminal.waitForUpdates());
+      expect(stream.buffer.join('')).toContain('foo');
+      expect(stream.buffer.join('')).toContain('status2');
+    });
+
     test('prints consecutive logs before later external output', async () => {
       const {stream, terminal} = prepare({isTTY: true, ttyPrint});
       terminal.log('foo');
