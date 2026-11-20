@@ -17,7 +17,7 @@ A typical setup involves:
 2. Running [`metro build`](./CLI.md#build-entry) periodically (e.g. in a CI job) to populate the cache, using `HttpStore` (or a custom read/write cache store) in your Metro config.
 3. Configuring Metro on development machines to read from the cache, using `HttpGetStore` (or a custom read-only cache store).
 
-Caches are configured with [`cacheStores`](./Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
+Caches are configured with [`cacheStores`](./Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). If a result is written while a read of the same key is still under way, the stores that read has already missed are written at once, and the rest once the read finishes, again stopping at the one that hit. So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
 
 ```js
 // metro.config.js
