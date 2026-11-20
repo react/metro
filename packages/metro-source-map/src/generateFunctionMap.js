@@ -27,7 +27,6 @@ import type {
   Program as BabelNodeProgram,
   SourceLocation as BabelNodeSourceLocation,
 } from '@babel/types';
-import type {MetroBabelFileMetadata} from 'metro-babel-transformer';
 
 import B64Builder from './B64Builder';
 import {traverse} from '@babel/core';
@@ -58,6 +57,13 @@ import {
 import invariant from 'invariant';
 import fsPath from 'node:path';
 import nullthrows from 'nullthrows';
+
+// The part of Babel file metadata this plugin writes, which
+// metro-babel-transformer reads back as `MetroBabelFileMetadata`.
+type FunctionMapFileMetadata = {
+  metro?: ?{functionMap?: ?FBSourceFunctionMap, ...},
+  ...
+};
 
 type Position = {
   line: number,
@@ -143,7 +149,7 @@ function functionMapBabelPlugin(): PluginObj<> {
       visitor.exit(programPath);
 
       // $FlowFixMe[incompatible-type] Babel `File` is not generically typed
-      const metroMetadata: MetroBabelFileMetadata = metadata;
+      const metroMetadata: FunctionMapFileMetadata = metadata;
 
       const functionMap = encoder.getResult();
 

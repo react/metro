@@ -49,6 +49,21 @@ module.exports = {
       },
     },
     {
+      // Published sources and their generated TypeScript definitions resolve
+      // type imports against the package's own dependencies.
+      files: ['packages/*/src/**/*.js'],
+      excludedFiles: [
+        'packages/metro/src/integration_tests/**/*.js',
+        '**/__tests__/**/*.js',
+        '**/__mocks__/**/*.js',
+        '**/__fixtures__/**/*.js',
+        '**/__flowtests__/**/*.js',
+      ],
+      rules: {
+        'import/no-extraneous-dependencies': ['error', {includeTypes: true}],
+      },
+    },
+    {
       files: [
         'packages/metro/src/integration_tests/**/*.js',
         'packages/metro-runtime/**/*.js',
