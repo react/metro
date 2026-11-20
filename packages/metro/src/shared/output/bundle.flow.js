@@ -68,7 +68,7 @@ export async function save(
     ...
   },
   options: OutputOptions,
-  log: string => void,
+  log: (message: string) => void,
 ): Promise<unknown> {
   const {
     bundleOutput,
@@ -101,7 +101,7 @@ export async function save(
   }
 
   // Wait until everything is written to disk.
-  await Promise.all(writeFns.map((cb: void => unknown) => cb()));
+  await Promise.all(writeFns.map((cb: () => unknown) => cb()));
 }
 
 export const formatName = 'bundle';

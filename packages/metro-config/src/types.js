@@ -45,10 +45,6 @@ export type ExtraTransformOptions = Readonly<{
 
 export type GetTransformOptionsOpts = {
   dev: boolean,
-  /**
-   * @deprecated Always true
-   */
-  hot: true,
   platform: ?string,
 };
 
@@ -120,12 +116,15 @@ type ResolverConfigT = {
   resolverMainFields: ReadonlyArray<string>,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
   unstable_incrementalResolution: boolean,
+  unstable_resolveExportsFromPackageRoot: boolean,
   useWatchman: boolean,
   requireCycleIgnorePatterns: ReadonlyArray<RegExp>,
   unstable_forceFullRefreshPatterns: ReadonlyArray<RegExp>,
@@ -167,6 +166,9 @@ type TransformerConfigT = {
   // TODO(moti): Remove this Meta-internal option from Metro's public config
   transformVariants: {readonly [name: string]: Partial<ExtraTransformOptions>},
   publicPath: string,
+  // Share one in-memory copy of each transform result between graphs with
+  // equal transform options. Experimental.
+  unstable_shareTransformResults: boolean,
   unstable_workerThreads: boolean,
 };
 
@@ -181,6 +183,7 @@ type MetalConfigT = {
   projectRoot: string,
   stickyWorkers: boolean,
   transformerPath: string,
+  unstable_hedgeCacheReadsAfterMs: ?number,
   reporter: Reporter,
   resetCache: boolean,
   watchFolders: ReadonlyArray<string>,

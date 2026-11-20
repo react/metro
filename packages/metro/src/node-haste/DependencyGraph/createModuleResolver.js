@@ -21,7 +21,7 @@ import path from 'node:path';
 export type CreateModuleResolverOptions = Readonly<{
   config: ConfigT,
   fileSystem: FileSystem,
-  hasteMap: HasteMap,
+  hasteMap: ?HasteMap,
   packageCache: PackageCache,
 }>;
 
@@ -46,14 +46,13 @@ export default function createModuleResolver({
   return new ModuleResolver({
     assetExts: new Set(config.resolver.assetExts),
     disableHierarchicalLookup: config.resolver.disableHierarchicalLookup,
-    doesFileExist: (filePath: string) => fileSystem.exists(filePath),
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
     getHasteModulePath: (name, platform) =>
-      hasteMap.getModule(name, platform, true),
+      hasteMap?.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
-      hasteMap.getPackage(name, platform, true),
+      hasteMap?.getPackage(name, platform, true),
     getPackage: (packageJsonPath: string) => {
       try {
         return packageCache.getPackage(packageJsonPath).packageJson ?? null;
@@ -93,11 +92,16 @@ export default function createModuleResolver({
       ...config.resolver.schemeResolvers,
     },
     sourceExts: config.resolver.sourceExts,
+    unstable_allowVirtualModules: config.resolver.unstable_allowVirtualModules,
+    unstable_applyBrowserSpecAfterExports:
+      config.resolver.unstable_applyBrowserSpecAfterExports,
     unstable_conditionNames: config.resolver.unstable_conditionNames,
     unstable_conditionsByPlatform:
       config.resolver.unstable_conditionsByPlatform,
     unstable_enablePackageExports:
       config.resolver.unstable_enablePackageExports,
+    unstable_resolveExportsFromPackageRoot:
+      config.resolver.unstable_resolveExportsFromPackageRoot,
     unstable_incrementalResolution:
       config.resolver.unstable_incrementalResolution,
   });

@@ -46,6 +46,7 @@ export type JsTransformerConfig = Readonly<{
   unstable_allowRequireContext: boolean;
   unstable_memoizeInlineRequires?: boolean | undefined;
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_supportsInlineModules?: boolean | undefined;
 }>;
 
 export type JsTransformOptions = Readonly<{
@@ -74,7 +75,11 @@ export type MinifierOptions = {
   config: MinifierConfig;
 };
 
-export type MinifierResult = {code: string; map?: BasicSourceMap | undefined};
+export type MinifierResult = {
+  code: string;
+  map?: BasicSourceMap | undefined;
+  decodedMap?: null | undefined | BabelDecodedMap;
+};
 
 export const transform: (config: JsTransformerConfig, projectRoot: string, projectRelativePath: string, data: Buffer, options: JsTransformOptions, assetUrlPath?: string) => Promise<TransformResponse>;
 

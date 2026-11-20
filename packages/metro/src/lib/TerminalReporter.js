@@ -17,8 +17,6 @@ import type {BackgroundColors, ForegroundColors, Modifiers} from 'node:util';
 import {calculateBundleProgressRatio} from './bundleProgressUtils';
 import logToConsole from './logToConsole';
 import * as reporting from './reporting';
-// $FlowFixMe[untyped-import] lodash.throttle
-import throttle from 'lodash.throttle';
 import {AmbiguousModuleResolutionError} from 'metro-core';
 import path from 'node:path';
 import util from 'node:util';
@@ -40,13 +38,6 @@ type BundleProgress = {
 
 export type TerminalReportableEvent =
   | ReportableEvent
-  | {
-      buildID: string,
-      type: 'bundle_transform_progressed_throttled',
-      transformedFileCount: number,
-      totalFileCount: number,
-      ...
-    }
   | {
       type: 'unstable_server_log',
       level: 'info' | 'warn' | 'error',
@@ -74,6 +65,7 @@ interface SnippetError extends Error {
 const DARK_BLOCK_CHAR = '\u2593';
 const LIGHT_BLOCK_CHAR = '\u2591';
 const MAX_PROGRESS_BAR_CHAR_WIDTH = 16;
+const PROGRESS_STATUS_INTERVAL_MS = 100;
 
 /**
  * We try to print useful information to the terminal for interactive builds.
@@ -89,24 +81,15 @@ export default class TerminalReporter {
 
   _interactionStatus: ?string;
 
-  _scheduleUpdateBundleProgress: {
-    (data: {
-      buildID: string,
-      transformedFileCount: number,
-      totalFileCount: number,
-      ...
-    }): void,
-    cancel(): void,
-  };
+  _lastProgressStatusTime: number;
+
   _prevHealthCheckResult: ?HealthCheckResult;
 
   readonly terminal: Terminal;
 
   constructor(terminal: Terminal) {
     this._activeBundles = new Map();
-    this._scheduleUpdateBundleProgress = throttle(data => {
-      this.update({...data, type: 'bundle_transform_progressed_throttled'});
-    }, 100);
+    this._lastProgressStatusTime = -Infinity;
     this.terminal = terminal;
   }
 
@@ -420,7 +403,7 @@ export default class TerminalReporter {
         this._activeBundles.set(event.buildID, bundleProgress);
         break;
 
-      case 'bundle_transform_progressed_throttled':
+      case 'bundle_transform_progressed':
         this._updateBundleProgress(event);
         break;
       case 'unstable_server_menu_updated':
@@ -540,15 +523,19 @@ export default class TerminalReporter {
   /**
    * Single entry point for reporting events. That allows us to implement the
    * corresponding JSON reporter easily and have a consistent reporting.
+   * Bundle transform progress updates the status at most every
+   * PROGRESS_STATUS_INTERVAL_MS.
    */
   update(event: TerminalReportableEvent): void {
-    if (event.type === 'bundle_transform_progressed') {
-      this._scheduleUpdateBundleProgress(event);
-      return;
-    }
-
     this._log(event);
     this._updateState(event);
+    if (event.type === 'bundle_transform_progressed') {
+      const now = performance.now();
+      if (now - this._lastProgressStatusTime < PROGRESS_STATUS_INTERVAL_MS) {
+        return;
+      }
+      this._lastProgressStatusTime = now;
+    }
     this.terminal.status(this._getStatusMessage());
   }
 }

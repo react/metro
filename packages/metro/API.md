@@ -302,6 +302,7 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean;
   processModuleFilter: (module: Module) => boolean;
   projectRoot: string;
+  reservedString: string;
   runBeforeMainModule: ReadonlyArray<string>;
   runModule: boolean;
   serverRoot: string;
@@ -330,12 +331,6 @@ export class Terminal {
 
 export type TerminalReportableEvent =
   | ReportableEvent
-  | {
-      buildID: string;
-      type: 'bundle_transform_progressed_throttled';
-      transformedFileCount: number;
-      totalFileCount: number;
-    }
   | {
       type: 'unstable_server_log';
       level: 'info' | 'warn' | 'error';

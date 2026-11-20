@@ -14,7 +14,6 @@ export type {
   CustomResolutionContext,
   CustomResolver,
   CustomResolverOptions,
-  DoesFileExist,
   FileAndDirCandidates,
   FileCandidates,
   FileResolution,
@@ -23,6 +22,7 @@ export type {
   Resolution,
   ResolveAsset,
   Result,
+  VirtualResolution,
 } from './types';
 
 import FailedToResolveNameError from './errors/FailedToResolveNameError';

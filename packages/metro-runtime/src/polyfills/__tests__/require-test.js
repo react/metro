@@ -12,6 +12,7 @@
 
 const {transformSync} = require('@babel/core');
 const fs = require('node:fs');
+const vm = require('node:vm');
 
 function createModule(
   moduleSystem,
@@ -128,11 +129,17 @@ describe('require', () => {
     expect(mockFactory.mock.calls[0][6]).toEqual([2, 3]);
   });
 
-  test('properly prefixes __d with global prefix', () => {
-    createModuleSystem(moduleSystem, false, '__metro');
-    expect(moduleSystem.__d).toBeUndefined();
-    expect(moduleSystem.__metro__d).not.toBeUndefined();
-  });
+  test.each([['__r'], ['__d'], ['__c'], ['__registerSegment'], ['__accept']])(
+    'properly prefixes %s with global prefix',
+    property => {
+      const prefix = '__metro';
+
+      createModuleSystem(moduleSystem, true, prefix);
+
+      expect(moduleSystem[property]).toBeUndefined();
+      expect(moduleSystem[`${prefix}${property}`]).not.toBeUndefined();
+    },
+  );
 
   test('works with Random Access Modules (RAM) bundles', () => {
     const mockExports = {foo: 'bar'};
@@ -748,7 +755,7 @@ describe('require', () => {
       const warn = console.warn;
       console.warn = jest.fn();
 
-      moduleSystem.__r(0);
+      moduleSystem.__customPrefix__r(0);
       expect(console.warn).toHaveBeenCalledTimes(0);
       console.warn = warn;
     });
@@ -997,6 +1004,93 @@ describe('require', () => {
         resultSet.add(result);
         expect(moduleSystem.__r.packModuleId(result)).toBe(id);
       }
+    });
+  });
+
+  describe('several module systems in one realm', () => {
+    // Evaluates a prelude and the module system as a bundle does, so that
+    // `__METRO_GLOBAL_PREFIX__` is a global that each bundle reassigns, as
+    // Module Federation's host and remote bundles do.
+    function evaluateBundleRuntime(context, globalPrefix) {
+      vm.runInContext(
+        `var __METRO_GLOBAL_PREFIX__ = ${JSON.stringify(globalPrefix)};`,
+        context,
+      );
+      vm.runInContext(
+        `(function (global, __DEV__) {\n${moduleSystemCode}\n})(globalThis, true);`,
+        context,
+      );
+    }
+
+    test('keeps the globals of each module system separate', () => {
+      const context = vm.createContext({console});
+      evaluateBundleRuntime(context, 'host');
+      evaluateBundleRuntime(context, 'remote');
+
+      createModule(
+        context,
+        0,
+        'host.js',
+        (g, r, i, a, module) => {
+          module.exports = 'host';
+        },
+        [],
+        'host',
+      );
+      createModule(
+        context,
+        0,
+        'remote.js',
+        (g, r, i, a, module) => {
+          module.exports = 'remote';
+        },
+        [],
+        'remote',
+      );
+
+      expect(context.host__r(0)).toBe('host');
+      expect(context.remote__r(0)).toBe('remote');
+      for (const name of ['__r', '__d', '__c', '__registerSegment']) {
+        expect(context[`host${name}`]).not.toBe(context[`remote${name}`]);
+      }
+    });
+
+    test('applies a hot update to the module system that defines the module', () => {
+      const context = vm.createContext({console});
+      const versionedFactory = version => (g, r, i, a, module) => {
+        module.exports = version;
+        module.hot.accept();
+      };
+      evaluateBundleRuntime(context, 'host');
+      createModule(
+        context,
+        0,
+        'host.js',
+        versionedFactory('HostV1'),
+        [],
+        'host',
+      );
+      expect(context.host__r(0)).toBe('HostV1');
+
+      // A remote's prelude reassigns `__METRO_GLOBAL_PREFIX__`, and its module
+      // system defines a module with the same ID.
+      evaluateBundleRuntime(context, 'remote');
+      createModule(
+        context,
+        0,
+        'remote.js',
+        versionedFactory('RemoteV1'),
+        [],
+        'remote',
+      );
+      expect(context.remote__r(0)).toBe('RemoteV1');
+
+      // An HMR update for the host redefines its module with inverse
+      // dependencies.
+      context.host__d(versionedFactory('HostV2'), 0, [], 'host.js', {0: []});
+
+      expect(context.host__r(0)).toBe('HostV2');
+      expect(context.remote__r(0)).toBe('RemoteV1');
     });
   });
 

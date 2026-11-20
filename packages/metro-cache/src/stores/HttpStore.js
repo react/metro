@@ -27,11 +27,22 @@ type EndpointOptions = {
   endpoint: string,
   family?: 4 | 6,
   timeout?: number,
+  maxSockets?: number,
+  /**
+   * `HttpGetStore` only: once this many reads are in flight, further reads
+   * return a miss right away instead of waiting for a socket.
+   */
+  maxInFlightReads?: number,
   key?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   cert?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   ca?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   params?: URLSearchParams,
-  headers?: {[string]: string},
+  /**
+   * Called before every request; the parameters it resolves to are added to
+   * `params`. Use it for short-lived credentials.
+   */
+  getParams?: () => Promise<URLSearchParams>,
+  headers?: {[key: string]: string},
   additionalSuccessStatuses?: ReadonlyArray<number>,
   /**
    * Whether to include additional debug information in error messages.
@@ -55,7 +66,8 @@ type Endpoint = {
   port: number,
   agent: http$Agent<tls$TLSSocket> | http$Agent<net$Socket>,
   params: URLSearchParams,
-  headers?: {[string]: string},
+  getParams: ?() => Promise<URLSearchParams>,
+  headers?: {[key: string]: string},
   timeout: number,
   additionalSuccessStatuses: ReadonlySet<number>,
   debug: boolean,
@@ -96,8 +108,8 @@ export default class HttpStore<T> {
       family: options.family,
       keepAlive: true,
       keepAliveMsecs: options.timeout || 5000,
-      maxFreeSockets: 64,
-      maxSockets: 64,
+      maxFreeSockets: options.maxSockets ?? 64,
+      maxSockets: options.maxSockets ?? 64,
     };
 
     if (options.key != null) {
@@ -138,6 +150,7 @@ export default class HttpStore<T> {
       ),
       agent,
       debug: options.debug ?? false,
+      getParams: options.getParams,
       headers: options.headers,
       host: uri.hostname,
       maxAttempts: options.maxAttempts ?? 1,
@@ -152,12 +165,18 @@ export default class HttpStore<T> {
   }
 
   get(key: Buffer): Promise<?T> {
-    return this.#withRetries(() => this.#getOnce(key), this.#getEndpoint);
+    return this.#withRetries(
+      () =>
+        this.#withParams(this.#getEndpoint, params =>
+          this.#getOnce(key, params),
+        ),
+      this.#getEndpoint,
+    );
   }
 
-  #getOnce(key: Buffer): Promise<?T> {
+  #getOnce(key: Buffer, params: URLSearchParams): Promise<?T> {
     return new Promise((resolve, reject) => {
-      let searchParamsString = this.#getEndpoint.params.toString();
+      let searchParamsString = params.toString();
       if (searchParamsString != '') {
         searchParamsString = '?' + searchParamsString;
       }
@@ -275,16 +294,19 @@ export default class HttpStore<T> {
 
   set(key: Buffer, value: T): Promise<void> {
     return this.#withRetries(
-      () => this.#setOnce(key, value),
+      () =>
+        this.#withParams(this.#setEndpoint, params =>
+          this.#setOnce(key, value, params),
+        ),
       this.#setEndpoint,
     );
   }
 
-  #setOnce(key: Buffer, value: T): Promise<void> {
+  #setOnce(key: Buffer, value: T, params: URLSearchParams): Promise<void> {
     return new Promise((resolve, reject) => {
       const gzip = zlib.createGzip(ZLIB_OPTIONS);
 
-      let searchParamsString = this.#setEndpoint.params.toString();
+      let searchParamsString = params.toString();
       if (searchParamsString != '') {
         searchParamsString = '?' + searchParamsString;
       }
@@ -398,6 +420,31 @@ export default class HttpStore<T> {
 
   clear() {
     // Not implemented.
+  }
+
+  // Requests go out synchronously unless `getParams` is set.
+  #withParams<R>(
+    endpoint: Endpoint,
+    request: (params: URLSearchParams) => Promise<R>,
+  ): Promise<R> {
+    const getParams = endpoint.getParams;
+    if (getParams == null) {
+      return request(endpoint.params);
+    }
+    // `getParams` may throw rather than reject, or return a plain value, as
+    // configs are often untyped JS: wrapping it here turns all of these into a
+    // `NetworkError`, which callers treat like any other failed request.
+    return new Promise<URLSearchParams>(resolve => resolve(getParams()))
+      .catch((error: unknown) => {
+        throw new NetworkError(
+          'Could not get request parameters: ' +
+            (error instanceof Error ? error.message : String(error)),
+          'EGETPARAMS',
+        );
+      })
+      .then(extraParams =>
+        request(new URLSearchParams([...endpoint.params, ...extraParams])),
+      );
   }
 
   #withRetries<R>(fn: () => Promise<R>, endpoint: Endpoint): Promise<R> {

@@ -10,6 +10,7 @@
  */
 
 import type {InputOptions} from '..';
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   BuildResult,
   CanonicalPath,
@@ -156,6 +157,14 @@ class MockWatcher extends AbstractWatcher {
   static isSupported(): boolean {
     return true;
   }
+  // Stands in for FallbackWatcher too, which a node crawl may report to
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: () => {},
+      onSkippedDirectory: async () => {},
+      onSymlink: () => {},
+    };
+  }
 }
 
 jest.mock('../watchers/FallbackWatcher', () => MockWatcher);
@@ -252,6 +261,7 @@ const assertFileSystemEqual = (fileSystem: FileSystem, fileData: FileData) => {
   expect(fileSystem.getDifference(fileData)).toEqual({
     changedFiles: new Map(),
     removedFiles: new Set(),
+    filesToStat: new Map(),
   });
 };
 
@@ -898,7 +908,6 @@ describe('FileMap', () => {
       buildNewFileMap(
         {},
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -906,7 +915,6 @@ describe('FileMap', () => {
           failValidationOnConflicts: true,
         },
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -1503,6 +1511,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Banana.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1511,6 +1520,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1519,6 +1529,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Strawberry.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1527,6 +1538,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/__mocks__/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1535,6 +1547,7 @@ describe('FileMap', () => {
           filePath: p('/project/vegetables/Melon.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
     ]);

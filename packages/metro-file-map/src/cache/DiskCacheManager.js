@@ -74,12 +74,15 @@ export class DiskCacheManager implements CacheManager {
   ): string {
     const {rootDirHash, relativeConfigHash} =
       rootRelativeCacheKeys(buildParameters);
+    // Bun's `node:v8` serialization isn't fully compatible with Node's, so a
+    // cache written by one can't be read by the other.
+    const runtimeSuffix = process.versions.bun != null ? '-bun' : '';
 
     return path.join(
       cacheDirectory ?? DEFAULT_DIRECTORY,
       `${
         cacheFilePrefix ?? DEFAULT_PREFIX
-      }-${rootDirHash}-${relativeConfigHash}`,
+      }-${rootDirHash}-${relativeConfigHash}${runtimeSuffix}`,
     );
   }
 

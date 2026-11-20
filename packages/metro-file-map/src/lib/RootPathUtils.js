@@ -123,6 +123,7 @@ export class RootPathUtils {
         absolutePath,
         endOfMatchingPrefix,
         upIndirectionsToPrepend,
+        true,
       )?.collapsedPath ?? this.#slowAbsoluteToNormal(absolutePath)
     );
   }
@@ -168,7 +169,7 @@ export class RootPathUtils {
 
   relativeToNormal(relativePath: string): string {
     return (
-      this.#tryCollapseIndirectionsInSuffix(relativePath, 0, 0)
+      this.#tryCollapseIndirectionsInSuffix(relativePath, 0, 0, true)
         ?.collapsedPath ??
       path.relative(this.#rootDir, path.join(this.#rootDir, relativePath))
     );
@@ -187,7 +188,11 @@ export class RootPathUtils {
     // so resolve with node:path. This runs once per symlink, when its node is
     // populated, not on traversal.
     const normal = this.absoluteToNormal(
-      path.resolve(this.#rootDir, symlinkNormalPath, '..', readlinkResult),
+      path.resolve(
+        this.normalToAbsolute(symlinkNormalPath),
+        '..',
+        readlinkResult,
+      ),
     );
     // Normalization keeps a trailing separator when the result is the root or
     // an ancestor of it (e.g. a link to '/'), and readlink itself may return
@@ -213,7 +218,12 @@ export class RootPathUtils {
       : normalPath + path.sep;
     const rawPath = left + relativePath;
     if (normalPath === '..' || normalPath.endsWith(SEP_UP_FRAGMENT)) {
-      const collapsed = this.#tryCollapseIndirectionsInSuffix(rawPath, 0, 0);
+      const collapsed = this.#tryCollapseIndirectionsInSuffix(
+        rawPath,
+        0,
+        0,
+        false,
+      );
       invariant(collapsed != null, 'Failed to collapse');
       return {
         collapsedSegments: collapsed.collapsedSegments,
@@ -236,6 +246,7 @@ export class RootPathUtils {
     fullPath: string, // A string ending with the relative path to process
     startOfRelativePart: number, // Index of the start of part to process
     implicitUpIndirections: number, // 0=root-relative, 1=dirname(root)-relative...
+    bailOnTrailingIndirection: boolean, // Fall back on a final '.' or '..'
   ): ?{collapsedPath: string, collapsedSegments: number} {
     let totalUpIndirections = implicitUpIndirections;
     let collapsedSegments = 0;
@@ -246,6 +257,22 @@ export class RootPathUtils {
     for (let pos = startOfRelativePart; ; pos += UP_FRAGMENT_SEP_LENGTH) {
       const nextIndirection = fullPath.indexOf(CURRENT_FRAGMENT, pos);
       if (nextIndirection === -1) {
+        // The search above doesn't find a final '.' or '..' segment, as no
+        // separator follows it. Fall back for those too, unless the '..' is
+        // one of the leading indirections, e.g. for /project/root/foo/. or
+        // /project/root/foo/..
+        if (bailOnTrailingIndirection && fullPath.endsWith('.')) {
+          const lastSegmentIdx = fullPath.lastIndexOf(path.sep) + 1;
+          const lastSegmentLength = fullPath.length - lastSegmentIdx;
+          if (
+            lastSegmentLength === 1 ||
+            (lastSegmentLength === 2 &&
+              fullPath[lastSegmentIdx] === '.' &&
+              lastSegmentIdx > pos)
+          ) {
+            return null;
+          }
+        }
         // If we have any indirections, they may "collapse" if a subsequent
         // segment re-enters a directory we had previously exited, e.g:
         // /project/root/../root/foo should collapse to /project/root/foo' and

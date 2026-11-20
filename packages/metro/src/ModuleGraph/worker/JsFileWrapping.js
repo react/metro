@@ -15,8 +15,11 @@ import type {
   Program,
 } from '@babel/types';
 
+import {RESERVED_STRING} from '../../lib/reservedString';
 import template from '@babel/template';
 import * as t from '@babel/types';
+
+const MODULE_ID_PLACEHOLDER = `${RESERVED_STRING}MODULE_ID`;
 
 // Check first the `global` variable as the global object. This way serializers
 // can create a local variable called global to fake it as a global object
@@ -52,7 +55,7 @@ function wrapModule(
             t.identifier('$SHBuiltin'),
             t.identifier('moduleFactory'),
           ),
-          [t.identifier('_$$_METRO_MODULE_ID'), factory],
+          [t.identifier(MODULE_ID_PLACEHOLDER), factory],
         )
       : factory,
   ]);
@@ -72,7 +75,33 @@ function wrapPolyfill(fileAst: BabelNodeFile): BabelNodeFile {
   return t.file(t.program([t.expressionStatement(iife)]));
 }
 
+// In an object literal, a non-computed `"__proto__": value` property sets the
+// prototype instead of defining an own property, unlike `JSON.parse`. Escaped
+// keys like `"__proto\u005f_"` behave the same, so check the parsed keys.
+function hasProtoKey(source: string): boolean {
+  if (!source.includes('__proto') && !source.includes('\\u')) {
+    return false;
+  }
+  let found = false;
+  try {
+    JSON.parse(source, (key: string, value: unknown) => {
+      if (key === '__proto__') {
+        found = true;
+      }
+      return value;
+    });
+  } catch {
+    return false;
+  }
+  return found;
+}
+
 function jsonToCommonJS(source: string): string {
+  // Like Node, ignore a leading BOM, which `JSON.parse` would reject.
+  const json = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+  if (hasProtoKey(json)) {
+    return `module.exports = JSON.parse(${JSON.stringify(json)});`;
+  }
   return `module.exports = ${source};`;
 }
 
@@ -132,7 +161,11 @@ function wrapModuleString(
   return (
     `${globalPrefix}__d(` +
     (unstable_useStaticHermesModuleFactory
-      ? '$SHBuiltin.moduleFactory(_$$_METRO_MODULE_ID, ' + factory + ')'
+      ? '$SHBuiltin.moduleFactory(' +
+        MODULE_ID_PLACEHOLDER +
+        ', ' +
+        factory +
+        ')'
       : factory) +
     ');'
   );

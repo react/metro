@@ -26,7 +26,7 @@ import {getContextModuleTemplate} from './contextModuleTemplates';
 import isAssetFile from 'metro-resolver/private/utils/isAssetFile';
 
 type InlineRequiresRaw =
-  Readonly<{blockList: Readonly<{[string]: true, ...}>, ...}> | boolean;
+  Readonly<{blockList: Readonly<{[key: string]: true, ...}>, ...}> | boolean;
 
 type TransformOptionsWithRawInlines = Readonly<{
   ...TransformOptions,
@@ -105,7 +105,7 @@ async function calcTransformerOptions(
 
   const {transform} = await config.transformer.getTransformOptions(
     entryFiles,
-    {dev: options.dev, hot: true, platform: options.platform},
+    {dev: options.dev, platform: options.platform},
     getDependencies,
   );
 
@@ -155,7 +155,9 @@ export async function getTransformFn(
   return async (modulePath: string, virtualSource: ?VirtualSource) => {
     let fileBuffer: ?Buffer;
 
-    if (virtualSource?.type === 'requireContext') {
+    if (virtualSource?.type === 'buffer') {
+      fileBuffer = virtualSource.source;
+    } else if (virtualSource?.type === 'requireContext') {
       const {requireContext} = virtualSource;
       const graph = await bundler.getDependencyGraph();
 

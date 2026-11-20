@@ -31,7 +31,7 @@ jest.mock('node:path', () => mockPathModule);
 describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
   // Convenience function to write paths with posix separators but convert them
   // to system separators
-  const p: string => string = filePath =>
+  const p: (filePath: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -117,6 +117,15 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     });
     expect(deserialized.exists(p('/project/foo/another.js'))).toBe(true);
+  });
+
+  test('getSerializableSnapshot returns a copy, getSerializableState does not', () => {
+    const snapshot = tfs.getSerializableSnapshot();
+    const state = tfs.getSerializableState();
+    expect(snapshot).toEqual(state);
+    tfs.addOrModify(p('/project/foo/new.js'), [0, 1, 0, null, 0, null]);
+    expect(snapshot).not.toEqual(tfs.getSerializableSnapshot());
+    expect(state).toEqual(tfs.getSerializableSnapshot());
   });
 
   test('implements linkStats()', () => {
@@ -208,6 +217,8 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       [p('/project/foo'), p('/project/foo'), []],
       [p('/project/foo/'), p('/project/foo'), []],
       [p('/project/root/outside'), p('/outside'), [p('/project/root')]],
+      [p('/project/foo/.'), p('/project/foo'), []],
+      [p('/project/foo/..'), p('/project'), []],
     ])(
       'returns type: d for %s',
       (givenPath, expectedRealPath, expectedSymlinks) => {
@@ -224,6 +235,41 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         });
       },
     );
+
+    test('symlink into itself is missing, rather than following it forever', () => {
+      const tfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('a'), [123, 0, 0, null, 'a/b', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(tfs.lookup(p('/project/a/file.js'))).toEqual({exists: false});
+    });
+
+    test.each([
+      [40, true],
+      [41, false],
+    ])('a chain of %i symlinks: exists %s', (length, exists) => {
+      const links: Array<[CanonicalPath, FileMetadata]> = [];
+      for (let i = 0; i < length; i++) {
+        const target = i === length - 1 ? 'file.js' : 'link' + (i + 1);
+        links.push([p('link' + i), [123, 0, 0, null, target, null]]);
+      }
+      const tfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('file.js'), [123, 0, 0, null, 0, null]],
+          ...links,
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(tfs.lookup(p('/project/link0'))).toMatchObject({exists});
+    });
 
     test('traversing the same symlink multiple times does not imply a cycle', () => {
       expect(
@@ -383,6 +429,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           p('abs-link-out'),
           p('root'),
         ]),
+        filesToStat: new Map(),
       });
     });
 
@@ -404,6 +451,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           p('foo/link-to-bar.js'),
           p('foo/link-to-another.js'),
         ]),
+        filesToStat: new Map(),
       });
     });
 
@@ -447,6 +495,7 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           [p('nonexistent/file.js'), [123, 0, 0, null, 0, null]],
         ]),
         removedFiles: new Set(),
+        filesToStat: new Map(),
       });
     });
 
@@ -463,9 +512,42 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         expect(tfs.getDifference(newFiles, {subpath})).toEqual({
           changedFiles: newFiles,
           removedFiles: new Set([subpath]),
+          filesToStat: new Map(),
         });
       },
     );
+
+    test('returns regular files given without an mtime that had one, with that mtime', () => {
+      const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([
+        // Stat'd before, not now
+        [p('foo/another.js'), [null, null, 0, null, 0, null]],
+        // Stat'd before with an mtime of 0, outside rootDir, not now
+        [p('../outside/external.js'), [null, null, 0, null, 0, null]],
+        // Stat'd before and now, with the same mtime
+        [p('bar.js'), [234, 3, 0, null, 0, null]],
+        // A symlink before, not stat'd now
+        [p('link-to-self'), [null, null, 0, null, 0, null]],
+        // New, not stat'd
+        [p('new-file.js'), [null, null, 0, null, 0, null]],
+      ]);
+
+      const {changedFiles, filesToStat} = tfs.getDifference(newFiles);
+
+      expect(filesToStat).toEqual(
+        new Map([
+          [p('foo/another.js'), 123],
+          [p('../outside/external.js'), 0],
+        ]),
+      );
+      expect([...changedFiles.keys()].sort()).toEqual(
+        [
+          p('foo/another.js'),
+          p('../outside/external.js'),
+          p('link-to-self'),
+          p('new-file.js'),
+        ].sort(),
+      );
+    });
 
     test('with empty subpath only considers files under the root', () => {
       const newFiles: FileData = new Map<CanonicalPath, FileMetadata>([
@@ -586,6 +668,30 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       expect(tfs.resolveSymlinks(p(mixedPath))).toEqual(p(expected));
     });
   });
+
+  test('hierarchicalLookup from a path ending in "." finds its own directory', () => {
+    expect(
+      tfs.hierarchicalLookup(p('/project/node_modules/pkg/.'), 'package.json', {
+        breakOnSegment: 'node_modules',
+        subpathType: 'f',
+      }),
+    ).toEqual({
+      absolutePath: p('/project/node_modules/pkg/package.json'),
+      containerRelativePath: '',
+    });
+  });
+
+  test.each([p('sub/.'), p('sub/..')])(
+    'hierarchicalLookup of a subpath ending in an indirection, %s',
+    subpath => {
+      expect(
+        tfs.hierarchicalLookup(p('/project/foo/.bar'), subpath, {
+          breakOnSegment: null,
+          subpathType: 'd',
+        }),
+      ).toBeNull();
+    },
+  );
 
   describe('hierarchicalLookup', () => {
     let tfs: TreeFSType;
@@ -942,8 +1048,162 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
             rootDir: p('/'),
           }),
         ),
-      ).toEqual([p('/project/bar.js')]);
+      ).toEqual([p('/project/bar.js'), p('/project/root/project/bar.js')]);
     });
+
+    test('ancestor of project root follows symlinks within the project root', () => {
+      expect(
+        Array.from(
+          tfs.matchFiles({
+            filter: new RegExp(/\/another\.js$/),
+            filterComparePosix: true,
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([
+        p('/project/foo/another.js'),
+        p('/project/foo/owndir/another.js'),
+        p('/project/link-to-foo/another.js'),
+        p('/project/link-to-foo/owndir/another.js'),
+        p('/project/root/project/foo/another.js'),
+        p('/project/root/project/foo/owndir/another.js'),
+        p('/project/root/project/link-to-foo/another.js'),
+        p('/project/root/project/link-to-foo/owndir/another.js'),
+      ]);
+    });
+
+    test('ancestor of project root follows a symlink in a directory ending in a dot', () => {
+      const dotTfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo./x.js'), [0, 0, 0, null, 0, null]],
+          [p('foo./link'), [0, 0, 0, null, 'foo.', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          dotTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/'),
+          }),
+        ),
+      ).toEqual([p('/project/foo./x.js'), p('/project/foo./link/x.js')]);
+    });
+
+    test.each([
+      [
+        '/a/b',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+        ],
+      ],
+      [
+        '/a',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+      [
+        '/',
+        [
+          '/a/b/project/foo/x.js',
+          '/a/b/project/link-to-foo/x.js',
+          '/a/b/sib/y.js',
+          '/a/c/z.js',
+        ],
+      ],
+    ])(
+      'ancestor %s of a deeper project root includes each level once',
+      (rootDir, expected) => {
+        const deepTfs = new TreeFS({
+          rootDir: p('/a/b/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+            [p('link-to-foo'), [0, 0, 0, null, 'foo', null]],
+            [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+            [p('../../c/z.js'), [0, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          Array.from(
+            deepTfs.matchFiles({
+              follow: true,
+              recursive: true,
+              rootDir: p(rootDir),
+            }),
+          ),
+        ).toEqual(expected.map(p));
+      },
+    );
+
+    test('follows a symlink to two levels above the project root', () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('up2'), [0, 0, 0, null, '../..', null]],
+          [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/a/b/project'),
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/project/up2/b/project/foo/x.js'),
+        p('/a/b/project/up2/b/sib/y.js'),
+      ]);
+    });
+
+    test.each([['/a/b/project'], ['/a'], ['/']])(
+      '%s lists the project root with nothing above it in the map',
+      rootDir => {
+        const deepTfs = new TreeFS({
+          rootDir: p('/a/b/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+            [p('up2'), [0, 0, 0, null, '../..', null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          Array.from(
+            deepTfs.matchFiles({
+              follow: true,
+              recursive: true,
+              rootDir: p(rootDir),
+            }),
+          ),
+        ).toEqual([
+          p('/a/b/project/foo/x.js'),
+          p('/a/b/project/up2/b/project/foo/x.js'),
+        ]);
+      },
+    );
 
     test('recursive', () => {
       expect(
@@ -1048,6 +1308,58 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ).toEqual([p('/outside/external.js')]);
     });
 
+    test('null rootDir follows a symlink outside the root to its ancestor', () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('../sib/to-a'), [0, 0, 0, null, '../..', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: null,
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/sib/to-a/b/project/foo/x.js'),
+      ]);
+    });
+
+    test("null rootDir doesn't list outside the root through a symlink", () => {
+      const deepTfs = new TreeFS({
+        rootDir: p('/a/b/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo/x.js'), [0, 0, 0, null, 0, null]],
+          [p('link-to-root'), [0, 0, 0, null, '', null]],
+          [p('../sib/y.js'), [0, 0, 0, null, 0, null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          deepTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: null,
+          }),
+        ),
+      ).toEqual([
+        p('/a/b/project/foo/x.js'),
+        p('/a/b/project/link-to-root/foo/x.js'),
+        p('/a/b/sib/y.js'),
+      ]);
+    });
+
     test('outside root, rootDir set to root has no matches', () => {
       expect(
         Array.from(
@@ -1100,6 +1412,28 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         expect(tfs.getSize(p('/project/link-to-foo/new.js'))).toEqual(1);
         expect(tfs.getSize(p('/project/fileatroot.js'))).toEqual(2);
       });
+    });
+
+    test('adds a file through a symlink to the root at its canonical path', () => {
+      tfs.addOrModify(p('link-to-root'), [0, 0, 0, null, '', null]);
+      const fileAdded = jest.fn();
+      tfs.addOrModify(p('link-to-root/new.js'), [1, 1, 0, null, 0, null], {
+        directoryAdded: jest.fn(),
+        directoryRemoved: jest.fn(),
+        fileAdded,
+        fileModified: jest.fn(),
+        fileRemoved: jest.fn(),
+      });
+      expect(fileAdded).toHaveBeenCalledWith(p('new.js'), [
+        1,
+        1,
+        0,
+        null,
+        0,
+        null,
+      ]);
+      expect(tfs.getAllFiles()).toContain(p('/project/new.js'));
+      expect(tfs.getAllFiles()).not.toContain(p('/new.js'));
     });
 
     describe('bulkAddOrModify', () => {
@@ -1600,6 +1934,31 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           type: 'f',
           realPath: 'D:\\external\\file.js',
         });
+      });
+
+      test('matchFiles() with no rootDir follows a symlink on another drive', () => {
+        const tfsLink = new TreeFS({
+          rootDir: 'C:\\project',
+          files: new Map<CanonicalPath, FileMetadata>([
+            ['..\\..\\D:\\external\\file.js', externalMeta],
+            [
+              '..\\..\\D:\\external\\self',
+              [0, 0, 0, null, '../../D:/external', null],
+            ],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        // Only the suffix is checked: paths on another drive are joined
+        // lexically to the project root (C:\D:\...).
+        expect(
+          Array.from(
+            tfsLink.matchFiles({follow: true, recursive: true, rootDir: null}),
+          ),
+        ).toContainEqual(
+          expect.stringMatching(/\\D:\\external\\self\\file\.js$/),
+        );
       });
     });
   }

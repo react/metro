@@ -12,6 +12,7 @@
 import type {Module, ReadOnlyGraph} from '../types';
 
 import {getAssetFiles} from '../../Assets';
+import {isVirtualModulePath} from '../../lib/modulePath';
 import {getJsOutput, isJsModule} from './helpers/js';
 
 type Options = {
@@ -36,7 +37,12 @@ export default async function getAllFiles(
   }
 
   for (const module of modules.values()) {
-    if (!isJsModule(module) || !processModuleFilter(module)) {
+    if (
+      !isJsModule(module) ||
+      !processModuleFilter(module) ||
+      // A virtual module has no file.
+      isVirtualModulePath(module.path)
+    ) {
       continue;
     }
 

@@ -41,7 +41,7 @@ type ProcessFileRequest = Readonly<{
 }>;
 
 interface AsyncWorker {
-  readonly processFile: WorkerMessage => Promise<WorkerMetadata>;
+  readonly processFile: (message: WorkerMessage) => Promise<WorkerMetadata>;
   readonly end: () => Promise<void>;
 }
 
@@ -170,7 +170,9 @@ export class FileProcessor {
       filePath: absolutePath,
       maybeReturnContent: false,
       pluginsToRun: [pluginIdx],
+      returnStats: fileMetadata[H.MTIME] == null,
     });
+    applyStats(reply, fileMetadata);
     // `undefined` is reserved to mean that no worker has run.
     const pluginData = reply.pluginData?.[0] ?? null;
     // $FlowFixMe[invalid-tuple-index]
@@ -219,6 +221,7 @@ export class FileProcessor {
       filePath: this.#rootPathUtils.normalToAbsolute(normalPath),
       maybeReturnContent,
       pluginsToRun,
+      returnStats: fileMetadata[H.MTIME] == null,
     };
   }
 
@@ -237,7 +240,7 @@ export class FileProcessor {
     debug('Creating worker farm of %d worker threads', numWorkers);
     this.#perfLogger?.point('initWorkers_start');
     const jestWorker = new JestWorker<{
-      processFile: WorkerMessage => Promise<WorkerMetadata>,
+      processFile: (message: WorkerMessage) => Promise<WorkerMetadata>,
     }>(workerPath, {
       exposedMethods: ['processFile'],
       maxRetries: 3,
@@ -270,6 +273,7 @@ function processWorkerReply(
   fileMetadata: FileMetadata,
 ) {
   fileMetadata[H.VISITED] = 1;
+  applyStats(metadata, fileMetadata);
   const pluginData = metadata.pluginData;
   if (pluginData) {
     for (const [i, pluginIdx] of pluginsRun.entries()) {
@@ -286,6 +290,16 @@ function processWorkerReply(
   return metadata.content;
 }
 
+// Records the stats of a file that hadn't been stat'd, taken as data was first
+// derived from it (see `FileMetadata`).
+function applyStats(metadata: WorkerMetadata, fileMetadata: FileMetadata) {
+  const {stats} = metadata;
+  if (stats != null) {
+    fileMetadata[H.MTIME] = stats.mtime;
+    fileMetadata[H.SIZE] = stats.size;
+  }
+}
+
 function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {
   if (
     mixedError == null ||
@@ -293,6 +307,7 @@ function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {
     mixedError.message == null ||
     mixedError.stack == null
   ) {
+    // $FlowFixMe[incompatible-type]
     const error = new Error(mixedError);
     error.stack = ''; // Remove stack for stack-less errors.
     return error;

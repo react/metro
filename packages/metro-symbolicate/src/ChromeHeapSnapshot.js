@@ -231,7 +231,7 @@ class ChromeHeapSnapshotRecordAccessor {
     recordTypes:
       | Array<ChromeHeapSnapshotFieldType>
       | Readonly<{
-          [string]: ChromeHeapSnapshotFieldType,
+          [key: string]: ChromeHeapSnapshotFieldType,
         }>
       | null,
     globalStringTable: ChromeHeapSnapshotStringTable,
@@ -576,7 +576,7 @@ class ChromeHeapSnapshotRecordIterator
     recordTypes:
       | Array<ChromeHeapSnapshotFieldType>
       | Readonly<{
-          [string]: ChromeHeapSnapshotFieldType,
+          [key: string]: ChromeHeapSnapshotFieldType,
         }>
       | null,
     globalStringTable: ChromeHeapSnapshotStringTable,

@@ -102,6 +102,79 @@ describe('HttpStore', () => {
     expect(await promise).toEqual({foo: 42});
   });
 
+  test('limits the agent to maxSockets, defaulting to 64', () => {
+    const {Agent} = jest.requireMock('node:http');
+    expect(new HttpStore({endpoint: 'http://example.com'})).toBeInstanceOf(
+      HttpStore,
+    );
+    expect(
+      new HttpStore({endpoint: 'http://example.com', maxSockets: 256}),
+    ).toBeInstanceOf(HttpStore);
+
+    expect(Agent.mock.calls[0][0]).toMatchObject({
+      maxSockets: 64,
+      maxFreeSockets: 64,
+    });
+    expect(Agent.mock.calls[2][0]).toMatchObject({
+      maxSockets: 256,
+      maxFreeSockets: 256,
+    });
+  });
+
+  test('adds the params from getParams to every request', async () => {
+    const getParams = jest.fn(() =>
+      Promise.resolve(new URLSearchParams({token: 'abc'})),
+    );
+    const store = new HttpStore({
+      endpoint: 'http://www.example.com/endpoint',
+      params: new URLSearchParams({bucket: 'b'}),
+      getParams,
+    });
+    const promise = store.get(Buffer.from('key'));
+    // The request starts once the params have resolved.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    const [opts, callback] =
+      jest.requireMock('node:http').request.mock.calls[0];
+
+    expect(getParams).toHaveBeenCalledTimes(1);
+    expect(opts.path).toEqual('/endpoint/6b6579?bucket=b&token=abc');
+
+    callback(responseHttpOk(JSON.stringify({foo: 42})));
+    jest.runAllTimers();
+
+    expect(await promise).toEqual({foo: 42});
+  });
+
+  test('rejects with a NetworkError when getParams rejects', async () => {
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      getParams: () => Promise.reject(new Error('mint failed')),
+    });
+
+    const error = await store.get(Buffer.from('key')).catch(e => e);
+
+    expect(error).toBeInstanceOf(HttpStore.NetworkError);
+    expect(error.message).toMatch(/mint failed/);
+    expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
+  });
+
+  test('rejects with a NetworkError when getParams throws', async () => {
+    const store = new HttpStore({
+      endpoint: 'http://example.com',
+      getParams: () => {
+        throw new Error('token file missing');
+      },
+    });
+
+    const error = await store.get(Buffer.from('key')).catch(e => e);
+
+    expect(error).toBeInstanceOf(HttpStore.NetworkError);
+    expect(error.message).toMatch(/token file missing/);
+    expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
+  });
+
   test('rejects when an HTTP different from 200 is returned', done => {
     const store = new HttpStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));

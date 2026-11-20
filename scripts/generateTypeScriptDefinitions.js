@@ -239,9 +239,9 @@ export async function generateTsDefsForJsGlobs(
   await Promise.all(
     filesToProcess.map(async ([jsFile, sourceFile]) => {
       const absoluteTsFile = getTSDeclAbsolutePath(jsFile);
-      const sourceTSDeclarationPath = absoluteTsFile.replace(
-        TYPES_DIR,
-        SRC_DIR,
+      const sourceTSDeclarationPath = path.resolve(
+        WORKSPACE_ROOT,
+        jsFile.replace(/\.js$/, '.d.ts'),
       );
       const absoluteSourceFile = path.resolve(WORKSPACE_ROOT, sourceFile);
 
@@ -315,9 +315,10 @@ export async function generateTsDefsForJsGlobs(
 // https://flow.org/en/docs/types/comments/:
 //   `/*: T */` -> `: T`
 //   `/*:: code */` and `/*flow-include code */` -> `code`
-function expandFlowCommentTypes(source: string): string {
+export function expandFlowCommentTypes(source: string): string {
+  const declarationSource = source.replace(/^#![^\r\n]*/, '');
   // Splice from the end so earlier comment ranges stay valid.
-  return parse(source, {flow: 'all'}).comments.reduceRight(
+  return parse(declarationSource, {flow: 'all'}).comments.reduceRight(
     (code, {type, value, range: [start, end]}) => {
       const marker =
         type === 'Block' ? /^(::|flow-include|:)/.exec(value)?.[1] : null;
@@ -331,7 +332,7 @@ function expandFlowCommentTypes(source: string): string {
         code.slice(end)
       );
     },
-    source,
+    declarationSource,
   );
 }
 
@@ -419,7 +420,7 @@ function removeDeclareConstAtLine(
 function findBlockStart(
   lines: ReadonlyArray<string>,
   lineIndex: number,
-  predicate: string => boolean,
+  predicate: (line: string) => boolean,
 ): ?number {
   for (let i = lineIndex; i >= 0; i--) {
     if (predicate(lines[i])) {

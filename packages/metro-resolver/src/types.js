@@ -30,14 +30,41 @@ export type AssetResolution = Readonly<{
 export type FileResolution = AssetResolution | SourceFileResolution;
 
 /**
- * A JS module whose contents are provided out-of-band rather than read from a file
- * on disk.
+ * A JS module whose contents are provided by the resolver rather than read from
+ * a file on disk.
  *
- * NOTE: Resolving to a virtual module is not yet implemented. This is a reservation.
+ * A virtual path names exactly one module, as a file path does. A change in
+ * `source` at the same virtual path is a modification of that module, as an
+ * edit to a file is, and the transform cache key is content-addressed, so
+ * nothing about a virtual module can go stale.
+ *
+ * A resolver must produce the same `source` for the same virtual path wherever
+ * it is resolved from. Metro throws when two resolutions in one traversal
+ * disagree.
  */
 export type VirtualResolution = Readonly<{
   type: 'virtualModule',
-  ...
+  /**
+   * The path the module notionally lives at. It should not be the path of a
+   * real file, and need not exist on disk. Relative and package imports inside
+   * the virtual module resolve from this path's directory, and path-based
+   * transform configuration (Babel overrides, `inlineRequires` block lists, and
+   * so on) sees this path.
+   *
+   * Metro keeps virtual modules in their own namespace, so a virtual path can
+   * never be confused with a real module, but two distinct virtual modules
+   * need two distinct virtual paths. A resolver deriving several modules from
+   * one file should name them beside it, for example `App.generated-1.tsx`.
+   *
+   * `null` declares a module with no base, as a `data:` URL has, whose identity
+   * is its source alone and inside which relative imports are errors.
+   * Resolving the dependencies of such a module needs a `ResolutionContext`
+   * with no `originModulePath`, which is a breaking change to the resolver
+   * contract, so Metro does not accept `null` yet.
+   */
+  virtualPath: ?string,
+  /** The complete source of the module, as text or UTF-8 bytes. */
+  source: string | Buffer,
 }>;
 
 export type FileAndDirCandidates = {
@@ -63,35 +90,20 @@ export type FileCandidates =
     };
 
 export type ExportsLikeMap = Readonly<{
-  [subpathOrCondition: string]: string | ExportsLikeMap | null,
+  [subpathOrCondition: string]:
+    string | ExportsLikeMap | ExportValueWithFallback | null,
 }>;
 
-/** "exports" mapping where values may be legacy Node.js <13.7 array format. */
-export type ExportMapWithFallbacks = Readonly<{
-  [subpath: string]: Values<ExportsLikeMap> | ExportValueWithFallback,
-}>;
-
-/** "exports" subpath value when in legacy Node.js <13.7 array format. */
-export type ExportValueWithFallback =
-  | ReadonlyArray<ExportsLikeMap | string>
-  // JSON can also contain exotic nested array structure, which will not be parsed
-  | ReadonlyArray<ReadonlyArray<unknown>>;
-
-export type ExportsField =
-  | string
-  | ReadonlyArray<string>
-  | ExportValueWithFallback
-  | ExportsLikeMap
-  | ExportMapWithFallbacks;
-
-export type FlattenedExportMap = ReadonlyMap<
-  string /* subpath */,
-  string | null,
+/** An ordered list of package target fallbacks. */
+export type ExportValueWithFallback = ReadonlyArray<
+  ExportsLikeMap | string | null | ExportValueWithFallback,
 >;
+
+export type ExportsField = string | ExportValueWithFallback | ExportsLikeMap;
 
 export type NormalizedExportsLikeMap = Map<
   string /* subpath */,
-  null | string | ExportsLikeMap,
+  null | string | ExportsLikeMap | ExportValueWithFallback,
 >;
 
 export type PackageJson = Readonly<{
@@ -113,11 +125,6 @@ export type PackageForModule = Readonly<{
      of the given candidate relative to the returned rootPath. */
   packageRelativePath: string,
 }>;
-
-/**
- * Check existence of a single file.
- */
-export type DoesFileExist = (filePath: string) => boolean;
 
 /**
  * Performs a lookup against an absolute or project-relative path to determine
@@ -146,12 +153,6 @@ export type ResolutionContext = Readonly<{
   customResolverOptions: CustomResolverOptions,
   disableHierarchicalLookup: boolean,
 
-  /**
-   * Determine whether a regular file exists at the given path.
-   *
-   * @deprecated, prefer `fileSystemLookup`
-   */
-  doesFileExist: DoesFileExist,
   extraNodeModules: ?{[packageName: string]: string, ...},
 
   /** Is resolving for a development bundle. */
@@ -199,7 +200,7 @@ export type ResolutionContext = Readonly<{
    * Always equal to dependency.data.isESMImport where dependency is provided,
    * but may be used for resolution.
    */
-  isESMImport?: boolean,
+  isESMImport: boolean,
 
   /**
    * Synchronously returns information about a given absolute path, including
@@ -224,7 +225,6 @@ export type ResolutionContext = Readonly<{
   nodeModulesPaths: ReadonlyArray<string>,
   preferNativePlatform: boolean,
   resolveAsset: ResolveAsset,
-  redirectModulePath: (modulePath: string) => string | false,
 
   /**
    * Given a name, this should return the full path to the file that provides
@@ -253,12 +253,26 @@ export type ResolutionContext = Readonly<{
   schemeResolvers?: Readonly<{[scheme: string]: CustomResolver}>,
 
   sourceExts: ReadonlyArray<string>,
+
+  /**
+   * When resolving a package with an "exports" field, apply "browser" spec
+   * redirections (from object-valued `mainFields`) to the file that
+   * "exports" resolves to, instead of to the requested subpath before
+   * "exports" is considered. This matches webpack 5 and Vite 8.
+   */
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
-  unstable_incrementalResolution: boolean,
+
+  /**
+   * Read a package's "exports" field from the `package.json` at the root of
+   * the package named by a bare specifier, instead of the `package.json`
+   * closest to the requested subpath.
+   */
+  unstable_resolveExportsFromPackageRoot: boolean,
   unstable_logWarning: (message: string) => void,
 }>;
 

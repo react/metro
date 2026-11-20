@@ -107,10 +107,26 @@ describe('Metro development server serves bundles via HTTP', () => {
     expect(bundlesDownloaded).toEqual(
       new Set([
         '/import-export/index.bundle?platform=ios&dev=true&minify=false&lazy=true',
-        '/import-export/export-5.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-6.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-7.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
-        '/import-export/export-8.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-5.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-6.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-7.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+        '/import-export/export-8.js.bundle?platform=ios&dev=true&minify=false&lazy=true&modulesOnly=true&runModule=false',
+      ]),
+    );
+  });
+
+  test('builds lazy bundles for the platform inferred from the entry file name', async () => {
+    const object = await downloadAndExec(
+      '/async-platform/index.ios.bundle?dev=true&minify=false&lazy=true',
+    );
+    await expect(object.asyncImport).resolves.toHaveProperty(
+      'default',
+      'dep.ios.js',
+    );
+    expect(bundlesDownloaded).toEqual(
+      new Set([
+        '/async-platform/index.ios.bundle?dev=true&minify=false&lazy=true',
+        '/async-platform/chunk.js.bundle?dev=true&minify=false&lazy=true&platform=ios&modulesOnly=true&runModule=false',
       ]),
     );
   });

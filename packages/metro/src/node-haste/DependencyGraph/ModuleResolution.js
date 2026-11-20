@@ -17,7 +17,6 @@ import type {Reporter} from '../../lib/reporting';
 import type {ResolverInputOptions} from '../../shared/types';
 import type {
   CustomResolver,
-  DoesFileExist,
   FileCandidates,
   FileSystemLookup,
   Resolution,
@@ -25,10 +24,11 @@ import type {
 } from 'metro-resolver';
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
+import {deriveVirtualModulePath} from '../../lib/modulePath';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
-import createDefaultContext from 'metro-resolver/private/createDefaultContext';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import util from 'node:util';
@@ -36,7 +36,6 @@ import util from 'node:util';
 type Options = Readonly<{
   assetExts: ReadonlySet<string>,
   disableHierarchicalLookup: boolean,
-  doesFileExist: DoesFileExist,
   emptyModulePath: string,
   extraNodeModules: ?any,
   fileSystemLookup: FileSystemLookup,
@@ -53,12 +52,15 @@ type Options = Readonly<{
   resolveRequest: ?CustomResolver,
   schemeResolvers: Readonly<{[scheme: string]: CustomResolver}>,
   sourceExts: ReadonlyArray<string>,
+  unstable_allowVirtualModules: boolean,
+  unstable_applyBrowserSpecAfterExports: boolean,
   unstable_conditionNames: ReadonlyArray<string>,
   unstable_conditionsByPlatform: Readonly<{
     [platform: string]: ReadonlyArray<string>,
   }>,
   unstable_enablePackageExports: boolean,
   unstable_incrementalResolution: boolean,
+  unstable_resolveExportsFromPackageRoot: boolean,
 }>;
 
 export class ModuleResolver {
@@ -67,6 +69,7 @@ export class ModuleResolver {
   _projectRootFakeModulePath: string;
   // An empty module, the result of resolving `emptyModulePath` from the project root.
   _cachedEmptyModule: ?BundlerResolution;
+  _isResolvingEmptyModule: boolean = false;
 
   constructor(options: Options) {
     this._options = options;
@@ -77,21 +80,34 @@ export class ModuleResolver {
   _getEmptyModule(): BundlerResolution {
     let emptyModule = this._cachedEmptyModule;
     if (!emptyModule) {
-      emptyModule = this.resolveDependency(
-        this._projectRootFakeModulePath,
-        {
-          data: {
-            asyncType: null,
-            isESMImport: false,
-            key: this._options.emptyModulePath,
-            locs: [],
+      const {emptyModulePath} = this._options;
+      if (this._isResolvingEmptyModule) {
+        throw new Error(
+          `\`resolver.emptyModulePath\` ('${emptyModulePath}') resolved to an ` +
+            'empty module. A custom `resolver.resolveRequest` must delegate ' +
+            'this specifier to `context.resolveRequest`, or resolve it to a file.',
+        );
+      }
+      this._isResolvingEmptyModule = true;
+      try {
+        emptyModule = this.resolveDependency(
+          this._projectRootFakeModulePath,
+          {
+            data: {
+              asyncType: null,
+              isESMImport: false,
+              key: emptyModulePath,
+              locs: [],
+            },
+            name: emptyModulePath,
           },
-          name: this._options.emptyModulePath,
-        },
-        false,
-        null,
-        /* resolverOptions */ {dev: false},
-      );
+          false,
+          null,
+          /* resolverOptions */ {dev: false},
+        );
+      } finally {
+        this._isResolvingEmptyModule = false;
+      }
       this._cachedEmptyModule = emptyModule;
     }
     return emptyModule;
@@ -107,7 +123,6 @@ export class ModuleResolver {
     const {
       assetExts,
       disableHierarchicalLookup,
-      doesFileExist,
       extraNodeModules,
       fileSystemLookup,
       getPackage,
@@ -119,47 +134,46 @@ export class ModuleResolver {
       resolveRequest,
       schemeResolvers,
       sourceExts,
+      unstable_applyBrowserSpecAfterExports,
       unstable_conditionNames,
       unstable_conditionsByPlatform,
       unstable_enablePackageExports,
-      unstable_incrementalResolution,
+      unstable_resolveExportsFromPackageRoot,
     } = this._options;
 
     try {
       const result = Resolver.resolve(
-        createDefaultContext(
-          {
-            allowHaste,
-            assetExts,
-            customResolverOptions: resolverOptions.customResolverOptions ?? {},
-            dev: resolverOptions.dev,
-            disableHierarchicalLookup,
-            doesFileExist,
-            extraNodeModules,
-            fileSystemLookup,
-            getPackage,
-            getPackageForModule,
-            isESMImport: dependency.data.isESMImport,
-            mainFields,
-            nodeModulesPaths,
-            originModulePath,
-            preferNativePlatform,
-            resolveAsset,
-            resolveHasteModule: (name: string) =>
-              this._options.getHasteModulePath(name, platform),
-            resolveHastePackage: (name: string) =>
-              this._options.getHastePackagePath(name, platform),
-            resolveRequest,
-            schemeResolvers,
-            sourceExts,
-            unstable_conditionNames,
-            unstable_conditionsByPlatform,
-            unstable_enablePackageExports,
-            unstable_incrementalResolution,
-            unstable_logWarning: this._logWarning,
-          },
+        {
+          allowHaste,
+          assetExts,
+          customResolverOptions: resolverOptions.customResolverOptions ?? {},
           dependency,
-        ),
+          dev: resolverOptions.dev,
+          disableHierarchicalLookup,
+          extraNodeModules,
+          fileSystemLookup,
+          getPackage,
+          getPackageForModule,
+          isESMImport: dependency.data.isESMImport,
+          mainFields,
+          nodeModulesPaths,
+          originModulePath,
+          preferNativePlatform,
+          resolveAsset,
+          resolveHasteModule: (name: string) =>
+            this._options.getHasteModulePath(name, platform),
+          resolveHastePackage: (name: string) =>
+            this._options.getHastePackagePath(name, platform),
+          resolveRequest,
+          schemeResolvers,
+          sourceExts,
+          unstable_applyBrowserSpecAfterExports,
+          unstable_conditionNames,
+          unstable_conditionsByPlatform,
+          unstable_enablePackageExports,
+          unstable_resolveExportsFromPackageRoot,
+          unstable_logWarning: this._logWarning,
+        },
         dependency.name,
         platform,
       );
@@ -242,8 +256,31 @@ export class ModuleResolver {
       case 'empty':
         return this._getEmptyModule();
       case 'virtualModule':
-        // Reserved for future implementation.
-        throw new Error('Virtual modules are not yet implemented.');
+        if (!this._options.unstable_allowVirtualModules) {
+          throw new Error(
+            'Virtual modules are not enabled. Set ' +
+              '`resolver.unstable_allowVirtualModules` to `true` in your ' +
+              'Metro config to enable them.',
+          );
+        }
+        // A module with no base needs its dependencies resolved with a null
+        // `originModulePath`, which `ResolutionContext` does not allow yet.
+        // Lifting this is a breaking change to the resolver contract.
+        const {virtualPath} = resolution;
+        invariant(
+          virtualPath != null,
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+        const source =
+          typeof resolution.source === 'string'
+            ? Buffer.from(resolution.source, 'utf8')
+            : resolution.source;
+        return {
+          type: 'virtualModule',
+          filePath: deriveVirtualModulePath(virtualPath),
+          source,
+          sha1: crypto.createHash('sha1').update(source).digest('hex'),
+        };
       default:
         resolution.type as empty;
         throw new Error('invalid type');

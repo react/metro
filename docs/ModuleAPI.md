@@ -57,7 +57,7 @@ In React Native projects that use `@react-native/babel-preset`, `import` and `ex
 1. Enable [lazy bundling](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md) by adding `&lazy=true` to the initial HTTP bundle URL your framework requests from Metro.
 2. At runtime, `import()` calls a framework-defined function to [fetch and evaluate](https://github.com/react-native-community/discussions-and-proposals/blob/main/proposals/0605-lazy-bundling.md#__loadbundleasync-in-metro) the split bundle. Your framework **must** implement this function if it uses the `lazy=true` parameter, or runtime errors will occur.
 
-   For example, if the initial bundle URL is `/index.bundle?platform=ios&dev=true&lazy=true`, then `import('./src/Settings')` calls `global.__loadBundleAsync('/src/Settings.bundle?platform=ios&dev=true&lazy=true&modulesOnly=true&runModule=false')` before evaluating the module.
+   For example, if the initial bundle URL is `/index.bundle?platform=ios&dev=true&lazy=true`, then `import('./src/Settings')`, resolving to `src/Settings.js`, calls `global.__loadBundleAsync('/src/Settings.js.bundle?platform=ios&dev=true&lazy=true&modulesOnly=true&runModule=false')` before evaluating the module.
 
 :::
 

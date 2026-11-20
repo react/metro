@@ -10,6 +10,7 @@
  */
 
 import type {TransformResultWithSource} from './DeltaBundler';
+import type {ReleasedModules} from './DeltaBundler/types';
 import type {TransformOptions} from './DeltaBundler/Worker';
 import type {DynamicRoot} from './lib/dynamicRoots';
 import type {ConfigT} from 'metro-config';
@@ -102,6 +103,14 @@ export default class Bundler {
       transformOptions,
       fileBuffer,
     );
+  }
+
+  /**
+   * Drops the shared transform results of released modules that no graph
+   * holds any more. See `transformer.unstable_shareTransformResults`.
+   */
+  releaseSharedTransformResults(released: ReleasedModules<>): void {
+    this._transformer?.releaseSharedResults(released);
   }
 
   // Waits for the bundler to become ready.

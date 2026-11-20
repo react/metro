@@ -451,6 +451,42 @@ function dep(name: string): TransformResultDependency {
       });
     });
 
+    describe('blockList config param', () => {
+      test('hides files matching a pattern in a blockList array', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'a.js': '',
+          'blocked.js': '',
+        });
+
+        resolver = await createResolver({
+          resolver: {blockList: [/blocked\.js$/]},
+        });
+
+        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+        });
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('./blocked')),
+        ).toThrow(/Unable to resolve module \.\/blocked/);
+      });
+
+      test('does not hide any file with an empty blockList array', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'a.js': '',
+        });
+
+        resolver = await createResolver({resolver: {blockList: []}});
+
+        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+        });
+      });
+    });
+
     describe('absolute paths', () => {
       test('supports requiring absolute paths', async () => {
         setMockFileSystem({
@@ -558,6 +594,30 @@ function dep(name: string): TransformResultDependency {
           filePath: p('/root/node_modules/foo/lib/index.js'),
         });
       });
+
+      test.each([
+        ['foo/.', 'lib/m.js'],
+        ['foo/lib/.', 'lib/index.js'],
+      ])(
+        'resolves %s, a package subpath ending in "."',
+        async (name, expected) => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {
+              foo: {
+                'package.json': JSON.stringify({name: 'foo', main: 'lib/m.js'}),
+                lib: {'m.js': '', 'index.js': ''},
+              },
+            },
+          });
+
+          resolver = await createResolver();
+          expect(resolver.resolve(p('/root/index.js'), dep(name))).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/node_modules/foo/' + expected),
+          });
+        },
+      );
 
       test('finds the appropriate node_modules folder', async () => {
         setMockFileSystem({
@@ -1392,6 +1452,123 @@ function dep(name: string): TransformResultDependency {
       // separately. Platform-specific keys are only matched per candidate
       // extension.
       describe('package scope of files reached through a symlink', () => {
+        test.each([
+          [true, '/root/store/pkg/dist/sub.js'],
+          [false, '/root/store/pkg/sub/legacy.js'],
+        ])(
+          'a symlinked package with a nested package.json, with unstable_resolveExportsFromPackageRoot: %s',
+          async (unstable_resolveExportsFromPackageRoot, expected) => {
+            setMockFileSystem({
+              'index.js': '',
+              node_modules: {},
+              store: {
+                pkg: {
+                  'package.json': JSON.stringify({
+                    name: 'pkg',
+                    exports: {'./sub': './dist/sub.js'},
+                  }),
+                  dist: {'sub.js': ''},
+                  sub: {
+                    'package.json': JSON.stringify({main: './legacy.js'}),
+                    'legacy.js': '',
+                  },
+                },
+              },
+            });
+            fs.symlinkSync(p('/root/store/pkg'), p('/root/node_modules/pkg'));
+
+            resolver = await createResolver(
+              {
+                resolver: {
+                  unstable_enablePackageExports: true,
+                  unstable_resolveExportsFromPackageRoot,
+                },
+              },
+              'ios',
+            );
+            expect(
+              resolver.resolve(p('/root/index.js'), dep('pkg/sub')),
+            ).toEqual({
+              type: 'sourceFile',
+              filePath: p(expected),
+            });
+          },
+        );
+
+        test.each([
+          [
+            '"exports"',
+            {exports: {'./sub': './image.png/'}},
+            'pkg/sub',
+            'node_modules/pkg/index.js',
+          ],
+          [
+            '"imports"',
+            {imports: {'#sub': './image.png/'}},
+            '#sub',
+            'node_modules/pkg/index.js',
+          ],
+        ])(
+          'an asset target with a trailing slash in %s',
+          async (_, manifest, specifier, origin) => {
+            setMockFileSystem({
+              'index.js': '',
+              node_modules: {
+                pkg: {
+                  'package.json': JSON.stringify({name: 'pkg', ...manifest}),
+                  'index.js': '',
+                  'image.png': '',
+                },
+              },
+            });
+
+            resolver = await createResolver(
+              {resolver: {unstable_enablePackageExports: true}},
+              'ios',
+            );
+            expect(() =>
+              resolver.resolve(p('/root/' + origin), dep(specifier)),
+            ).toThrow();
+          },
+        );
+
+        test('a "browser" spec redirection in a symlinked package with no root package.json', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {},
+            store: {
+              pkg: {
+                sub: {
+                  'package.json': JSON.stringify({
+                    browser: {'./a.js': './b.js'},
+                    exports: {'./b.js': './from-exports.js'},
+                  }),
+                  'a.js': '',
+                  'b.js': '',
+                  'from-exports.js': '',
+                },
+              },
+            },
+          });
+          fs.symlinkSync(p('/root/store/pkg'), p('/root/node_modules/pkg'));
+
+          resolver = await createResolver(
+            {
+              resolver: {
+                unstable_enablePackageExports: true,
+                unstable_resolveExportsFromPackageRoot: true,
+              },
+            },
+            'ios',
+          );
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg/sub/a.js')),
+          ).toEqual({
+            type: 'sourceFile',
+            filePath: p('/root/store/pkg/sub/b.js'),
+          });
+        });
+
         test('a node_modules symlink to a package root', async () => {
           setMockFileSystem({
             'index.js': '',
@@ -2728,6 +2905,102 @@ function dep(name: string): TransformResultDependency {
           type: 'sourceFile',
           filePath: p('/root/overridden.js'),
         });
+      });
+
+      test('throws a descriptive error if emptyModulePath itself resolves to empty', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver({
+          resolver: {
+            emptyModulePath: 'metro:runtime/modules/empty-module',
+            resolveRequest: () => ({type: 'empty'}),
+          },
+        });
+
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('anything')),
+        ).toThrow(
+          "`resolver.emptyModulePath` ('metro:runtime/modules/empty-module') resolved to an empty module.",
+        );
+      });
+
+      test('resolves to a virtual module at the given virtual path', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: p('/root/index.js'),
+          source: 'export default 1;',
+        });
+
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
+
+        expect(resolver.resolve(p('/root/index.js'), dep('virtual'))).toEqual({
+          type: 'virtualModule',
+          filePath: 'virtual:' + p('/root/index.js'),
+          source: Buffer.from('export default 1;'),
+          sha1: expect.stringMatching(/^[0-9a-f]{40}$/),
+        });
+      });
+
+      test('accepts the virtual module source as a Buffer, with the same identity as the text', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: p('/root/index.js'),
+          source: 'export default 1;',
+        });
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
+        const fromText = resolver.resolve(p('/root/index.js'), dep('virtual'));
+
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: p('/root/index.js'),
+          source: Buffer.from('export default 1;'),
+        });
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
+
+        expect(resolver.resolve(p('/root/index.js'), dep('virtual'))).toEqual(
+          fromText,
+        );
+      });
+
+      test('rejects a virtual module with no virtual path, which is not yet supported', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: null,
+          source: 'export default 1;',
+        });
+
+        resolver = await createResolver({
+          resolver: {resolveRequest, unstable_allowVirtualModules: true},
+        });
+
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('virtual')),
+        ).toThrow(
+          'Virtual modules without a virtualPath are not yet supported.',
+        );
+      });
+
+      test('rejects a virtual module unless virtual modules are allowed', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolveRequest.mockReturnValue({
+          type: 'virtualModule',
+          virtualPath: p('/root/index.js'),
+          source: 'export default 1;',
+        });
+
+        resolver = await createResolver({resolver: {resolveRequest}});
+
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), dep('virtual')),
+        ).toThrow('`resolver.unstable_allowVirtualModules`');
       });
 
       test('overrides relative paths', async () => {

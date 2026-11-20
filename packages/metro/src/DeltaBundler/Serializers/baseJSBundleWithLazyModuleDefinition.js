@@ -64,6 +64,7 @@ export default function baseJSBundleWithLazyModuleDefinition(
     createModuleId: options.createModuleId,
     dev: options.dev,
     includeAsyncPaths: options.includeAsyncPaths,
+    platform: graph.transformOptions.platform,
     projectRoot: options.projectRoot,
     serverRoot: options.serverRoot,
     sourceUrl: options.sourceUrl,
@@ -117,7 +118,9 @@ export default function baseJSBundleWithLazyModuleDefinition(
       (a, b) => options.createModuleId(a.path) - options.createModuleId(b.path),
     );
 
-  builder.append('__registerSegment(0, function defSeg0(moduleId) {');
+  builder.append(
+    `${options.globalPrefix}__registerSegment(0, function defSeg0(moduleId) {`,
+  );
   appendLazyModuleSwitch(builder, modules.map(getModuleEntry), {
     globalPrefix: options.globalPrefix,
   });

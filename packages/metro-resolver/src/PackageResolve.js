@@ -206,7 +206,7 @@ export function matchSubpathFromMainFields(
   // `Object.assign({}, ...fieldValues.reverse())`, but avoiding any allocation
   // in the most common case (no object-valued field, e.g. only a string
   // "main"/"browser").
-  let replacements: {[string]: string | false} | null = null;
+  let replacements: {[key: string]: string | false} | null = null;
   for (let i = mainFields.length - 1; i >= 0; i--) {
     // $FlowFixMe[invalid-computed-prop]
     const value = pkg[mainFields[i]];

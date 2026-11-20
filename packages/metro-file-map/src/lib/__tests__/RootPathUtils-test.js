@@ -17,7 +17,7 @@ jest.mock('node:path', () => mockPathModule);
 describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
   // Convenience function to write paths with posix separators but convert them
   // to system separators
-  const p: string => string = filePath =>
+  const p: (filePath: string) => string = filePath =>
     platform === 'win32'
       ? filePath.replace(/\//g, '\\').replace(/^\\/, 'C:\\')
       : filePath;
@@ -54,6 +54,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     p('/'),
     p('/outside'),
     p('/outside/'),
+    p('/project/..'),
+    p('/project/root/../..'),
+    p('/project/root/a.'),
+    p('/project/root/foo..'),
+    p('/project/root/...'),
   ])(`absoluteToNormal('%s') is correct and optimised`, absolutePath => {
     const rootDir = p('/project/root');
     pathUtils = new RootPathUtils(rootDir);
@@ -80,6 +85,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       p('/project/root/../a./foo'),
       p('/project/root/.././foo'),
       p('/project/root/.././foo/'),
+      p('/project/root/.'),
+      p('/project/root/baz/.'),
+      p('/project/root/baz/..'),
+      p('/project/root/../root2/.'),
+      p('/project/root/../root2/..'),
     ])(`absoluteToNormal('%s') falls back to path.relative`, absolutePath => {
       let expected = mockPathModule.relative(rootDir, absolutePath);
       // Unlike path.relative, we expect to preserve trailing separators.
@@ -136,6 +146,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
             p('../../project/root'),
             p('../../project/root/'),
             p('../../..'),
+            p('.'),
+            p('foo/.'),
+            p('foo/..'),
+            p('../root/.'),
+            p('../root/..'),
             // On POSIX, `..` at the root re-enters the root
             ...(platform === 'posix'
               ? [p('../../../normal/path'), p('../../../normal/path/')]
@@ -163,6 +178,20 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       },
     );
   });
+
+  test.each([
+    [p('..'), p('foo/.'), p('../foo/.')],
+    [p('..'), p('foo/..'), p('../foo/..')],
+  ])(
+    'joinNormalToRelative(%s, %s) keeps a final indirection, as %s',
+    (normalPath, relativePath, expected) => {
+      pathUtils = new RootPathUtils(p('/project/root'));
+      expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
+        collapsedSegments: 0,
+        normalPath: expected,
+      });
+    },
+  );
 
   if (platform === 'win32') {
     describe('cross-drive absolute paths (Windows)', () => {
@@ -324,6 +353,23 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
         (readlinkResult, expected) => {
           expect(
             pathUtils.resolveSymlinkToNormal('link', readlinkResult),
+          ).toEqual(expected);
+        },
+      );
+
+      test.each([
+        ['..\\..\\..\\D:\\store\\a\\link', '..\\b', '..\\..\\..\\D:\\store\\b'],
+        [
+          '..\\..\\..\\D:\\store\\.bun\\rn@1\\node_modules\\invariant',
+          '..\\..\\invariant@2\\node_modules\\invariant',
+          '..\\..\\..\\D:\\store\\.bun\\invariant@2\\node_modules\\invariant',
+        ],
+        ['..\\..\\..\\D:\\link', 'target', '..\\..\\..\\D:\\target'],
+      ])(
+        'resolves relative target of cross-drive symlink (%s -> %s) to %s',
+        (symlinkPath, readlinkResult, expected) => {
+          expect(
+            pathUtils.resolveSymlinkToNormal(symlinkPath, readlinkResult),
           ).toEqual(expected);
         },
       );

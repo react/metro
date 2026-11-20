@@ -125,10 +125,13 @@ export interface SourceMapGenerator {
   toString(file?: string, options?: {excludeSource?: boolean | undefined}): string;
 }
 
+// @deprecated
 export function toBabelSegments(sourceMap: BasicSourceMap): Array<BabelSourceMapSegment>;
 
+// @deprecated
 export function toSegmentTuple(mapping: BabelSourceMapSegment): MetroSourceMapSegmentTuple;
 
+// @deprecated
 export function tuplesFromBabelDecodedMap(decodedMap: BabelDecodedMap): Array<MetroSourceMapSegmentTuple>;
 
 export type VlqMap = {

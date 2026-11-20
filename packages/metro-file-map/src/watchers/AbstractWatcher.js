@@ -11,6 +11,7 @@
 import type {
   WatcherBackend,
   WatcherBackendChangeEvent,
+  WatcherBackendChangeEventWithoutRoot,
   WatcherBackendOptions,
   WatcherIncludedFiles,
 } from '../flow-types';
@@ -76,7 +77,7 @@ export class AbstractWatcher implements WatcherBackend {
     this.#emitter.removeAllListeners();
   }
 
-  emitFileEvent(event: Omit<WatcherBackendChangeEvent, 'root'>) {
+  emitFileEvent(event: WatcherBackendChangeEventWithoutRoot) {
     this.#emitter.emit('fileevent', {
       ...event,
       root: this.root,

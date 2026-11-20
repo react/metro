@@ -22,7 +22,7 @@ import type {MetadataWorker, WorkerMessage, V8Serializable} from '../../flow-typ
 const PACKAGE_JSON = path.sep + 'package.json';
 
 class Worker /*:: implements MetadataWorker */ {
-  /*:: readonly  */ #hasteImpl /*: ?Readonly<{getHasteName: string => ?string}>  */ =
+  /*:: readonly  */ #hasteImpl /*: ?Readonly<{getHasteName: (v: string) => ?string}>  */ =
     null;
 
   constructor(

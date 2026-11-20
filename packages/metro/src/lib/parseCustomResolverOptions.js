@@ -18,7 +18,7 @@ export default function parseCustomResolverOptions(
 ): CustomResolverOptions {
   const customResolverOptions: {
     __proto__: null,
-    [string]: unknown,
+    [key: string]: unknown,
     ...
   } = Object.create(null);
 

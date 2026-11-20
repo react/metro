@@ -16,7 +16,7 @@ export default function getPreludeCode({
   requireCycleIgnorePatterns,
   unstable_forceFullRefreshPatterns,
 }: {
-  readonly extraVars?: {[string]: unknown, ...},
+  readonly extraVars?: {[key: string]: unknown, ...},
   readonly isDev: boolean,
   readonly globalPrefix: string,
   readonly requireCycleIgnorePatterns: ReadonlyArray<RegExp>,
@@ -54,14 +54,13 @@ export default function getPreludeCode({
 
 const excluded = new Set(['__BUNDLE_START_TIME__', '__DEV__', 'process']);
 
-function formatExtraVars(extraVars: ?{[string]: unknown, ...}): Array<string> {
+function formatExtraVars(
+  extraVars: ?{[key: string]: unknown, ...},
+): Array<string> {
   const assignments = [];
 
   for (const key in extraVars) {
     if (extraVars.hasOwnProperty(key) && !excluded.has(key)) {
-      /* $FlowFixMe[incompatible-type](>=0.95.0 site=react_native_fb) This comment suppresses an
-       * error found when Flow v0.95 was deployed. To see the error, delete
-       * this comment and run Flow. */
       assignments.push(`${key}=${JSON.stringify(extraVars[key])}`);
     }
   }

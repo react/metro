@@ -25,7 +25,7 @@ export type ReadonlyJsonData =
   | number
   | string
   | ReadonlyArray<?ReadonlyJsonData>
-  | Readonly<{[string]: ?ReadonlyJsonData}>;
+  | Readonly<{[key: string]: ?ReadonlyJsonData}>;
 
 export type MixedOutput = {
   readonly data: unknown,
@@ -92,13 +92,24 @@ export type Module<T = MixedOutput> = Readonly<{
 
 /**
  * How the transform obtains the source of a module that has no file, as
- * supplied by the resolution that produced it. A `require.context` module
- * arrives as the parameters the transform expands by enumerating the file map.
+ * supplied by the resolution that produced it. A virtual module arrives as the
+ * buffer itself. A `require.context` module arrives as the parameters the
+ * transform expands by enumerating the file map: a derived module whose inputs
+ * are discovered at transform time rather than pinned at resolution, which is
+ * why it has its own invalidation in `Graph.markModifiedContextModules`.
  */
-export type VirtualSource = Readonly<{
-  type: 'requireContext',
-  requireContext: RequireContext,
-}>;
+export type VirtualSource =
+  | Readonly<{type: 'requireContext', requireContext: RequireContext}>
+  | Readonly<{
+      type: 'buffer',
+      source: Buffer,
+      /**
+       * SHA-1 of `source`. A virtual module's identity is independent of its
+       * content, so this is how the graph notices that an edge now supplies
+       * different content for an existing module and re-transforms it.
+       */
+      sha1: string,
+    }>;
 
 export type ModuleData<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyMap<string, Dependency>,
@@ -147,8 +158,8 @@ export type TransformResultWithSource<T = MixedOutput> = Readonly<{
 }>;
 
 export type TransformFn<T = MixedOutput> = (
-  string,
-  ?VirtualSource,
+  modulePath: string,
+  virtualSource: ?VirtualSource,
 ) => Promise<TransformResultWithSource<T>>;
 
 export type ResolveFn = (
@@ -162,10 +173,23 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
-export type BundlerResolution = Readonly<{
-  type: 'sourceFile',
-  filePath: string,
-}>;
+export type BundlerResolution =
+  | Readonly<{
+      type: 'sourceFile',
+      filePath: string,
+    }>
+  | Readonly<{
+      type: 'virtualModule',
+      /**
+       * The module's identity in the graph: its virtual path in the
+       * `virtual:` namespace. See `lib/modulePath.js`.
+       */
+      filePath: string,
+      /** Carried to the transform as the module's input in place of a file read. */
+      source: Buffer,
+      /** SHA-1 of `source`. */
+      sha1: string,
+    }>;
 
 export type Options<T = MixedOutput> = Readonly<{
   resolve: ResolveFn,
@@ -186,6 +210,17 @@ export type DeltaResult<T = MixedOutput> = {
   readonly reset: boolean,
 };
 
+// Modules that graphs released, with the outputs live graphs still hold.
+export type ReleasedModules<T = MixedOutput> = Readonly<{
+  // The source paths the released modules were transformed as, or null if they
+  // aren't known, in which case `heldOutputs` covers every module of every live
+  // graph.
+  paths: ?ReadonlyArray<string>,
+  // The outputs live graphs hold at the released modules, or at any module if
+  // `paths` is null.
+  heldOutputs: ReadonlySet<ReadonlyArray<T>>,
+}>;
+
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: (absolutePath: string) => number,
@@ -201,6 +236,10 @@ export type SerializerOptions = Readonly<{
   modulesOnly: boolean,
   processModuleFilter: (module: Module<>) => boolean,
   projectRoot: string,
+  // The string reserved for identifiers that Metro generates. The default
+  // transformer rejects it in source and JSON files, which prevents accidental
+  // collisions.
+  reservedString: string,
   runBeforeMainModule: ReadonlyArray<string>,
   runModule: boolean,
   serverRoot: string,

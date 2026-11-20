@@ -246,7 +246,9 @@ function concatUnique<T>(
 async function mergeConfigAsync<T extends InputConfigT>(
   baseConfig: Promise<T>,
   ...reversedConfigs: ReadonlyArray<
-    InputConfigT | (T => InputConfigT) | (T => Promise<InputConfigT>),
+    | InputConfigT
+    | ((baseConfig: T) => InputConfigT)
+    | ((baseConfig: T) => Promise<InputConfigT>),
   >
 ): Promise<T> {
   let currentConfig: T = await baseConfig;

@@ -18,6 +18,12 @@ import type {
 import type {JsOutput} from 'metro-transform-worker';
 
 import {isResolvedDependency} from '../../../lib/isResolvedDependency';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleDisplayPath,
+  getModuleSourcePath,
+  isVirtualModulePath,
+} from '../../../lib/modulePath';
 import {normalizePathSeparatorsToPosix} from '../../../lib/pathUtils';
 import invariant from 'invariant';
 import * as jscSafeUrl from 'jsc-safe-url';
@@ -25,9 +31,12 @@ import {addParamsToDefineCall} from 'metro-transform-plugins';
 import path from 'node:path';
 
 export type Options = Readonly<{
-  createModuleId: string => number | string,
+  createModuleId: (absolutePath: string) => number | string,
   dev: boolean,
   includeAsyncPaths: boolean,
+  // The platform the bundle is built for, set on async bundle URLs so that the
+  // server builds each split bundle for the same platform.
+  platform?: ?string,
   projectRoot: string,
   serverRoot: string,
   sourceUrl: ?string,
@@ -78,9 +87,7 @@ export function wrapModule(module: Module<>, options: Options): string {
 function getModuleVerboseName(module: Module<>, options: Options): string {
   // The relative path of the module, to make debugging easier. This is mapped
   // to `module.verboseName` in `require.js`.
-  return normalizePathSeparatorsToPosix(
-    path.relative(options.projectRoot, module.path),
-  );
+  return getModuleDisplayPath(module.path, options.projectRoot);
 }
 
 // Default value stored in the `__d(...)` `paths` object for an async
@@ -102,20 +109,26 @@ function getDefaultAsyncDependencyPath(
   // most parameters from the main bundle's URL.
 
   const {searchParams} = new URL(jscSafeUrl.toNormalUrl(options.sourceUrl));
+  if (options.platform != null) {
+    searchParams.set('platform', options.platform);
+  }
   searchParams.set('modulesOnly', 'true');
   searchParams.set('runModule', 'false');
+  if (isVirtualModulePath(dependency.absolutePath)) {
+    searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
+  }
 
-  const bundlePath = path.relative(options.serverRoot, dependency.absolutePath);
+  const bundlePath = path.relative(
+    options.serverRoot,
+    getModuleSourcePath(dependency.absolutePath),
+  );
   return (
     '/' +
-    normalizePathSeparatorsToPosix(
-      path.join(
-        // TODO: This is not the proper Metro URL encoding of a file path
-        path.dirname(bundlePath),
-        // Strip the file extension
-        path.basename(bundlePath, path.extname(bundlePath)),
-      ),
-    ) +
+    // TODO: This is not the proper Metro URL encoding of a file path
+    // Keep the file extension: the server strips only the `.bundle` suffix, so
+    // the chunk resolves to this exact file and not to a sibling found through
+    // `sourceExts` (e.g. `index.js` instead of `index.cjs`).
+    normalizePathSeparatorsToPosix(bundlePath) +
     '.bundle?' +
     searchParams.toString()
   );
