@@ -18,14 +18,28 @@ import {Logger} from 'metro-core';
 
 export default class HttpGetStore<T> extends HttpStore<T> {
   #warned: boolean;
+  #maxInFlightReads: number;
+  #inFlightReads: number = 0;
 
   constructor(options: HttpOptions) {
     super(options);
 
     this.#warned = false;
+    // Reads use `getOptions` when the two-endpoint form is given, but accept
+    // the option alongside it too: it is a read-side option, so a caller that
+    // sets it next to `getOptions` means it, and silently ignoring it would
+    // leave the cap off.
+    this.#maxInFlightReads =
+      options.getOptions?.maxInFlightReads ??
+      options.maxInFlightReads ??
+      Number.POSITIVE_INFINITY;
   }
 
   async get(key: Buffer): Promise<?T> {
+    if (this.#inFlightReads >= this.#maxInFlightReads) {
+      return null;
+    }
+    this.#inFlightReads++;
     try {
       return await super.get(key);
     } catch (err) {
@@ -39,6 +53,8 @@ export default class HttpGetStore<T> extends HttpStore<T> {
       this.#warn(err);
 
       return null;
+    } finally {
+      this.#inFlightReads--;
     }
   }
 

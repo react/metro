@@ -183,6 +183,7 @@ type MetalConfigT = {
   projectRoot: string,
   stickyWorkers: boolean,
   transformerPath: string,
+  unstable_hedgeCacheReadsAfterMs: ?number,
   reporter: Reporter,
   resetCache: boolean,
   watchFolders: ReadonlyArray<string>,

@@ -62,6 +62,7 @@ export default function baseJSBundle(
     getAppendScripts(entryPoint, [...preModules, ...modules], {
       asyncRequireModulePath: options.asyncRequireModulePath,
       createModuleId: options.createModuleId,
+      excludeSource: options.excludeSource,
       getRunModuleStatement: options.getRunModuleStatement,
       globalPrefix: options.globalPrefix,
       inlineSourceMap: options.inlineSourceMap,

@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-// flowlint-next-line untyped-import:off
+// $FlowFixMe[untyped-import]
 import util from 'source-map/lib/util';
 
 // Extracted from source-map@0.5.6's SourceMapConsumer

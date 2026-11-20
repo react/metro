@@ -107,7 +107,7 @@ describe('Minification:', () => {
     terser.minify.mockResolvedValue({
       code: '',
       decoded_map: decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
+      // $FlowFixMe[unsafe-getters-setters]
       get map() {
         encodeCount++;
         return JSON.stringify(map);
