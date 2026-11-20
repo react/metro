@@ -593,7 +593,7 @@ test("uses the minifier's decoded map, if it has one, without reading `map`", as
     .mockImplementationOnce(() => ({
       code: 'minified(code);',
       decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
+      // $FlowFixMe[unsafe-getters-setters]
       get map() {
         throw new Error('Expected the decoded map to be used');
       },

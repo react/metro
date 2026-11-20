@@ -52,7 +52,7 @@ export default class AbstractConsumer implements IConsumer {
     }
   }
 
-  // flowlint-next-line unsafe-getters-setters:off
+  // $FlowFixMe[unsafe-getters-setters]
   get file(): ?string {
     return this._sourceMap.file;
   }
