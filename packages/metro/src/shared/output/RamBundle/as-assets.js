@@ -67,15 +67,9 @@ export default function saveAsAssets(
   if (sourcemapOutput) {
     const sourceMap = buildSourcemapWithMetadata({
       fixWrapperOffset: true,
-      lazyModules: lazyModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      lazyModules: lazyModules.concat<ModuleTransportLike>(),
       moduleGroups: null,
-      startupModules: startupModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      startupModules: startupModules.concat<ModuleTransportLike>(),
     });
     if (sourcemapSourcesRoot != null) {
       relativizeSourceMapInline(sourceMap, sourcemapSourcesRoot);
