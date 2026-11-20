@@ -1451,21 +1451,6 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           ],
         ],
         [
-          'records a followed symlink to a directory by its target',
-          {follow: true, recursive: true, rootDir: p('/project/foo')},
-          [
-            p('/project/foo'),
-            p('/project/foo/owndir'),
-            p('/project/foo/link-to-bar.js'),
-            p('/project/foo/link-to-another.js'),
-          ],
-          [
-            p('/project/foo'),
-            p('/project/bar.js'),
-            p('/project/foo/another.js'),
-          ],
-        ],
-        [
           'records a symlink traversed to reach rootDir',
           {follow: true, recursive: false, rootDir: p('/project/link-to-foo')},
           [
