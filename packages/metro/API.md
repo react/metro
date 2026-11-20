@@ -295,6 +295,7 @@ export type SerializerOptions = Readonly<{
   createModuleId: (absolutePath: string) => number;
   dependencyMapReservedName?: null | undefined | string;
   dev: boolean;
+  excludeSource?: null | undefined | boolean;
   getRunModuleStatement: (moduleId: number | string, globalPrefix: string) => string;
   globalPrefix: string;
   includeAsyncPaths: boolean;
