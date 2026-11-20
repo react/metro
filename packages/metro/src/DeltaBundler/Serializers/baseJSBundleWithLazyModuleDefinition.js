@@ -19,11 +19,6 @@ import {appendLazyModuleSwitch} from './helpers/lazyModuleSwitch';
 import processModules from './helpers/processModules';
 import {BundleBuilder, fromRawMappings} from 'metro-source-map';
 
-type Options = Readonly<{
-  ...SerializerOptions,
-  excludeSource?: boolean,
-}>;
-
 /**
  * Serializes a bundle in which the graph's modules are placed inside a single
  * segment definer -- `__registerSegment(0, function (moduleId) { switch (...) })`
@@ -50,7 +45,7 @@ export default function baseJSBundleWithLazyModuleDefinition(
   entryPoint: string,
   preModules: ReadonlyArray<Module<>>,
   graph: ReadOnlyGraph<>,
-  options: Options,
+  options: SerializerOptions,
 ): {code: string, map: string} {
   // Assign ids up front so ordering and dependency-map ids are stable, matching
   // `baseJSBundle`.
@@ -132,6 +127,7 @@ export default function baseJSBundleWithLazyModuleDefinition(
     getAppendScripts(entryPoint, [...preModules, ...modules], {
       asyncRequireModulePath: options.asyncRequireModulePath,
       createModuleId: options.createModuleId,
+      excludeSource: options.excludeSource,
       getRunModuleStatement: options.getRunModuleStatement,
       globalPrefix: options.globalPrefix,
       inlineSourceMap: options.inlineSourceMap,
