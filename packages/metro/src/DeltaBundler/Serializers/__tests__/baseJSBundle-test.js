@@ -474,6 +474,54 @@ test('applies processModuleFilter to the inline source map', () => {
   ]);
 });
 
+test.each([
+  [undefined, ['foo-source', 'bar-source']],
+  [false, ['foo-source', 'bar-source']],
+  [true, [undefined, undefined]],
+])(
+  'inline source map respects excludeSource: %s',
+  (excludeSource, expectedSourcesContent) => {
+    const bundle = baseJSBundle(
+      '/root/foo',
+      [],
+      {
+        dependencies: new Map([
+          ['/root/foo', fooModule],
+          ['/root/bar', barModule],
+        ]),
+        entryPoints: new Set(['/root/foo']),
+        transformOptions,
+      },
+      {
+        asyncRequireModulePath: '',
+        createModuleId: createModuleIdFactory(),
+        dev: true,
+        excludeSource,
+        getRunModuleStatement,
+        globalPrefix: '',
+        includeAsyncPaths: false,
+        inlineSourceMap: true,
+        modulesOnly: false,
+        processModuleFilter: () => true,
+        projectRoot: '/root',
+        reservedString: '_$$_METRO_',
+        runBeforeMainModule: [],
+        runModule: true,
+        serverRoot: '/root',
+        shouldAddToIgnoreList: () => false,
+        sourceMapUrl: null,
+        sourceUrl: null,
+        getSourceUrl: null,
+      },
+    );
+    const base64 = bundle.post.slice(bundle.post.lastIndexOf('base64') + 7);
+    const map = JSON.parse(Buffer.from(base64, 'base64').toString());
+    expect(
+      map.sections.map(section => section.map.sourcesContent?.[0]),
+    ).toEqual(expectedSourcesContent);
+  },
+);
+
 test('emits x_google_ignoreList based on shouldAddToIgnoreList', () => {
   const bundle = baseJSBundle(
     '/root/foo',
