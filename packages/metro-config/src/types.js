@@ -10,19 +10,20 @@
  */
 
 import type {HandleFunction, Server} from 'connect';
-import type {CacheStore, MetroCache} from 'metro-cache';
-import type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
-import type {CustomResolver} from 'metro-resolver';
-import type {JsTransformerConfig} from 'metro-transform-worker';
 import type {
+  CacheManagerFactory,
+  CustomResolver,
   DeltaResult,
+  InputFileMapPlugin,
+  JsTransformerConfig,
+  MetroServer,
   Module,
   ReadOnlyGraph,
+  Reporter,
   SerializerOptions,
   TransformResult,
-} from 'metro/private/DeltaBundler/types';
-import type {Reporter} from 'metro/private/lib/reporting';
-import type MetroServer from 'metro/private/Server';
+} from 'metro';
+import type {CacheStore, MetroCache} from 'metro-cache';
 import type {IntermediateStackFrame} from 'metro/private/Server/symbolicate';
 
 export type ExtraTransformOptions = Readonly<{
