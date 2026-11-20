@@ -47,8 +47,9 @@ jobs:
             const VERDICT_LABELS = ['Auto review: Good', 'Auto review: Nits', 'Auto review: Discuss', 'Auto review: Change'];
             const {owner, repo} = context.repo;
             const issue_number = context.payload.pull_request.number;
-            const present = new Set(context.payload.pull_request.labels.map(l => l.name));
-            for (const name of VERDICT_LABELS.filter(l => present.has(l))) {
+            // Not filtered by the event's labels: a review of the old head can
+            // add one after the push, before this job runs.
+            for (const name of VERDICT_LABELS) {
               try {
                 await github.rest.issues.removeLabel({owner, repo, issue_number, name});
                 core.notice(`#${issue_number}: removed ${name} after a push`);
