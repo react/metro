@@ -221,6 +221,23 @@ export type ReleasedModules<T = MixedOutput> = Readonly<{
   heldOutputs: ReadonlySet<ReadonlyArray<T>>,
 }>;
 
+/**
+ * What `createModuleId` is told about the graph a module belongs to, besides
+ * the module's path.
+ */
+export type ModuleIdContext = Readonly<{
+  transformOptions: Readonly<TransformInputOptions>,
+}>;
+
+/**
+ * Maps a module's path to its ID. Metro passes `context` wherever the module's
+ * graph is known.
+ */
+export type CreateModuleIdFn = (
+  path: string,
+  context?: ModuleIdContext,
+) => number;
+
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: (absolutePath: string) => number,

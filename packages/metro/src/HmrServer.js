@@ -8,6 +8,7 @@
  * @format
  */
 
+import type {CreateModuleIdFn} from './DeltaBundler/types';
 import type {
   RevisionId,
   default as IncrementalBundler,
@@ -73,13 +74,13 @@ function send(
 export default class HmrServer<TClient extends Client> {
   _config: ConfigT;
   _bundler: IncrementalBundler;
-  _createModuleId: (path: string) => number;
+  _createModuleId: CreateModuleIdFn;
   _clientGroups: Map<RevisionId, ClientGroup>;
   _rootUrlMap: RootUrlMap;
 
   constructor(
     bundler: IncrementalBundler,
-    createModuleId: (path: string) => number,
+    createModuleId: CreateModuleIdFn,
     config: ConfigT,
   ) {
     this._config = config;
@@ -382,9 +383,13 @@ export default class HmrServer<TClient extends Client> {
 
       logger?.point('serialize_start');
 
+      const moduleIdContext = {
+        transformOptions: revision.graph.transformOptions,
+      };
       const hmrUpdate = hmrJSBundle(delta, revision.graph, {
         clientUrl: new URL(group.clientUrl),
-        createModuleId: this._createModuleId,
+        createModuleId: (path: string) =>
+          this._createModuleId(path, moduleIdContext),
         includeAsyncPaths: group.graphOptions.lazy,
         projectRoot: this._config.projectRoot,
         serverRoot: this._rootUrlMap.serverRootDir,

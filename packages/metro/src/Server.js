@@ -13,6 +13,7 @@ import type {AssetData} from './Assets';
 import type {ExplodedSourceMap} from './DeltaBundler/Serializers/getExplodedSourceMap';
 import type {RamBundleInfo} from './DeltaBundler/Serializers/getRamBundleInfo';
 import type {
+  CreateModuleIdFn,
   MixedOutput,
   Module,
   ReadOnlyDependencies,
@@ -149,7 +150,7 @@ type FetchTiming = {
 export default class Server {
   _bundler: IncrementalBundler;
   _config: ConfigT;
-  _createModuleId: (path: string) => number;
+  _createModuleId: CreateModuleIdFn;
   _isEnded: boolean;
   _logger: typeof Logger;
   _nextBundleBuildNumber: number;
@@ -214,8 +215,14 @@ export default class Server {
     return this._bundler;
   }
 
-  getCreateModuleId(): (path: string) => number {
+  getCreateModuleId(): CreateModuleIdFn {
     return this._createModuleId;
+  }
+
+  // Binds `createModuleId` to the graph that every module it's given is in.
+  _createModuleIdForGraph(graph: ReadOnlyGraph<>): (path: string) => number {
+    const context = {transformOptions: graph.transformOptions};
+    return (path: string) => this._createModuleId(path, context);
   }
 
   async _serializeGraph({
@@ -247,7 +254,7 @@ export default class Server {
         },
       ),
       processModuleFilter: this._config.serializer.processModuleFilter,
-      createModuleId: this._createModuleId,
+      createModuleId: this._createModuleIdForGraph(graph),
       getRunModuleStatement: this._config.serializer.getRunModuleStatement,
       globalPrefix: this._config.transformer.globalPrefix,
       dev: transformOptions.dev,
@@ -395,7 +402,7 @@ export default class Server {
         },
       ),
       processModuleFilter: this._config.serializer.processModuleFilter,
-      createModuleId: this._createModuleId,
+      createModuleId: this._createModuleIdForGraph(graph),
       dev: transformOptions.dev,
       excludeSource: serializerOptions.excludeSource,
       getRunModuleStatement: this._config.serializer.getRunModuleStatement,
@@ -1144,7 +1151,7 @@ export default class Server {
             },
           ),
           processModuleFilter: this._config.serializer.processModuleFilter,
-          createModuleId: this._createModuleId,
+          createModuleId: this._createModuleIdForGraph(revision.graph),
           getRunModuleStatement: this._config.serializer.getRunModuleStatement,
           globalPrefix: this._config.transformer.globalPrefix,
           includeAsyncPaths: graphOptions.lazy,
@@ -1243,15 +1250,16 @@ export default class Server {
   // This function ensures that modules in source maps are sorted in the same
   // order as in a plain JS bundle.
   _getSortedModules(graph: ReadOnlyGraph<>): ReadonlyArray<Module<>> {
+    const createModuleId = this._createModuleIdForGraph(graph);
     const modules = [...graph.dependencies.values()];
     // Assign IDs to modules in a consistent order
     for (const module of modules) {
-      this._createModuleId(module.path);
+      createModuleId(module.path);
     }
     // Sort by IDs
     return modules.sort(
       (a: Module<MixedOutput>, b: Module<MixedOutput>) =>
-        this._createModuleId(a.path) - this._createModuleId(b.path),
+        createModuleId(a.path) - createModuleId(b.path),
     );
   }
 

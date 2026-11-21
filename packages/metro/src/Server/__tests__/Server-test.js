@@ -13,6 +13,7 @@ import type {Graph} from '../../DeltaBundler/Graph';
 import type {
   Dependency,
   Module,
+  ModuleIdContext,
   Options,
   ReadOnlyGraph,
   TransformResultDependency,
@@ -1656,6 +1657,83 @@ describe('processRequest', () => {
         expect(errorSpy).not.toBeCalled();
       },
     );
+  });
+
+  describe('createModuleId context', () => {
+    let contexts: Array<?ModuleIdContext>;
+
+    beforeEach(() => {
+      contexts = [];
+      server = new Server(
+        mergeConfig(config, {
+          serializer: {
+            createModuleIdFactory: () => {
+              const ids = new Map<string, number>();
+              return (path: string, context?: ModuleIdContext) => {
+                contexts.push(context);
+                let id = ids.get(path);
+                if (id == null) {
+                  id = ids.size;
+                  ids.set(path, id);
+                }
+                return id;
+              };
+            },
+          },
+        } as InputConfigT),
+      );
+    });
+
+    const expectGraphContext = () => {
+      expect(contexts.length).toBeGreaterThan(0);
+      for (const context of contexts) {
+        expect(context?.transformOptions).toEqual(
+          expect.objectContaining({
+            platform: 'ios',
+            customTransformOptions: {env: 'test'},
+          }),
+        );
+      }
+    };
+
+    test.each([
+      ['bundle', 'mybundle.bundle?platform=ios&transform.env=test'],
+      ['source map', 'mybundle.map?platform=ios&transform.env=test'],
+    ])("is the graph's transform options for a %s request", async (_, url) => {
+      await makeRequest(url);
+      expectGraphContext();
+    });
+
+    test("is the graph's transform options for symbolication", async () => {
+      fs.mkdirSync(p('/root'));
+      fs.writeFileSync(p('/root/mybundle.js'), 'mock data');
+      fs.writeFileSync(p('/root/foo.js'), 'mock data');
+
+      await makeRequest('/symbolicate', {
+        headers: {'content-type': 'application/json'},
+        data: JSON.stringify({
+          stack: [
+            {
+              file: 'http://localhost:8081/mybundle.bundle?platform=ios&transform.env=test',
+              lineNumber: 2,
+              column: 18,
+              methodName: 'clientSideMethodName',
+            },
+          ],
+        }),
+      });
+      expectGraphContext();
+    });
+
+    test("is the graph's transform options for build()", async () => {
+      await server.build({
+        ...Server.DEFAULT_BUNDLE_OPTIONS,
+        customTransformOptions: {env: 'test'},
+        entryFile: 'mybundle.js',
+        platform: 'ios',
+      });
+      expectGraphContext();
+    });
   });
 
   describe('asset URL roots', () => {

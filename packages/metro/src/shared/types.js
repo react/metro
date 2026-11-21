@@ -10,6 +10,7 @@
  */
 
 import type {
+  CreateModuleIdFn,
   Options as DeltaBundlerOptions,
   TransformInputOptions,
 } from '../DeltaBundler/types';
@@ -61,7 +62,7 @@ export type BundleOptions = {
   readonly shallow: boolean,
   sourceMapUrl: ?string,
   sourceUrl: ?string,
-  createModuleIdFactory?: () => (path: string) => number,
+  createModuleIdFactory?: () => CreateModuleIdFn,
   readonly unstable_transformProfile: TransformProfile,
   readonly sourcePaths: SourcePathsMode,
 };
@@ -151,7 +152,7 @@ export type RequestOptions = Readonly<
     dev?: boolean,
     minify: boolean,
     platform: string,
-    createModuleIdFactory?: () => (path: string) => number,
+    createModuleIdFactory?: () => CreateModuleIdFn,
     onProgress?: (transformedFileCount: number, totalFileCount: number) => void,
     customResolverOptions?: CustomResolverOptions,
     customTransformOptions?: CustomTransformOptions,
