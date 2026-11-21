@@ -16,6 +16,7 @@ import typeof {
   screen as Screen,
 } from '@testing-library/react/pure';
 import typeof * as ReactModule from 'react';
+// $FlowFixMe[untyped-type-import]
 import typeof ReactRefreshRuntime from 'react-refresh/runtime';
 
 import {transformSync} from '@babel/core';
