@@ -21,9 +21,9 @@ type ActionStartLogEntry = {
 };
 
 export class AmbiguousModuleResolutionError extends Error {
-  constructor(fromModulePath: string, hasteError: DuplicateHasteCandidatesError);
+  constructor(fromModulePath: string, hasteError: HasteCandidatesError);
   fromModulePath: string;
-  hasteError: DuplicateHasteCandidatesError;
+  hasteError: HasteCandidatesError;
 }
 
 function createActionEndEntry(logEntry: ActionStartLogEntry, error?: null | undefined | Error): LogEntry;
@@ -46,7 +46,6 @@ type LogEntry = {
   start_timestamp?: [number, number] | undefined;
   outdated_modules?: number | undefined;
   bundle_size?: number | undefined;
-  bundle_options?: BundleOptions | undefined;
   bundle_hash?: string | undefined;
   build_id?: string | undefined;
   error_message?: string | undefined;
@@ -58,7 +57,7 @@ declare namespace Logger {
 }
 export {Logger};
 
-function on(event: string, handler: (logEntry: LogEntry) => void): void;
+function on<T extends LogEntry = LogEntry>(event: string, handler: (logEntry: T) => void): void;
 
 export class PackageResolutionError extends Error {
   constructor(opts: {readonly originModulePath: string; readonly packageError: InvalidPackageError; readonly targetModuleName: string});

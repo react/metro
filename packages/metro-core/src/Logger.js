@@ -9,8 +9,6 @@
  * @oncall react_native
  */
 
-import type {BundleOptions} from 'metro/private/shared/types';
-
 import EventEmitter from 'node:events';
 import os from 'node:os';
 
@@ -44,7 +42,6 @@ export type LogEntry = {
   start_timestamp?: [number, number],
   outdated_modules?: number,
   bundle_size?: number,
-  bundle_options?: BundleOptions,
   bundle_hash?: string,
   build_id?: string,
   error_message?: string,
@@ -55,7 +52,10 @@ export type LogEntry = {
 const log_session = `${os.hostname()}-${Date.now()}`;
 const eventEmitter = new EventEmitter();
 
-function on(event: string, handler: (logEntry: LogEntry) => void): void {
+function on<T extends LogEntry = LogEntry>(
+  event: string,
+  handler: (logEntry: T) => void,
+): void {
   eventEmitter.on(event, handler);
 }
 

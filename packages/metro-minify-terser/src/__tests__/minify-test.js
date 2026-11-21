@@ -11,10 +11,11 @@
 
 'use strict';
 
-import type {BasicSourceMap} from 'metro-source-map';
 import type {MinifierOptions} from 'metro-transform-worker';
 
 const minify = require('..');
+
+type BasicSourceMap = NonNullable<MinifierOptions['map']>;
 
 jest.mock('terser', () => ({
   minify: jest.fn(code => {
