@@ -37,6 +37,7 @@ import type {Result} from '../Graph';
 import type {
   BundlerResolution,
   Dependency,
+  ExternalInput,
   MixedOutput,
   Module,
   Options,
@@ -230,6 +231,7 @@ function deferred(
     getSource: () => Buffer,
     output: ReadonlyArray<MixedOutput>,
     unstable_transformResultKey?: ?string,
+    unstable_externalInputs?: ReadonlyArray<ExternalInput>,
   }>,
 ) {
   let resolve;

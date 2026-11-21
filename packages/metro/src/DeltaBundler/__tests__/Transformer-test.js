@@ -296,6 +296,105 @@ describe('Transformer', function () {
     transform.mockReset();
   });
 
+  describe('a transform whose output depends on an input outside its key', () => {
+    let transform;
+    let transformCount;
+
+    beforeEach(() => {
+      transformCount = 0;
+      transform = require('../WorkerFarm').default.prototype.transform;
+      transform.mockClear();
+    });
+
+    afterEach(() => {
+      transform.mockReset();
+    });
+
+    const createTransformer = ({set}) =>
+      new Transformer(
+        {
+          ...commonOptions,
+          // A store that declines every result, as a store skipping results
+          // that depend on unkeyed inputs does.
+          cacheStores: [{get: jest.fn(() => null), set}],
+          transformer: {
+            ...commonOptions.transformer,
+            unstable_shareTransformResults: true,
+          },
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+
+    test('gets its earlier shared result when it relies on a store declining it', async () => {
+      transform.mockImplementation(async () => ({
+        sha1: '0123456789012345678901234567890123456789',
+        result: {
+          dependencies: [],
+          output: [{type: 'js/module', data: {count: ++transformCount}}],
+        },
+      }));
+      const transformerInstance = createTransformer({set: jest.fn()});
+
+      const first = await transformerInstance.transformFile('./foo.css', {});
+      const second = await transformerInstance.transformFile('./foo.css', {});
+
+      expect(transform).toHaveBeenCalledTimes(1);
+      expect(second.output).toBe(first.output);
+    });
+
+    test('runs again when it declares the input, and is neither stored nor shared', async () => {
+      const unstable_externalInputs = [
+        {type: 'file', filePath: '/root/tailwind.config.js'},
+      ];
+      transform.mockImplementation(async () => ({
+        sha1: '0123456789012345678901234567890123456789',
+        result: {
+          dependencies: [],
+          output: [{type: 'js/module', data: {count: ++transformCount}}],
+          unstable_externalInputs,
+        },
+      }));
+      const set = jest.fn(() => Promise.resolve());
+      const transformerInstance = createTransformer({set});
+
+      const first = await transformerInstance.transformFile('./foo.css', {});
+      const second = await transformerInstance.transformFile('./foo.css', {});
+
+      expect(transform).toHaveBeenCalledTimes(2);
+      expect(set).not.toHaveBeenCalled();
+      expect(first.output[0].data).toEqual({count: 1});
+      expect(second.output[0].data).toEqual({count: 2});
+      expect(second.unstable_externalInputs).toEqual(unstable_externalInputs);
+      // Graphs tell a re-transformed module from an unchanged one by its key.
+      expect(second.unstable_transformResultKey).not.toBe(
+        first.unstable_transformResultKey,
+      );
+    });
+
+    test('shares one transform between concurrent requests', async () => {
+      transform.mockImplementation(async () => ({
+        sha1: '0123456789012345678901234567890123456789',
+        result: {
+          dependencies: [],
+          output: [{type: 'js/module', data: {count: ++transformCount}}],
+          unstable_externalInputs: [
+            {type: 'directory', dirPath: '/root/src', recursive: true},
+          ],
+        },
+      }));
+      const transformerInstance = createTransformer({set: jest.fn()});
+
+      const [first, second] = await Promise.all([
+        transformerInstance.transformFile('./foo.css', {}),
+        transformerInstance.transformFile('./foo.css', {}),
+      ]);
+
+      expect(transform).toHaveBeenCalledTimes(1);
+      expect(second.output).toBe(first.output);
+    });
+  });
+
   test('with transformer.unstable_shareTransformResults, keys a result by the SHA-1 the worker transformed', async () => {
     const set = jest.fn();
     const transformerInstance = new Transformer(

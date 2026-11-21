@@ -13,6 +13,8 @@
 const Metro = require('../../..');
 const IncrementalBundler = require('../../IncrementalBundler').default;
 const MetroConfig = require('metro-config');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 jest.setTimeout(60 * 1000);
@@ -31,6 +33,7 @@ const resolverOptions = {dev: true};
 // Returns a new copy on each read, as a deserializing store does.
 class CopyingMemoryStore {
   reads = 0;
+  writes = 0;
   #map = new Map();
   get(key) {
     const value = this.#map.get(key.toString('hex'));
@@ -40,6 +43,7 @@ class CopyingMemoryStore {
     return value == null ? null : structuredClone(value);
   }
   set(key, value) {
+    this.writes++;
     this.#map.set(key.toString('hex'), structuredClone(value));
   }
 }
@@ -47,6 +51,8 @@ class CopyingMemoryStore {
 async function createBundler({
   unstable_shareTransformResults = true,
   resolver = {},
+  transformer = {},
+  transformerPath,
 }) {
   const store = new CopyingMemoryStore();
   const baseConfig = await Metro.loadConfig({
@@ -55,7 +61,8 @@ async function createBundler({
   const config = MetroConfig.mergeConfig(baseConfig, {
     cacheStores: [store],
     resolver,
-    transformer: {unstable_shareTransformResults},
+    transformer: {unstable_shareTransformResults, ...transformer},
+    ...(transformerPath != null ? {transformerPath} : null),
   });
   return {bundler: new IncrementalBundler(config, {watch: false}), store};
 }
@@ -176,5 +183,58 @@ export default n => increment() + n;`,
     await bundler.endGraph(second.graphId);
   } finally {
     await bundler.end();
+  }
+});
+
+test('re-transforms a result with an external input in every graph when the input changes', async () => {
+  const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'metro-external-'));
+  const inputPath = path.join(inputDir, 'input.txt');
+  fs.writeFileSync(inputPath, 'one');
+  const {bundler, store} = await createBundler({
+    transformer: {unstable_testExternalInputPath: inputPath},
+    transformerPath: require.resolve('../externalInputTransformer'),
+  });
+  try {
+    const {test, bar} = await buildGraphs(bundler);
+    const barCode = revision =>
+      revision.graph.dependencies.get(barPath)?.output[0].data.code;
+    expect(barCode(test)).toMatch('/* external: one */');
+    expect(barCode(bar)).toMatch('/* external: one */');
+    // Each graph transformed Bar.js itself, and neither stored the result.
+    expect(test.graph.dependencies.get(barPath)?.output).not.toBe(
+      bar.graph.dependencies.get(barPath)?.output,
+    );
+    const writesBefore = store.writes;
+
+    fs.writeFileSync(inputPath, 'two');
+    bundler
+      .getBundler()
+      .getWatcher()
+      .emit('change', {
+        changes: {
+          addedFiles: [],
+          modifiedFiles: [
+            ['input.txt', {modifiedTime: Date.now(), isSymlink: false}],
+          ],
+          removedFiles: [],
+          addedDirectories: [],
+          removedDirectories: [],
+        },
+        rootDir: inputDir,
+        logger: null,
+      });
+
+    for (const revision of [test, bar]) {
+      const {revision: next, delta} = await bundler.updateGraph(
+        revision,
+        false,
+      );
+      expect([...delta.modified.keys()]).toEqual([barPath]);
+      expect(barCode(next)).toMatch('/* external: two */');
+    }
+    expect(store.writes).toBe(writesBefore);
+  } finally {
+    await bundler.end();
+    fs.rmSync(inputDir, {recursive: true, force: true});
   }
 });
