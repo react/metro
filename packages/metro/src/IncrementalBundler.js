@@ -103,6 +103,45 @@ export default class IncrementalBundler {
     return this._revisionsByGraphId.get(graphId);
   }
 
+  /**
+   * The ID of the graph that `initializeGraph` builds for these options, and
+   * under which `getRevisionByGraphId` finds its latest revision.
+   */
+  getGraphId(
+    entryFile: string,
+    transformOptions: TransformInputOptions,
+    resolverOptions: ResolverInputOptions,
+    graphOptions: Readonly<{shallow: boolean, lazy: boolean, ...}>,
+  ): GraphId {
+    return getGraphId(entryFile, transformOptions, {
+      resolverOptions,
+      shallow: graphOptions.shallow,
+      lazy: graphOptions.lazy,
+      unstable_allowRequireContext:
+        this._config.transformer.unstable_allowRequireContext,
+    });
+  }
+
+  /**
+   * The latest revision of the graph that `initializeGraph` builds for these
+   * options, or null if there is none.
+   */
+  getRevisionFor(
+    entryFile: string,
+    transformOptions: TransformInputOptions,
+    resolverOptions: ResolverInputOptions,
+    graphOptions: Readonly<{shallow: boolean, lazy: boolean, ...}>,
+  ): ?Promise<GraphRevision> {
+    return this.getRevisionByGraphId(
+      this.getGraphId(
+        entryFile,
+        transformOptions,
+        resolverOptions,
+        graphOptions,
+      ),
+    );
+  }
+
   async buildGraphForEntries(
     entryFiles: ReadonlyArray<string>,
     transformOptions: TransformInputOptions,
@@ -247,13 +286,12 @@ export default class IncrementalBundler {
     revision: GraphRevision,
     ...
   }> {
-    const graphId = getGraphId(entryFile, transformOptions, {
+    const graphId = this.getGraphId(
+      entryFile,
+      transformOptions,
       resolverOptions,
-      shallow: otherOptions.shallow,
-      lazy: otherOptions.lazy,
-      unstable_allowRequireContext:
-        this._config.transformer.unstable_allowRequireContext,
-    });
+      otherOptions,
+    );
     const revisionId = createRevisionId();
     const revisionPromise = (async () => {
       const {graph, prepend} = await this.buildGraph(
