@@ -104,7 +104,14 @@ export default class HttpStore<T> {
   }
 
   #createEndpointConfig(options: EndpointOptions): Endpoint {
-    const agentConfig: http$agentOptions & HttpsProxyAgentOptions = {
+    const agentConfig: {
+      ...HttpsProxyAgentOptions,
+      key?: EndpointOptions['key'],
+      cert?: EndpointOptions['cert'],
+      ca?: EndpointOptions['ca'],
+      socketPath?: string,
+      ...
+    } = {
       family: options.family,
       keepAlive: true,
       keepAliveMsecs: options.timeout || 5000,
@@ -113,22 +120,18 @@ export default class HttpStore<T> {
     };
 
     if (options.key != null) {
-      // $FlowFixMe[incompatible-use] `key` is missing in the Flow definition
       agentConfig.key = options.key;
     }
 
     if (options.cert != null) {
-      // $FlowFixMe[incompatible-use] `cert` is missing in the Flow definition
       agentConfig.cert = options.cert;
     }
 
     if (options.ca != null) {
-      // $FlowFixMe[incompatible-use] `ca` is missing in the Flow definition
       agentConfig.ca = options.ca;
     }
 
     if (options.socketPath != null) {
-      // $FlowFixMe[incompatible-use] `socketPath` is missing in the Flow definition
       agentConfig.socketPath = options.socketPath;
     }
 

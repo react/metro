@@ -20,18 +20,17 @@ import {AmbiguousModuleResolutionError} from 'metro-core';
 import fs from 'node:fs';
 import serializeError from 'serialize-error';
 
-export type CustomError = Error &
-  interface {
-    readonly type?: string,
-    filename?: string,
-    lineNumber?: number,
-    errors?: Array<{
-      description: string,
-      filename: string,
-      lineNumber: number,
-      ...
-    }>,
-  };
+export interface CustomError extends Error {
+  readonly type?: string;
+  filename?: string;
+  lineNumber?: number;
+  errors?: Array<{
+    description: string,
+    filename: string,
+    lineNumber: number,
+    ...
+  }>;
+}
 
 export default function formatBundlingError(
   error: CustomError,
