@@ -9,7 +9,10 @@
  * @oncall react_native
  */
 
-import type {TransformResultDependency} from '../DeltaBundler/types';
+import type {
+  ModuleIdContext,
+  TransformResultDependency,
+} from '../DeltaBundler/types';
 import type {Client} from '../HmrServer';
 import type {InputConfigT} from 'metro-config';
 import type {HmrClientMessage} from 'metro-runtime/src/modules/types';
@@ -47,6 +50,7 @@ describe('HmrServer', () => {
   let connect;
   let message;
   let id;
+  let config;
   const updateGraphMock = jest.fn();
 
   const hiModule = {
@@ -125,7 +129,7 @@ describe('HmrServer', () => {
       },
     });
 
-    const config = mergeConfig(getDefaultValues(p('/root')), {
+    config = mergeConfig(getDefaultValues(p('/root')), {
       serializer: {experimentalSerializerHook: () => {}},
       reporter: {update: jest.fn()},
       transformer: {
@@ -548,6 +552,38 @@ describe('HmrServer', () => {
         type: 'update-done',
       },
     ]);
+  });
+
+  test("passes the graph's transform options to createModuleId", async () => {
+    const createModuleId = jest.fn((path: string, context?: ModuleIdContext) =>
+      id(path),
+    );
+    hmrServer = new HmrServer<Client>(
+      incrementalBundlerMock,
+      createModuleId,
+      config,
+    );
+    await connect('/hot?bundleEntry=EntryPoint.js&platform=ios');
+
+    updateGraphMock.mockResolvedValue({
+      revision: {id: 'rev1', graph: mockedGraph},
+      delta: {
+        added: new Map(),
+        modified: new Map([[hiModule.path, hiModule]]),
+        deleted: new Set([p('/root/bye')]),
+      },
+    });
+    await emitChangeEvent();
+
+    expect(createModuleId.mock.calls.map(([path]) => path)).toEqual(
+      expect.arrayContaining([p('/root/hi'), p('/root/bye')]),
+    );
+    for (const call of createModuleId.mock.calls) {
+      expect(call).toEqual([
+        expect.any(String),
+        {transformOptions: mockedGraph.transformOptions},
+      ]);
+    }
   });
 
   test('should propagate extra params to module URLs', async () => {

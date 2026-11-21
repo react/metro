@@ -117,7 +117,7 @@ function prepareModule(
     // $FlowFixMe[invalid-computed-prop]
     inverseDependenciesById[options.createModuleId(path)] = inverseDependencies[
       path
-    ].map(options.createModuleId);
+    ].map(inverseDependency => options.createModuleId(inverseDependency));
   });
   return addParamsToDefineCall(code, inverseDependenciesById);
 }

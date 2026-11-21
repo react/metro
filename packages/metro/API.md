@@ -47,6 +47,8 @@ export const createConnectMiddleware: (config: ConfigT, options?: RunMetroOption
 
 export type createConnectMiddleware = typeof createConnectMiddleware;
 
+export type CreateModuleIdFn = (path: string, context?: ModuleIdContext) => number;
+
 export type DeltaResult<T = MixedOutput> = {
   readonly added: Map<string, Module<T>>;
   readonly modified: Map<string, Module<T>>;
@@ -136,7 +138,7 @@ export class MetroServer {
   end(): Promise<void>;
   getAssets(options: BundleOptions): Promise<ReadonlyArray<AssetData>>;
   getBundler(): IncrementalBundler;
-  getCreateModuleId(): (path: string) => number;
+  getCreateModuleId(): CreateModuleIdFn;
   getNewBuildNumber(): number;
   getOrderedDependencyPaths(options: {readonly dev: boolean; readonly entryFile: string; readonly minify: boolean; readonly platform: null | undefined | string}): Promise<Array<string>>;
   getPlatforms(): ReadonlyArray<string>;
@@ -155,6 +157,10 @@ export type Module<T = MixedOutput> = Readonly<{
   path: string;
   getSource: () => Buffer;
   unstable_transformResultKey?: null | undefined | string;
+}>;
+
+export type ModuleIdContext = Readonly<{
+  transformOptions: Readonly<TransformInputOptions>;
 }>;
 
 export type ReadOnlyDependencies<T = MixedOutput> = ReadonlyMap<string, Module<T>>;
