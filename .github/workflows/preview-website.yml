@@ -1,0 +1,79 @@
+# Builds the website, which checks links between doc pages.
+#
+# In forks, also publishes a preview of the website from each pushed branch, at
+# https://<owner>.github.io/<repo>/<branch>/, with characters in <branch> other
+# than letters, digits, `.`, `_`, `/` and `-` replaced by `-`. To enable it,
+# enable workflows in the Actions tab, then set Settings > Pages > Source to
+# "Deploy from a branch", `gh-pages`, `/ (root)`.
+name: Preview website
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "website/**"
+      - ".github/workflows/preview-website.yml"
+      - ".github/actions/website-install/**"
+  push:
+    branches-ignore:
+      - "gh-pages"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request' || github.repository != 'react/metro'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to push previews to gh-pages
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/website-install
+      - name: Set the preview directory
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          # Matches link-website-preview.yml.
+          preview_dir=$(printf '%s' "$REF_NAME" | LC_ALL=C.UTF-8 sed 's|[^A-Za-z0-9._/-]|-|g')
+          echo "PREVIEW_DIR=$preview_dir" >> "$GITHUB_ENV"
+          echo "WEBSITE_BASE_URL=/$REPO_NAME/$preview_dir/" >> "$GITHUB_ENV"
+      - run: yarn build
+        working-directory: website
+      - name: Push preview to gh-pages
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch --depth=1 origin gh-pages; then
+            git worktree add gh-pages FETCH_HEAD
+          else
+            git worktree add --orphan -b gh-pages gh-pages
+          fi
+          # Runs for other branches push to gh-pages concurrently. Each writes only
+          # its own directory, so a rejected push is redone on the new tip.
+          for attempt in 1 2 3 4 5; do
+            if [ "$attempt" -gt 1 ]; then
+              git -C gh-pages fetch --depth=1 origin gh-pages
+              git -C gh-pages reset -q --hard FETCH_HEAD
+            fi
+            rm -rf "gh-pages/$PREVIEW_DIR"
+            mkdir -p "gh-pages/$PREVIEW_DIR"
+            cp -R website/build/. "gh-pages/$PREVIEW_DIR"
+            echo "$GITHUB_SHA" > "gh-pages/$PREVIEW_DIR/.sha"
+            touch gh-pages/.nojekyll
+            git -C gh-pages add -A
+            # Unchanged when re-run for an already published commit.
+            git -C gh-pages diff --cached --quiet && break
+            git -C gh-pages commit -q -m "Preview $PREVIEW_DIR at $GITHUB_SHA"
+            git -C gh-pages push origin HEAD:gh-pages && break
+            [ "$attempt" -lt 5 ] || exit 1
+          done
+          echo "Preview: https://${GITHUB_REPOSITORY_OWNER}.github.io${WEBSITE_BASE_URL}" >> "$GITHUB_STEP_SUMMARY"
