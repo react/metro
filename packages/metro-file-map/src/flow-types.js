@@ -9,9 +9,44 @@
  * @oncall react_native
  */
 
-import type {PerfLogger, PerfLoggerFactory, RootPerfLogger} from 'metro-config';
+type PerfAnnotations = Partial<{
+  string: Readonly<{[key: string]: string}>,
+  int: Readonly<{[key: string]: number}>,
+  double: Readonly<{[key: string]: number}>,
+  bool: Readonly<{[key: string]: boolean}>,
+  string_array: Readonly<{[key: string]: ReadonlyArray<string>}>,
+  int_array: Readonly<{[key: string]: ReadonlyArray<number>}>,
+  double_array: Readonly<{[key: string]: ReadonlyArray<number>}>,
+  bool_array: Readonly<{[key: string]: ReadonlyArray<boolean>}>,
+}>;
 
-export type {PerfLoggerFactory, PerfLogger};
+type PerfLoggerPointOptions = Readonly<{
+  // The time this event point occurred, if it differs from the time the point was logged.
+  timestamp?: number,
+}>;
+
+export interface PerfLogger {
+  point(name: string, opts?: PerfLoggerPointOptions): void;
+  annotate(annotations: PerfAnnotations): void;
+  subSpan(label: string): PerfLogger;
+}
+
+export interface RootPerfLogger extends PerfLogger {
+  start(opts?: PerfLoggerPointOptions): void;
+  end(
+    status: 'SUCCESS' | 'FAIL' | 'CANCEL',
+    opts?: PerfLoggerPointOptions,
+  ): void;
+}
+
+export type PerfLoggerFactoryOptions = Readonly<{
+  key?: number,
+}>;
+
+export type PerfLoggerFactory = (
+  type: 'START_UP' | 'BUNDLING_REQUEST' | 'HMR',
+  opts?: PerfLoggerFactoryOptions,
+) => RootPerfLogger;
 
 // These inputs affect the internal data collected for a given filesystem
 // state, and changes may invalidate a cache.

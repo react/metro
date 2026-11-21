@@ -185,6 +185,10 @@ export type {
   RequireContextParams,
 } from './ModuleGraph/worker/collectDependencies';
 export type {ServerOptions} from './Server';
+export type {MetroLogEntry} from './shared/types';
+export type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
+export type {CustomResolver} from 'metro-resolver';
+export type {JsTransformerConfig} from 'metro-transform-worker';
 export type {MetroConfig, MetroServer};
 
 async function getConfig(config: InputConfigT): Promise<ConfigT> {

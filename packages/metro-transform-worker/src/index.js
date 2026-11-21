@@ -86,9 +86,9 @@ export type MinifierResult = {
    * @deprecated Return `decodedMap` instead. Only read if `decodedMap` is
    * missing, and will be removed.
    */
-  map?: BasicSourceMap,
+  readonly map?: BasicSourceMap,
   // The minified code's source map, decoded, composed with the input `map`.
-  decodedMap?: ?BabelDecodedMap,
+  readonly decodedMap?: ?BabelDecodedMap,
   ...
 };
 
