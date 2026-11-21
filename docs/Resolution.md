@@ -270,7 +270,7 @@ Given a candidate absolute module path, which need not exist, returns the closes
 
 Whether the dependency was declared with an ESM import (`import x from 'y'` or `await import('z')`) rather than `require()`, the criteria Node.js uses to assert the `"import"` rather than the `"require"` [condition](./PackageExports.md#how-metro-applies-importrequire-exports-conditions).
 
-When [`dependency`](#dependency-dependency) is provided, this always equals `dependency.data.isESMImport`. Unlike `dependency`, it may be used to decide the resolution.
+Unlike [`dependency`](#dependency-dependency), it may be used to decide the resolution.
 
 #### `resolveHasteModule: string => ?string`
 

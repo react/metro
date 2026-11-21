@@ -47,6 +47,8 @@ export const createConnectMiddleware: (config: ConfigT, options?: RunMetroOption
 
 export type createConnectMiddleware = typeof createConnectMiddleware;
 
+export type CustomResolver = (context: CustomResolutionContext, moduleName: string, platform: string | null) => Resolution;
+
 export type DeltaResult<T = MixedOutput> = {
   readonly added: Map<string, Module<T>>;
   readonly modified: Map<string, Module<T>>;
@@ -92,6 +94,32 @@ export class JsonReporter<TEvent extends {readonly [prop: string]: unknown}> {
   update(event: TEvent): void;
 }
 
+export type JsTransformerConfig = Readonly<{
+  assetPlugins: ReadonlyArray<string>;
+  assetRegistryPath: string;
+  asyncRequireModulePath: string;
+  babelTransformerPath: string;
+  dynamicDepsInPackages: DynamicRequiresBehavior;
+  enableBabelRCLookup: boolean;
+  enableBabelRuntime: boolean | string;
+  globalPrefix: string;
+  hermesParser: boolean;
+  minifierConfig: MinifierConfig;
+  minifierPath: string;
+  optimizationSizeLimit: number;
+  publicPath: string;
+  allowOptionalDependencies: AllowOptionalDependencies;
+  unstable_dependencyMapReservedName: null | undefined | string;
+  unstable_disableModuleWrapping: boolean;
+  unstable_disableNormalizePseudoGlobals: boolean;
+  unstable_compactOutput: boolean;
+  unstable_disableInputAstCloning?: boolean | undefined;
+  unstable_allowRequireContext: boolean;
+  unstable_memoizeInlineRequires?: boolean | undefined;
+  unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_supportsInlineModules?: boolean | undefined;
+}>;
+
 export function loadConfig(argvInput?: YargArguments, defaultConfigOverrides?: InputConfigT): Promise<ConfigT>;
 
 export function mergeConfig<T extends InputConfigT, R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT) | ((baseConfig: T) => Promise<InputConfigT>)>>(
@@ -100,6 +128,10 @@ export function mergeConfig<T extends InputConfigT, R extends ReadonlyArray<Inpu
 ): R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT)> ? T : Promise<T>;
 
 export type MetroConfig = InputConfigT;
+
+export type MetroLogEntry = Omit<LogEntry, 'bundle_options'> & {
+  bundle_options?: BundleOptions | undefined;
+};
 
 export class MetroServer {
   constructor(config: ConfigT, options?: ServerOptions);
