@@ -9,16 +9,19 @@
  * @oncall react_native
  */
 
-import type {DuplicateHasteCandidatesError} from 'metro-file-map';
+interface HasteCandidatesError {
+  readonly message: string;
+  readonly hasteName: string;
+  readonly platform: string | null;
+  readonly supportsNativePlatform: boolean;
+  readonly duplicatesSet: ReadonlyMap<string, number>;
+}
 
 export default class AmbiguousModuleResolutionError extends Error {
   fromModulePath: string;
-  hasteError: DuplicateHasteCandidatesError;
+  hasteError: HasteCandidatesError;
 
-  constructor(
-    fromModulePath: string,
-    hasteError: DuplicateHasteCandidatesError,
-  ) {
+  constructor(fromModulePath: string, hasteError: HasteCandidatesError) {
     super(
       `Ambiguous module resolution from \`${fromModulePath}\`: ` +
         hasteError.message,

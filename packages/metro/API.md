@@ -41,11 +41,15 @@ export type BundleDetails = {
   platform: null | undefined | string;
 };
 
+export type CacheManagerFactory = (options: CacheManagerFactoryOptions) => CacheManager;
+
 export type ContextMode = 'sync' | 'eager' | 'lazy' | 'lazy-once';
 
 export const createConnectMiddleware: (config: ConfigT, options?: RunMetroOptions) => Promise<MetroMiddleWare>;
 
 export type createConnectMiddleware = typeof createConnectMiddleware;
+
+export type CustomResolver = (context: CustomResolutionContext, moduleName: string, platform: string | null) => Resolution;
 
 export type DeltaResult<T = MixedOutput> = {
   readonly added: Map<string, Module<T>>;
@@ -87,10 +91,49 @@ export function getSchemeResolvers(): Readonly<{
   [scheme: string]: CustomResolver;
 }>;
 
+export type InputFileMapPlugin = FileMapPlugin<
+  /**
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   *       |                                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+   **/
+  any,
+  /**
+   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
+   *       |                                                       ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
+   **/
+  any
+>;
+
 export class JsonReporter<TEvent extends {readonly [prop: string]: unknown}> {
   constructor(stream: Writable);
   update(event: TEvent): void;
 }
+
+export type JsTransformerConfig = Readonly<{
+  assetPlugins: ReadonlyArray<string>;
+  assetRegistryPath: string;
+  asyncRequireModulePath: string;
+  babelTransformerPath: string;
+  dynamicDepsInPackages: DynamicRequiresBehavior;
+  enableBabelRCLookup: boolean;
+  enableBabelRuntime: boolean | string;
+  globalPrefix: string;
+  hermesParser: boolean;
+  minifierConfig: MinifierConfig;
+  minifierPath: string;
+  optimizationSizeLimit: number;
+  publicPath: string;
+  allowOptionalDependencies: AllowOptionalDependencies;
+  unstable_dependencyMapReservedName: null | undefined | string;
+  unstable_disableModuleWrapping: boolean;
+  unstable_disableNormalizePseudoGlobals: boolean;
+  unstable_compactOutput: boolean;
+  unstable_disableInputAstCloning?: boolean | undefined;
+  unstable_allowRequireContext: boolean;
+  unstable_memoizeInlineRequires?: boolean | undefined;
+  unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_supportsInlineModules?: boolean | undefined;
+}>;
 
 export function loadConfig(argvInput?: YargArguments, defaultConfigOverrides?: InputConfigT): Promise<ConfigT>;
 
@@ -100,6 +143,10 @@ export function mergeConfig<T extends InputConfigT, R extends ReadonlyArray<Inpu
 ): R extends ReadonlyArray<InputConfigT | ((baseConfig: T) => InputConfigT)> ? T : Promise<T>;
 
 export type MetroConfig = InputConfigT;
+
+export type MetroLogEntry = Omit<LogEntry, 'bundle_options'> & {
+  bundle_options?: BundleOptions | undefined;
+};
 
 export class MetroServer {
   constructor(config: ConfigT, options?: ServerOptions);

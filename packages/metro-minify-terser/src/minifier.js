@@ -9,10 +9,44 @@
  * @oncall react_native
  */
 
-import type {BabelDecodedMap, BasicSourceMap} from 'metro-source-map';
-import type {MinifierOptions, MinifierResult} from 'metro-transform-worker';
-
 import terser from 'terser';
+
+type SourceMap = {
+  readonly file?: string,
+  readonly mappings: string,
+  readonly names: Array<string>,
+  readonly sourceRoot?: string,
+  readonly sources: Array<string>,
+  readonly sourcesContent?: Array<?string>,
+  readonly version: number,
+};
+
+type MinifierOptions = Readonly<{
+  code: string,
+  map: ?Readonly<{...}>,
+  filename: string,
+  reserved: ReadonlyArray<string>,
+  config: Readonly<{[key: string]: unknown, ...}>,
+  ...
+}>;
+
+type DecodedMapSegment =
+  | [number]
+  | [number, number, number, number]
+  | [number, number, number, number, number];
+
+type DecodedMap = {
+  readonly mappings: ReadonlyArray<ReadonlyArray<DecodedMapSegment>>,
+  readonly names: ReadonlyArray<string>,
+  ...
+};
+
+type MinifierResult = {
+  code: string,
+  map?: SourceMap,
+  decodedMap?: ?DecodedMap,
+  ...
+};
 
 export default async function minifier(
   options: MinifierOptions,
@@ -24,13 +58,13 @@ export default async function minifier(
     return {code: result.code};
   }
 
-  let map: ?BasicSourceMap;
+  let map: ?SourceMap;
 
   return {
     code: result.code,
     // Terser encodes its map only when `result.map` is read.
     // $FlowFixMe[unsafe-getters-setters]
-    get map(): BasicSourceMap {
+    get map(): SourceMap {
       if (map == null) {
         map = {...JSON.parse(getMap()), sources: [options.filename]};
       }
@@ -43,7 +77,7 @@ export default async function minifier(
 async function minify({code, map, reserved, config}: MinifierOptions): Promise<{
   code: string,
   getMap: ?() => string,
-  decodedMap: ?BabelDecodedMap,
+  decodedMap: ?DecodedMap,
 }> {
   const options = {
     ...config,

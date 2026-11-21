@@ -14,6 +14,7 @@ import type {
   TransformInputOptions,
 } from '../DeltaBundler/types';
 import type {TransformProfile} from 'metro-babel-transformer';
+import type {LogEntry} from 'metro-core/private/Logger';
 import type {CustomResolverOptions} from 'metro-resolver';
 import type {
   MetroSourceMapSegmentTuple,
@@ -64,6 +65,12 @@ export type BundleOptions = {
   createModuleIdFactory?: () => (path: string) => number,
   readonly unstable_transformProfile: TransformProfile,
   readonly sourcePaths: SourcePathsMode,
+};
+
+export type MetroLogEntry = {
+  ...LogEntry,
+  bundle_options?: BundleOptions,
+  ...
 };
 
 export type BuildOptions = Readonly<{
