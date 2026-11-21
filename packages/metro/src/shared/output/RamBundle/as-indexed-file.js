@@ -60,14 +60,8 @@ export function save(
 
   if (sourcemapOutput) {
     const sourceMap = buildSourcemapWithMetadata({
-      startupModules: startupModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
-      lazyModules: lazyModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      startupModules: startupModules.concat<ModuleTransportLike>(),
+      lazyModules: lazyModules.concat<ModuleTransportLike>(),
       moduleGroups,
       fixWrapperOffset: true,
     });
