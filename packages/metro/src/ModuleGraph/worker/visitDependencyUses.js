@@ -8,6 +8,7 @@
  * @format
  */
 
+import type {TransformResultDependency as Dependency} from '../../DeltaBundler/types';
 import type {Binding, NodePath} from '@babel/traverse';
 import type {
   CallExpression,
@@ -16,7 +17,6 @@ import type {
   Node,
   Program,
 } from '@babel/types';
-import type {TransformResultDependency as Dependency} from 'metro/private/DeltaBundler/types';
 
 import traverseFile from './traverseFile';
 import invariant from 'invariant';
