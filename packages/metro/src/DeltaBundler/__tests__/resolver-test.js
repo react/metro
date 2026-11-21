@@ -125,7 +125,7 @@ function dep(name: string): TransformResultDependency {
         from: string,
         dependency: TransformResultDependency,
         resolverOptions?: ResolverInputOptions = {dev: true},
-        options: void | {assumeFlatNodeModules: boolean},
+        options?: {assumeFlatNodeModules: boolean},
       ) =>
         dependencyGraph.resolveDependency(
           from,
