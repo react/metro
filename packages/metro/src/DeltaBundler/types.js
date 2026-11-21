@@ -81,6 +81,25 @@ export type Dependency =
       data: TransformResultDependency,
     }>;
 
+/**
+ * A file-system input of a transform besides the module's own source and
+ * transform options, i.e. one outside the transform cache key: a file it read,
+ * or a directory whose listing or files it read. Paths are absolute.
+ *
+ * A directory input covers the files beneath it that `recursive` and `filter`
+ * select, matched as `require.context` matches files. Changes are learned from
+ * the file map, so an input outside the watched roots is never seen to change.
+ */
+export type ExternalInput =
+  | Readonly<{type: 'file', filePath: string}>
+  | Readonly<{
+      type: 'directory',
+      dirPath: string,
+      recursive: boolean,
+      /** Tested against each file's path relative to `dirPath`, prefixed with `./`. Defaults to every file. */
+      filter?: Readonly<{pattern: string, flags: string}>,
+    }>;
+
 export type Module<T = MixedOutput> = Readonly<{
   dependencies: Map<string, Dependency>,
   inverseDependencies: CountingSet<string>,
@@ -88,6 +107,7 @@ export type Module<T = MixedOutput> = Readonly<{
   path: string,
   getSource: () => Buffer,
   unstable_transformResultKey?: ?string,
+  unstable_externalInputs?: ReadonlyArray<ExternalInput>,
 }>;
 
 /**
@@ -118,6 +138,7 @@ export type ModuleData<T = MixedOutput> = Readonly<{
   output: ReadonlyArray<T>,
   getSource: () => Buffer,
   unstable_transformResultKey?: ?string,
+  unstable_externalInputs?: ReadonlyArray<ExternalInput>,
 }>;
 
 export type Dependencies<T = MixedOutput> = Map<string, Module<T>>;
@@ -148,6 +169,13 @@ export type TransformResult<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyArray<TransformResultDependency>,
   output: ReadonlyArray<T>,
   unstable_transformResultKey?: ?string,
+  /**
+   * Inputs the output depends on beyond the transform cache key. A result that
+   * declares any is neither written to cache stores nor shared between graphs,
+   * and its module is re-transformed when the file map reports a change to one
+   * of them.
+   */
+  unstable_externalInputs?: ReadonlyArray<ExternalInput>,
 }>;
 
 export type TransformResultWithSource<T = MixedOutput> = Readonly<{

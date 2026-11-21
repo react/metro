@@ -29,10 +29,12 @@
  *    nodes and entries in the importBundleNodes set.
  */
 
+import type {RequireContext} from '../lib/contextModule';
 import type {RequireContextParams} from '../ModuleGraph/worker/collectDependencies';
 import type {
   Dependencies,
   Dependency,
+  ExternalInput,
   GraphInputOptions,
   MixedOutput,
   Module,
@@ -154,6 +156,12 @@ export class Graph<T = MixedOutput> {
    * path.
    */
   #virtualSources: Map<string, VirtualSource> = new Map();
+
+  /**
+   * External inputs of the modules in the graph that declare any, keyed by
+   * module path. See `markModifiedExternalInputDependents`.
+   */
+  #externalInputs: Map<string, ReadonlyArray<IndexedExternalInput>> = new Map();
 
   constructor(options: GraphInputOptions) {
     this.entryPoints = options.entryPoints;
@@ -440,16 +448,16 @@ export class Graph<T = MixedOutput> {
     } = currentModule;
 
     const nextModule = {
-      ...(previousModule ?? {
-        inverseDependencies: new CountingSet(),
-        path,
-      }),
+      ...(previousModule == null
+        ? {inverseDependencies: new CountingSet<string>(), path}
+        : withoutExternalInputs(previousModule)),
       ...transformResult,
       dependencies: new Map(previousDependencies),
     };
 
     // Update the module information.
     this.dependencies.set(nextModule.path, nextModule);
+    this.#indexExternalInputs(nextModule);
 
     if (previousModule == null) {
       // If the module is not currently in the graph, it is either new or was
@@ -517,6 +525,7 @@ export class Graph<T = MixedOutput> {
       // We have not operated on nextModule, so restore previousModule
       // to aid diffing. Don't add this path to delta.touched.
       this.dependencies.set(previousModule.path, previousModule);
+      this.#indexExternalInputs(previousModule);
       return previousModule;
     }
 
@@ -676,6 +685,37 @@ export class Graph<T = MixedOutput> {
   }
 
   /**
+   * Adds to `modifiedPaths` the modules in the graph that declare `filePath`
+   * as an external input, directly or through a directory input.
+   */
+  markModifiedExternalInputDependents(
+    filePath: string,
+    modifiedPaths: Set<string>,
+  ): void {
+    for (const [modulePath, inputs] of this.#externalInputs) {
+      if (
+        !modifiedPaths.has(modulePath) &&
+        inputs.some(input =>
+          input.type === 'file'
+            ? input.filePath === filePath
+            : fileMatchesContext(filePath, input.context),
+        )
+      ) {
+        modifiedPaths.add(modulePath);
+      }
+    }
+  }
+
+  #indexExternalInputs(module: Module<T>): void {
+    const inputs = module.unstable_externalInputs;
+    if (inputs == null || inputs.length === 0) {
+      this.#externalInputs.delete(module.path);
+    } else {
+      this.#externalInputs.set(module.path, inputs.map(indexExternalInput));
+    }
+  }
+
+  /**
    * Gets the list of modules affected by the deletion of a given file. The
    * caller is expected to mark these modules as modified in the next call to
    * traverseDependencies. Note that the list may contain duplicates.
@@ -800,8 +840,13 @@ export class Graph<T = MixedOutput> {
   }
 
   _moduleSnapshot(module: Module<T>): ModuleData<T> {
-    const {dependencies, getSource, output, unstable_transformResultKey} =
-      module;
+    const {
+      dependencies,
+      getSource,
+      output,
+      unstable_externalInputs,
+      unstable_transformResultKey,
+    } = module;
 
     const virtualSources: Map<string, VirtualSource> = new Map();
     for (const [key, dependency] of dependencies) {
@@ -819,6 +864,7 @@ export class Graph<T = MixedOutput> {
       output,
       virtualSources,
       unstable_transformResultKey,
+      ...(unstable_externalInputs != null ? {unstable_externalInputs} : null),
     };
   }
 
@@ -869,6 +915,7 @@ export class Graph<T = MixedOutput> {
     this.#gc.possibleCycleRoots.delete(module.path);
     this.#gc.color.delete(module.path);
     this.#virtualSources.delete(module.path);
+    this.#externalInputs.delete(module.path);
   }
 
   // Mark a module as a possible cycle root
@@ -1000,6 +1047,38 @@ function contextParamsEqual(
       a.filter.flags === b.filter.flags &&
       a.mode === b.mode)
   );
+}
+
+type IndexedExternalInput =
+  | Readonly<{type: 'file', filePath: string}>
+  | Readonly<{type: 'directory', context: RequireContext}>;
+
+function indexExternalInput(input: ExternalInput): IndexedExternalInput {
+  if (input.type === 'file') {
+    return input;
+  }
+  return {
+    type: 'directory',
+    context: {
+      from: input.dirPath,
+      recursive: input.recursive,
+      filter:
+        input.filter != null
+          ? new RegExp(input.filter.pattern, input.filter.flags)
+          : /.*/,
+      mode: 'sync',
+    },
+  };
+}
+
+// A module's fields without the external inputs it declared, which a
+// re-transformed module replaces rather than inherits.
+function withoutExternalInputs<T>(module: Module<T>): Module<T> {
+  if (module.unstable_externalInputs == null) {
+    return module;
+  }
+  const {unstable_externalInputs: _, ...rest} = module;
+  return rest;
 }
 
 function transformOutputMayDiffer<T>(a: Module<T>, b: Module<T>): boolean {

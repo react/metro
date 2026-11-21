@@ -159,6 +159,27 @@ Absolute path of a transformer module (or a package name resolvable from `metro`
 
 To customize compilation, you usually want [`babelTransformerPath`](#babeltransformerpath) instead. For the transformer interface, see [`metro-transform-worker`](https://github.com/react/metro/blob/main/packages/metro-transform-worker/src/index.js).
 
+A transformer's output is cached by the module's path and contents, the transform options and the transformer configuration (see [Caching](./Caching.md)). If the output also depends on other files, such as a config file or the files a CSS framework scans for class names, the transformer can list them in its result as `unstable_externalInputs` <span class="label experimental">Experimental</span>:
+
+```js
+return {
+  dependencies,
+  output,
+  unstable_externalInputs: [
+    {type: 'file', filePath: '/abs/path/tailwind.config.js'},
+    // Files beneath `dirPath` whose `./`-prefixed relative path matches `filter`
+    {
+      type: 'directory',
+      dirPath: '/abs/path/src',
+      recursive: true,
+      filter: {pattern: '\\.tsx?$', flags: ''},
+    },
+  ],
+};
+```
+
+Metro then transforms the module again whenever the file watcher reports a change to one of those files, and doesn't write the result to cache stores or share it between graphs, since its cache key doesn't cover them. Paths are absolute, and only changes within [`watchFolders`](#watchfolders) are seen.
+
 #### `reporter`
 
 Type: `{update: (event: ReportableEvent) => void}`
@@ -696,7 +717,7 @@ Whether graphs with equal transform options share one in-memory copy of each mod
 
 A module's `output` and its dependencies' `data` are read-only, and with sharing on, every graph that uses a module holds the same objects. Code that reads modules, such as a [custom serializer](#customserializer), serializer plugins, or a wrapper around the bundler's `transformFile`, must not write to them: a write through one graph's module changes it in every other graph. Set this option to `false` if code you depend on writes to them.
 
-A shared result is reused whenever a module's transform cache key is unchanged, even where a cache store declines to store it. Also set this option to `false` if a transformer's output depends on inputs outside the cache key, and it relies on a store not storing its results so that the module is transformed again.
+A shared result is reused whenever a module's transform cache key is unchanged, even where a cache store declines to store it. A transformer whose output depends on inputs outside the cache key should declare them as [`unstable_externalInputs`](#transformerpath), which are never shared. If it instead relies on a store not storing its results so that the module is transformed again, set this option to `false`.
 
 #### `unstable_workerThreads` <div class="label experimental">Experimental</div>
 

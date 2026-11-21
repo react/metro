@@ -50,6 +50,10 @@ type Entry<T> = Readonly<{
  * keeps prepended scripts, which every graph's revision holds, shared between
  * graphs.
  *
+ * A result that declares external inputs (`unstable_externalInputs`) isn't
+ * kept, since its key doesn't cover everything it depends on. Concurrent
+ * requests for its key still share the one transform in flight.
+ *
  * Callers must treat `output` and `dependencies` as read-only, as their types
  * declare, since every graph holding a result sees a write to it.
  */
@@ -87,6 +91,9 @@ export default class SharedTransformResults<T> {
     const promise = compute().then(
       computed => {
         this.#inFlight.delete(keyString);
+        if (hasExternalInputs(computed.result)) {
+          return computed;
+        }
         const result = {
           dependencies: computed.result.dependencies,
           output: computed.result.output,
@@ -141,6 +148,10 @@ export default class SharedTransformResults<T> {
   countEntries(): number {
     return this.#settled.size;
   }
+}
+
+export function hasExternalInputs<T>(result: TransformResult<T>): boolean {
+  return (result.unstable_externalInputs?.length ?? 0) > 0;
 }
 
 // 'binary' (latin1) is a lossless one-character-per-byte encoding.

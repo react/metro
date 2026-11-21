@@ -23,7 +23,9 @@ import type {ConfigT} from 'metro-config';
 import {getAssetUrlPath} from '../Assets';
 import {normalizePathSeparatorsToPosix} from '../lib/pathUtils';
 import getTransformCacheKey from './getTransformCacheKey';
-import SharedTransformResults from './SharedTransformResults';
+import SharedTransformResults, {
+  hasExternalInputs,
+} from './SharedTransformResults';
 import WorkerFarm from './WorkerFarm';
 import debugModule from 'debug';
 import {Cache, stableHash} from 'metro-cache';
@@ -114,6 +116,8 @@ class TransformSlots {
     }
   }
 }
+
+let externalInputResultCount = 0;
 
 export default class Transformer {
   _config: ConfigT;
@@ -300,13 +304,17 @@ export default class Transformer {
         fullKey = Buffer.concat([partialKey, Buffer.from(data.sha1, 'hex')]);
       }
 
-      // Fire-and-forget cache set promise.
-      cache.set(fullKey, data.result).catch(error => {
-        this._config.reporter.update({
-          type: 'cache_write_error',
-          error,
+      // A result with external inputs depends on more than its key, so a
+      // later read of that key could be stale.
+      if (!hasExternalInputs(data.result)) {
+        // Fire-and-forget cache set promise.
+        cache.set(fullKey, data.result).catch(error => {
+          this._config.reporter.update({
+            type: 'cache_write_error',
+            error,
+          });
         });
-      });
+      }
 
       return {key: fullKey, result: data.result};
     };
@@ -321,7 +329,12 @@ export default class Transformer {
 
     return {
       ...result,
-      unstable_transformResultKey: key.toString(),
+      // The key doesn't identify the output of a result with external inputs,
+      // so each such result gets a key of its own, and `Graph` treats every
+      // re-transform of its module as a change.
+      unstable_transformResultKey: hasExternalInputs(result)
+        ? key.toString() + '#' + String(++externalInputResultCount)
+        : key.toString(),
       getSource: createGetSource(filePath, fileBuffer),
     };
   }

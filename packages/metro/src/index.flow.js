@@ -169,6 +169,7 @@ export type {
   CreateModuleIdFn,
   DeltaResult,
   Dependency,
+  ExternalInput,
   MixedOutput,
   Module,
   ModuleIdContext,

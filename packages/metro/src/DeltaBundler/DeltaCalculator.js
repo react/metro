@@ -326,6 +326,17 @@ export default class DeltaCalculator<T> extends EventEmitter {
       });
     }
 
+    // Modules whose transform declared a changed file as an external input are
+    // stale, whether or not the file is in the graph.
+    for (const files of [modifiedFiles, addedFiles, deletedFiles]) {
+      for (const filePath of files) {
+        this._graph.markModifiedExternalInputDependents(
+          filePath,
+          modifiedFiles,
+        );
+      }
+    }
+
     // We only want to process files that are in the bundle.
     const modifiedDependencies = Array.from(modifiedFiles).filter(
       (filePath: string) => this._graph.dependencies.has(filePath),

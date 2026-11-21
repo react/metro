@@ -85,6 +85,15 @@ export class DependencyGraph extends EventEmitter {
   ): BundlerResolution;
 }
 
+export type ExternalInput =
+  | Readonly<{type: 'file'; filePath: string}>
+  | Readonly<{
+      type: 'directory';
+      dirPath: string;
+      recursive: boolean;
+      filter?: Readonly<{pattern: string; flags: string}> | undefined;
+    }>;
+
 export function getSchemeResolvers(): Readonly<{
   [scheme: string]: CustomResolver;
 }>;
@@ -157,6 +166,7 @@ export type Module<T = MixedOutput> = Readonly<{
   path: string;
   getSource: () => Buffer;
   unstable_transformResultKey?: null | undefined | string;
+  unstable_externalInputs?: ReadonlyArray<ExternalInput> | undefined;
 }>;
 
 export type ModuleIdContext = Readonly<{
@@ -357,6 +367,7 @@ export type TransformResult<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyArray<TransformResultDependency>;
   output: ReadonlyArray<T>;
   unstable_transformResultKey?: null | undefined | string;
+  unstable_externalInputs?: ReadonlyArray<ExternalInput> | undefined;
 }>;
 
 export type TransformResultDependency = Readonly<{
