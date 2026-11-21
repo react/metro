@@ -27,7 +27,6 @@ import GraphNotFoundError from './IncrementalBundler/GraphNotFoundError';
 import RevisionNotFoundError from './IncrementalBundler/RevisionNotFoundError';
 import debounceAsyncQueue from './lib/debounceAsyncQueue';
 import formatBundlingError from './lib/formatBundlingError';
-import getGraphId from './lib/getGraphId';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import RootUrlMap from './lib/RootUrlMap';
 import splitBundleOptions from './lib/splitBundleOptions';
@@ -143,13 +142,12 @@ export default class HmrServer<TClient extends Client> {
         locs: [],
       },
     }).filePath;
-    const graphId = getGraphId(resolvedEntryFilePath, transformOptions, {
+    const graphId = this._bundler.getGraphId(
+      resolvedEntryFilePath,
+      transformOptions,
       resolverOptions,
-      shallow: graphOptions.shallow,
-      lazy: graphOptions.lazy,
-      unstable_allowRequireContext:
-        this._config.transformer.unstable_allowRequireContext,
-    });
+      graphOptions,
+    );
     const revPromise = this._bundler.getRevisionByGraphId(graphId);
     if (!revPromise) {
       send([sendFn], {

@@ -162,6 +162,18 @@ describe('HmrServer', () => {
       .spyOn(incrementalBundlerMock, 'getRevisionByGraphId')
       .mockImplementation(getRevisionByGraphIdMock);
     jest
+      .spyOn(incrementalBundlerMock, 'getGraphId')
+      .mockImplementation(
+        (entryFile, transformOptions, resolverOptions, graphOptions) =>
+          getGraphId(entryFile, transformOptions, {
+            resolverOptions,
+            shallow: graphOptions.shallow,
+            lazy: graphOptions.lazy,
+            unstable_allowRequireContext:
+              config.transformer.unstable_allowRequireContext,
+          }),
+      );
+    jest
       .spyOn(incrementalBundlerMock, 'updateGraph')
       .mockImplementation(updateGraphMock);
     jest

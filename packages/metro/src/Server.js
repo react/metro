@@ -56,7 +56,6 @@ import ResourceNotFoundError from './IncrementalBundler/ResourceNotFoundError';
 import {calculateBundleProgressRatio} from './lib/bundleProgressUtils';
 import bundleToString from './lib/bundleToString';
 import formatBundlingError from './lib/formatBundlingError';
-import getGraphId from './lib/getGraphId';
 import {
   VIRTUAL_MODULE_URL_PARAM,
   getModuleSourcePath,
@@ -843,13 +842,12 @@ export default class Server {
         res.end(JSON.stringify(formattedError));
         return;
       }
-      const graphId = getGraphId(resolvedEntryFilePath, transformOptions, {
-        unstable_allowRequireContext:
-          this._config.transformer.unstable_allowRequireContext,
+      const graphId = this._bundler.getGraphId(
+        resolvedEntryFilePath,
+        transformOptions,
         resolverOptions,
-        shallow: graphOptions.shallow,
-        lazy: graphOptions.lazy,
-      });
+        graphOptions,
+      );
 
       // For resources that support deletion, handle the DELETE method.
       if (deleteFn && req.method === 'DELETE') {
@@ -1612,15 +1610,13 @@ export default class Server {
       transformOptions,
     });
 
-    const graphId = getGraphId(resolvedEntryFilePath, transformOptions, {
-      unstable_allowRequireContext:
-        this._config.transformer.unstable_allowRequireContext,
-      resolverOptions,
-      shallow: graphOptions.shallow,
-      lazy: graphOptions.lazy,
-    });
     let revision;
-    const revPromise = this._bundler.getRevisionByGraphId(graphId);
+    const revPromise = this._bundler.getRevisionFor(
+      resolvedEntryFilePath,
+      transformOptions,
+      resolverOptions,
+      graphOptions,
+    );
     if (revPromise == null) {
       ({revision} = await this._bundler.initializeGraph(
         resolvedEntryFilePath,
