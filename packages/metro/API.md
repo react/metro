@@ -41,8 +41,6 @@ export type BundleDetails = {
   platform: null | undefined | string;
 };
 
-export type CacheManagerFactory = (options: CacheManagerFactoryOptions) => CacheManager;
-
 export type ContextMode = 'sync' | 'eager' | 'lazy' | 'lazy-once';
 
 export const createConnectMiddleware: (config: ConfigT, options?: RunMetroOptions) => Promise<MetroMiddleWare>;
@@ -90,19 +88,6 @@ export class DependencyGraph extends EventEmitter {
 export function getSchemeResolvers(): Readonly<{
   [scheme: string]: CustomResolver;
 }>;
-
-export type InputFileMapPlugin = FileMapPlugin<
-  /**
-   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
-   *       |                                                ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
-   **/
-  any,
-  /**
-   * >     | export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
-   *       |                                                       ^^^^^ Unsupported feature: Translating "empty type" is currently not supported.
-   **/
-  any
->;
 
 export class JsonReporter<TEvent extends {readonly [prop: string]: unknown}> {
   constructor(stream: Writable);

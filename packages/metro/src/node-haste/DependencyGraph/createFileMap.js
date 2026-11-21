@@ -18,6 +18,8 @@ import MetroFileMap, {
   HastePlugin,
 } from 'metro-file-map';
 
+export type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
+
 const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
   if (!Array.isArray(regexes)) {
     return regexes;

@@ -11,10 +11,8 @@
 
 import type {HandleFunction, Server} from 'connect';
 import type {
-  CacheManagerFactory,
   CustomResolver,
   DeltaResult,
-  InputFileMapPlugin,
   JsTransformerConfig,
   MetroServer,
   Module,
@@ -24,6 +22,10 @@ import type {
   TransformResult,
 } from 'metro';
 import type {CacheStore, MetroCache} from 'metro-cache';
+import type {
+  CacheManagerFactory,
+  InputFileMapPlugin,
+} from 'metro/private/node-haste/DependencyGraph/createFileMap';
 import type {IntermediateStackFrame} from 'metro/private/Server/symbolicate';
 
 export type ExtraTransformOptions = Readonly<{
