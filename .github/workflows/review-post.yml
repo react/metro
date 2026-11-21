@@ -28,13 +28,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: metro-review-post-${{ github.event.client_payload.pr || github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
+  # In its own concurrency group, so that a queued post run can't cancel it.
+  # A post run re-checks the head after adding a verdict, which covers a push
+  # that lands while it runs.
   clear-verdict:
     if: github.repository == 'react/metro' && github.event_name == 'pull_request_target'
+    concurrency:
+      group: metro-review-clear-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -60,6 +62,9 @@ jobs:
 
   post:
     if: github.repository == 'react/metro' && github.event_name == 'repository_dispatch'
+    concurrency:
+      group: metro-review-post-${{ github.event.client_payload.pr }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -180,6 +185,22 @@ jobs:
                 await github.rest.issues.removeLabel({owner, repo, issue_number: p.pr, name});
               } catch (e) {
                 if (e.status !== 404) throw e;
+              }
+            }
+            // A push since the head check above can't rely on clear-verdict,
+            // which may have run before this added the label, so undo it here.
+            const addedVerdicts = addLabels.filter(l => l !== 'Auto review: Skipped');
+            if (addedVerdicts.length) {
+              const {data: now} = await github.rest.pulls.get({owner, repo, pull_number: p.pr});
+              if (now.head.sha !== p.head_sha) {
+                for (const name of addedVerdicts) {
+                  try {
+                    await github.rest.issues.removeLabel({owner, repo, issue_number: p.pr, name});
+                  } catch (e) {
+                    if (e.status !== 404) throw e;
+                  }
+                }
+                core.notice(`#${p.pr} moved to ${now.head.sha.slice(0, 7)} while labeling; removed ${addedVerdicts.join(', ')}`);
               }
             }
             const labelNote = [addLabels.length ? `labels added: ${addLabels.join(', ')}` : null, removeLabels.length ? `labels removed: ${removeLabels.join(', ')}` : null].filter(Boolean).join('; ');
