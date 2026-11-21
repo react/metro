@@ -49,8 +49,8 @@ module.exports = {
       },
     },
     {
-      // Published sources resolve imports against the package's own
-      // dependencies.
+      // Published sources and their generated TypeScript definitions resolve
+      // type imports against the package's own dependencies.
       files: ['packages/*/src/**/*.js'],
       excludedFiles: [
         'packages/metro/src/integration_tests/**/*.js',
@@ -69,7 +69,7 @@ module.exports = {
       rules: {
         'import/no-extraneous-dependencies': [
           'error',
-          {devDependencies: false},
+          {devDependencies: false, includeTypes: true},
         ],
       },
     },
