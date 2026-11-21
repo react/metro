@@ -274,6 +274,7 @@ export default class Transformer {
       this._workerFarm.transform(
         projectRelativePath,
         transformerOptions,
+        // $FlowFixMe[incompatible-type] `void` is not `undefined` under experimental.ts_void
         content,
         assetUrlPath ?? undefined,
       );
