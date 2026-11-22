@@ -59,7 +59,7 @@ export type EventHelpers = {
   nextEvent: (afterFn: () => Promise<void>) => Promise<{
     eventType: string,
     path: string,
-    metadata?: ChangeEventMetadata,
+    metadata?: ChangeEventMetadata | void,
   }>,
   untilEvent: (
     afterFn: () => Promise<void>,
@@ -150,7 +150,7 @@ export const startWatching = async (
       Promise.all([
         new Promise<{
           eventType: string,
-          metadata?: ChangeEventMetadata,
+          metadata?: ChangeEventMetadata | void,
           path: string,
         }>((resolve, reject) => {
           const unsubscribe: () => void = watcherInstance.onFileEvent(
