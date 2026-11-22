@@ -150,6 +150,7 @@ export class ModuleResolver {
           dependency,
           dev: resolverOptions.dev,
           disableHierarchicalLookup,
+          environment: resolverOptions.environment,
           extraNodeModules,
           fileSystemLookup,
           getPackage,

@@ -87,18 +87,19 @@ test('exposes the Babel runtime module name and version to presets via the calle
   });
 });
 
-test('omits the Babel runtime from the caller when not provided', () => {
+test('omits the Babel runtime and environment from the caller when not provided', () => {
   let callerKeys;
   transform({
     filename: 'foo.js',
     src: 'console.log("foo");',
     plugins: [
       babel => {
-        callerKeys = ['babelRuntimeModuleName', 'enableBabelRuntime'].filter(
-          key =>
-            babel.caller(
-              caller => caller != null && Object.hasOwn(caller, key),
-            ),
+        callerKeys = [
+          'babelRuntimeModuleName',
+          'enableBabelRuntime',
+          'environment',
+        ].filter(key =>
+          babel.caller(caller => caller != null && Object.hasOwn(caller, key)),
         );
         return {visitor: {}};
       },
@@ -146,6 +147,38 @@ test.each([
         publicPath: 'test',
         projectRoot: PROJECT_ROOT,
         supportsInlineModules,
+      },
+    });
+    expect(callerValue).toBe(expected);
+  },
+);
+
+test.each([
+  ['react-server', 'react-server'],
+  [null, undefined],
+])(
+  'with environment: %s, exposes it on the caller: %s',
+  (environment, expected) => {
+    let callerValue;
+    transform({
+      filename: 'foo.js',
+      src: 'console.log("foo");',
+      plugins: [
+        babel => {
+          callerValue = babel.caller(caller => caller?.environment);
+          return {visitor: {}};
+        },
+      ],
+      options: {
+        dev: true,
+        enableBabelRuntime: false,
+        enableBabelRCLookup: false,
+        environment,
+        globalPrefix: '__metro__',
+        minify: false,
+        platform: null,
+        publicPath: 'test',
+        projectRoot: PROJECT_ROOT,
       },
     });
     expect(callerValue).toBe(expected);

@@ -38,6 +38,7 @@ export default function getGraphId(
         customResolverOptions: resolverOptions.customResolverOptions ?? {},
         customTransformOptions: options.customTransformOptions ?? null,
         dev: options.dev,
+        environment: options.environment ?? undefined,
         experimentalImportSupport: options.experimentalImportSupport || false,
         minify: options.minify,
         platform: options.platform != null ? options.platform : null,

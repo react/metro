@@ -224,6 +224,7 @@ export type RunBuildOptions = {
   entry: string;
   assets?: boolean | undefined;
   dev?: boolean | undefined;
+  environment?: string | undefined;
   out?: string | undefined;
   bundleOut?: string | undefined;
   sourceMapOut?: string | undefined;

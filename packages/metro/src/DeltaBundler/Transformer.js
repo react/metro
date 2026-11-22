@@ -193,6 +193,7 @@ export default class Transformer {
     const {
       customTransformOptions,
       dev,
+      environment,
       experimentalImportSupport,
       inlinePlatform,
       inlineRequires,
@@ -253,6 +254,9 @@ export default class Transformer {
       unstable_memoizeInlineRequires,
       unstable_nonMemoizedInlineRequires,
       unstable_transformProfile,
+      // Omitted when unset, keeping keys stable for builds without an
+      // environment.
+      ...(environment != null ? [environment] : []),
     ]);
 
     let sha1: string;

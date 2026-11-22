@@ -159,6 +159,12 @@ export type ResolutionContext = Readonly<{
   dev: boolean,
 
   /**
+   * The environment to bundle for, e.g. `'react-server'`. Absent for the
+   * default environment.
+   */
+  environment?: ?string,
+
+  /**
    * Get the parsed contents of the specified `package.json` file.
    */
   getPackage: (packageJsonPath: string) => ?PackageJson,

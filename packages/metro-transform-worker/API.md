@@ -52,6 +52,7 @@ export type JsTransformerConfig = Readonly<{
 export type JsTransformOptions = Readonly<{
   customTransformOptions?: CustomTransformOptions | undefined;
   dev: boolean;
+  environment?: null | undefined | string;
   experimentalImportSupport?: boolean | undefined;
   inlinePlatform: boolean;
   inlineRequires: boolean;

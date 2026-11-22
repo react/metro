@@ -132,6 +132,7 @@ export default function parseBundleOptionsFromBundleRequestUrl(
     dev: getBoolQueryParam(searchParams, 'dev', true),
     // Absolute and relative paths are converted to paths relative to root
     entryFile: filePathPosix,
+    environment: searchParams.get('environment') || undefined,
     excludeSource: getBoolQueryParam(searchParams, 'excludeSource', false),
     inlineSourceMap: getBoolQueryParam(searchParams, 'inlineSourceMap', false),
     lazy: getBoolQueryParam(searchParams, 'lazy', false),

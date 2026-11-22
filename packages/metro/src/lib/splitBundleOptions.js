@@ -17,15 +17,24 @@ import type {BundleOptions, SplitBundleOptions} from '../shared/types';
 export default function splitBundleOptions(
   options: BundleOptions,
 ): SplitBundleOptions {
+  // Unset, empty and 'client' all mean the default (client) environment.
+  const environment =
+    options.environment != null &&
+    options.environment !== '' &&
+    options.environment !== 'client'
+      ? options.environment
+      : undefined;
   return {
     entryFile: options.entryFile,
     resolverOptions: {
       customResolverOptions: options.customResolverOptions,
       dev: options.dev,
+      environment,
     },
     transformOptions: {
       customTransformOptions: options.customTransformOptions,
       dev: options.dev,
+      environment,
       minify: options.minify,
       platform: options.platform,
       type: 'module',
