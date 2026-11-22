@@ -1328,7 +1328,7 @@ const toPublicMetadata = (
 const mapIterable: <T, S>(
   it: Iterable<T>,
   fn: (item: T) => S,
-) => IteratorObject<S> = (it, fn) =>
+) => IteratorObject<S, void, void> = (it, fn) =>
   (function* mapped() {
     for (const item of it) {
       yield fn(item);
