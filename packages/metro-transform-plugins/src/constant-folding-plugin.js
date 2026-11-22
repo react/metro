@@ -153,6 +153,53 @@ export default function constantFoldingPlugin(context: {
         if (result.confident) {
           state.stripped = true;
 
+          // `var`s are hoisted out of the branch that is dropped. Keep a bare
+          // declaration for those still used outside it, so they read as
+          // `undefined` instead of throwing a ReferenceError.
+          const dropped: NodePath<> = result.value
+            ? // $FlowFixMe[incompatible-type]
+              path.get('alternate')
+            : // $FlowFixMe[incompatible-type]
+              path.get('consequent');
+          const hoisted = new Set<string>();
+          const outside = (p: NodePath<>) => !p.isDescendant(dropped);
+          const collect = (declaration: NodePath<>) => {
+            const {node} = declaration;
+            if (node?.type !== 'VariableDeclaration' || node.kind !== 'var') {
+              return;
+            }
+            for (const name of Object.keys(
+              declaration.getBindingIdentifiers(),
+            )) {
+              const binding = declaration.scope.getBinding(name);
+              // Declared elsewhere too (as a param or function, say).
+              if (binding?.kind !== 'var') {
+                continue;
+              }
+              const writes = [binding.path, ...binding.constantViolations];
+              if (
+                !writes.some(p => p.isVariableDeclarator() && outside(p)) &&
+                [...binding.referencePaths, ...writes].some(outside)
+              ) {
+                hoisted.add(name);
+              }
+            }
+          };
+          if (dropped.node != null) {
+            collect(dropped);
+            dropped.traverse({
+              Function(p: NodePath<>) {
+                p.skip();
+              },
+              VariableDeclaration: collect,
+            });
+          }
+          const scope =
+            path.scope.getFunctionParent() ?? path.scope.getProgramParent();
+          for (const name of hoisted) {
+            scope.push({id: t.identifier(name)});
+          }
+
           if (result.value || node.alternate) {
             const valueIsTruthy = Boolean(result.value);
             // $FlowFixMe[incompatible-type]

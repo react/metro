@@ -128,6 +128,64 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, '');
   });
 
+  test('keeps the declaration of a var in a removed branch that is used elsewhere', () => {
+    const code = `
+      if ('production' === 'development') {
+        var a = 1;
+        for (var i = 0; i < 3; i++) {}
+      }
+      if (true) {
+        f();
+      } else {
+        var b = 1, c = 2;
+      }
+      if (x) {
+        g();
+      } else if (false) {
+        var d;
+      }
+      export function h() {
+        if (false) {
+          var k = 1;
+        }
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    const expected = `
+      var a, i, b, c, d;
+      {
+        f();
+      }
+      if (x) {
+        g();
+      }
+      export function h() {
+        var k;
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('does not keep a var from a removed branch that is only used in a nested function there', () => {
+    const code = `
+      if (false) {
+        (function () {
+          var c;
+        });
+      }
+      use(c);
+    `;
+
+    compare([constantFoldingPlugin], code, 'use(c);');
+  });
+
   test('does not fold non-literal void expressions', () => {
     const code = `
       void obj.prop;
