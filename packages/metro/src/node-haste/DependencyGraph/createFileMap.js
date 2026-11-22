@@ -12,6 +12,7 @@
 import type {ConfigT} from 'metro-config';
 import type {HasteMap, InputFileMapPlugin} from 'metro-file-map';
 
+import PackageJsonPlugin from './PackageJsonPlugin';
 import MetroFileMap, {
   DependencyPlugin,
   DiskCacheManager,
@@ -64,6 +65,7 @@ export default function createFileMap(
   fileMap: MetroFileMap,
   hasteMap: ?HasteMap,
   dependencyPlugin: ?DependencyPlugin,
+  packageJsonPlugin: PackageJsonPlugin,
 } {
   const watch = options?.watch ?? !isCIEnv();
   const {enabled: autoSaveEnabled, ...autoSaveOpts} =
@@ -107,6 +109,9 @@ export default function createFileMap(
     plugins.push(hasteMap);
   }
 
+  const packageJsonPlugin = new PackageJsonPlugin();
+  plugins.push(packageJsonPlugin);
+
   const fileMap = new MetroFileMap({
     cacheManagerFactory:
       config?.unstable_fileMapCacheManagerFactory ??
@@ -139,5 +144,5 @@ export default function createFileMap(
     watch,
     watchmanDeferStates: config.watcher.watchman.deferStates,
   });
-  return {fileMap, hasteMap, dependencyPlugin};
+  return {fileMap, hasteMap, dependencyPlugin, packageJsonPlugin};
 }
