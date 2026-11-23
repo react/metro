@@ -158,7 +158,20 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
   let getFS: (files: FileData) => TreeFSType;
   let nodeCrawl;
 
+  // Early stats depend on the host platform (see `nodeCrawl`), so tests that
+  // depend on it set it, and the rest run as on Linux.
+  const platformDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    'platform',
+  );
+  const setPlatform = (value: string) =>
+    Object.defineProperty(process, 'platform', {...platformDescriptor, value});
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platformDescriptor);
+  });
+
   beforeEach(() => {
+    setPlatform('linux');
     jest.resetModules();
     mockPathModule = jest.requireActual<{}>('path')[platform];
     mockP = p;
@@ -404,6 +417,117 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
         'fruits/tomato.js': [expect.any(Number), 42, 0, null, 0],
       }),
     );
+    expect(fs.lstat).toHaveBeenCalledTimes(2);
+  });
+
+  test("on macOS, stats the files that were stat'd before during the walk, once each", async () => {
+    setPlatform('darwin');
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    const files = createMap({
+      'fruits/directory/strawberry.js': [32, 40, 1, 'abc', 0],
+      'fruits/tomato.js': [30, 40, 1, 'def', 0],
+    });
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+    });
+
+    // strawberry.js is unmodified (mtime 32), tomato.js is not (mtime 33).
+    expect(changedFiles).toEqual(
+      createMap({'fruits/tomato.js': [33, 42, 0, null, 0]}),
+    );
+    expect(fs.lstat).toHaveBeenCalledTimes(2);
+    expect(fs.lstat.mock.calls.map(([file]) => file).sort()).toEqual([
+      p('/project/fruits/directory/strawberry.js'),
+      p('/project/fruits/tomato.js'),
+    ]);
+    // The first is issued before the walk lists its last directory.
+    expect(fs.lstat.mock.invocationCallOrder[0]).toBeLessThan(
+      fs.readdir.mock.invocationCallOrder.at(-1),
+    );
+  });
+
+  test("on other platforms, stats the files that were stat'd before after the walk", async () => {
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    const files = createMap({
+      'fruits/directory/strawberry.js': [30, 40, 1, 'abc', 0],
+      'fruits/tomato.js': [30, 40, 1, 'def', 0],
+    });
+
+    await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+    });
+
+    expect(fs.lstat).toHaveBeenCalledTimes(2);
+    expect(fs.lstat.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fs.readdir.mock.invocationCallOrder.at(-1),
+    );
+  });
+
+  test.each([['darwin'], ['linux']])(
+    'on %s, reports a file whose stat fails as changed, without stats',
+    async hostPlatform => {
+      setPlatform(hostPlatform);
+      nodeCrawl = require('../node').default;
+      const fs = require('node:fs');
+      fs.lstat.mockImplementationOnce((file, callback) =>
+        setTimeout(() => callback({code: 'ENOENT'}), 0),
+      );
+
+      const files = createMap({'fruits/tomato.js': [30, 40, 1, 'abc', 0]});
+
+      const {changedFiles} = await nodeCrawl({
+        console: global.console,
+        previousState: {fileSystem: getFS(files)},
+        extensions: ['js'],
+        ignore: pearMatcher,
+        rootDir,
+        roots: [p('/project/fruits')],
+      });
+
+      expect(changedFiles).toEqual(
+        createMap({
+          'fruits/directory/strawberry.js': [null, null, 0, null, 0],
+          'fruits/tomato.js': [null, null, 0, null, 0],
+        }),
+      );
+    },
+  );
+
+  test("on macOS, a scoped recrawl stats files that were stat'd before only as it walks", async () => {
+    setPlatform('darwin');
+    nodeCrawl = require('../node').default;
+    const fs = require('node:fs');
+
+    const files = createMap({
+      'fruits/directory/strawberry.js': [30, 40, 1, 'abc', 0],
+      'fruits/tomato.js': [30, 40, 1, 'def', 0],
+    });
+
+    await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: getFS(files)},
+      extensions: ['js'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/fruits')],
+      subpath: p('fruits'),
+    });
+
     expect(fs.lstat).toHaveBeenCalledTimes(2);
   });
 

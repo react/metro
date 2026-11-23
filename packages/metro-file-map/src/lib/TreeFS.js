@@ -400,6 +400,17 @@ export default class TreeFS implements MutableFileSystem {
     };
   }
 
+  *getStatPaths(): IteratorObject<string> {
+    for (const {canonicalPath, metadata} of this.#metadataIterator(
+      this.#rootNode,
+      {includeNodeModules: true, includeSymlinks: false},
+    )) {
+      if (metadata[H.MTIME] != null) {
+        yield canonicalPath;
+      }
+    }
+  }
+
   getSha1(mixedPath: Path): ?string {
     const fileMetadata = this.#getFileData(mixedPath);
     return (fileMetadata && fileMetadata[H.SHA1]) ?? null;

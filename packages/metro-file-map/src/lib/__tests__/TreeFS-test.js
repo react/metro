@@ -614,6 +614,40 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     });
   });
 
+  describe('getStatPaths', () => {
+    test("yields the regular files that were stat'd, including outside rootDir and in node_modules", () => {
+      tfs.addOrModify(p('foo/not-stated.js'), [null, null, 0, null, 0, null]);
+
+      expect([...tfs.getStatPaths()].sort()).toEqual(
+        [
+          p('../outside/external.js'),
+          p('bar.js'),
+          p('foo/another.js'),
+          p('node_modules/pkg/a.js'),
+          p('node_modules/pkg/package.json'),
+        ].sort(),
+      );
+    });
+
+    test('includes every file getDifference can return in filesToStat', () => {
+      // Every regular file, crawled without a stat
+      const newFiles: FileData = new Map(
+        [
+          '../outside/external.js',
+          'bar.js',
+          'foo/another.js',
+          'node_modules/pkg/a.js',
+          'node_modules/pkg/package.json',
+        ].map(file => [p(file), [null, null, 0, null, 0, null]]),
+      );
+
+      const {filesToStat} = tfs.getDifference(newFiles);
+
+      expect(filesToStat.size).toBe(5);
+      expect(new Set(tfs.getStatPaths())).toEqual(new Set(filesToStat.keys()));
+    });
+  });
+
   describe('pathsOutsideRoots', () => {
     const build = (rootDir: string, files: ReadonlyArray<string>) =>
       new TreeFS({

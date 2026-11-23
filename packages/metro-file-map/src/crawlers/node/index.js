@@ -33,6 +33,7 @@ export type CrawlWatcher = Readonly<{
 async function find(
   options: CrawlerOptions,
   watchers: ?ReadonlyArray<?CrawlWatcher>,
+  onDirectoryRead: ?() => void,
 ): Promise<FileData> {
   const {
     console,
@@ -73,6 +74,7 @@ async function find(
       watcher?.onDirectory(directory);
       fs.readdir(directory, {withFileTypes: true}, (err, entries) => {
         activeCalls--;
+        onDirectoryRead?.();
         if (err) {
           console.warn(
             `Error "${err.code ?? err.message}" reading contents of "${directory}", skipping. Add this directory to your ignore list to exclude it.`,
@@ -124,8 +126,8 @@ async function find(
 
             if (!isSymbolicLink && !statRegularFiles) {
               // Not stat'd (see `FileMetadata`). Those that were stat'd before
-              // are stat'd once the difference is known, by
-              // `dropUnmodifiedFiles`.
+              // may be stat'd alongside the walk (see `nodeCrawl`), and are
+              // checked once the difference is known, by `dropUnmodifiedFiles`.
               result.set(childNormal, [null, null, 0, null, 0]);
               continue;
             }
@@ -183,28 +185,61 @@ export default async function nodeCrawl(
 
   perfLogger?.point('nodeCrawl_start');
 
-  const fileData = await find(options, watchers);
+  // On macOS, stat the files that were stat'd before, which
+  // `dropUnmodifiedFiles` is likely to need, during the walk, one per directory
+  // read. That's cheaper there than stating them after the walk, but not on
+  // Linux or Windows. A change made after a file's stat goes unnoticed either
+  // way, but an early stat opens that window sooner. A recrawl stats every file
+  // as it walks.
+  const earlyStats: Map<string, Promise<?fs.Stats>> = new Map();
+  let onDirectoryRead = null;
+  if (subpath == null && process.platform === 'darwin') {
+    const paths = previousState.fileSystem.getStatPaths();
+    const pathUtils = new RootPathUtils(options.rootDir);
+    onDirectoryRead = () => {
+      const next = paths.next();
+      if (next.done !== true) {
+        earlyStats.set(
+          next.value,
+          lstat(pathUtils.normalToAbsolute(next.value)),
+        );
+      }
+    };
+  }
+  const fileData = await find(options, watchers, onDirectoryRead);
 
   abortSignal?.throwIfAborted();
 
   const {changedFiles, removedFiles, filesToStat} =
     previousState.fileSystem.getDifference(fileData, {subpath});
-  await dropUnmodifiedFiles(options.rootDir, changedFiles, filesToStat);
+  await dropUnmodifiedFiles(
+    options.rootDir,
+    changedFiles,
+    filesToStat,
+    earlyStats,
+  );
 
   perfLogger?.point('nodeCrawl_end');
   return {changedFiles, removedFiles};
 }
 
+function lstat(filePath: string): Promise<?fs.Stats> {
+  return new Promise(resolve => {
+    fs.lstat(filePath, (err, stat) => resolve(err ? null : stat));
+  });
+}
+
 /**
  * Changed files crawled without a stat that were stat'd before may have data
- * derived from what they held then. Stat those, drop any whose mtime matches,
- * and record the stats of the rest.
+ * derived from what they held then. Stat those (from `earlyStats` where it has
+ * them), drop any whose mtime matches, and record the stats of the rest.
  */
 async function dropUnmodifiedFiles(
   rootDir: string,
   changedFiles: FileData,
   // Each with the mtime it had before
   filesToStat: ReadonlyMap<string, number>,
+  earlyStats: ReadonlyMap<string, Promise<?fs.Stats>>,
 ): Promise<void> {
   // None if the previous file map is empty, as on a cold start
   if (filesToStat.size === 0) {
@@ -217,22 +252,22 @@ async function dropUnmodifiedFiles(
     if (modifiedTime == null) {
       continue;
     }
+    const stat =
+      earlyStats.get(normalPath) ??
+      lstat(pathUtils.normalToAbsolute(normalPath));
     stats.push(
-      new Promise(resolve => {
-        fs.lstat(pathUtils.normalToAbsolute(normalPath), (err, stat) => {
-          if (!err && stat) {
-            const mtime = stat.mtime.getTime();
-            if (mtime === modifiedTime) {
-              changedFiles.delete(normalPath);
-            } else {
-              metadata[H.MTIME] = mtime;
-              metadata[H.SIZE] = stat.size;
-            }
-          }
-          // Otherwise deleted since it was crawled, which processing will
-          // discover.
-          resolve();
-        });
+      stat.then(result => {
+        if (result == null) {
+          // Missing or unreadable when stat'd, which processing will discover.
+          return;
+        }
+        const mtime = result.mtime.getTime();
+        if (mtime === modifiedTime) {
+          changedFiles.delete(normalPath);
+        } else {
+          metadata[H.MTIME] = mtime;
+          metadata[H.SIZE] = result.size;
+        }
       }),
     );
   }
