@@ -65,6 +65,7 @@ export type ResolutionContext = Readonly<{
   disableHierarchicalLookup: boolean;
   extraNodeModules: null | undefined | {[packageName: string]: string};
   dev: boolean;
+  environment?: null | undefined | string;
   getPackage: (packageJsonPath: string) => null | undefined | PackageJson;
   getPackageForModule: (absoluteModulePath: string) => null | undefined | PackageForModule;
   dependency?: TransformResultDependency | undefined;

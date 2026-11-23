@@ -134,6 +134,7 @@ export type {CustomTransformOptions} from 'metro-babel-transformer';
 export type JsTransformOptions = Readonly<{
   customTransformOptions?: CustomTransformOptions,
   dev: boolean,
+  environment?: ?string,
   experimentalImportSupport?: boolean,
   inlinePlatform: boolean,
   inlineRequires: boolean,

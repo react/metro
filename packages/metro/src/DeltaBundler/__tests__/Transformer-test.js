@@ -737,4 +737,44 @@ describe('Transformer', function () {
       expect(transform).toHaveBeenCalledTimes(2);
     });
   });
+
+  test('adds the environment to the cache key only when set', async () => {
+    const get = jest.fn();
+    const transformerInstance = new Transformer(
+      {
+        ...commonOptions,
+        cacheStores: [{get, set: jest.fn()}],
+        // Read the cache for every transform, including repeated keys.
+        transformer: {
+          ...commonOptions.transformer,
+          unstable_shareTransformResults: false,
+        },
+        watchFolders,
+      },
+      {getOrComputeSha1},
+    );
+    require('../WorkerFarm').default.prototype.transform.mockReturnValue({
+      sha1: '0123456789012345678901234567890123456789',
+      result: {},
+    });
+    for (const transformOptions of [
+      {},
+      {environment: null},
+      {environment: 'react-server'},
+    ]) {
+      await transformerInstance.transformFile(
+        path.join(projectRoot, 'foo.js'),
+        transformOptions,
+      );
+    }
+    // Each key is the partial key followed by the file's SHA-1.
+    const [unset, nullEnvironment, server] = get.mock.calls.map(([key]) =>
+      key.toString('hex').slice(0, 32),
+    );
+    // Pinned, so that existing transform caches stay valid for builds without
+    // an environment.
+    expect(unset).toBe('f1c5c1a8c7f20b582f90f6cc8088ba2e');
+    expect(nullEnvironment).toBe(unset);
+    expect(server).not.toBe(unset);
+  });
 });

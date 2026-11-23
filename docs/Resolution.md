@@ -230,6 +230,10 @@ The set of file extensions used to identify asset files. Defaults to [`resolver.
 
 `true` for a development bundle, `false` otherwise.
 
+#### `environment: ?string`
+
+The environment to bundle for (e.g. `'react-server'`), from the [`environment`](./GettingStarted.md#bundle) bundle option. Absent for the default environment.
+
 #### `fileSystemLookup: string => {exists: true, type: 'f'|'d', realPath: string} | {exists: false}`
 
 _Added in v0.81.0_
@@ -397,7 +401,7 @@ Metro caches and reuses resolver results, which matters mainly for [custom resol
 
 1. For given origin module paths _A_ and _B_ and target module name _M_, the resolution for _M_ may be reused if **all** of the following conditions hold:
    1. _A_ and _B_ are in the same directory.
-   2. The contents of [`dev`](#dev-boolean) and [`customResolverOptions`](#customresolveroptions-string-mixed) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
+   2. The contents of [`dev`](#dev-boolean), [`customResolverOptions`](#customresolveroptions-string-mixed) and [`environment`](#environment-string) are equivalent ( = serialize to JSON the same) in both calls to the resolver.
    3. The `platform` is the same in both calls.
    4. [`isESMImport`](#isesmimport-boolean) is the same in both calls.
 2. Any cache of resolutions must be invalidated if any file in the project has changed.

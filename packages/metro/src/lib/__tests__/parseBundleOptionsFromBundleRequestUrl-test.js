@@ -141,4 +141,24 @@ describe('parseBundleOptionsFromBundleRequestUrl', () => {
       ).toMatchObject({[optionName]: false});
     });
   });
+
+  describe('environment', () => {
+    test('is retrieved from the url', () => {
+      expect(
+        parseBundleOptionsFromBundleRequestUrl(
+          'http://localhost/my/bundle.bundle?environment=react-server',
+          new Set([]),
+        ),
+      ).toMatchObject({environment: 'react-server'});
+    });
+
+    test.each([
+      ['http://localhost/my/bundle.bundle'],
+      ['http://localhost/my/bundle.bundle?environment='],
+    ])('is unset when absent or empty: %s', url => {
+      expect(
+        parseBundleOptionsFromBundleRequestUrl(url, new Set([])).environment,
+      ).toBeUndefined();
+    });
+  });
 });

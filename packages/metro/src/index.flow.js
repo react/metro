@@ -113,6 +113,7 @@ export type RunBuildOptions = {
   entry: string,
   assets?: boolean,
   dev?: boolean,
+  environment?: string,
   out?: string,
   bundleOut?: string,
   sourceMapOut?: string,
@@ -440,6 +441,7 @@ export const runBuild = async (
     customTransformOptions = DEFAULTS.customTransformOptions,
     dev = false,
     entry,
+    environment,
     onBegin,
     onComplete,
     onProgress,
@@ -461,6 +463,7 @@ export const runBuild = async (
     const requestOptions = {
       dev,
       entryFile: entry,
+      environment,
       inlineSourceMap: sourceMap && !sourceMapUrl,
       minify,
       platform,

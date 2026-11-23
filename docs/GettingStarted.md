@@ -178,10 +178,11 @@ Metro can also serve a variant of an asset for a specific [platform](./Concepts.
 
 Any JS file in the [project root](./Concepts.md#project-root-and-watch-folders) can be the [entry point](./Concepts.md#entry-point) of a bundle, which includes the file and, recursively, everything it requires. To request a bundle, use the file's path relative to the project root (or [`server.unstable_serverRoot`](./Configuration.md#unstable_serverroot-experimental), if set), with `.js` changed to `.bundle`.
 
-Pass build options as query parameters. All are optional. Boolean ones take `true` or `false` and default to `false` unless noted. `dev`, `platform` and `minify` correspond to the bundle's settings of the same name.
+Pass build options as query parameters. All are optional. Boolean ones take `true` or `false` and default to `false` unless noted. `dev`, `platform`, `environment` and `minify` correspond to the bundle's settings of the same name.
 
 - `dev`: Build in development mode. Defaults to `true`.
 - `platform`: The [platform](./Concepts.md#platform) requesting the bundle (e.g. `ios`). Defaults to the platform suffix of the requested file name, if any (e.g. `ios` for `index.ios.bundle`).
+- `environment`: The environment to bundle for (e.g. `react-server`), passed to the transformer as `options.environment`, to Babel plugins as `caller.environment` by Metro's Babel transformer, and to the resolver as [`context.environment`](./Resolution.md#environment-string). Unset, empty or `client` for the default (client) environment.
 - `minify`: Minify the code.
 - `excludeSource`: Leave the source code out of the source map, e.g. `/index.map?platform=ios&dev=true&excludeSource=true` returns a source map without `sourcesContent`.
 - `inlineSourceMap`: Append the source map to the bundle as a base64 `data:` URL.
@@ -209,7 +210,7 @@ Required. Transforms a module's code. It receives an object with:
 
 - `filename`: The path of the file, relative to the project root.
 - `src`: The source code.
-- `options`: Options for this transformation, e.g. `dev`, `platform`, `minify`, `projectRoot`, `customTransformOptions` and `unstable_transformProfile`.
+- `options`: Options for this transformation, e.g. `dev`, `platform`, `minify`, `projectRoot`, `customTransformOptions`, `unstable_transformProfile` and `environment`.
 - `plugins`: Babel plugins that Metro wants applied to the code.
 
 It must return an object with an `ast` key containing the Babel AST of the transformed code, and optionally Babel `metadata`. Metro gets function names for stack traces from `metadata`, so apply the `plugins` it passes in and return the resulting `metadata` to keep them. For example, using Babel:

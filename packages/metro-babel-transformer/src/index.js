@@ -39,6 +39,7 @@ type BabelTransformerOptions = Readonly<{
   dev: boolean,
   enableBabelRCLookup?: boolean,
   enableBabelRuntime: boolean | string,
+  environment?: ?string,
   extendsBabelConfigPath?: string,
   experimentalImportSupport?: boolean,
   hermesParser?: boolean,
@@ -101,6 +102,11 @@ function transform(
     ? 'development'
     : process.env.BABEL_ENV || 'production';
 
+  // Omitted when unset, so builds without an environment get the same caller.
+  // Typed separately to avoid spreading a second union into the caller.
+  const environmentCaller: {environment?: string} =
+    options.environment != null ? {environment: options.environment} : {};
+
   try {
     const babelConfig: BabelTransformOptions = {
       ast: true,
@@ -122,6 +128,7 @@ function transform(
           : null),
         // Whether `metro:inline` specifiers will resolve.
         supportsInlineModules: options.supportsInlineModules,
+        ...environmentCaller,
       },
       // NOTE(EvanBacon): We split the parse/transform steps up to accommodate
       // Hermes parsing, but this defaults to cloning the AST which increases

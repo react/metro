@@ -91,6 +91,7 @@ Builds a single bundle for `entry`, like [`metro build`](./CLI.md#build-entry). 
 
 - `entry` (string): **Required.** The [entry point](./Concepts.md#entry-point) file to bundle.
 - `platform` (string): The [platform](./Concepts.md#platform) to bundle for (e.g. `'web'`, `'android'`, `'ios'`). Defaults to `'web'`.
+- `environment` (string): The environment to bundle for (e.g. `'react-server'`), equivalent to the bundle URL parameter [`environment`](./GettingStarted.md#bundle). Unset, empty or `'client'` for the default (client) environment.
 - `dev` (boolean): Build a development bundle, in which `__DEV__` is `true`. Otherwise, `__DEV__` and `process.env.NODE_ENV` are inlined as `false` and `'production'`. Defaults to `false`.
 - `minify` (boolean): Whether to minify the bundle. Defaults to `true`.
 - `out` (string): Path for the bundle (with `.js` added if missing) and source map (with `.map` extension). Override either path with `bundleOut` or `sourceMapOut`. For example, `out: 'dist/main'` or `out: 'dist/main.js'` with `sourceMap: true` writes `dist/main.js` and `dist/main.map`.

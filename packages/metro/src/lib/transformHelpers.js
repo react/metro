@@ -53,6 +53,7 @@ async function calcTransformerOptions(
   const baseOptions = {
     customTransformOptions: options.customTransformOptions,
     dev: options.dev,
+    environment: options.environment,
     inlinePlatform: true,
     inlineRequires: false,
     minify: options.minify,

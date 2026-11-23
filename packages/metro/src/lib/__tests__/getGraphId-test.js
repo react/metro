@@ -270,6 +270,7 @@ describe('getGraphId', () => {
           customTransformOptions: undefined,
           experimentalImportSupport: false,
           dev: true,
+          environment: null,
           minify: true,
           type: 'module',
           platform: null,
@@ -305,5 +306,26 @@ describe('getGraphId', () => {
         },
       ),
     );
+  });
+
+  test('adds no environment key when the environment is unset', () => {
+    expect(
+      getGraphId(
+        '/root/waddup',
+        {
+          dev: true,
+          minify: true,
+          type: 'module',
+          platform: 'web',
+          unstable_transformProfile: 'default',
+        },
+        {
+          shallow: false,
+          lazy: false,
+          unstable_allowRequireContext: false,
+          resolverOptions: {dev: true},
+        },
+      ),
+    ).not.toContain('environment');
   });
 });

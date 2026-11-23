@@ -50,6 +50,7 @@ export type BundleOptions = {
   customTransformOptions: CustomTransformOptions,
   dev: boolean,
   entryFile: string,
+  readonly environment?: ?string,
   readonly excludeSource: boolean,
   readonly inlineSourceMap: boolean,
   readonly lazy: boolean,
@@ -73,6 +74,7 @@ export type BuildOptions = Readonly<{
 export type ResolverInputOptions = Readonly<{
   customResolverOptions?: CustomResolverOptions,
   dev: boolean,
+  environment?: ?string,
 }>;
 
 export type SerializerOptions = {
@@ -155,6 +157,7 @@ export type RequestOptions = Readonly<
     onProgress?: (transformedFileCount: number, totalFileCount: number) => void,
     customResolverOptions?: CustomResolverOptions,
     customTransformOptions?: CustomTransformOptions,
+    environment?: string,
     unstable_transformProfile?: TransformProfile,
   }>,
 >;
