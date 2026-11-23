@@ -21,6 +21,7 @@ import nullthrows from 'nullthrows';
 type Options<T extends number | string> = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: (absolutePath: string) => T,
+  excludeSource?: ?boolean,
   getRunModuleStatement: (moduleId: T, globalPrefix: string) => string,
   globalPrefix: string,
   inlineSourceMap: ?boolean,
@@ -75,7 +76,7 @@ export default function getAppendScripts<T extends number | string>(
       ? getInlineSourceMappingURL(
           sourceMapString(modules, {
             processModuleFilter: options.processModuleFilter,
-            excludeSource: false,
+            excludeSource: options.excludeSource === true,
             shouldAddToIgnoreList: options.shouldAddToIgnoreList,
             getSourceUrl: options.getSourceUrl,
           }),

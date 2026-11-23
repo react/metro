@@ -682,6 +682,55 @@ describe('processRequest', () => {
     });
   });
 
+  test.each([
+    ['', ['code-require', 'code-mybundle', 'code-foo']],
+    ['&excludeSource=false', ['code-require', 'code-mybundle', 'code-foo']],
+    ['&excludeSource=true', [undefined, undefined, undefined]],
+  ])(
+    'inline source map respects `excludeSource` (query: %j)',
+    async (query, expectedSourcesContent) => {
+      const response = await makeRequest(
+        `mybundle.bundle?inlineSourceMap=true${query}`,
+      );
+      const code: string = response._getString();
+      const base64 = code.slice(
+        code.indexOf('base64,') + 7,
+        code.indexOf('\n', code.indexOf('base64,')),
+      );
+      const map = JSON.parse(Buffer.from(base64, 'base64').toString());
+
+      expect(
+        map.sections.map(section => section.map.sourcesContent?.[0]),
+      ).toEqual(expectedSourcesContent);
+    },
+  );
+
+  test.each([
+    ['mybundle.bundle', false],
+    ['mybundle.bundle?excludeSource=true', true],
+  ])(
+    'passes `excludeSource` to a custom serializer (request: %s)',
+    async (requestUrl, expectedExcludeSource) => {
+      const customSerializer = jest.fn(
+        async (..._args: ReadonlyArray<unknown>) => 'code',
+      );
+      server = new Server(
+        mergeConfig(config, {
+          serializer: {customSerializer},
+        } as InputConfigT),
+      );
+
+      await makeRequest(requestUrl);
+
+      expect(customSerializer).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Array),
+        expect.any(Object),
+        expect.objectContaining({excludeSource: expectedExcludeSource}),
+      );
+    },
+  );
+
   test('does not rebuild the graph when requesting the sourcemaps after having requested the same bundle', async () => {
     expect((await makeRequest('mybundle.bundle?platform=ios')).statusCode).toBe(
       200,
@@ -1133,6 +1182,34 @@ describe('processRequest', () => {
   });
 
   describe('build(options)', () => {
+    test.each([[false], [true]])(
+      'passes `excludeSource: %s` to a custom serializer',
+      async excludeSource => {
+        const customSerializer = jest.fn(
+          async (..._args: ReadonlyArray<unknown>) => 'code',
+        );
+        server = new Server(
+          mergeConfig(config, {
+            serializer: {customSerializer},
+          } as InputConfigT),
+        );
+
+        await server.build({
+          ...Server.DEFAULT_BUNDLE_OPTIONS,
+          entryFile: 'mybundle.js',
+          excludeSource,
+          platform: undefined,
+        });
+
+        expect(customSerializer).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Array),
+          expect.any(Object),
+          expect.objectContaining({excludeSource}),
+        );
+      },
+    );
+
     test('Calls the delta bundler with the correct args', async () => {
       await server.build({
         ...Server.DEFAULT_BUNDLE_OPTIONS,

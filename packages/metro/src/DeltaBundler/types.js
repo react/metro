@@ -237,6 +237,7 @@ export type SerializerOptions = Readonly<{
   createModuleId: (absolutePath: string) => number,
   dependencyMapReservedName?: ?string,
   dev: boolean,
+  excludeSource?: ?boolean,
   getRunModuleStatement: (
     moduleId: number | string,
     globalPrefix: string,
