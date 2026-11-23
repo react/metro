@@ -8,6 +8,7 @@ import type $$IMPORT_TYPEOF_1$$ from '@babel/traverse';
 import type * as $$IMPORT_TYPEOF_1$$_2 from '@babel/core';
 import type * as $$IMPORT_TYPEOF_2$$ from '@babel/types';
 import type {Node as Node_2} from '@babel/types';
+import type {NodePath} from '@babel/traverse';
 import type {PluginObj} from '@babel/core';
 import type {SourceLocation} from '@babel/types';
 import type {Statement} from '@babel/types';
