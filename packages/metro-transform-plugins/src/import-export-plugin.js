@@ -88,7 +88,7 @@ const exportAllTemplate = template.statements(`
   var REQUIRED = require(FILE);
 
   for (var KEY in REQUIRED) {
-    if (KEY === "default") continue;
+    if (KEY === "default" || KEY === "__esModule") continue;
     exports[KEY] = REQUIRED[KEY];
   }
 `);
