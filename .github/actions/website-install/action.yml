@@ -1,0 +1,15 @@
+name: Install Website Dependencies
+
+runs:
+  using: "composite"
+  steps:
+  - uses: actions/setup-node@v6
+    name: Setup Node With Yarn Cache
+    with:
+      node-version: lts/*
+      cache: yarn
+      cache-dependency-path: website/yarn.lock
+  - name: Install Dependencies
+    run: yarn --frozen-lockfile
+    working-directory: website
+    shell: bash

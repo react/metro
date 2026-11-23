@@ -20,35 +20,15 @@ jobs:
 
     if: github.repository == 'react/metro'
 
-    env:
-      working-directory: website
-      node-version: lts/*
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Use Node.js ${{ env.node-version }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.node-version }}
-
-      - name: Get yarn cache directory
-        id: yarn
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Restore yarn cache
-        uses: actions/cache@v6
-        with:
-          path: ${{ steps.yarn.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles(format('{0}{1}', github.workspace, '/website/yarn.lock')) }}
-
       - name: Install packages
-        working-directory: ${{ env.working-directory }}
-        run: yarn --frozen-lockfile
+        uses: ./.github/actions/website-install
 
       - name: Deploy to GitHub Pages
-        working-directory: ${{ env.working-directory }}
+        working-directory: website
         run: |
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git config --global user.name "${GITHUB_ACTOR}"

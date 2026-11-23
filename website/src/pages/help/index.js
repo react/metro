@@ -8,6 +8,7 @@
  * @oncall react_native
  */
 
+import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import * as React from 'react';
 
@@ -19,17 +20,18 @@ const supportLinks = [
     content: (
       <ul>
         <li>
-          Learn how to <a href="/docs/getting-started">get started</a> with
+          Learn how to <Link to="/docs/getting-started">get started</Link> with
           Metro.
         </li>
         <li>
-          <a href="/docs/troubleshooting">Troubleshoot</a> problems with Metro.
+          <Link to="/docs/troubleshooting">Troubleshoot</Link> problems with
+          Metro.
         </li>
         <li>
-          Learn how to <a href="/docs/configuration">configure Metro</a>.
+          Learn how to <Link to="/docs/configuration">configure Metro</Link>.
         </li>
         <li>
-          Look at the full <a href="/docs/api">API Reference</a>.
+          Look at the full <Link to="/docs/api">API Reference</Link>.
         </li>
       </ul>
     ),
