@@ -105,7 +105,9 @@ export default class Terminal {
     this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
     this.#externalBytesWritten = 0;
     this.#flushBeforeExit = () => {
-      void this.flush();
+      // The flush is fire-and-forget, like an update, so mark its
+      // rejection as handled; waiters still see it through the update.
+      void this.flush().catch(() => {});
     };
   }
 
@@ -113,22 +115,35 @@ export default class Terminal {
    * Starts an update of the status, unless one is ongoing. An update keeps
    * writing the status until the latest one is written. Status delays don't
    * keep the process alive, so an ongoing update is flushed before the process
-   * exits.
+   * exits. #updatePromise tracks the current write, reassigned each
+   * iteration: the loop exit check and the cleanup run in one synchronous
+   * step, with no microtask gap between them, so a `status()` call in the
+   * gap would be lost. `waitForUpdates()` loops on #updatePromise until it
+   * clears, so it waits for the whole update, not just the current write.
    */
-  #scheduleStatusUpdate() {
+  async #scheduleStatusUpdate(): Promise<void> {
     if (this.#updatePromise != null) {
       return;
     }
 
     process.on('beforeExit', this.#flushBeforeExit);
-    this.#updatePromise = this.#writeStatus().then(async () => {
-      while (this.#writtenStatus !== this.#status) {
-        await this.#writeStatus();
-      }
+    try {
+      do {
+        this.#updatePromise = this.#writeStatus();
+        // An update is fire-and-forget: mark its rejection as handled, so
+        // a failed update doesn't crash the process when no one awaits it.
+        // Waiters still see the rejection through #updatePromise.
+        void this.#updatePromise.catch(() => {});
+        await this.#updatePromise;
+      } while (this.#writtenStatus !== this.#status);
+    } catch {
+      // #updatePromise already rejected for waiters; swallow here so the
+      // discarded promise returned by this method never rejects.
+    } finally {
       process.off('beforeExit', this.#flushBeforeExit);
       this.#updatePromise = null;
       this.#isFlushRequested = false;
-    });
+    }
   }
 
   /**
@@ -151,7 +166,9 @@ export default class Terminal {
   }
 
   async waitForUpdates(): Promise<void> {
-    await (this.#updatePromise || Promise.resolve());
+    while (this.#updatePromise != null) {
+      await this.#updatePromise;
+    }
     await this.#lastWritePromise;
   }
 
@@ -179,6 +196,10 @@ export default class Terminal {
     this.#lastWritePromise = new Promise(resolve =>
       this.#stream.write(chunk, () => resolve()),
     );
+    // A write is fire-and-forget: mark its rejection as handled, so a
+    // failed write doesn't crash the process when no one awaits it.
+    // Waiters still see the rejection through #lastWritePromise.
+    void this.#lastWritePromise.catch(() => {});
     this.#bytesWrittenAfterLastWrite = this.#getBytesWritten();
   }
 
@@ -207,7 +228,19 @@ export default class Terminal {
     void this.#delayStatus(
       this.#ttyStream ? STATUS_UPDATE_DELAY_MS : NON_TTY_STATUS_UPDATE_DELAY_MS,
     );
-    await this.#lastWritePromise;
+    const writePromise = this.#lastWritePromise;
+    try {
+      await writePromise;
+    } catch (error: unknown) {
+      if (
+        this.#lastWritePromise === writePromise &&
+        this.#writtenStatus === status
+      ) {
+        this.#writtenStatus = '';
+        this.#lastWritePromise = Promise.resolve();
+      }
+      throw error;
+    }
   }
 
   /**
@@ -313,7 +346,7 @@ export default class Terminal {
       ? chunkString(status, this.#ttyStream.columns).join('\n')
       : status;
 
-    this.#scheduleStatusUpdate();
+    void this.#scheduleStatusUpdate();
 
     return previousStatus;
   }
@@ -328,14 +361,30 @@ export default class Terminal {
   log(format: string, ...args: Array<unknown>): void {
     const writtenStatus = this.#writtenStatus;
     const line = util.format(format, ...args) + '\n';
+    let redrewStatus = false;
     if (this.#eraseWrittenStatusMaybe() && this.#status.length > 0) {
       this.#write(line + writtenStatus + '\n');
       this.#writtenStatus = writtenStatus;
+      redrewStatus = true;
     } else {
       this.#write(line);
     }
 
-    this.#scheduleStatusUpdate();
+    // If this write fails, it leaves the same stale state a failed
+    // status write does: a redrawn status recorded as drawn although the
+    // erase already removed it, and a rejected #lastWritePromise that
+    // makes later flush() calls reject with the stale error.
+    const writePromise = this.#lastWritePromise;
+    void writePromise.catch(() => {
+      if (this.#lastWritePromise === writePromise) {
+        if (redrewStatus && this.#writtenStatus === writtenStatus) {
+          this.#writtenStatus = '';
+        }
+        this.#lastWritePromise = Promise.resolve();
+      }
+    });
+
+    void this.#scheduleStatusUpdate();
   }
 
   /**
