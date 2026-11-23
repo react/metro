@@ -59,6 +59,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     p('/project/root/a.'),
     p('/project/root/foo..'),
     p('/project/root/...'),
+    p('/project/root/a./foo'),
+    p('/project/root/foo../bar'),
+    p('/project/root/.../bar'),
+    p('/project/root/../a./foo'),
+    p('/project/root/../../project/root/a./foo.js'),
   ])(`absoluteToNormal('%s') is correct and optimised`, absolutePath => {
     const rootDir = p('/project/root');
     pathUtils = new RootPathUtils(rootDir);
@@ -82,7 +87,7 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       p('/project/root/../root2/../root3/foo'),
       p('/project/root/./baz/foo/bar'),
       p('/project/root/a./../foo'),
-      p('/project/root/../a./foo'),
+      p('/project/root/a./.'),
       p('/project/root/.././foo'),
       p('/project/root/.././foo/'),
       p('/project/root/.'),
@@ -180,14 +185,19 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
   });
 
   test.each([
-    [p('..'), p('foo/.'), p('../foo/.')],
-    [p('..'), p('foo/..'), p('../foo/..')],
+    // A final indirection is kept
+    [p('..'), p('foo/.'), p('../foo/.'), 0],
+    [p('..'), p('foo/..'), p('../foo/..'), 0],
+    // A name ending in a dot is not an indirection
+    [p('..'), p('root/a./foo'), p('a./foo'), 1],
+    [p('../..'), p('project/root/foo../bar'), p('foo../bar'), 2],
+    [p('..'), p('sibling./foo'), p('../sibling./foo'), 0],
   ])(
-    'joinNormalToRelative(%s, %s) keeps a final indirection, as %s',
-    (normalPath, relativePath, expected) => {
+    'joinNormalToRelative(%s, %s) is %s, collapsing %s segments',
+    (normalPath, relativePath, expected, collapsedSegments) => {
       pathUtils = new RootPathUtils(p('/project/root'));
       expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
-        collapsedSegments: 0,
+        collapsedSegments,
         normalPath: expected,
       });
     },

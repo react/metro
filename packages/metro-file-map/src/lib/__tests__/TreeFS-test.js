@@ -379,6 +379,42 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
+    test('lookup can find a file in a directory ending in a dot', () => {
+      tfs.addOrModify(p('foo./x.js'), [0, 0, 0, null, 0, null]);
+      expect(tfs.lookup(p('/project/root/project/foo./x.js'))).toMatchObject({
+        exists: true,
+        realPath: p('/project/foo./x.js'),
+      });
+    });
+
+    test('matchFiles follows a link whose target leads into a directory ending in a dot', () => {
+      const dotTfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo./sub/x.js'), [0, 0, 0, null, 0, null]],
+          [p('root'), [0, 0, 0, null, '..', null]],
+          [p('link-to-sub'), [0, 0, 0, null, 'root/project/foo./sub', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          dotTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/project'),
+          }),
+        ),
+      ).toEqual([
+        p('/project/foo./sub/x.js'),
+        p('/project/root/project/foo./sub/x.js'),
+        p('/project/root/project/link-to-sub/x.js'),
+        p('/project/link-to-sub/x.js'),
+      ]);
+    });
+
     test('matchFiles follows links up', () => {
       const matches = [
         ...tfs.matchFiles({
