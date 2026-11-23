@@ -30,7 +30,7 @@ import type {
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-type State = {stripped: boolean};
+type State = {stripped: boolean, dropped: Array<NodePath<>>};
 
 export default function constantFoldingPlugin(context: {
   types: Types,
@@ -162,7 +162,11 @@ export default function constantFoldingPlugin(context: {
             : // $FlowFixMe[incompatible-type]
               path.get('consequent');
           const hoisted = new Set<string>();
-          const outside = (p: NodePath<>) => !p.isDescendant(dropped);
+          // Bindings are only recomputed once the whole pass ends, so they
+          // still list paths in branches dropped earlier in this pass.
+          state.dropped.push(dropped);
+          const outside = (p: NodePath<>) =>
+            !state.dropped.some(d => p.isDescendant(d));
           const collect = (declaration: NodePath<>) => {
             const {node} = declaration;
             if (node?.type !== 'VariableDeclaration' || node.kind !== 'var') {
@@ -255,6 +259,7 @@ export default function constantFoldingPlugin(context: {
   const Program = {
     enter(path: NodePath<BabelNodeProgram>, state: State): void {
       state.stripped = false;
+      state.dropped = [];
     },
 
     exit(path: NodePath<BabelNodeProgram>, state: State): void {
@@ -277,7 +282,7 @@ export default function constantFoldingPlugin(context: {
         // Re-traverse all program, if we removed any blocks. Manually re-call
         // enter and exit, because traversing a Program node won't call them.
         Program.enter(path, state);
-        path.traverse(visitor, {stripped: false});
+        path.traverse(visitor, {stripped: false, dropped: []});
         Program.exit(path, state);
       }
     },

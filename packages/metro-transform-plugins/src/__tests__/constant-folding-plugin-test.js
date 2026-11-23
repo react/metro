@@ -173,6 +173,35 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
+  test('keeps the declaration of a var declared in more than one removed branch', () => {
+    const code = `
+      if (false) {
+        var a = 1;
+      }
+      if (false) {
+        var a = 2;
+      }
+      if (true) {
+      } else {
+        var b = 1;
+      }
+      if (true) {
+      } else {
+        var b = 2;
+      }
+      use(a, b);
+    `;
+
+    const expected = `
+      var a, b;
+      {}
+      {}
+      use(a, b);
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
   test('does not keep a var from a removed branch that is only used in a nested function there', () => {
     const code = `
       if (false) {
