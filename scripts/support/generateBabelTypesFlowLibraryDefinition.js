@@ -309,6 +309,36 @@ function main() {
     ),
   );
 
+  // definitions/
+  typeDecls += `
+declare type ${NODE_PREFIX}Validator = {
+  (node?: ${NODE_PREFIX}, key?: string | { toString(): string }, val?: unknown): void;
+  type?: 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'array' | 'null' | 'any';
+  each?: ${NODE_PREFIX}Validator;
+  chainOf?: ReadonlyArray<${NODE_PREFIX}Validator>;
+  oneOf?: ReadonlyArray<unknown>;
+  oneOfNodeTypes?: ReadonlyArray<string>;
+  oneOfNodeOrValueTypes?: ReadonlyArray<string>;
+  shapeOf?: { [field: string]: ${NODE_PREFIX}FieldOptions };
+};
+
+declare type ${NODE_PREFIX}FieldOptions = {
+  default?: string | number | boolean | [] | null;
+  optional?: boolean;
+  deprecated?: boolean;
+  validate?: ${NODE_PREFIX}Validator;
+};
+`;
+  lines.push(
+    `declare export var VISITOR_KEYS: { [type: string]: Array<string> };`,
+    `declare export var ALIAS_KEYS: { [type: ${NODE_PREFIX}['type']]: Array<string> };`,
+    `declare export var FLIPPED_ALIAS_KEYS: { [alias: string]: Array<${NODE_PREFIX}['type']> };`,
+    `declare export var NODE_FIELDS: { [type: string]: { [field: string]: ${NODE_PREFIX}FieldOptions } };`,
+    `declare export var BUILDER_KEYS: { [type: string]: Array<string> };`,
+    `declare export var DEPRECATED_KEYS: { [type: string]: ${NODE_PREFIX}['type'] };`,
+    `declare export var TYPES: Array<string>;`,
+  );
+
   // Node type declarations, kept module-local. The exported aliases and
   // function signatures below reference them by their `BabelNode`-prefixed name.
   const moduleInner = typeDecls + '\n' + lines.join('\n');
