@@ -117,7 +117,6 @@ export default async function watchmanCrawl({
       // $FlowFixMe[incompatible-type]
       return response;
     } finally {
-      // $FlowFixMe[incompatible-type] clearInterval / clearTimeout are interchangeable
       clearInterval(intervalOrTimeoutId);
       if (didLogWatchmanWaitMessage) {
         onStatus({

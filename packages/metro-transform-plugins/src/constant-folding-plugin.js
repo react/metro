@@ -14,15 +14,12 @@ import type {NodePath, VisitNode, Visitor} from '@babel/traverse';
 import typeof Traverse from '@babel/traverse';
 import type {
   ArrowFunctionExpression as BabelNodeArrowFunctionExpression,
-  AssignmentExpression as BabelNodeAssignmentExpression,
   BinaryExpression as BabelNodeBinaryExpression,
-  CallExpression as BabelNodeCallExpression,
   ConditionalExpression as BabelNodeConditionalExpression,
   FunctionDeclaration as BabelNodeFunctionDeclaration,
   FunctionExpression as BabelNodeFunctionExpression,
   IfStatement as BabelNodeIfStatement,
   LogicalExpression as BabelNodeLogicalExpression,
-  OptionalCallExpression as BabelNodeOptionalCallExpression,
   Program as BabelNodeProgram,
   UnaryExpression as BabelNodeUnaryExpression,
 } from '@babel/types';
@@ -47,13 +44,7 @@ export default function constantFoldingPlugin(context: {
     value: unknown,
   } {
     const state = {safe: true};
-    const unsafe = (
-      path:
-        | NodePath<BabelNodeAssignmentExpression>
-        | NodePath<BabelNodeCallExpression>
-        | NodePath<BabelNodeOptionalCallExpression>,
-      state: {safe: boolean},
-    ) => {
+    const unsafe = (path: NodePath<>, state: {safe: boolean}) => {
       state.safe = false;
     };
 
@@ -80,6 +71,18 @@ export default function constantFoldingPlugin(context: {
          * resulting in the expression call being skipped.
          */
         OptionalCallExpression: unsafe,
+        // Babel evaluates a sequence to its last operand, so side effects in
+        // the leading operands (e.g. `(i++, false)`) would otherwise be lost.
+        AwaitExpression: unsafe,
+        NewExpression: unsafe,
+        TaggedTemplateExpression: unsafe,
+        UpdateExpression: unsafe,
+        YieldExpression: unsafe,
+        UnaryExpression(path, state) {
+          if (path.node.operator === 'delete') {
+            state.safe = false;
+          }
+        },
       },
       state,
     );
@@ -100,7 +103,13 @@ export default function constantFoldingPlugin(context: {
       const binding =
         path.node.id != null && path.scope.parent.getBinding(path.node.id.name);
 
-      if (binding && !binding.referenced) {
+      if (
+        binding &&
+        !binding.referenced &&
+        binding.constantViolations.every(violation =>
+          violation.isDescendant(path),
+        )
+      ) {
         state.stripped = true;
         path.remove();
       }
@@ -120,7 +129,13 @@ export default function constantFoldingPlugin(context: {
         if (isVariableDeclarator(parentNode) && parentNode.id.name != null) {
           const binding = parentPath?.scope.getBinding(parentNode.id.name);
 
-          if (binding && !binding.referenced) {
+          if (
+            binding &&
+            !binding.referenced &&
+            binding.constantViolations.every(violation =>
+              violation.isDescendant(path),
+            )
+          ) {
             state.stripped = true;
             parentPath?.remove();
           }

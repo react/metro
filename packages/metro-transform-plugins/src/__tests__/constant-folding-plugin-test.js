@@ -289,6 +289,46 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
+  test('does not wipe unused functions whose bindings are reassigned', () => {
+    const code = `
+      export function load() {
+        let cleanup = () => {};
+        cleanup = null;
+
+        var handler = function () {};
+        handler = null;
+
+        function callback() {}
+        callback = null;
+
+        function retry() {
+          retry = null;
+        }
+        retry = null;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('wipes unused functions that only reassign themselves', () => {
+    const code = `
+      function _devOnly() {
+        const data = require('dev-only');
+        _devOnly = function () {
+          return data;
+        };
+        return data;
+      }
+
+      var _lazy = function () {
+        _lazy = null;
+      };
+    `;
+
+    compare([constantFoldingPlugin], code, '');
+  });
+
   test('recursively strips off functions', () => {
     const code = `
       function x() {}
@@ -395,5 +435,86 @@ describe('constant expressions', () => {
     const expected = `void foo?.();`;
 
     compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('does not drop side effects from the leading operands of a sequence', () => {
+    const code = `
+      if ((i++, false)) {
+        a();
+      }
+      var b = (delete o.x, true) ? 1 : 2;
+      var c = (new Foo(), null) || 3;
+      var d = (--j, 1) + 2;
+      var h = (tag\`x\`, 0) || 4;
+      async function e() {
+        if ((await f, false)) {}
+      }
+      function* g() {
+        if ((yield, false)) {}
+      }
+      export {e, g};
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('folds a sequence whose leading operands have no side effects', () => {
+    const code = `
+      var a = (0, 'production' !== 'production') ? 1 : 2;
+    `;
+
+    const expected = `
+      var a = 2;
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('does not fold arithmetic on destructured object bindings', () => {
+    const code = `
+      const O = {e: 80};
+      export function f() {
+        const {e} = O;
+        return e + 1;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('does not fold to non-finite numbers from destructured bindings', () => {
+    const code = `
+      const SHAPE = {lo: 80, hi: 85, scale: 2.8};
+      export function f() {
+        const {lo, hi, scale} = SHAPE;
+        return (hi - lo) * scale;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('does not fold conditionals on destructured object bindings', () => {
+    const code = `
+      const O = {flag: false};
+      export function f() {
+        const {flag} = O;
+        return flag ? 1 : 2;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('does not fold logical expressions on destructured object bindings', () => {
+    const code = `
+      const O = {flag: false};
+      export function f() {
+        const {flag} = O;
+        return flag || 3;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
   });
 });

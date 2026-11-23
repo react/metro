@@ -46,6 +46,7 @@ describe('Server torn down test', () => {
       }
       active.set(asyncId, {
         type,
+        // $FlowFixMe[incompatible-type]
         callStack: new Error('mock error to get stack trace').stack,
         resource,
       });

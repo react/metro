@@ -9,7 +9,7 @@
  */
 
 import type {
-  WatcherBackendChangeEvent,
+  WatcherBackendChangeEventWithoutRoot,
   WatcherIncludedFiles,
 } from '../flow-types';
 import type {FSWatcher} from 'node:fs';
@@ -57,6 +57,13 @@ export default class NativeWatcher extends AbstractWatcher {
 
   static isSupported(): boolean {
     return platform() === 'darwin';
+  }
+
+  // fs.watch can return before any changes are reported: libuv starts the
+  // FSEvents stream on another thread, and the stream reports only changes
+  // made after it starts.
+  static isLiveOnStart(): boolean {
+    return false;
   }
 
   constructor(
@@ -129,7 +136,7 @@ export default class NativeWatcher extends AbstractWatcher {
   async #handleEvent(
     event: string,
     relativePath: string,
-  ): Promise<?Omit<WatcherBackendChangeEvent, 'root'>> {
+  ): Promise<?WatcherBackendChangeEventWithoutRoot> {
     const absolutePath = path.resolve(this.root, relativePath);
     if (this.doIgnore(relativePath)) {
       debug(

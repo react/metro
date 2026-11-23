@@ -11,6 +11,8 @@
 
 'use strict';
 
+import type {SerializerOptions} from '../../DeltaBundler/types';
+
 const Metro = require('../../..');
 const execBundle = require('../execBundle');
 const MetroConfig = require('metro-config');
@@ -34,6 +36,104 @@ test('builds a simple bundle', async () => {
   // Assets are not returned by default
   expect(result.assets).toBeUndefined();
 });
+
+test('builds a bundle that runs under a global prefix', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    transformer: {globalPrefix: 'app1'},
+  });
+
+  const prefixed = await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+  const unprefixed = await Metro.runBuild(baseConfig, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+
+  const context: {[key: string]: unknown} = {};
+  // Exports cross realms, so compare their serialized form.
+  expect(JSON.stringify(execBundle(prefixed.code, context))).toBe(
+    JSON.stringify(execBundle(unprefixed.code)),
+  );
+  expect(
+    Object.keys(context)
+      .filter(name => /__(r|c|d|registerSegment|accept)$/.test(name))
+      .sort(),
+  ).toEqual([
+    'app1__accept',
+    'app1__c',
+    'app1__d',
+    'app1__r',
+    'app1__registerSegment',
+  ]);
+});
+
+test('tells a custom serializer the reserved string', async () => {
+  const baseConfig = await Metro.loadConfig({
+    config: require.resolve('../metro.config.js'),
+  });
+  let reservedString;
+  const config = MetroConfig.mergeConfig(baseConfig, {
+    serializer: {
+      customSerializer: async (
+        _entryPoint: string,
+        _preModules: unknown,
+        _graph: unknown,
+        options: SerializerOptions,
+      ) => {
+        reservedString = options.reservedString;
+        return 'code';
+      },
+    },
+  });
+
+  await Metro.runBuild(config, {
+    entry: 'TestBundle.js',
+    dev: true,
+  });
+
+  expect(reservedString).toBe('_$$_METRO_');
+});
+
+test.each([
+  ['Metro transformer', null, /^\/assets\/\[metro-watchFolders\]\/\d+$/],
+  // Doesn't forward the URL path, so uses the project-relative one.
+  [
+    'custom transformer wrapping Metro transformer',
+    'wrapper-transformer.js',
+    /^\/assets\/\.\.$/,
+  ],
+])(
+  'agrees with getAssets on the URL of an asset outside projectRoot (%s)',
+  async (_name, transformer, expectedLocation) => {
+    const projectRoot = path.join(INPUT_PATH, 'external-asset');
+    const baseConfig = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+    const config = MetroConfig.mergeConfig(baseConfig, {
+      projectRoot,
+      ...(transformer != null
+        ? {transformerPath: path.join(projectRoot, transformer)}
+        : null),
+    });
+
+    const result = await Metro.runBuild(config, {
+      entry: 'index.js',
+      assets: true,
+    });
+
+    // $FlowFixMe[incompatible-use] - the bundle evaluates to the asset data
+    const {httpServerLocation} = execBundle(result.code);
+    expect(httpServerLocation).toMatch(expectedLocation);
+    expect(result.assets?.map(asset => asset.httpServerLocation)).toEqual([
+      httpServerLocation,
+    ]);
+  },
+);
 
 test('build a simple bundle with polyfills', async () => {
   const baseConfig = await Metro.loadConfig({

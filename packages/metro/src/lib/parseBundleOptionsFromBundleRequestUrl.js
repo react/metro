@@ -14,6 +14,7 @@ import type {TransformProfile} from 'metro-babel-transformer';
 
 import parsePlatformFilePath from '../node-haste/lib/parsePlatformFilePath';
 import {SourcePathsMode} from '../shared/types';
+import {isVirtualModuleUrl} from './modulePath';
 import parseCustomResolverOptions from './parseCustomResolverOptions';
 import parseCustomTransformOptions from './parseCustomTransformOptions';
 import debugModule from 'debug';
@@ -69,6 +70,12 @@ export default function parseBundleOptionsFromBundleRequestUrl(
     search,
     hash,
   } = new URL(rawNonJscSafeUrlEncodedUrl, RESOLVE_BASE_URL /* baseURL */);
+
+  if (isVirtualModuleUrl(searchParams)) {
+    throw new Error('Virtual modules cannot be requested by URL yet.', {
+      cause: rawNonJscSafeUrlEncodedUrl,
+    });
+  }
 
   // e.g. "//localhost:8081/foo/bar.js?platform=ios"
   const isRelativeProtocol = rawNonJscSafeUrlEncodedUrl.startsWith('//');

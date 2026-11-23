@@ -86,6 +86,7 @@ describe('HmrServer', () => {
     mockedGraph = {
       dependencies: new Map<$FlowFixMe, $FlowFixMe>(),
       entryPoint: p('/root/EntryPoint.js'),
+      transformOptions: {platform: 'ios'},
     };
     changeHandlerPromises.clear();
 
@@ -169,7 +170,7 @@ describe('HmrServer', () => {
 
     connect = async (
       relativeUrl: string,
-      sendFn?: string => void,
+      sendFn?: (message: string) => void,
       {baseUrl = 'ws://localhost'}: {baseUrl?: string} = {},
     ) => {
       const absoluteUrl = baseUrl + relativeUrl;
@@ -191,7 +192,7 @@ describe('HmrServer', () => {
     message = async (
       client: Client,
       message: HmrClientMessage,
-      sendFn?: string => void,
+      sendFn?: (message: string) => void,
     ) => {
       await hmrServer.onClientMessage(
         client,

@@ -18,7 +18,6 @@ export type BabelFileImportLocsMetadata = ReadonlySet<string>;
 export type BabelTransformer = Readonly<{
   transform: (transformerArgs: BabelTransformerArgs) => Readonly<{
     ast: File_2;
-    functionMap?: BabelFileFunctionMapMetadata | undefined;
     metadata?: MetroBabelFileMetadata | undefined;
   }>;
   getCacheKey?: ((options?: BabelTransformerCacheKeyOptions) => string) | undefined;

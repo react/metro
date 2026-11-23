@@ -68,10 +68,12 @@ function serializeError(
   seen: Set<Error> = new Set(),
 ): SerializedError {
   if (seen.has(e)) {
+    // $FlowFixMe[incompatible-type]
     return {message: '[circular]: ' + e.message, stack: e.stack};
   }
   seen.add(e);
   const {message, stack, cause} = e;
+  // $FlowFixMe[incompatible-type]
   const serialized: SerializedError = {message, stack};
   if (e instanceof AggregateError) {
     serialized.errors = [...e.errors]

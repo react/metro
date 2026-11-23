@@ -21,11 +21,13 @@ import EventEmitter from 'node:events';
 import * as path from 'node:path';
 import {serialize} from 'node:v8';
 
+const mockMkdir = jest.fn();
 const mockReadFile = jest.fn();
 const mockWriteFile = jest.fn();
 
 jest.mock('node:fs', () => ({
   promises: {
+    mkdir: (...args) => mockMkdir(...args),
     readFile: (...args) => mockReadFile(...args),
     writeFile: (...args) => mockWriteFile(...args),
   },
@@ -71,6 +73,30 @@ describe('cacheManager', () => {
         ? /^\\file-prefix-.*$/
         : /^\/file-prefix-.*$/,
     );
+  });
+
+  test('creates different cache file paths under Bun', () => {
+    const nodePath = DiskCacheManager.getCacheFilePath(
+      buildParameters,
+      'file-prefix',
+      '/',
+    );
+    // `process.versions` is read-only, but its properties can be defined.
+    Object.defineProperty(process.versions, 'bun', {
+      configurable: true,
+      value: '1.3.0',
+    });
+    let bunPath;
+    try {
+      bunPath = DiskCacheManager.getCacheFilePath(
+        buildParameters,
+        'file-prefix',
+        '/',
+      );
+    } finally {
+      delete process.versions.bun;
+    }
+    expect(bunPath).toBe(nodePath + '-bun');
   });
 
   test('creates different cache file paths for different roots', () => {
@@ -187,6 +213,85 @@ describe('cacheManager', () => {
       cacheManager.getCacheFilePath(),
       serialize(getSnapshot()),
     );
+  });
+
+  test('serialises the snapshot before anything can change it', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    // The file map's own state, which may change at the next `await`.
+    const fileSystemData = new Map<string, unknown>();
+    const snapshot: CacheData = {
+      clocks: new Map(),
+      fileSystemData,
+      plugins: new Map(),
+    };
+    const written = serialize(snapshot);
+    const getSnapshot = () => {
+      queueMicrotask(() => {
+        fileSystemData.set('later.js', [0, 0, 0, null, 0]);
+      });
+      return snapshot;
+    };
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError: () => {},
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      cacheManager.getCacheFilePath(),
+      written,
+    );
+  });
+
+  test('creates the cache directory if it does not exist', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const getSnapshot = jest.fn(
+      () =>
+        ({
+          clocks: new Map([['foo', 'bar']]),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+    );
+    mockWriteFile.mockRejectedValueOnce({code: 'ENOENT'});
+    const onWriteError = jest.fn();
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError,
+    });
+    expect(mockMkdir).toHaveBeenCalledWith(
+      path.dirname(cacheManager.getCacheFilePath()),
+      {recursive: true},
+    );
+    expect(mockWriteFile).toHaveBeenCalledTimes(2);
+    expect(mockWriteFile).toHaveBeenLastCalledWith(
+      cacheManager.getCacheFilePath(),
+      serialize(getSnapshot()),
+    );
+    expect(onWriteError).not.toHaveBeenCalled();
+  });
+
+  test('reports other write errors without retrying', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    const error = {code: 'EACCES'};
+    mockWriteFile.mockRejectedValueOnce(error);
+    const onWriteError = jest.fn();
+    await cacheManager.write(
+      () =>
+        ({
+          clocks: new Map(),
+          fileSystemData: new Map(),
+          plugins: new Map(),
+        }) as CacheData,
+      {
+        changedSinceCacheRead: true,
+        eventSource: {onChange: () => () => {}},
+        onWriteError,
+      },
+    );
+    expect(mockMkdir).not.toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledTimes(1);
+    expect(onWriteError).toHaveBeenCalledWith(error);
   });
 
   test('does not write when there have been no changes', async () => {

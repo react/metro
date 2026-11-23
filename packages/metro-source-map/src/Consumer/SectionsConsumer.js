@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {IndexMap} from '../source-map';
+import type {BasicSourceMap, IndexMap} from '../source-map';
 import type {
   GeneratedOffset,
   GeneratedPositionLookup,
@@ -21,6 +21,7 @@ import type {
 import AbstractConsumer from './AbstractConsumer';
 import {EMPTY_POSITION, FIRST_COLUMN, FIRST_LINE} from './constants';
 import createConsumer from './createConsumer';
+import normalizeSourcePath from './normalizeSourcePath';
 import {subtractOffsetFromPosition} from './positionMath';
 import {greatestLowerBound} from './search';
 import {add, add0, get0, get1, sub, sub1} from 'ob1';
@@ -34,9 +35,13 @@ export default class SectionsConsumer
   implements IConsumer
 {
   _consumers: ReadonlyArray<[GeneratedOffset, IConsumer]>;
+  _basicMaps: ?ReadonlyArray<BasicSourceMap>;
+  _contentBySource: ?ReadonlyMap<string, string>;
 
   constructor(sourceMap: IndexMap) {
     super(sourceMap);
+    this._basicMaps = getBasicMaps(sourceMap);
+    this._contentBySource = null;
     this._consumers = sourceMap.sections.map((section, index) => {
       const generatedOffset = {
         lines: add0(section.offset.line),
@@ -113,6 +118,10 @@ export default class SectionsConsumer
   }
 
   sourceContentFor(source: string, nullOnMissing: true): ?string {
+    const contentBySource = this._buildAndCacheContentBySource();
+    if (contentBySource) {
+      return contentBySource.get(normalizeSourcePath(source, {})) ?? null;
+    }
     for (const [_, consumer] of this._consumers) {
       const content = consumer.sourceContentFor(source, nullOnMissing);
       if (content != null) {
@@ -121,4 +130,55 @@ export default class SectionsConsumer
     }
     return null;
   }
+
+  _buildAndCacheContentBySource(): ?ReadonlyMap<string, string> {
+    if (!this._contentBySource && this._basicMaps) {
+      this._contentBySource = buildContentBySource(this._basicMaps);
+    }
+    return this._contentBySource;
+  }
+}
+
+function getBasicMaps(
+  sourceMap: IndexMap,
+  basicMaps: Array<BasicSourceMap> = [],
+): ?Array<BasicSourceMap> {
+  for (const {map} of sourceMap.sections) {
+    // eslint-disable-next-line lint/strictly-null
+    if (map.mappings === undefined) {
+      if (getBasicMaps(map, basicMaps) == null) {
+        return null;
+      }
+    } else if (map.sourceRoot != null) {
+      return null;
+    } else {
+      basicMaps.push(map);
+    }
+  }
+  return basicMaps;
+}
+
+function buildContentBySource(
+  basicMaps: ReadonlyArray<BasicSourceMap>,
+): Map<string, string> {
+  const contentBySource = new Map<string, string>();
+  for (const map of basicMaps) {
+    const {sources, sourcesContent} = map;
+    if (sourcesContent == null) {
+      continue;
+    }
+    const seen = new Set<string>();
+    for (const [i, source] of sources.entries()) {
+      const normalized = normalizeSourcePath(source, map);
+      if (seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      const content = sourcesContent[i];
+      if (content != null && !contentBySource.has(normalized)) {
+        contentBySource.set(normalized, content);
+      }
+    }
+  }
+  return contentBySource;
 }

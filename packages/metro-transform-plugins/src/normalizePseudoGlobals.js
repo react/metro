@@ -19,7 +19,7 @@ import type {
   Program,
 } from '@babel/types';
 
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import nullthrows from 'nullthrows';
 
 export type Options = {
@@ -49,6 +49,7 @@ export default function normalizePseudoglobals(
         return;
       }
 
+      // $FlowFixMe[incompatible-type]
       const pseudoglobals: Array<string> = params
         .map(path => path.node.name)
         // $FlowFixMe[incompatible-type] Flow error uncovered by typing Babel more strictly

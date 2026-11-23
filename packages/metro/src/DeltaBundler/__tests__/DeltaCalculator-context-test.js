@@ -113,7 +113,6 @@ describe('DeltaCalculator + require.context', () => {
         inverseDependencies: new CountingSet([]),
         output: [],
         path: p('/bundle'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });
@@ -138,7 +137,6 @@ describe('DeltaCalculator + require.context', () => {
         inverseDependencies: new CountingSet([p('/bundle')]),
         output: [],
         path: p('/ctx?ctx=xxx'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });
@@ -147,7 +145,6 @@ describe('DeltaCalculator + require.context', () => {
         inverseDependencies: new CountingSet([p('/ctx?ctx=xxx')]),
         output: [],
         path: p('/ctx/foo'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       });

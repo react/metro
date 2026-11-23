@@ -9,7 +9,7 @@
  * @oncall react_native
  */
 
-import type {FileMetadata} from '../flow-types';
+import type {CacheData, FileMetadata} from '../flow-types';
 import type {
   Crawler,
   CrawlerFactoryOptions,
@@ -21,6 +21,7 @@ import type {
 import typeof * as AbstractWatcherModule from '../watchers/AbstractWatcher';
 
 import FileMap, {HastePlugin, NoopCacheManager} from '../index';
+import fs from 'node:fs';
 import * as path from 'node:path';
 
 // Hoisted above the imports by jest, so the backend class has to be built
@@ -170,6 +171,29 @@ describe('crawlerFactory', () => {
     expect(fileSystem.exists(p('src', 'index.js'))).toBe(true);
 
     await fileMap.end();
+  });
+
+  test('takes its roots as given on a cache hit, without reading the disk', async () => {
+    let cacheContent: ?CacheData = null;
+    const cacheManagerFactory = () => ({
+      end: async () => {},
+      read: async () => cacheContent,
+      write: async (getSnapshot: () => CacheData) => {
+        cacheContent = getSnapshot();
+      },
+    });
+    const crawlerFactory = () => stubCrawler([path.join('src', 'index.js')]);
+    await createFileMap({cacheManagerFactory, crawlerFactory}).build();
+    const realpath = jest.spyOn(fs.promises, 'realpath');
+
+    const {fileSystem} = await createFileMap({
+      cacheManagerFactory,
+      crawlerFactory,
+    }).build();
+
+    expect(realpath).not.toHaveBeenCalled();
+    expect(fileSystem.exists(p('src', 'index.js'))).toBe(true);
+    realpath.mockRestore();
   });
 
   test('failures are fatal, with no fallback to the node crawler', async () => {

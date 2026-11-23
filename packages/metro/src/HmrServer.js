@@ -42,7 +42,7 @@ const {createActionStartEntry, createActionEndEntry, log} = Logger;
 export type Client = {
   optedIntoHMR: boolean,
   revisionIds: Array<RevisionId>,
-  readonly sendFn: string => void,
+  readonly sendFn: (message: string) => void,
 };
 
 type ClientGroup = {
@@ -53,9 +53,12 @@ type ClientGroup = {
   readonly graphOptions: GraphOptions,
 };
 
-function send(sendFns: Array<(string) => void>, message: HmrMessage): void {
+function send(
+  sendFns: Array<(message: string) => void>,
+  message: HmrMessage,
+): void {
   const strMessage = JSON.stringify(message);
-  sendFns.forEach((sendFn: string => void) => sendFn(strMessage));
+  sendFns.forEach((sendFn: (message: string) => void) => sendFn(strMessage));
 }
 
 /**

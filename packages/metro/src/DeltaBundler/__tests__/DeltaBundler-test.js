@@ -9,7 +9,12 @@
  * @oncall react_native
  */
 
-import type {MixedOutput, Options, TransformResultDependency} from '../types';
+import type {
+  DeltaResult,
+  MixedOutput,
+  Options,
+  TransformResultDependency,
+} from '../types';
 
 import DeltaBundler from '../../DeltaBundler';
 import DeltaCalculator from '../DeltaCalculator';
@@ -118,5 +123,219 @@ describe('DeltaBundler', () => {
     deltaBundler.endGraph(graph);
 
     expect(() => deltaBundler.endGraph(graph)).toThrow();
+  });
+
+  describe('onModulesReleased', () => {
+    const outputA = [{type: 'js/module', data: {}}];
+    const sharedOutputInA = [{type: 'js/module', data: {}}];
+    const outputB = [{type: 'js/module', data: {}}];
+    const sharedOutputInB = [{type: 'js/module', data: {}}];
+    const graphA = {
+      dependencies: new Map([
+        ['/a', {output: outputA}],
+        ['/shared', {output: sharedOutputInA}],
+      ]),
+      entryPoints: ['/a'],
+    };
+    const graphB = {
+      dependencies: new Map([
+        ['/b', {output: outputB}],
+        ['/shared', {output: sharedOutputInB}],
+      ]),
+      entryPoints: ['/b'],
+    };
+    let onModulesReleased;
+
+    beforeEach(() => {
+      onModulesReleased = jest.fn();
+      deltaBundler = new DeltaBundler(new EventEmitter(), {onModulesReleased});
+    });
+
+    async function buildGraphs() {
+      DeltaCalculator.prototype.getGraph
+        .mockReturnValueOnce(graphA)
+        .mockReturnValueOnce(graphB);
+      const transformingOptions = {...options, transform: jest.fn()};
+      return [
+        await deltaBundler.buildGraph(graphA.entryPoints, transformingOptions),
+        await deltaBundler.buildGraph(graphB.entryPoints, transformingOptions),
+      ];
+    }
+
+    // Fails the next update of the graph built last, after it transforms
+    // `paths`.
+    function failNextUpdate(paths: ReadonlyArray<string>) {
+      const {transform} = jest
+        .requireMock('../DeltaCalculator')
+        .default.mock.calls.at(-1)[2];
+      DeltaCalculator.prototype.getDelta.mockImplementationOnce(async () => {
+        await Promise.all(paths.map(modulePath => transform(modulePath, null)));
+        throw new Error('Update failed');
+      });
+    }
+
+    const emptyDelta: DeltaResult<MixedOutput> = {
+      added: new Map(),
+      modified: new Map(),
+      deleted: new Set(),
+      reset: false,
+    };
+
+    function releasedArgs() {
+      expect(onModulesReleased).toHaveBeenCalledTimes(1);
+      const [{paths, heldOutputs}] = onModulesReleased.mock.calls[0];
+      return {paths, heldOutputs: [...heldOutputs]};
+    }
+
+    test("is called with the ended graph's paths and what other graphs hold there", async () => {
+      const [a] = await buildGraphs();
+      expect(onModulesReleased).not.toHaveBeenCalled();
+
+      deltaBundler.endGraph(a);
+
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toEqual(['/a', '/shared']);
+      expect(heldOutputs).toHaveLength(1);
+      expect(heldOutputs[0]).toBe(sharedOutputInB);
+    });
+
+    test('is called with the source paths of released virtual modules', async () => {
+      const virtualOutputInA = [{type: 'js/module', data: {}}];
+      const virtualOutputInB = [{type: 'js/module', data: {}}];
+      const graphWithVirtual = (entry: string, output: typeof outputA) => ({
+        dependencies: new Map([
+          [entry, {output: [{type: 'js/module', data: {}}]}],
+          ['virtual:/v', {output}],
+        ]),
+        entryPoints: [entry],
+      });
+      const virtualGraphA = graphWithVirtual('/a', virtualOutputInA);
+      const virtualGraphB = graphWithVirtual('/b', virtualOutputInB);
+      DeltaCalculator.prototype.getGraph
+        .mockReturnValueOnce(virtualGraphA)
+        .mockReturnValueOnce(virtualGraphB);
+      const a = await deltaBundler.buildGraph(['/a'], options);
+      await deltaBundler.buildGraph(['/b'], options);
+
+      deltaBundler.endGraph(a);
+
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toEqual(['/a', '/v']);
+      expect(heldOutputs).toHaveLength(1);
+      expect(heldOutputs[0]).toBe(virtualOutputInB);
+    });
+
+    test('is not called after a delta that releases nothing', async () => {
+      const [a] = await buildGraphs();
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce(emptyDelta);
+
+      await deltaBundler.getDelta(a, {reset: false, shallow: false});
+
+      expect(onModulesReleased).not.toHaveBeenCalled();
+    });
+
+    test('is called with only the deleted paths after a delta that deletes modules', async () => {
+      const [a] = await buildGraphs();
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce({
+        added: new Map(),
+        modified: new Map(),
+        deleted: new Set(['/shared']),
+        reset: false,
+      });
+
+      await deltaBundler.getDelta(a, {reset: false, shallow: false});
+
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toEqual(['/shared']);
+      expect(heldOutputs).toHaveLength(2);
+      expect(heldOutputs[0]).toBe(sharedOutputInA);
+      expect(heldOutputs[1]).toBe(sharedOutputInB);
+    });
+
+    test('is called with what failed updates transformed once the graph commits an update', async () => {
+      const [, b] = await buildGraphs();
+      failNextUpdate(['/new', '/shared']);
+
+      await expect(
+        deltaBundler.getDelta(b, {reset: false, shallow: false}),
+      ).rejects.toThrow('Update failed');
+      expect(onModulesReleased).not.toHaveBeenCalled();
+
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce(emptyDelta);
+      await deltaBundler.getDelta(b, {reset: false, shallow: false});
+
+      // The graph holds `/shared`, so only `/new` is released.
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toEqual(['/new']);
+      expect(heldOutputs).toHaveLength(0);
+
+      // It's released once.
+      onModulesReleased.mockClear();
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce(emptyDelta);
+      await deltaBundler.getDelta(b, {reset: false, shallow: false});
+      expect(onModulesReleased).not.toHaveBeenCalled();
+    });
+
+    test('is not called for a virtual module that the graph holds after a committed update transforms it', async () => {
+      const graph = {
+        dependencies: new Map([
+          ['/c', {output: outputA}],
+          ['virtual:/c-virtual', {output: sharedOutputInA}],
+        ]),
+        entryPoints: ['/c'],
+      };
+      DeltaCalculator.prototype.getGraph.mockReturnValueOnce(graph);
+      const c = await deltaBundler.buildGraph(graph.entryPoints, {
+        ...options,
+        transform: jest.fn(),
+      });
+      const {transform} = jest
+        .requireMock('../DeltaCalculator')
+        .default.mock.calls.at(-1)[2];
+      DeltaCalculator.prototype.getDelta.mockImplementationOnce(async () => {
+        // A virtual module is transformed as its source path.
+        await transform('/c-virtual', {
+          type: 'buffer',
+          source: Buffer.from(''),
+          sha1: 'sha1',
+        });
+        return emptyDelta;
+      });
+
+      await deltaBundler.getDelta(c, {reset: false, shallow: false});
+
+      expect(onModulesReleased).not.toHaveBeenCalled();
+    });
+
+    test('is called with what failed updates transformed when the graph ends', async () => {
+      const [, b] = await buildGraphs();
+      failNextUpdate(['/new']);
+      await expect(
+        deltaBundler.getDelta(b, {reset: false, shallow: false}),
+      ).rejects.toThrow('Update failed');
+
+      deltaBundler.endGraph(b);
+
+      expect(releasedArgs().paths).toEqual(['/b', '/shared', '/new']);
+    });
+
+    test('is called with every held output after a reset delta', async () => {
+      const [a] = await buildGraphs();
+      DeltaCalculator.prototype.getDelta.mockResolvedValueOnce({
+        added: graphA.dependencies,
+        modified: new Map(),
+        deleted: new Set(),
+        reset: true,
+      });
+
+      await deltaBundler.getDelta(a, {reset: true, shallow: false});
+
+      const {paths, heldOutputs} = releasedArgs();
+      expect(paths).toBeNull();
+      expect(new Set(heldOutputs)).toEqual(
+        new Set([outputA, sharedOutputInA, outputB, sharedOutputInB]),
+      );
+      expect(heldOutputs).toHaveLength(4);
+    });
   });
 });

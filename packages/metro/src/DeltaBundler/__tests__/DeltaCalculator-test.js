@@ -133,7 +133,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         inverseDependencies: new CountingSet(),
         output: [],
         path: p('/bundle'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
@@ -158,7 +157,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         inverseDependencies: new CountingSet([p('/bundle')]),
         output: [],
         path: p('/foo'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
@@ -167,7 +165,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         inverseDependencies: new CountingSet([p('/bundle')]),
         output: [],
         path: p('/bar'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
@@ -176,7 +173,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         inverseDependencies: new CountingSet([p('/bundle')]),
         output: [],
         path: p('/baz'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
@@ -185,7 +181,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
         inverseDependencies: new CountingSet([p('/foo')]),
         output: [],
         path: p('/qux'),
-        // $FlowFixMe[prop-missing]
         // $FlowFixMe[incompatible-type]
         getSource: () => Buffer.of(),
       };
@@ -396,7 +391,6 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
       inverseDependencies: new CountingSet(),
       output: [],
       path: p('/qux'),
-      // $FlowFixMe[prop-missing]
       // $FlowFixMe[incompatible-type]
       getSource: () => Buffer.of(),
     };
@@ -618,6 +612,28 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
     rejectTraversal(new Error('Unable to resolve module'));
     await expect(failedDelta).rejects.toBeInstanceOf(Error);
 
+    traverseDependencies.mockResolvedValueOnce({
+      added: new Map(),
+      modified: new Map([[p('/bundle'), entryModule]]),
+      deleted: new Set([p('/foo')]),
+    });
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    expect(traverseDependencies).toHaveBeenCalledTimes(2);
+    expect(traverseDependencies.mock.calls[1][0]).toEqual([p('/bundle')]);
+  });
+
+  test('should not traverse a re-added file deleted after a failed delta', async () => {
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+
+    // As after a delete and re-add during an earlier build.
+    emitChange({addedFiles: ['foo']});
+    traverseDependencies.mockRejectedValueOnce(new Error('Syntax error'));
+    await expect(
+      deltaCalculator.getDelta({reset: false, shallow: false}),
+    ).rejects.toBeInstanceOf(Error);
+
+    emitChange({removedFiles: ['foo']});
     traverseDependencies.mockResolvedValueOnce({
       added: new Map(),
       modified: new Map([[p('/bundle'), entryModule]]),

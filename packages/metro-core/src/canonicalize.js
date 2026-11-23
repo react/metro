@@ -21,7 +21,7 @@ export default function canonicalize(key: string, value: unknown): unknown {
 
   const keys = Object.keys(value).sort();
   const length = keys.length;
-  const object: {[string]: unknown} = {};
+  const object: {[key: string]: unknown} = {};
 
   for (let i = 0; i < length; i++) {
     object[keys[i]] = value[keys[i]];

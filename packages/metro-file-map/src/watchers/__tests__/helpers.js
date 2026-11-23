@@ -59,7 +59,7 @@ export type EventHelpers = {
   nextEvent: (afterFn: () => Promise<void>) => Promise<{
     eventType: string,
     path: string,
-    metadata?: ChangeEventMetadata,
+    metadata?: ChangeEventMetadata | void,
   }>,
   untilEvent: (
     afterFn: () => Promise<void>,
@@ -69,7 +69,11 @@ export type EventHelpers = {
   allEvents: (
     afterFn: () => Promise<void>,
     events: ReadonlyArray<[string, 'touch' | 'delete' | 'recrawl']>,
-    opts?: {rejectUnexpected: boolean},
+    opts?: {
+      rejectUnexpected: boolean,
+      // Events that may arrive, but needn't
+      optionalEvents?: ReadonlyArray<[string, 'touch' | 'delete' | 'recrawl']>,
+    },
   ) => Promise<void>,
 };
 
@@ -109,12 +113,44 @@ export const startWatching = async (
 
   await watcherInstance.startWatching();
 
+  // As Metro's Watcher does, confirm a watch that isn't live on start with a
+  // change of its own - a cookie file, matched by the `cookie-*` prefix.
+  // Watchers emit in order, so once the latest is reported, none of the
+  // earlier ones remain in flight to leak into a test.
+  if (!Watcher.isLiveOnStart()) {
+    const deadline = Date.now() + 10000;
+    for (let i = 1; ; i++) {
+      const cookie = `cookie-live-${i}`;
+      let unsubscribe: () => void = () => {};
+      const observed = new Promise<boolean>(resolve => {
+        unsubscribe = watcherInstance.onFileEvent(change => {
+          if (change.relativePath === cookie) {
+            resolve(true);
+          }
+        });
+      });
+      await writeFile(join(watchRoot, cookie), '');
+      const live = await Promise.race([
+        observed,
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), 200)),
+      ]);
+      unsubscribe();
+      if (live) {
+        break;
+      }
+      invariant(
+        Date.now() < deadline,
+        `${watcherName} watch never became live`,
+      );
+    }
+  }
+
   const eventHelpers: EventHelpers = {
     nextEvent: afterFn =>
       Promise.all([
         new Promise<{
           eventType: string,
-          metadata?: ChangeEventMetadata,
+          metadata?: ChangeEventMetadata | void,
           path: string,
         }>((resolve, reject) => {
           const unsubscribe: () => void = watcherInstance.onFileEvent(
@@ -147,12 +183,19 @@ export const startWatching = async (
         rejectUnexpected: false,
       }),
 
-    allEvents: (afterFn, expectedEvents, {rejectUnexpected = true} = {}) =>
+    allEvents: (
+      afterFn,
+      expectedEvents,
+      {rejectUnexpected = true, optionalEvents = []} = {},
+    ) =>
       Promise.all([
         new Promise((resolve, reject) => {
           const tupleToKey = (tuple: ReadonlyArray<string>) => tuple.join('\0');
           const allEventKeys = new Set(
             expectedEvents.map(tuple => tupleToKey(tuple)),
+          );
+          const optionalEventKeys = new Set(
+            optionalEvents.map(tuple => tupleToKey(tuple)),
           );
           const unsubscribe: () => void = watcherInstance.onFileEvent(
             change => {
@@ -171,7 +214,10 @@ export const startWatching = async (
                   unsubscribe();
                   resolve();
                 }
-              } else if (rejectUnexpected) {
+              } else if (
+                rejectUnexpected &&
+                !optionalEventKeys.has(receivedKey)
+              ) {
                 unsubscribe();
                 reject(
                   new Error(

@@ -38,8 +38,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     blockList: exclusionList(),
     dependencyExtractor: undefined,
     disableHierarchicalLookup: false,
-    emptyModulePath:
-      require.resolve('metro-runtime/src/modules/empty-module.js'),
+    emptyModulePath: 'metro:runtime/modules/empty-module',
     enableGlobalPackages: false,
     extraNodeModules: {},
     hasteImplModulePath: undefined,
@@ -47,12 +46,15 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     resolveRequest: null,
     resolverMainFields: ['browser', 'main'],
     schemeResolvers: {},
+    unstable_allowVirtualModules: false,
+    unstable_applyBrowserSpecAfterExports: true,
     unstable_conditionNames: [],
     unstable_conditionsByPlatform: {
       web: ['browser'],
     },
     unstable_enablePackageExports: true,
     unstable_incrementalResolution: false,
+    unstable_resolveExportsFromPackageRoot: true,
     useWatchman: true,
     requireCycleIgnorePatterns: [/(^|\/|\\)node_modules($|\/|\\)/],
     unstable_forceFullRefreshPatterns: [],
@@ -60,8 +62,11 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
 
   serializer: {
     polyfillModuleNames: [],
-    getRunModuleStatement: (moduleId: number | string, globalPrefix: string) =>
-      `__r(${JSON.stringify(moduleId)});`,
+    // `globalPrefix` defaults to '' for wrappers that pass only the module ID.
+    getRunModuleStatement: (
+      moduleId: number | string,
+      globalPrefix: string = '',
+    ) => `${globalPrefix}__r(${JSON.stringify(moduleId)});`,
     getPolyfills: () => [],
     getModulesRunBeforeMainModule: () => [],
     processModuleFilter: module => true,
@@ -98,7 +103,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
 
   transformer: {
     assetPlugins: [],
-    asyncRequireModulePath: 'metro-runtime/src/modules/asyncRequire',
+    asyncRequireModulePath: 'metro:runtime/modules/asyncRequire',
     assetRegistryPath: 'missing-asset-registry-path',
     babelTransformerPath: 'metro-babel-transformer',
     dynamicDepsInPackages: 'throwAtRuntime',
@@ -142,7 +147,9 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     unstable_disableModuleWrapping: false,
     unstable_disableNormalizePseudoGlobals: false,
     unstable_compactOutput: false,
+    unstable_disableInputAstCloning: true,
     unstable_memoizeInlineRequires: false,
+    unstable_shareTransformResults: true,
     unstable_workerThreads: false,
   },
   watcher: {
@@ -174,6 +181,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
   stickyWorkers: true,
   watchFolders: [],
   transformerPath: 'metro-transform-worker',
+  unstable_hedgeCacheReadsAfterMs: null,
   maxWorkers: getMaxWorkers(),
   resetCache: false,
   reporter: new TerminalReporter(new Terminal(process.stdout)),

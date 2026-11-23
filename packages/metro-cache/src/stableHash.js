@@ -13,13 +13,8 @@ import canonicalize from 'metro-core/private/canonicalize';
 import crypto from 'node:crypto';
 
 export default function stableHash(value: unknown): Buffer {
-  return (
-    crypto
-      .createHash('md5')
-      /* $FlowFixMe[incompatible-type](>=0.95.0 site=react_native_fb) This comment suppresses an
-       * error found when Flow v0.95 was deployed. To see the error, delete this
-       * comment and run Flow. */
-      .update(JSON.stringify(value, canonicalize))
-      .digest('buffer')
-  );
+  return crypto
+    .createHash('md5')
+    .update(JSON.stringify(value, canonicalize))
+    .digest('buffer');
 }

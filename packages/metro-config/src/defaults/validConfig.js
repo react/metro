@@ -15,6 +15,7 @@ export default async function validConfig(): Promise<InputConfigT> {
   const defaultConfig = await require('./index').default('/path/to/project');
   const validConfig = {
     ...defaultConfig,
+    unstable_hedgeCacheReadsAfterMs: 0,
     resolver: {
       ...defaultConfig.resolver,
       resolveRequest: function CustomResolver() {

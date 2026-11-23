@@ -21,5 +21,12 @@ module.exports = {
         parser: 'flow',
       },
     },
+    {
+      files: ['docs/*.md'],
+      options: {
+        parser: 'markdown',
+        requirePragma: false,
+      },
+    },
   ],
 };

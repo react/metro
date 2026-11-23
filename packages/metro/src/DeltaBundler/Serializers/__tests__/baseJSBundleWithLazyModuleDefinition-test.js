@@ -81,7 +81,7 @@ const transformOptions: TransformInputOptions = {
   unstable_transformProfile: 'default',
 };
 
-function serialize() {
+function serialize(globalPrefix: string = '') {
   return baseJSBundleWithLazyModuleDefinition(
     '/root/foo',
     [polyfill],
@@ -99,12 +99,13 @@ function serialize() {
       dev: true,
       getRunModuleStatement: (moduleId: number | string) =>
         `require(${JSON.stringify(moduleId)});`,
-      globalPrefix: '',
+      globalPrefix,
       includeAsyncPaths: false,
       inlineSourceMap: false,
       modulesOnly: false,
       processModuleFilter: () => true,
       projectRoot: '/root',
+      reservedString: '_$$_METRO_',
       runBeforeMainModule: [],
       runModule: true,
       serverRoot: '/root',
@@ -190,6 +191,7 @@ test('modulesOnly omits the eager polyfills but keeps the segment', () => {
       modulesOnly: true,
       processModuleFilter: () => true,
       projectRoot: '/root',
+      reservedString: '_$$_METRO_',
       runBeforeMainModule: [],
       runModule: true,
       serverRoot: '/root',
@@ -204,4 +206,70 @@ test('modulesOnly omits the eager polyfills but keeps the segment', () => {
   expect(code).toContain('__registerSegment(0, function defSeg0(moduleId) {');
   expect(code).toContain('var ___d = __d;');
   expect(code).toContain('case 0:');
+});
+
+test('async paths carry the platform of the bundle', () => {
+  const lazyFooModule: Module<> = {
+    ...fooModule,
+    dependencies: new Map([
+      [
+        './bar',
+        {
+          absolutePath: '/root/bar.ios.js',
+          data: {
+            data: {
+              asyncType: 'async',
+              isESMImport: false,
+              locs: [],
+              key: './bar',
+            },
+            name: './bar',
+          },
+        },
+      ],
+    ]),
+  };
+  const {code} = baseJSBundleWithLazyModuleDefinition(
+    '/root/foo',
+    [],
+    {
+      dependencies: new Map([['/root/foo', lazyFooModule]]),
+      entryPoints: new Set(['/root/foo']),
+      transformOptions: {...transformOptions, platform: 'ios'},
+    },
+    {
+      asyncRequireModulePath: '',
+      createModuleId: (filePath: string) => (filePath === '/root/foo' ? 0 : 1),
+      dev: true,
+      getRunModuleStatement: (moduleId: number | string) =>
+        `require(${JSON.stringify(moduleId)});`,
+      globalPrefix: '',
+      includeAsyncPaths: true,
+      inlineSourceMap: false,
+      modulesOnly: false,
+      processModuleFilter: () => true,
+      projectRoot: '/root',
+      reservedString: '_$$_METRO_',
+      runBeforeMainModule: [],
+      runModule: true,
+      serverRoot: '/root',
+      shouldAddToIgnoreList: () => false,
+      sourceMapUrl: 'http://localhost/bundle.map',
+      sourceUrl: 'http://localhost/foo.ios.bundle?lazy=true',
+      getSourceUrl: null,
+    },
+  );
+  expect(code).toContain(
+    '"paths":{"1":"/bar.ios.js.bundle?lazy=true&platform=ios&modulesOnly=true&runModule=false"}',
+  );
+});
+
+test('prefixes the segment definer with the global prefix', () => {
+  const {code} = serialize('app1');
+
+  expect(code).toContain(
+    'app1__registerSegment(0, function defSeg0(moduleId) {',
+  );
+  expect(code).not.toMatch(/(^|[^\w])__registerSegment\(/);
+  expect(code).toContain('var _app1__d = app1__d;');
 });

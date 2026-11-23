@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {ResolutionObservations} from '../../DeltaBundler/types';
 import type {PackageCache} from '../PackageCache';
 import type {ConfigT} from 'metro-config';
 import type {FileSystem, HasteMap} from 'metro-file-map';
@@ -21,7 +22,7 @@ import path from 'node:path';
 export type CreateModuleResolverOptions = Readonly<{
   config: ConfigT,
   fileSystem: FileSystem,
-  hasteMap: HasteMap,
+  hasteMap: ?HasteMap,
   packageCache: PackageCache,
 }>;
 
@@ -31,8 +32,11 @@ export default function createModuleResolver({
   hasteMap,
   packageCache,
 }: CreateModuleResolverOptions): ModuleResolver {
-  const fileSystemLookup = (filePath: string): ReturnType<FileSystemLookup> => {
-    const result = fileSystem.lookup(filePath);
+  const fileSystemLookup = (
+    filePath: string,
+    observations?: ?ResolutionObservations,
+  ): ReturnType<FileSystemLookup> => {
+    const result = fileSystem.lookup(filePath, observations);
     if (result.exists) {
       return {
         exists: true,
@@ -46,14 +50,13 @@ export default function createModuleResolver({
   return new ModuleResolver({
     assetExts: new Set(config.resolver.assetExts),
     disableHierarchicalLookup: config.resolver.disableHierarchicalLookup,
-    doesFileExist: (filePath: string) => fileSystem.exists(filePath),
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
     getHasteModulePath: (name, platform) =>
-      hasteMap.getModule(name, platform, true),
+      hasteMap?.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
-      hasteMap.getPackage(name, platform, true),
+      hasteMap?.getPackage(name, platform, true),
     getPackage: (packageJsonPath: string) => {
       try {
         return packageCache.getPackage(packageJsonPath).packageJson ?? null;
@@ -62,14 +65,21 @@ export default function createModuleResolver({
         return null;
       }
     },
-    getPackageForModule: (absolutePath: string) =>
-      packageCache.getPackageForModule(absolutePath),
+    getPackageForModule: (
+      absolutePath: string,
+      observations?: ?ResolutionObservations,
+    ) => packageCache.getPackageForModule(absolutePath, observations),
     mainFields: config.resolver.resolverMainFields,
     nodeModulesPaths: config.resolver.nodeModulesPaths,
     preferNativePlatform: true,
     projectRoot: config.projectRoot,
     reporter: config.reporter,
-    resolveAsset: (dirPath: string, assetName: string, extension: string) => {
+    resolveAsset: (
+      dirPath: string,
+      assetName: string,
+      extension: string,
+      observations?: ?ResolutionObservations,
+    ) => {
       const basePath = dirPath + path.sep + assetName;
       const assets = [
         basePath + extension,
@@ -78,7 +88,7 @@ export default function createModuleResolver({
         ),
       ]
         .map(assetPath => {
-          const result = fileSystemLookup(assetPath);
+          const result = fileSystemLookup(assetPath, observations);
           // A directory such as `node_modules/lodash.zip` is not an asset, and
           // must fall through to directory (package) resolution.
           return result.exists && result.type === 'f' ? result.realPath : null;
@@ -93,11 +103,16 @@ export default function createModuleResolver({
       ...config.resolver.schemeResolvers,
     },
     sourceExts: config.resolver.sourceExts,
+    unstable_allowVirtualModules: config.resolver.unstable_allowVirtualModules,
+    unstable_applyBrowserSpecAfterExports:
+      config.resolver.unstable_applyBrowserSpecAfterExports,
     unstable_conditionNames: config.resolver.unstable_conditionNames,
     unstable_conditionsByPlatform:
       config.resolver.unstable_conditionsByPlatform,
     unstable_enablePackageExports:
       config.resolver.unstable_enablePackageExports,
+    unstable_resolveExportsFromPackageRoot:
+      config.resolver.unstable_resolveExportsFromPackageRoot,
     unstable_incrementalResolution:
       config.resolver.unstable_incrementalResolution,
   });

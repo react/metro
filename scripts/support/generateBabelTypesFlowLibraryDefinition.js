@@ -245,7 +245,7 @@ function main() {
     key: string,
     index?: number,
   }>;
-  declare export type TraversalHandler<T> = (BabelNode, TraversalAncestors, T) => void;
+  declare export type TraversalHandler<T> = (node: BabelNode, parent: TraversalAncestors, state: T) => void;
   declare export type TraversalHandlers<T> = {
     enter?: TraversalHandler<T>,
     exit?: TraversalHandler<T>,
@@ -261,7 +261,7 @@ function main() {
 
     // validators/
     // eslint-disable-next-line max-len
-    `declare export function buildMatchMemberExpression(match: string, allowPartial?: boolean): (?BabelNode) => boolean`,
+    `declare export function buildMatchMemberExpression(match: string, allowPartial?: boolean): (member: ?BabelNode) => boolean`,
     `declare export function is(type: string, n: BabelNode, opts: Object): boolean;`,
     `declare export function isBinding(node: BabelNode, parent: BabelNode, grandparent?: BabelNode): boolean`,
     `declare export function isBlockScoped(node: BabelNode): boolean`,

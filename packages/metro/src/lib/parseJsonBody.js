@@ -16,7 +16,7 @@ const SIZE_LIMIT = 100 * 1024 * 1024; // 100MB
 
 export type JsonData =
   | {
-      [string]: JsonData,
+      [key: string]: JsonData,
     }
   | Array<JsonData>
   | string
@@ -40,6 +40,12 @@ export default function parseJsonBody(
         reject(new Error(`Invalid content type, expected ${CONTENT_TYPE}`));
         return;
       }
+    }
+
+    // A stream that has already ended will never emit `end` again.
+    if (req.readableEnded) {
+      reject(new Error('Request body was already read by a middleware'));
+      return;
     }
 
     let size = 0;

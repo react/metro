@@ -12,6 +12,11 @@
 import type {DeltaResult, Module, ReadOnlyGraph} from '../types';
 import type {HmrModule} from 'metro-runtime/src/modules/types';
 
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+} from '../../lib/modulePath';
 import {isJsModule, wrapModule} from './helpers/js';
 import debugModule from 'debug';
 import * as jscSafeUrl from 'jsc-safe-url';
@@ -22,7 +27,7 @@ const debug = debugModule('Metro:HMR');
 
 type Options = Readonly<{
   clientUrl: URL,
-  createModuleId: string => number,
+  createModuleId: (absolutePath: string) => number,
   includeAsyncPaths: boolean,
   projectRoot: string,
   serverRoot: string,
@@ -38,17 +43,15 @@ function generateModules(
 
   for (const module of sourceModules) {
     if (isJsModule(module)) {
+      const sourcePath = getModuleSourcePath(module.path);
       const getPathname = (extension: 'bundle' | 'map') => {
         return (
           path
             .relative(
               options.serverRoot ?? options.projectRoot,
-              path.join(
-                path.dirname(module.path),
-                path.basename(module.path, path.extname(module.path)) +
-                  '.' +
-                  extension,
-              ),
+              // Keep the file extension, as for async bundle paths, so that the
+              // server resolves the URL to this exact file.
+              sourcePath + '.' + extension,
             )
             .split(path.sep)
             // using this Metro particular convention for encoding file paths as URL paths.
@@ -59,6 +62,12 @@ function generateModules(
 
       const clientUrl = new URL(options.clientUrl);
       clientUrl.searchParams.delete('excludeSource');
+      if (graph.transformOptions.platform != null) {
+        clientUrl.searchParams.set('platform', graph.transformOptions.platform);
+      }
+      if (isVirtualModulePath(module.path)) {
+        clientUrl.searchParams.set(VIRTUAL_MODULE_URL_PARAM, 'true');
+      }
 
       clientUrl.pathname = getPathname('map');
       const sourceMappingURL = clientUrl.toString();
@@ -96,6 +105,7 @@ function prepareModule(
 ): string {
   const code = wrapModule(module, {
     ...options,
+    platform: graph.transformOptions.platform,
     sourceUrl: options.clientUrl.toString(),
     dev: true,
   });

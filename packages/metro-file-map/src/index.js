@@ -172,7 +172,7 @@ export type {
 // This should be bumped whenever a code change to `metro-file-map` itself
 // would cause a change to the cache data structure and/or content (for a given
 // filesystem state and build parameters).
-const CACHE_BREAKER = '13';
+const CACHE_BREAKER = '15';
 
 const CHANGE_INTERVAL = 30;
 
@@ -536,11 +536,22 @@ export default class FileMap extends EventEmitter {
 
         // The cache key does not include roots added by `addRoot`, so the
         // cache may hold files from an earlier instance's added roots. Drop
-        // them, including from plugins.
+        // them, including from plugins. Watchman lists a symlinked root's
+        // files under its real path. A custom crawler's files may not be on
+        // disk.
         if (initialData != null) {
-          for (const canonicalPath of fileSystem.pathsOutsideRoots(
-            this.#options.roots,
-          )) {
+          const realRoots =
+            this.#crawler == null
+              ? await Promise.all(
+                  this.#options.roots.map(root =>
+                    fsPromises.realpath(root).catch(() => root),
+                  ),
+                )
+              : [];
+          for (const canonicalPath of fileSystem.pathsOutsideRoots([
+            ...this.#options.roots,
+            ...realRoots,
+          ])) {
             fileDelta.removedFiles.add(canonicalPath);
           }
         }
@@ -900,7 +911,7 @@ export default class FileMap extends EventEmitter {
    * 4. Serialize a snapshot of our raw data via the configured cache manager
    */
   async #takeSnapshotAndPersist(
-    fileSystem: FileSystem,
+    fileSystem: MutableFileSystem,
     clocks: WatchmanClocks,
     plugins: ReadonlyArray<IndexedPlugin>,
     changedSinceCacheRead: boolean,
@@ -909,7 +920,7 @@ export default class FileMap extends EventEmitter {
     await this.#cacheManager.write(
       () => ({
         clocks: new Map(clocks),
-        fileSystemData: fileSystem.getSerializableSnapshot(),
+        fileSystemData: fileSystem.getSerializableState(),
         plugins: new Map(
           plugins.map(({plugin}) => [
             plugin.name,
@@ -1204,6 +1215,7 @@ export default class FileMap extends EventEmitter {
         })
         .catch((error: Error) => {
           this.#console.error(
+            // $FlowFixMe[incompatible-type]
             `metro-file-map: watch error:\n  ${error.stack}\n`,
           );
         });
@@ -1313,10 +1325,10 @@ const toPublicMetadata = (
 });
 
 // TODO: Replace with it.map() from Node 22+
-const mapIterable: <T, S>(Iterable<T>, (T) => S) => IteratorObject<S> = (
-  it,
-  fn,
-) =>
+const mapIterable: <T, S>(
+  it: Iterable<T>,
+  fn: (item: T) => S,
+) => IteratorObject<S, void, void> = (it, fn) =>
   (function* mapped() {
     for (const item of it) {
       yield fn(item);

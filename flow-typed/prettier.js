@@ -63,7 +63,9 @@ declare module 'prettier' {
     | 'typescript'
     | 'vue'
     | 'yaml';
-  declare export type BuiltInParsers = {[BuiltInParserName]: BuiltInParser};
+  declare export type BuiltInParsers = {
+    [name: BuiltInParserName]: BuiltInParser,
+  };
 
   declare export type CustomParser = (
     text: string,
@@ -493,7 +495,7 @@ declare module 'prettier' {
     | PathArraySupportOption;
 
   declare export type SupportOptions = {
-    [string]: SupportOption,
+    [key: string]: SupportOption,
   };
 
   declare export type SupportInfo = {

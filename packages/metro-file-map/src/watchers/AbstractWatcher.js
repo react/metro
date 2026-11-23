@@ -11,6 +11,7 @@
 import type {
   WatcherBackend,
   WatcherBackendChangeEvent,
+  WatcherBackendChangeEventWithoutRoot,
   WatcherBackendOptions,
   WatcherIncludedFiles,
 } from '../flow-types';
@@ -31,6 +32,15 @@ export class AbstractWatcher implements WatcherBackend {
   readonly doIgnore: (path: string) => boolean;
 
   #emitter: EventEmitter = new EventEmitter();
+
+  /**
+   * Whether a watch reports every change made after `startWatching` resolves.
+   * If not, `Watcher` confirms each watch with a change of its own before
+   * relying on it.
+   */
+  static isLiveOnStart(): boolean {
+    return true;
+  }
 
   constructor(dir: string, opts: WatcherBackendOptions) {
     const {ignored, included} = opts;
@@ -67,7 +77,7 @@ export class AbstractWatcher implements WatcherBackend {
     this.#emitter.removeAllListeners();
   }
 
-  emitFileEvent(event: Omit<WatcherBackendChangeEvent, 'root'>) {
+  emitFileEvent(event: WatcherBackendChangeEventWithoutRoot) {
     this.#emitter.emit('fileevent', {
       ...event,
       root: this.root,

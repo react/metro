@@ -18,6 +18,7 @@ export type JsOutput = Readonly<{
     lineCount: number;
     map: VlqMap;
     functionMap: null | undefined | FBSourceFunctionMap;
+    unstable_assetUrlPath?: string | undefined;
   }>;
   type: JSFileType;
 }>;
@@ -41,9 +42,11 @@ export type JsTransformerConfig = Readonly<{
   unstable_disableModuleWrapping: boolean;
   unstable_disableNormalizePseudoGlobals: boolean;
   unstable_compactOutput: boolean;
+  unstable_disableInputAstCloning?: boolean | undefined;
   unstable_allowRequireContext: boolean;
   unstable_memoizeInlineRequires?: boolean | undefined;
   unstable_nonMemoizedInlineRequires?: ReadonlyArray<string> | undefined;
+  unstable_supportsInlineModules?: boolean | undefined;
 }>;
 
 export type JsTransformOptions = Readonly<{
@@ -72,7 +75,11 @@ export type MinifierOptions = {
   config: MinifierConfig;
 };
 
-export type MinifierResult = {code: string; map?: BasicSourceMap | undefined};
+export type MinifierResult = {
+  code: string;
+  map?: BasicSourceMap | undefined;
+  decodedMap?: null | undefined | BabelDecodedMap;
+};
 
 export const transform: (config: JsTransformerConfig, projectRoot: string, projectRelativePath: string, data: Buffer, options: JsTransformOptions, assetUrlPath?: string) => Promise<TransformResponse>;
 

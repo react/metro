@@ -8,6 +8,7 @@
  * @format
  */
 
+import type {CrawlWatcher} from './crawlers/node';
 import type {
   Console,
   Crawler,
@@ -42,7 +43,14 @@ const debug = debugModule('Metro:Watcher');
 
 const MAX_WAIT_TIME = 240000;
 
+// For a backend that isn't live as soon as it starts, how long to wait for each
+// health check that confirms a watch, and for the watch overall.
+const LIVE_CHECK_TIMEOUT = 200;
+const MAX_LIVE_WAIT_TIME = 10000;
+
 type InternalCrawlOptions = Readonly<{
+  // For a node crawl to report what it lists to, one for each root.
+  crawlWatchers?: ?ReadonlyArray<?CrawlWatcher>,
   previousState: CrawlerOptions['previousState'],
   roots: ReadonlyArray<string>,
   subpath?: string,
@@ -92,6 +100,9 @@ export class Watcher extends EventEmitter {
   #bufferedEvents: Array<WatcherBackendChangeEvent> = [];
   #closed: boolean = false;
   #createBackend: ?(root: Path) => Promise<WatcherBackend>;
+  // Whether a started backend's watches need confirming before they are
+  // relied on.
+  #confirmWatches: boolean = false;
   readonly #instanceId: number;
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
@@ -122,11 +133,24 @@ export class Watcher extends EventEmitter {
     // the same window. If the Watchman crawl falls back to the node crawler,
     // there is no clock, so #crawl() starts non-Watchman backends before the
     // node crawl instead.
+    //
+    // The node crawler lists every directory under the roots, so a
+    // FallbackWatcher started for it can watch each just before it is listed,
+    // instead of walking the roots again.
+    let crawlWatchers: ?ReadonlyArray<?CrawlWatcher> = null;
     if (!options.useWatchman) {
-      await this.#startBackendsBeforeCrawl();
+      const crawlFed =
+        options.crawl == null && this.#getBackendClass() === FallbackWatcher;
+      await this.#startBackendsBeforeCrawl({crawlFed});
+      if (crawlFed) {
+        crawlWatchers = this.#backends.map(backend =>
+          backend instanceof FallbackWatcher ? backend.getCrawlWatcher() : null,
+        );
+      }
     }
 
     const result = await this.#crawl({
+      crawlWatchers,
       previousState: options.previousState,
       roots: options.roots,
       useWatchman: options.useWatchman,
@@ -136,11 +160,13 @@ export class Watcher extends EventEmitter {
     return result;
   }
 
-  async #startBackendsBeforeCrawl(): Promise<void> {
+  async #startBackendsBeforeCrawl({
+    crawlFed = false,
+  }: {crawlFed?: boolean} = {}): Promise<void> {
     if (!this.#options.watch) {
       return;
     }
-    await this.#startBackends();
+    await this.#startBackends(null, {crawlFed});
     // end() may have closed us before the backends were set - don't leak them.
     if (this.#options.abortSignal.aborted) {
       await this.close();
@@ -164,7 +190,7 @@ export class Watcher extends EventEmitter {
 
   async #crawl(crawlOptions: InternalCrawlOptions): Promise<CrawlResult> {
     const options = this.#options;
-    const {useWatchman, subpath} = crawlOptions;
+    const {crawlWatchers, useWatchman, subpath} = crawlOptions;
 
     const ignoreForCrawl = (filePath: string) =>
       options.ignoreForCrawl(filePath) ||
@@ -200,7 +226,11 @@ export class Watcher extends EventEmitter {
 
     let delta: CrawlResult;
     try {
-      delta = await crawl(crawlerOptions);
+      // Crawl watchers are only given for the node crawler.
+      delta =
+        crawlWatchers != null
+          ? await nodeCrawl(crawlerOptions, crawlWatchers)
+          : await crawl(crawlerOptions);
     } catch (firstError) {
       if (crawl !== watchmanCrawl) {
         throw firstError;
@@ -259,16 +289,23 @@ export class Watcher extends EventEmitter {
     }
   }
 
-  async #startBackends(clocks?: WatchmanClocks): Promise<void> {
-    const {extensions, ignorePatternForWatch} = this.#options;
-    const useWatchman = this.#useWatchmanWatcher;
-
+  #getBackendClass():
+    Class<WatchmanWatcher> | Class<NativeWatcher> | Class<FallbackWatcher> {
     // WatchmanWatcher > NativeWatcher > FallbackWatcher
-    const WatcherImpl = useWatchman
+    return this.#useWatchmanWatcher
       ? WatchmanWatcher
       : NativeWatcher.isSupported()
         ? NativeWatcher
         : FallbackWatcher;
+  }
+
+  async #startBackends(
+    clocks: ?WatchmanClocks,
+    {crawlFed = false}: {crawlFed?: boolean} = {},
+  ): Promise<void> {
+    const {extensions, ignorePatternForWatch} = this.#options;
+    const useWatchman = this.#useWatchmanWatcher;
+    const WatcherImpl = this.#getBackendClass();
 
     let watcher = 'fallback';
     if (WatcherImpl === WatchmanWatcher) {
@@ -299,8 +336,10 @@ export class Watcher extends EventEmitter {
     const createWatcherBackend = (
       root: Path,
       rootClocks: ?Map<string, WatchmanClockSpec>,
+      {crawlFed = false}: {crawlFed?: boolean} = {},
     ): Promise<WatcherBackend> => {
       const watcherOptions: WatcherBackendOptions = {
+        crawlFed,
         included: {
           extensions: new Set(extensions),
           // Ensure we always include package.json files, which are crucial for
@@ -361,9 +400,45 @@ export class Watcher extends EventEmitter {
     this.#createBackend = root => createWatcherBackend(root, null);
     this.#backends = await Promise.all(
       this.#options.roots.map(root =>
-        createWatcherBackend(root, watchmanClocks),
+        createWatcherBackend(root, watchmanClocks, {crawlFed}),
       ),
     );
+    // Confirmed only once every backend has started, because starting one may
+    // restart the others' watches (NativeWatchers share one FSEvents stream).
+    this.#confirmWatches = !WatcherImpl.isLiveOnStart();
+    if (this.#confirmWatches) {
+      await Promise.all(
+        this.#options.roots.map(root => this.#waitUntilLive(root)),
+      );
+    }
+  }
+
+  /**
+   * Check the health of a root's watch until it reports a change, so that
+   * changes made from now on aren't missed. Warns if it can't be confirmed.
+   */
+  async #waitUntilLive(root: Path): Promise<void> {
+    const deadline = Date.now() + MAX_LIVE_WAIT_TIME;
+    let result;
+    do {
+      result = await this.#checkHealth(root, LIVE_CHECK_TIMEOUT);
+    } while (
+      result.type === 'timeout' &&
+      Date.now() < deadline &&
+      !this.#closed &&
+      !this.#options.abortSignal.aborted
+    );
+    debug('Confirming the watch of %s: %s', root, result.type);
+    if (
+      result.type !== 'success' &&
+      !this.#closed &&
+      !this.#options.abortSignal.aborted
+    ) {
+      this.#options.console.warn(
+        `metro-file-map: Could not confirm that ${root} is being watched ` +
+          `(${result.type}). Changes made during startup may be missed.`,
+      );
+    }
   }
 
   /**
@@ -379,8 +454,11 @@ export class Watcher extends EventEmitter {
     // `close()` may have been called while the backend was starting.
     if (this.#closed) {
       await backend.stopWatching();
-    } else {
-      this.#backends.push(backend);
+      return;
+    }
+    this.#backends.push(backend);
+    if (this.#confirmWatches) {
+      await this.#waitUntilLive(root);
     }
   }
 
@@ -399,6 +477,13 @@ export class Watcher extends EventEmitter {
   }
 
   async checkHealth(timeout: number): Promise<HealthCheckResult> {
+    return this.#checkHealth(this.#options.rootDir, timeout);
+  }
+
+  /**
+   * Write a health check file into `dir`, and wait for a backend to report it.
+   */
+  async #checkHealth(dir: Path, timeout: number): Promise<HealthCheckResult> {
     const healthCheckId = this.#nextHealthCheckId++;
     if (healthCheckId === Number.MAX_SAFE_INTEGER) {
       this.#nextHealthCheckId = 0;
@@ -412,7 +497,7 @@ export class Watcher extends EventEmitter {
       this.#instanceId +
       '-' +
       healthCheckId;
-    const healthCheckPath = path.join(this.#options.rootDir, basename);
+    const healthCheckPath = path.join(dir, basename);
     let result: ?HealthCheckResult;
     const timeoutPromise = new Promise(resolve =>
       setTimeout(resolve, timeout),

@@ -64,7 +64,7 @@ export default class DelegatingConsumer implements IConsumer {
     return this._rootConsumer.eachMapping(callback, context, order);
   }
 
-  // flowlint-next-line unsafe-getters-setters:off
+  // $FlowFixMe[unsafe-getters-setters]
   get file(): ?string {
     return this._rootConsumer.file;
   }

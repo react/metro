@@ -9,16 +9,19 @@
  * @oncall react_native
  */
 
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   CacheData,
   ChangeEvent,
   CrawlerOptions,
+  FileData,
   FileMetadata,
   WatcherBackendOptions,
 } from '../flow-types';
 import type FileMapT from '../index';
 
 import {AbstractWatcher} from '../watchers/AbstractWatcher';
+import fs from 'node:fs';
 import * as path from 'node:path';
 
 jest.useRealTimers();
@@ -27,6 +30,16 @@ jest.useRealTimers();
 let mockFiles: Map<string, number>;
 // Absolute path -> normal (rootDir-relative, POSIX) symlink target.
 let mockSymlinks: Map<string, string>;
+
+// What the node crawler returns of `getDifference`'s result.
+const toCrawlResult = ({
+  changedFiles,
+  removedFiles,
+}: {
+  changedFiles: FileData,
+  removedFiles: Set<string>,
+  ...
+}) => ({changedFiles, removedFiles});
 
 const mockNodeCrawler = jest.fn((options: CrawlerOptions) => {
   const path = require('node:path');
@@ -68,9 +81,11 @@ const mockNodeCrawler = jest.fn((options: CrawlerOptions) => {
     }
   }
   return Promise.resolve(
-    options.previousState.fileSystem.getDifference(files, {
-      subpath: options.subpath,
-    }),
+    toCrawlResult(
+      options.previousState.fileSystem.getDifference(files, {
+        subpath: options.subpath,
+      }),
+    ),
   );
 });
 
@@ -90,6 +105,14 @@ class MockWatcher extends AbstractWatcher {
   static isSupported(): boolean {
     return true;
   }
+  // Stands in for FallbackWatcher too, which a node crawl may report to
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: () => {},
+      onSkippedDirectory: async () => {},
+      onSymlink: () => {},
+    };
+  }
 }
 
 jest.mock('../watchers/FallbackWatcher', () => MockWatcher);
@@ -106,7 +129,11 @@ const EXTERNAL_DIR = path.resolve('/', 'external');
 const EXTERNAL_FILE = path.join(EXTERNAL_DIR, 'lib', 'helper.js');
 
 function createFileMap(
-  opts?: Readonly<{enableSymlinks?: boolean, watch?: boolean}>,
+  opts?: Readonly<{
+    enableSymlinks?: boolean,
+    roots?: ReadonlyArray<string>,
+    watch?: boolean,
+  }>,
 ): FileMapT {
   return new FileMap({
     cacheManagerFactory: () => ({
@@ -130,7 +157,7 @@ function createFileMap(
     resetCache: false,
     retainAllFiles: true,
     rootDir: ROOT_DIR,
-    roots: [SRC_DIR],
+    roots: opts?.roots ?? [SRC_DIR],
     useWatchman: false,
     watch: opts?.watch ?? false,
   });
@@ -162,6 +189,7 @@ describe('FileMap.addRoot', () => {
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await fileMap.end();
   });
 
@@ -310,14 +338,16 @@ describe('FileMap.addRoot', () => {
           new Promise(resolve => {
             finishCrawl = () =>
               resolve(
-                options.previousState.fileSystem.getDifference(
-                  new Map([
-                    [
-                      path.relative(ROOT_DIR, EXTERNAL_FILE),
-                      [1, 42, 0, null, 0],
-                    ],
-                  ]),
-                  {subpath: options.subpath},
+                toCrawlResult(
+                  options.previousState.fileSystem.getDifference(
+                    new Map([
+                      [
+                        path.relative(ROOT_DIR, EXTERNAL_FILE),
+                        [1, 42, 0, null, 0],
+                      ],
+                    ]),
+                    {subpath: options.subpath},
+                  ),
                 ),
               );
             resolveStarted();
@@ -356,6 +386,49 @@ describe('FileMap.addRoot', () => {
     expect(fileSystem.getAllFiles()).toEqual([path.join(SRC_DIR, 'index.js')]);
   });
 
+  test('keeps the files of a root given through a symlink in an instance built from the cache', async () => {
+    const linkedRoot = path.join(ROOT_DIR, 'node_modules', 'linked');
+    const realFile = path.join(EXTERNAL_DIR, 'lib', 'helper.js');
+    jest
+      .spyOn(fs.promises, 'realpath')
+      .mockImplementation(async (root: string) => {
+        if (root === linkedRoot) {
+          return path.join(EXTERNAL_DIR, 'lib');
+        }
+        throw new Error(`ENOENT: no such file or directory, '${root}'`);
+      });
+    // Like Watchman, list a root's files under its real path.
+    mockNodeCrawler.mockImplementationOnce(options =>
+      Promise.resolve(
+        toCrawlResult(
+          options.previousState.fileSystem.getDifference(
+            new Map([
+              [
+                path.relative(ROOT_DIR, path.join(SRC_DIR, 'index.js')),
+                [1, 42, 0, null, 0],
+              ],
+              [path.relative(ROOT_DIR, realFile), [1, 42, 0, null, 0]],
+            ]),
+          ),
+        ),
+      ),
+    );
+    const roots = [SRC_DIR, linkedRoot];
+    fileMap = createFileMap({roots});
+    await fileMap.build();
+    await fileMap.end();
+
+    // Like Watchman, report only changes since the cache.
+    mockNodeCrawler.mockImplementationOnce(() =>
+      Promise.resolve({changedFiles: new Map(), removedFiles: new Set()}),
+    );
+    fileMap = createFileMap({roots});
+    const {fileSystem} = await fileMap.build();
+
+    expect(fileSystem.exists(realFile)).toBe(true);
+    expect(fileSystem.exists(path.join(SRC_DIR, 'index.js'))).toBe(true);
+  });
+
   describe('in watch mode', () => {
     beforeEach(() => {
       fileMap = createFileMap({watch: true});
@@ -392,6 +465,7 @@ describe('FileMap.addRoot', () => {
       await fileMap.build();
       await fileMap.addRoot(EXTERNAL_DIR);
       const stopWatching = jest.spyOn(
+        // $FlowFixMe[incompatible-type] Flow 0.337
         mockWatchers.get(EXTERNAL_DIR),
         'stopWatching',
       );

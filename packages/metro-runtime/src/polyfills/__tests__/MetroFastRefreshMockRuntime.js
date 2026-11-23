@@ -16,6 +16,7 @@ import typeof {
   screen as Screen,
 } from '@testing-library/react/pure';
 import typeof * as ReactModule from 'react';
+// $FlowFixMe[untyped-type-import]
 import typeof ReactRefreshRuntime from 'react-refresh/runtime';
 
 import {transformSync} from '@babel/core';
@@ -120,7 +121,8 @@ export class Runtime {
     );
     this.define = this.#global[this.#globalPrefix + '__d'];
     this.metroRequire = this.#global[this.#globalPrefix + '__r'];
-    this.registerSegment = this.#global.__registerSegment;
+    this.registerSegment =
+      this.#global[this.#globalPrefix + '__registerSegment'];
 
     // Set up Fast Refresh. Adapted from `setUpReactRefresh.js` in React Native.
     jest.isolateModules(() => {
@@ -198,10 +200,10 @@ const moduleSystemCode = (() => {
 // instead of `__ReactRefresh.performFullRefresh`.
 const createModuleSystem: (
   this: any,
-  RuntimeGlobal,
-  boolean,
-  string,
-  void,
+  global: RuntimeGlobal,
+  __DEV__: boolean,
+  __METRO_GLOBAL_PREFIX__: string,
+  window: void,
 ) => unknown =
   // eslint-disable-next-line no-new-func
   new Function(

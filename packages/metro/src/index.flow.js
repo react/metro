@@ -157,9 +157,9 @@ export type RunBuildResult = {
   ...
 };
 
-type BuildCommandOptions = Readonly<{[string]: unknown}> | null;
-type ServeCommandOptions = Readonly<{[string]: unknown}> | null;
-type DependenciesCommandOptions = Readonly<{[string]: unknown}> | null;
+type BuildCommandOptions = Readonly<{[key: string]: unknown}> | null;
+type ServeCommandOptions = Readonly<{[key: string]: unknown}> | null;
+type DependenciesCommandOptions = Readonly<{[key: string]: unknown}> | null;
 
 export {Terminal, JsonReporter, TerminalReporter, getSchemeResolvers};
 
@@ -593,6 +593,7 @@ async function earlyPortCheck(host: void | string, port: number) {
       server.on('error', err => {
         reject(err);
       });
+      // $FlowFixMe[incompatible-type] `void` is not `undefined` under experimental.ts_void
       server.listen(port, host, undefined, () => resolve());
     });
   } finally {

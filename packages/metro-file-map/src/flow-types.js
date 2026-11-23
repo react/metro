@@ -51,7 +51,9 @@ export interface CacheManager {
    * crawler - i.e. internal state reflects the current file system state.
    *
    * getSnapshot may be retained and called at any time before end(), such as
-   * in response to eventSource 'change' events.
+   * in response to eventSource 'change' events. What it returns is the file
+   * map's own state, not a copy, and may change at the next `await`.
+   * Serialize it synchronously, or copy it to keep it.
    */
   write(
     getSnapshot: () => CacheData,
@@ -277,7 +279,7 @@ export type FileMapPluginWorker = Readonly<{
    * This applies to files under node_modules too, which a plugin may reject
    * using `isNodeModules`.
    */
-  filter: ({normalPath: string, isNodeModules: boolean}) => boolean,
+  filter: (file: {normalPath: string, isNodeModules: boolean}) => boolean,
   /**
    * If true, the worker is not run on files as they are crawled or changed,
    * and `filter` is not consulted. It runs only on the files the plugin asks
@@ -316,8 +318,8 @@ export type InputFileMapPlugin = FileMapPlugin<empty, empty>;
 
 export interface MetadataWorker {
   processFile(
-    WorkerMessage,
-    Readonly<{getContent: () => Buffer}>,
+    data: WorkerMessage,
+    utils: Readonly<{getContent: () => Buffer}>,
   ): V8Serializable;
 }
 
@@ -343,8 +345,13 @@ export type IgnoreMatcher = (item: string) => boolean;
 export type FileData = Map<CanonicalPath, FileMetadata>;
 
 export type FileMetadata = [
+  // `mtime` and `size` are null for a regular file that hasn't been stat'd,
+  // as the node crawler lists regular files without a stat. Such a file has
+  // no derived data: its mtime and size are recorded, from a stat taken before
+  // it's read, when a SHA-1 or plugin data is first derived from it. So a file
+  // without an mtime has nothing that could be stale.
   /* mtime */ ?number,
-  /* size */ number,
+  /* size */ ?number,
   /* visited */ 0 | 1,
   /* sha1 */ ?string,
   // A string is the symlink's target, lexically resolved to a normal path with
@@ -368,6 +375,9 @@ export interface FileSystem {
    * Given a map of files, determine which of them are new or modified
    * (changedFiles), and which of them are missing from the input
    * (removedFiles), vs the current state of this instance of FileSystem.
+   * Regular files given without a modified time, that were regular files with
+   * one here, may be unmodified. They are included in changedFiles, and also
+   * in filesToStat with the modified time they had here.
    */
   getDifference(
     files: FileData,
@@ -382,7 +392,9 @@ export interface FileSystem {
   ): {
     changedFiles: FileData,
     removedFiles: Set<string>,
+    filesToStat: Map<string, number>,
   };
+  // A copy of the file system's data, which later changes don't affect.
   getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): ?string;
   getOrComputeSha1(file: Path): Promise<?{sha1: string, content?: Buffer}>;
@@ -425,6 +437,9 @@ export interface FileSystem {
   /**
    * Analogous to posix lstat. If the file at `file` is a symlink, return
    * information about the symlink without following it.
+   *
+   * `modifiedTime` and `size` are null for a regular file that hasn't been
+   * stat'd (see `FileMetadata`).
    */
   linkStats(file: Path): ?FileStats;
 
@@ -438,20 +453,31 @@ export interface FileSystem {
    */
   lookup(mixedPath: Path, observations?: ?Observations): LookupResult;
 
-  matchFiles(opts: {
-    /* Filter relative paths against a pattern. */
-    filter?: RegExp | null,
-    /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
-    filterCompareAbsolute?: boolean,
-    /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
-    filterComparePosix?: boolean,
-    /* Follow symlinks when enumerating paths. (default: false) */
-    follow?: boolean,
-    /* Should search for files recursively. (default: true) */
-    recursive?: boolean,
-    /* Match files under a given root, or null for all files */
-    rootDir?: Path | null,
-  }): Iterable<Path>;
+  /**
+   * Enumerate the files under `rootDir` that match `filter`.
+   *
+   * If `observations` is given, records the paths the result depends upon as
+   * it is iterated: every directory enumerated, any symlink traversed or
+   * enumerated and what it resolved to, and either `rootDir` or the first
+   * segment of it that did not exist.
+   */
+  matchFiles(
+    opts: {
+      /* Filter relative paths against a pattern. */
+      filter?: RegExp | null,
+      /* `filter` is applied against absolute paths, vs rootDir-relative. (default: false) */
+      filterCompareAbsolute?: boolean,
+      /* `filter` is applied against posix-delimited paths, even on Windows. (default: false) */
+      filterComparePosix?: boolean,
+      /* Follow symlinks when enumerating paths. (default: false) */
+      follow?: boolean,
+      /* Should search for files recursively. (default: true) */
+      recursive?: boolean,
+      /* Match files under a given root, or null for all files */
+      rootDir?: Path | null,
+    },
+    observations?: ?Observations,
+  ): Iterable<Path>;
 }
 
 export type JsonData =
@@ -582,6 +608,12 @@ export interface ReadonlyFileSystemChanges<out T = FileMetadata> {
 }
 
 export interface MutableFileSystem extends FileSystem {
+  /**
+   * The file system's own data, not a copy, so it changes with the file
+   * system. Serialize it synchronously (see `CacheManager.write`), or use
+   * `getSerializableSnapshot()` for a copy.
+   */
+  getSerializableState(): CacheData['fileSystemData'];
   remove(filePath: Path, listener?: FileSystemListener): void;
   addOrModify(
     filePath: Path,
@@ -655,6 +687,14 @@ export type WatcherBackendChangeEvent =
       root: string,
     }>;
 
+// `Omit` of each member separately, so that each event keeps its own properties.
+type OmitRoot<Event> = Event extends {readonly root: string, ...}
+  ? Omit<Event, 'root'>
+  : Event;
+
+export type WatcherBackendChangeEventWithoutRoot =
+  OmitRoot<WatcherBackendChangeEvent>;
+
 export type WatcherBackendOptions = Readonly<{
   ignored: ?RegExp,
   included: ?WatcherIncludedFiles,
@@ -680,11 +720,15 @@ export type WorkerMessage = Readonly<{
   filePath: string,
   maybeReturnContent: boolean,
   pluginsToRun: ReadonlyArray<number>,
+  // Whether to stat the file before reading it, and return the result as
+  // `stats`. Set for a file that hasn't been stat'd (see `FileMetadata`).
+  returnStats: boolean,
 }>;
 
 export type WorkerMetadata = Readonly<{
   sha1?: ?string,
   content?: ?Buffer,
+  stats?: ?Readonly<{mtime: number, size: number}>,
   pluginData?: ReadonlyArray<V8Serializable>,
 }>;
 

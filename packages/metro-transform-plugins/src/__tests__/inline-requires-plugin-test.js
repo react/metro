@@ -15,10 +15,12 @@ import type {Plugins} from '@babel/core';
 import type {Node as BabelNode} from '@babel/types';
 import type {PluginTesterOptions} from 'babel-plugin-tester';
 
+import importExportPlugin from '../import-export-plugin';
 import inlineRequiresPlugin from '../inline-requires-plugin';
 import validateOutputAst from './validateOutputAst';
 import * as babel from '@babel/core';
 import pluginTester from 'babel-plugin-tester';
+import vm from 'node:vm';
 import nullthrows from 'nullthrows';
 
 type TestCases = PluginTesterOptions<PluginOptions, State>['tests'];
@@ -269,6 +271,11 @@ const TEST_CASES: TestCases = {
     snapshot: true,
   },
 
+  'ignores empty destructured requires': {
+    code: ['const {} = require("foo");'].join('\n'),
+    snapshot: false,
+  },
+
   'ignores destructured requires with defaults': {
     code: ['const {', '  a = 1', '} = require("foo");', 'a();'].join('\n'),
     snapshot: false,
@@ -325,6 +332,22 @@ const TEST_CASES: TestCases = {
     snapshot: true,
   },
 
+  'ignores requires exported by name': {
+    code: ['var foo = require("foo");', 'foo();', 'export { foo };'].join('\n'),
+    snapshot: false,
+  },
+
+  'ignores destructured requires exported by name': {
+    code: [
+      'const {',
+      '  a',
+      '} = require("foo");',
+      'a();',
+      'export { a };',
+    ].join('\n'),
+    snapshot: false,
+  },
+
   'ignores destructured requires in `ignoredRequires`': {
     code: ['const {', '  a', '} = require("CommonFoo");', 'a();'].join('\n'),
     snapshot: false,
@@ -348,6 +371,63 @@ describe.each([true, false])('memoizeCalls=%s:', memoizeCalls => {
 });
 
 describe('inline-requires', () => {
+  test.each([[false], [true]])(
+    'ignores requires referenced in type annotations (memoizeCalls=%s)',
+    memoizeCalls => {
+      const source = [
+        'const foo = require("foo");',
+        'const {a} = require("bar");',
+        'type T = typeof foo | typeof a;',
+        'foo(a);',
+      ].join('\n');
+      const transformFlow = (plugins: Plugins) =>
+        babel.transformSync(source, {
+          babelrc: false,
+          configFile: false,
+          parserOpts: {plugins: ['flow']},
+          plugins,
+        })?.code;
+      expect(transformFlow([[inlineRequiresPlugin, {memoizeCalls}]])).toBe(
+        transformFlow([]),
+      );
+    },
+  );
+
+  test.each([[false], [true]])(
+    'inlines destructured requires exported by the import-export plugin (memoizeCalls=%s)',
+    memoizeCalls => {
+      // The import-export plugin runs first in the same pass and inserts
+      // `exports.a = a` after `a()`, with no source location.
+      const code = nullthrows(
+        babel.transformSync(
+          ['const {a} = require("foo");', 'a();', 'export {a};'].join('\n'),
+          {
+            babelrc: false,
+            configFile: false,
+            sourceType: 'module',
+            plugins: [
+              [
+                importExportPlugin,
+                {
+                  importAll: '_$$_IMPORT_ALL',
+                  importDefault: '_$$_IMPORT_DEFAULT',
+                  resolve: false,
+                },
+              ],
+              [inlineRequiresPlugin, {memoizeCalls}],
+            ],
+          },
+        )?.code,
+      );
+      expect(code).not.toMatch(/const \{/);
+      const foo = {a: jest.fn()};
+      const exports: {a?: unknown} = {};
+      vm.runInNewContext(code, {require: () => foo, exports});
+      expect(foo.a).toHaveBeenCalledTimes(1);
+      expect(exports.a).toBe(foo.a);
+    },
+  );
+
   const transform = (
     source: ReadonlyArray<string>,
     plugins?: Plugins = [[inlineRequiresPlugin, {}]],

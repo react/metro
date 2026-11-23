@@ -30,7 +30,7 @@ import type {
 import type {MetroBabelFileMetadata} from 'metro-babel-transformer';
 
 import B64Builder from './B64Builder';
-import traverse from '@babel/traverse';
+import {traverse} from '@babel/core';
 import * as t from '@babel/types';
 import {
   isAssignmentExpression,
@@ -159,7 +159,7 @@ function functionMapBabelPlugin(): PluginObj<> {
 
 function getFunctionMapVisitor(
   context: ?Context,
-  pushMapping: RangeMapping => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ): FunctionMapVisitor {
   const nameStack: Array<{loc: BabelNodeSourceLocation, name: string}> = [];
   let tailPos = {line: 1, column: 0};
@@ -223,7 +223,7 @@ function getFunctionMapVisitor(
 function forEachMapping(
   ast: BabelNode,
   context: ?Context,
-  pushMapping: RangeMapping => void,
+  pushMapping: (mapping: RangeMapping) => void,
 ) {
   const visitor = getFunctionMapVisitor(context, pushMapping);
 

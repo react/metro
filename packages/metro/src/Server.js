@@ -56,8 +56,15 @@ import {calculateBundleProgressRatio} from './lib/bundleProgressUtils';
 import bundleToString from './lib/bundleToString';
 import formatBundlingError from './lib/formatBundlingError';
 import getGraphId from './lib/getGraphId';
+import {
+  VIRTUAL_MODULE_URL_PARAM,
+  getModuleSourcePath,
+  isVirtualModulePath,
+  isVirtualModuleUrl,
+} from './lib/modulePath';
 import parseBundleOptionsFromBundleRequestUrl from './lib/parseBundleOptionsFromBundleRequestUrl';
 import parseJsonBody from './lib/parseJsonBody';
+import {RESERVED_STRING} from './lib/reservedString';
 import RootUrlMap from './lib/RootUrlMap';
 import splitBundleOptions from './lib/splitBundleOptions';
 import * as transformHelpers from './lib/transformHelpers';
@@ -89,7 +96,7 @@ const noopLogger: RootPerfLogger = {
   end: () => {},
 };
 
-export type SegmentLoadData = {[number]: [Array<number>, ?number], ...};
+export type SegmentLoadData = {[key: number]: [Array<number>, ?number], ...};
 export type BundleMetadata = {
   hash: string,
   otaBuildNumber: ?string,
@@ -247,6 +254,7 @@ export default class Server {
       includeAsyncPaths: graphOptions.lazy,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -397,6 +405,7 @@ export default class Server {
       platform: transformOptions.platform,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
+      reservedString: RESERVED_STRING,
       runBeforeMainModule:
         this._config.serializer.getModulesRunBeforeMainModule(
           path.relative(this._config.projectRoot, entryPoint),
@@ -444,8 +453,6 @@ export default class Server {
       platform,
       projectRoot: this._config.projectRoot,
       publicPath: this._config.transformer.publicPath,
-      watchFolders: this._config.watchFolders,
-      dynamicRoots: this._bundler.getBundler().getDynamicRoots(),
     });
   }
 
@@ -600,7 +607,7 @@ export default class Server {
   ) => void = (
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (error: ?Error) => void,
   ) => {
     this._processRequest(req, res, next).catch(next);
   };
@@ -623,7 +630,7 @@ export default class Server {
   async _processRequest(
     req: IncomingMessage,
     res: ServerResponse,
-    next: (?Error) => void,
+    next: (error: ?Error) => void,
   ): Promise<void> {
     const originalUrl = req.url;
     debug('Handling request:    %s', originalUrl);
@@ -714,7 +721,8 @@ export default class Server {
         sourceFilePath =
           this._rootUrlMap.filePathOfUrlDecodedPathname(filePathname);
       }
-      if (sourceFilePath != null) {
+      // Virtual modules aren't served by URL yet.
+      if (sourceFilePath != null && !isVirtualModuleUrl(urlObj.searchParams)) {
         await this._processSourceRequest(sourceFilePath, res);
       } else {
         next();
@@ -1143,6 +1151,7 @@ export default class Server {
           dev: transformOptions.dev,
           projectRoot: this._config.projectRoot,
           modulesOnly: serializerOptions.modulesOnly,
+          reservedString: RESERVED_STRING,
           runBeforeMainModule:
             this._config.serializer.getModulesRunBeforeMainModule(
               path.relative(this._config.projectRoot, entryFile),
@@ -1453,16 +1462,7 @@ export default class Server {
       );
       debug('Start symbolication');
 
-      let parsedBody;
-      if ('rawBody' in req) {
-        // TODO: Remove this branch once we are no longer targeting React Native
-        // < 0.80 and Expo SDK < 53
-        // $FlowFixMe[prop-missing] - rawBody assigned by legacy CLI integrations
-        const body = await req.rawBody;
-        parsedBody = JSON.parse(body) as JsonData;
-      } else {
-        parsedBody = await parseJsonBody(req, {strict: false});
-      }
+      const parsedBody = await parseJsonBody(req, {strict: false});
 
       let validatedBody: {
         stack: ReadonlyArray<JsonData>,
@@ -1757,8 +1757,14 @@ export default class Server {
   // eslint-disable-next-line consistent-return
   _getModuleSourceUrl(module: Module<>, mode: SourcePathsMode): string {
     switch (mode) {
-      case SourcePathsMode.ServerUrl:
-        return this._rootUrlMap.urlPathnameOfFilePath(module.path);
+      case SourcePathsMode.ServerUrl: {
+        const pathname = this._rootUrlMap.urlPathnameOfFilePath(
+          getModuleSourcePath(module.path),
+        );
+        return isVirtualModulePath(module.path)
+          ? `${pathname}?${VIRTUAL_MODULE_URL_PARAM}=true`
+          : pathname;
+      }
       case SourcePathsMode.Absolute:
         return module.path;
     }
@@ -1766,7 +1772,6 @@ export default class Server {
 }
 
 function* zip<X, Y>(xs: Iterable<X>, ys: Iterable<Y>): Iterable<[X, Y]> {
-  //$FlowFixMe[incompatible-type] #9324959
   const ysIter: Iterator<Y> = ys[Symbol.iterator]();
   for (const x of xs) {
     const y = ysIter.next();
