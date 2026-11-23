@@ -12,13 +12,13 @@
 
 import {formatTable, parseTargets} from '../benchmarks/bundling_speed';
 
-test('parses <entry>:<platform> into a prod and a dev bundle', () => {
-  expect(parseTargets(['src/App.js:ios'], {}).map(b => b.name)).toEqual([
-    'App-ios-prod',
-    'App-ios-dev',
+test('builds the generated app in prod and dev, and takes no targets', () => {
+  expect(parseTargets([], {}).map(b => b.name)).toEqual([
+    'app-prod',
+    'app-dev',
   ]);
-  expect(() => parseTargets(['Entry.js'], {})).toThrow(
-    'Missing platform in "Entry.js"',
+  expect(() => parseTargets(['Entry.js:ios'], {})).toThrow(
+    'bundling_speed takes no targets, got "Entry.js:ios"',
   );
 });
 
