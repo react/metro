@@ -76,7 +76,6 @@ type WatcherOptions = {
   healthCheckFilePrefix: string,
   ignoreForCrawl: (filePath: string) => boolean,
   ignorePatternForWatch: RegExp,
-  previousState: CrawlerOptions['previousState'],
   perfLogger: ?PerfLogger,
   roots: ReadonlyArray<string>,
   rootDir: string,
@@ -107,6 +106,7 @@ export class Watcher extends EventEmitter {
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
   readonly #options: WatcherOptions;
+  #prepared: ?Promise<?ReadonlyArray<?CrawlWatcher>>;
   readonly #pendingHealthChecks: Map<
     /* basename */ string,
     /* resolve */ () => void,
@@ -122,8 +122,20 @@ export class Watcher extends EventEmitter {
     this.#useWatchmanWatcher = options.useWatchman;
   }
 
-  async crawl(): Promise<CrawlResult> {
-    this.#options.perfLogger?.point('crawl_start');
+  /**
+   * Start anything that must be running before the crawl begins, which in
+   * watch mode without Watchman is the backends, with their watches
+   * confirmed. crawl() waits for this, and calling it earlier lets other work,
+   * such as reading a cache, overlap with it. Resolves to the node crawl's
+   * watchers, if any.
+   */
+  prepareCrawl(): Promise<?ReadonlyArray<?CrawlWatcher>> {
+    this.#prepared ??= this.#prepareCrawl();
+    return this.#prepared;
+  }
+
+  async #prepareCrawl(): Promise<?ReadonlyArray<?CrawlWatcher>> {
+    this.#options.perfLogger?.point('prepareCrawl_start');
     const options = this.#options;
 
     // Non-Watchman backends have no clock to subscribe `since`, so they must
@@ -148,10 +160,20 @@ export class Watcher extends EventEmitter {
         );
       }
     }
+    this.#options.perfLogger?.point('prepareCrawl_end');
+    return crawlWatchers;
+  }
+
+  async crawl(
+    previousState: CrawlerOptions['previousState'],
+  ): Promise<CrawlResult> {
+    this.#options.perfLogger?.point('crawl_start');
+    const options = this.#options;
+    const crawlWatchers = await this.prepareCrawl();
 
     const result = await this.#crawl({
       crawlWatchers,
-      previousState: options.previousState,
+      previousState,
       roots: options.roots,
       useWatchman: options.useWatchman,
     });

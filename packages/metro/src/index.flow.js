@@ -593,6 +593,7 @@ async function earlyPortCheck(host: void | string, port: number) {
       server.on('error', err => {
         reject(err);
       });
+      // $FlowFixMe[incompatible-type] `void` is not `undefined` under experimental.ts_void
       server.listen(port, host, undefined, () => resolve());
     });
   } finally {

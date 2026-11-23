@@ -69,7 +69,7 @@ export async function save(
   },
   options: OutputOptions,
   log: (message: string) => void,
-): Promise<unknown> {
+): Promise<void> {
   const {
     bundleOutput,
     bundleEncoding: encoding,

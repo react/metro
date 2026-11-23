@@ -524,6 +524,39 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
+  test('does not drop side effects from the leading operands of a sequence', () => {
+    const code = `
+      if ((i++, false)) {
+        a();
+      }
+      var b = (delete o.x, true) ? 1 : 2;
+      var c = (new Foo(), null) || 3;
+      var d = (--j, 1) + 2;
+      var h = (tag\`x\`, 0) || 4;
+      async function e() {
+        if ((await f, false)) {}
+      }
+      function* g() {
+        if ((yield, false)) {}
+      }
+      export {e, g};
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('folds a sequence whose leading operands have no side effects', () => {
+    const code = `
+      var a = (0, 'production' !== 'production') ? 1 : 2;
+    `;
+
+    const expected = `
+      var a = 2;
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
   test('does not fold arithmetic on destructured object bindings', () => {
     const code = `
       const O = {e: 80};

@@ -173,10 +173,19 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
+// Canonical paths whose addition or removal (`existence`) or modification
+// (`content`) can change a resolution's result.
+export type ResolutionObservations = Readonly<{
+  existence: Set<string>,
+  content: Set<string>,
+}>;
+
 export type BundlerResolution =
   | Readonly<{
       type: 'sourceFile',
       filePath: string,
+      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      unstable_observations?: ResolutionObservations,
     }>
   | Readonly<{
       type: 'virtualModule',
@@ -189,6 +198,8 @@ export type BundlerResolution =
       source: Buffer,
       /** SHA-1 of `source`. */
       sha1: string,
+      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      unstable_observations?: ResolutionObservations,
     }>;
 
 export type Options<T = MixedOutput> = Readonly<{
