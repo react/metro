@@ -11,6 +11,7 @@
 
 import type {RequireContext} from '../lib/contextModule';
 import type {RequireContextParams} from '../ModuleGraph/worker/collectDependencies';
+import type {ObservationList} from '../node-haste/DependencyGraph/ObservationIndex';
 import type {ReadonlySourceLocation} from '../shared/types';
 import type {Graph} from './Graph';
 import type {JsTransformOptions} from 'metro-transform-worker';
@@ -176,10 +177,12 @@ export type AllowOptionalDependencies =
 // Canonical paths whose addition or removal (`existence`) or modification
 // (`content`) can change a resolution's result, and every Haste name it looked
 // up, found or not (`haste`). `haste` is null if there were none, which is
-// always so when no file can have a Haste name.
+// always so when no file can have a Haste name. `existence` and `content` are
+// append-only lists that may hold duplicates: `DependencyGraph` ingests the
+// record into its `ObservationIndex` and drops it.
 export type ResolutionObservations = Readonly<{
-  existence: Set<string>,
-  content: Set<string>,
+  existence: ObservationList,
+  content: ObservationList,
   haste: ?Set<string>,
 }>;
 
@@ -187,8 +190,11 @@ export type BundlerResolution =
   | Readonly<{
       type: 'sourceFile',
       filePath: string,
-      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      // Set by `ModuleResolver` if `resolver.unstable_incrementalResolution`
+      // is enabled. `DependencyGraph` replaces it with
+      // `unstable_observationsId`, the record's id in its `ObservationIndex`.
       unstable_observations?: ResolutionObservations,
+      unstable_observationsId?: number,
     }>
   | Readonly<{
       type: 'virtualModule',
@@ -201,8 +207,9 @@ export type BundlerResolution =
       source: Buffer,
       /** SHA-1 of `source`. */
       sha1: string,
-      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      // As for `sourceFile`.
       unstable_observations?: ResolutionObservations,
+      unstable_observationsId?: number,
     }>;
 
 export type Options<T = MixedOutput> = Readonly<{

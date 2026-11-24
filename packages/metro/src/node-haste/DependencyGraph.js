@@ -34,6 +34,7 @@ import {getMetroBabelRuntimePackageJsonPath} from '../lib/metroBabelRuntime';
 import {getMetroRuntimePackageJsonPath} from '../lib/metroRuntime';
 import createFileMap from './DependencyGraph/createFileMap';
 import createModuleResolver from './DependencyGraph/createModuleResolver';
+import {ObservationIndex} from './DependencyGraph/ObservationIndex';
 import {PackageCache} from './PackageCache';
 import {
   AmbiguousModuleResolutionError,
@@ -63,6 +64,24 @@ function getOrCreateMap<T>(
   return subMap;
 }
 
+type ResolutionCache = Map<
+  // Custom resolver options
+  string | symbol,
+  Map<
+    // Origin folder
+    string | symbol,
+    Map<
+      // Dependency name
+      string | symbol,
+      Map<
+        // Platform
+        string | symbol,
+        BundlerResolution,
+      >,
+    >,
+  >,
+>;
+
 export default class DependencyGraph extends EventEmitter {
   _config: ConfigT;
   _haste: MetroFileMap;
@@ -71,23 +90,11 @@ export default class DependencyGraph extends EventEmitter {
   _hasteMap: ?HasteMap;
   #dependencyPlugin: ?DependencyPlugin;
   _moduleResolver: ModuleResolver;
-  _resolutionCache: Map<
-    // Custom resolver options
-    string | symbol,
-    Map<
-      // Origin folder
-      string | symbol,
-      Map<
-        // Dependency name
-        string | symbol,
-        Map<
-          // Platform
-          string | symbol,
-          BundlerResolution,
-        >,
-      >,
-    >,
-  >;
+  // One index per resolution cache, so it lives exactly as long as the
+  // resolutions it describes, however the cache is replaced.
+  readonly #observationIndexes: WeakMap<ResolutionCache, ObservationIndex> =
+    new WeakMap();
+  _resolutionCache: ResolutionCache;
   _initializedPromise: Promise<void>;
   #dynamicRoots: ReadonlyArray<DynamicRoot> = [];
   #dynamicRootsSource: ?ReadonlyArray<FileMapRoot> = null;
@@ -359,6 +366,26 @@ export default class DependencyGraph extends EventEmitter {
         }
         throw error;
       }
+      const observations = resolution.unstable_observations;
+      if (observations != null) {
+        // Keep only the reduced, interned record; the raw one is dropped.
+        const unstable_observationsId =
+          this._getObservationIndex().ingest(observations);
+        resolution =
+          resolution.type === 'virtualModule'
+            ? {
+                type: 'virtualModule',
+                filePath: resolution.filePath,
+                source: resolution.source,
+                sha1: resolution.sha1,
+                unstable_observationsId,
+              }
+            : {
+                type: 'sourceFile',
+                filePath: resolution.filePath,
+                unstable_observationsId,
+              };
+      }
     }
 
     const memoOriginKey =
@@ -368,6 +395,17 @@ export default class DependencyGraph extends EventEmitter {
       resolution,
     );
     return resolution;
+  }
+
+  // The index describing the current resolution cache, i.e. what each cached
+  // resolution observed (by its `unstable_observationsId`).
+  _getObservationIndex(): ObservationIndex {
+    let index = this.#observationIndexes.get(this._resolutionCache);
+    if (index == null) {
+      index = new ObservationIndex();
+      this.#observationIndexes.set(this._resolutionCache, index);
+    }
+    return index;
   }
 
   doesFileExist = (filePath: string): boolean => {

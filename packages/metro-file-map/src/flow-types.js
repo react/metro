@@ -529,6 +529,11 @@ export type LookupResult =
       metadata: FileMetadata,
     };
 
+/** Where a query records a path. Producers only ever append. */
+export interface ObservationSink {
+  add(canonicalPath: CanonicalPath): unknown;
+}
+
 /**
  * A mutable record of what a query observed of the file system, sufficient to
  * decide later whether its answer may have changed.
@@ -545,7 +550,7 @@ export interface Observations {
    * it to one entry: a missing `node_modules` is one path invalidating every
    * package resolution under it, rather than one per package.
    */
-  readonly existence: Set<CanonicalPath>;
+  readonly existence: ObservationSink;
 
   /**
    * Files whose content was observed (including traversed symlinks, whose
@@ -555,7 +560,7 @@ export interface Observations {
    * and a content read of the same file) without changing what invalidates
    * the result.
    */
-  readonly content: Set<CanonicalPath>;
+  readonly content: ObservationSink;
 }
 
 export interface MockMap {

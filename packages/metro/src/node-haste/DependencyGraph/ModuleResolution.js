@@ -26,6 +26,7 @@ import type {
 import type {PackageForModule, PackageJson} from 'metro-resolver/private/types';
 
 import {deriveVirtualModulePath} from '../../lib/modulePath';
+import {createObservations} from './ObservationIndex';
 import {codeFrameColumns} from '@babel/code-frame';
 import invariant from 'invariant';
 import * as Resolver from 'metro-resolver';
@@ -76,11 +77,6 @@ type Options = Readonly<{
   unstable_incrementalResolution: boolean,
   unstable_resolveExportsFromPackageRoot: boolean,
 }>;
-
-// Same shape for every record, to keep lookups monomorphic.
-function createObservations(): {...ResolutionObservations} {
-  return {existence: new Set(), content: new Set(), haste: null};
-}
 
 export class ModuleResolver {
   _options: Options;
@@ -350,10 +346,10 @@ export class ModuleResolver {
         // It is resolved without Haste, so has no names to merge.
         const emptyObservations = emptyModule.unstable_observations;
         if (emptyObservations != null) {
-          for (const canonicalPath of emptyObservations.existence) {
+          for (const canonicalPath of emptyObservations.existence.items) {
             observations.existence.add(canonicalPath);
           }
-          for (const canonicalPath of emptyObservations.content) {
+          for (const canonicalPath of emptyObservations.content.items) {
             observations.content.add(canonicalPath);
           }
         }

@@ -12,7 +12,7 @@
 'use strict';
 
 import type {ResolverInputOptions} from '../../shared/types';
-import type {TransformResultDependency} from '../types';
+import type {BundlerResolution, TransformResultDependency} from '../types';
 import type {InputConfigT} from 'metro-config';
 
 const {getDefaultConfig, mergeConfig} = require('metro-config');
@@ -119,6 +119,13 @@ function dep(name: string): TransformResultDependency {
       mergeConfig(await getDefaultConfig(p('/root')), defaultConfig, config),
     );
     await dependencyGraph.ready();
+    // Underscored members are private to Flow (munge_underscores). The tests
+    // read the resolver's own result, and the graph's observation index.
+    // $FlowFixMe[prop-missing]
+    const moduleResolver = dependencyGraph._moduleResolver;
+    const observationIndex = () =>
+      // $FlowFixMe[prop-missing]
+      dependencyGraph._getObservationIndex();
 
     return {
       resolve: (
@@ -134,6 +141,42 @@ function dep(name: string): TransformResultDependency {
           resolverOptions,
           options,
         ),
+      // The resolver's raw record, before `DependencyGraph` ingests it, with
+      // its lists as sets.
+      resolveObserved: (
+        from: string,
+        dependency: TransformResultDependency,
+        resolverOptions?: ResolverInputOptions = {dev: true},
+      ) => {
+        const resolution = moduleResolver.resolveDependency(
+          from,
+          dependency,
+          true,
+          platform ?? null,
+          resolverOptions,
+        );
+        const observations = resolution.unstable_observations;
+        return observations == null
+          ? resolution
+          : {
+              ...resolution,
+              unstable_observations: {
+                existence: new Set(observations.existence.items),
+                content: new Set(observations.content.items),
+                haste: observations.haste,
+              },
+            };
+      },
+      observedKeys: (resolution: BundlerResolution) => {
+        const id = resolution.unstable_observationsId;
+        return id == null ? null : observationIndex().getKeys(id);
+      },
+      invalidated: (
+        addedOrRemoved: ReadonlyArray<string>,
+        modified: ReadonlyArray<string> = [],
+        hasteNames: ReadonlyArray<string> = [],
+      ) =>
+        observationIndex().getInvalidated(addedOrRemoved, modified, hasteNames),
       end: () => dependencyGraph.end(),
     };
   }
@@ -3292,15 +3335,17 @@ function dep(name: string): TransformResultDependency {
       test('resolutions carry no observations by default', async () => {
         setMockFileSystem({'index.js': '', 'a.js': ''});
         resolver = await createResolver();
-        expect(
-          resolver.resolve(p('/root/index.js'), dep('./a')),
-        ).not.toHaveProperty('unstable_observations');
+        const resolution = resolver.resolve(p('/root/index.js'), dep('./a'));
+        expect(resolution).not.toHaveProperty('unstable_observations');
+        expect(resolution).not.toHaveProperty('unstable_observationsId');
       });
 
       test('records every candidate probed for a relative import', async () => {
         setMockFileSystem({'index.js': '', 'a.js': ''});
         resolver = await createResolver(incremental, 'ios');
-        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+        expect(
+          resolver.resolveObserved(p('/root/index.js'), dep('./a')),
+        ).toEqual({
           type: 'sourceFile',
           filePath: p('/root/a.js'),
           unstable_observations: {
@@ -3330,7 +3375,7 @@ function dep(name: string): TransformResultDependency {
         });
         resolver = await createResolver(incremental, 'ios');
         expect(
-          resolver.resolve(p('/root/deep/dir/index.js'), dep('pkg')),
+          resolver.resolveObserved(p('/root/deep/dir/index.js'), dep('pkg')),
         ).toEqual({
           type: 'sourceFile',
           filePath: p('/root/node_modules/pkg/main.js'),
@@ -3368,7 +3413,9 @@ function dep(name: string): TransformResultDependency {
         setMockFileSystem({'index.js': '', real: {'x.js': ''}});
         fs.symlinkSync(p('/root/real'), p('/root/link'));
         resolver = await createResolver(incremental, 'ios');
-        expect(resolver.resolve(p('/root/index.js'), dep('./link/x'))).toEqual({
+        expect(
+          resolver.resolveObserved(p('/root/index.js'), dep('./link/x')),
+        ).toEqual({
           type: 'sourceFile',
           filePath: p('/root/real/x.js'),
           unstable_observations: {
@@ -3395,7 +3442,7 @@ function dep(name: string): TransformResultDependency {
         });
         resolver = await createResolver(incremental, 'ios');
         expect(
-          resolver.resolve(p('/root/index.js'), dep('./asset.png'))
+          resolver.resolveObserved(p('/root/index.js'), dep('./asset.png'))
             .unstable_observations,
         ).toEqual({
           existence: canonical(
@@ -3434,7 +3481,10 @@ function dep(name: string): TransformResultDependency {
           'ios',
         );
         expect(
-          resolver.resolve(p('/root/withBrowser/index.js'), dep('./gone')),
+          resolver.resolveObserved(
+            p('/root/withBrowser/index.js'),
+            dep('./gone'),
+          ),
         ).toEqual({
           type: 'sourceFile',
           filePath: p('/root/empty.js'),
@@ -3453,14 +3503,49 @@ function dep(name: string): TransformResultDependency {
         });
       });
 
-      test('origins sharing a cached resolution share its observations', async () => {
+      test('the graph keeps a reduced record in place of the raw one', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        resolver = await createResolver(incremental, 'ios');
+        const resolution = resolver.resolve(p('/root/index.js'), dep('./a'));
+        expect(resolution).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+          unstable_observationsId: expect.any(Number),
+        });
+        const keys = resolver.observedKeys(resolution);
+        // Every candidate for `a` shares one key, as does `package.json`
+        // with any other `package.*`
+        expect(new Set(keys?.existence)).toEqual(canonical('a', 'package'));
+        expect(keys?.content).toEqual([]);
+        expect(keys?.haste).toEqual([]);
+      });
+
+      test('origins sharing a cached resolution share its record', async () => {
         setMockFileSystem({'index.js': '', 'other.js': '', 'a.js': ''});
         resolver = await createResolver(incremental, 'ios');
         const first = resolver.resolve(p('/root/index.js'), dep('./a'));
         const second = resolver.resolve(p('/root/other.js'), dep('./a'));
         expect(second).toBe(first);
-        expect(second.unstable_observations?.existence.size).toBeGreaterThan(0);
+        expect(second.unstable_observationsId).toEqual(expect.any(Number));
       });
+
+      test('a change to an observed name finds the resolution', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        resolver = await createResolver(incremental, 'ios');
+        const {unstable_observationsId: id} = resolver.resolve(
+          p('/root/index.js'),
+          dep('./a'),
+        );
+        // A more specific candidate appearing
+        expect(resolver.invalidated([joinPath('a.ios.js')])).toEqual(
+          new Set([id]),
+        );
+        // The resolved file being removed
+        expect(resolver.invalidated([joinPath('a.js')])).toEqual(new Set([id]));
+        // An unrelated file
+        expect(resolver.invalidated([joinPath('b.js')])).toEqual(new Set());
+      });
+
       describe('Haste names', () => {
         const withHaste: InputConfigT = {
           resolver: {
@@ -3480,7 +3565,7 @@ function dep(name: string): TransformResultDependency {
           resolver = await createResolver(incremental, 'ios');
           // Bare specifiers go to the Haste map, which stays empty
           expect(
-            resolver.resolve(p('/root/index.js'), dep('pkg'))
+            resolver.resolveObserved(p('/root/index.js'), dep('pkg'))
               .unstable_observations?.haste,
           ).toBe(null);
         });
@@ -3491,7 +3576,7 @@ function dep(name: string): TransformResultDependency {
             'hasteModule.js': '@providesModule hasteModule',
           });
           resolver = await createResolver(withHaste, 'ios');
-          const resolution = resolver.resolve(
+          const resolution = resolver.resolveObserved(
             p('/root/index.js'),
             dep('hasteModule'),
           );
@@ -3507,7 +3592,10 @@ function dep(name: string): TransformResultDependency {
             node_modules: {pkg: {'index.js': ''}},
           });
           resolver = await createResolver(withHaste, 'ios');
-          const resolution = resolver.resolve(p('/root/index.js'), dep('pkg'));
+          const resolution = resolver.resolveObserved(
+            p('/root/index.js'),
+            dep('pkg'),
+          );
           expect(resolution.filePath).toBe(
             p('/root/node_modules/pkg/index.js'),
           );
@@ -3523,7 +3611,7 @@ function dep(name: string): TransformResultDependency {
           });
           resolver = await createResolver(withHaste, 'ios');
           expect(
-            resolver.resolve(p('/root/index.js'), dep('pkg/lib/thing'))
+            resolver.resolveObserved(p('/root/index.js'), dep('pkg/lib/thing'))
               .unstable_observations?.haste,
           ).toEqual(new Set(['pkg']));
         });
@@ -3532,7 +3620,7 @@ function dep(name: string): TransformResultDependency {
           setMockFileSystem({'index.js': '', 'a.js': ''});
           resolver = await createResolver(withHaste, 'ios');
           expect(
-            resolver.resolve(p('/root/index.js'), dep('./a'))
+            resolver.resolveObserved(p('/root/index.js'), dep('./a'))
               .unstable_observations?.haste,
           ).toBe(null);
         });
@@ -3554,7 +3642,7 @@ function dep(name: string): TransformResultDependency {
             },
             'ios',
           );
-          const resolution = resolver.resolve(
+          const resolution = resolver.resolveObserved(
             p('/root/index.js'),
             dep('aPackage'),
           );
