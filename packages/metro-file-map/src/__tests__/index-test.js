@@ -1857,6 +1857,62 @@ describe('FileMap', () => {
       },
     );
 
+    test('starts watching while the cache is read', async () => {
+      let watchedRoots: ?Array<string> = null;
+      mockNodeCrawler.mockImplementationOnce(async () => ({
+        changedFiles: new Map(),
+        removedFiles: new Set(),
+      }));
+      mockCacheManager.read.mockImplementationOnce(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        watchedRoots = Object.keys(mockEmitters);
+        return null;
+      });
+
+      const {fileMap} = await buildNewFileMap({
+        useWatchman: false,
+        watch: true,
+      });
+      await fileMap.end();
+
+      expect(watchedRoots).toEqual([
+        p('/project/fruits'),
+        p('/project/vegetables'),
+      ]);
+    });
+
+    test('end() while the cache is read stops the watch started meanwhile', async () => {
+      let finishRead: () => void = () => {};
+      mockCacheManager.read.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishRead = () => resolve(null);
+          }),
+      );
+      const fileMap = new FileMap({
+        ...defaultConfig,
+        plugins: [],
+        useWatchman: false,
+        watch: true,
+      });
+
+      const built = fileMap.build();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const backends = Object.values(mockEmitters);
+      expect(backends).toHaveLength(2);
+      const stops = backends.map(backend =>
+        jest.spyOn(backend, 'stopWatching'),
+      );
+      await fileMap.end();
+      finishRead();
+
+      await expect(built).rejects.toMatchObject({name: 'AbortError'});
+      for (const stop of stops) {
+        expect(stop).toHaveBeenCalled();
+      }
+      expect(mockNodeCrawler).not.toHaveBeenCalled();
+    });
+
     test('does not miss a change made while the file map is being built', async () => {
       mockNodeCrawler.mockImplementationOnce(async () => {
         // The watcher is already running at this point, so this reports a

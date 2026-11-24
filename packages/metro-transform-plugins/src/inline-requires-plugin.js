@@ -693,9 +693,6 @@ function isDirectlyEnclosedByBlock(t: Types, path: NodePath<Node>) {
 // references.
 function getTreePosition(t: Types, path: NodePath<>): Array<number> {
   const visitorKeys: {readonly [type: string]: ReadonlyArray<string>} =
-    // VISITOR_KEYS is missing from flow-typed's @babel/types.
-    // $FlowFixMe[prop-missing]
-    // $FlowFixMe[incompatible-type]
     t.VISITOR_KEYS;
   const position: Array<number> = [];
   for (const current of path.getAncestry()) {
@@ -707,7 +704,9 @@ function getTreePosition(t: Types, path: NodePath<>): Array<number> {
     }
     position.push(
       visitorKeys[current.parent.type].indexOf(
-        // $FlowFixMe[incompatible-type] Only the root path has a null key.
+        // Only the root path has a null key, and only a path in a list, which
+        // has a `listKey`, has a numeric key.
+        // $FlowFixMe[incompatible-type]
         current.listKey ?? current.key,
       ),
     );

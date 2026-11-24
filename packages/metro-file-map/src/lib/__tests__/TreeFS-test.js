@@ -379,6 +379,42 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       },
     );
 
+    test('lookup can find a file in a directory ending in a dot', () => {
+      tfs.addOrModify(p('foo./x.js'), [0, 0, 0, null, 0, null]);
+      expect(tfs.lookup(p('/project/root/project/foo./x.js'))).toMatchObject({
+        exists: true,
+        realPath: p('/project/foo./x.js'),
+      });
+    });
+
+    test('matchFiles follows a link whose target leads into a directory ending in a dot', () => {
+      const dotTfs = new TreeFS({
+        rootDir: p('/project'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('foo./sub/x.js'), [0, 0, 0, null, 0, null]],
+          [p('root'), [0, 0, 0, null, '..', null]],
+          [p('link-to-sub'), [0, 0, 0, null, 'root/project/foo./sub', null]],
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        Array.from(
+          dotTfs.matchFiles({
+            follow: true,
+            recursive: true,
+            rootDir: p('/project'),
+          }),
+        ),
+      ).toEqual([
+        p('/project/foo./sub/x.js'),
+        p('/project/root/project/foo./sub/x.js'),
+        p('/project/root/project/link-to-sub/x.js'),
+        p('/project/link-to-sub/x.js'),
+      ]);
+    });
+
     test('matchFiles follows links up', () => {
       const matches = [
         ...tfs.matchFiles({
@@ -1371,6 +1407,158 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           }),
         ),
       ).toEqual([]);
+    });
+
+    describe('observations', () => {
+      function observe(opts: Parameters<TreeFSType['matchFiles']>[0]) {
+        const observations = emptyObservations();
+        const files = Array.from(tfs.matchFiles(opts, observations));
+        return {files, observations};
+      }
+
+      // Every symlink listed is resolved, to decide whether it is a file or a
+      // directory, so each is recorded with what it resolved to.
+      const topLevelSymlinks = [
+        p('/project/link-to-foo'),
+        p('/project/abs-link-out'),
+        p('/project/root'),
+        p('/project/link-to-nowhere'),
+        p('/project/link-to-self'),
+        p('/project/link-cycle-1'),
+        p('/project/link-cycle-2'),
+      ];
+      const topLevelSymlinkTargets = [
+        p('/project/foo'),
+        p('/outside'),
+        p('/'),
+        p('/project/nowhere'),
+        p('/project/link-to-self'),
+        p('/project/link-cycle-2'),
+        p('/project/link-cycle-1'),
+      ];
+
+      test.each([
+        [
+          'records the directory enumerated, non-recursively',
+          {recursive: false, rootDir: p('/project')},
+          [p('/project'), ...topLevelSymlinks],
+          topLevelSymlinkTargets,
+        ],
+        [
+          'records each directory enumerated, recursively',
+          {follow: false, recursive: true, rootDir: p('/project')},
+          [
+            p('/project'),
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+            ...topLevelSymlinks,
+            p('/project/node_modules'),
+            p('/project/node_modules/pkg'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+            ...topLevelSymlinkTargets,
+          ],
+        ],
+        [
+          'records directories outside the project root by canonical path',
+          {follow: false, recursive: true, rootDir: p('/')},
+          [
+            p('/'),
+            p('/project'),
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+            ...topLevelSymlinks,
+            p('/project/node_modules'),
+            p('/project/node_modules/pkg'),
+            p('/outside'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+            ...topLevelSymlinkTargets,
+          ],
+        ],
+        [
+          'records a symlink traversed to reach rootDir',
+          {follow: true, recursive: false, rootDir: p('/project/link-to-foo')},
+          [
+            p('/project/link-to-foo'),
+            p('/project/foo'),
+            p('/project/foo/owndir'),
+            p('/project/foo/link-to-bar.js'),
+            p('/project/foo/link-to-another.js'),
+          ],
+          [
+            p('/project/foo'),
+            p('/project/bar.js'),
+            p('/project/foo/another.js'),
+          ],
+        ],
+        [
+          'records the first missing segment of a missing rootDir',
+          {rootDir: p('/project/missing/deeper')},
+          [],
+          [p('/project/missing')],
+        ],
+        [
+          'records a rootDir that is a file',
+          {rootDir: p('/project/bar.js')},
+          [],
+          [p('/project/bar.js')],
+        ],
+      ])('%s', (_name, opts, content, existence) => {
+        expect(observe(opts).observations).toEqual({
+          content: new Set(content.map(canonical)),
+          existence: new Set(existence.map(canonical)),
+        });
+      });
+
+      test('records a followed symlink target, and directories beneath it, by canonical path', () => {
+        tfs = new TreeFS({
+          rootDir: p('/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('src/index.js'), [0, 0, 0, null, 0, null]],
+            [p('src/link-to-lib'), [0, 0, 0, null, 'lib', null]],
+            [p('lib/nested/deep.js'), [0, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          observe({follow: true, recursive: true, rootDir: p('/project/src')}),
+        ).toEqual({
+          files: [
+            p('/project/src/index.js'),
+            p('/project/src/link-to-lib/nested/deep.js'),
+          ],
+          observations: {
+            content: new Set(
+              [
+                p('/project/src'),
+                p('/project/src/link-to-lib'),
+                p('/project/lib'),
+                p('/project/lib/nested'),
+              ].map(canonical),
+            ),
+            existence: new Set([p('/project/lib')].map(canonical)),
+          },
+        });
+      });
+
+      test('records only once iterated', () => {
+        const observations = emptyObservations();
+        tfs.matchFiles({rootDir: p('/project/foo')}, observations);
+        expect(observations).toEqual(emptyObservations());
+      });
     });
   });
 

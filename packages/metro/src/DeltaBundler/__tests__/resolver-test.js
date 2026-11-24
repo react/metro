@@ -125,7 +125,7 @@ function dep(name: string): TransformResultDependency {
         from: string,
         dependency: TransformResultDependency,
         resolverOptions?: ResolverInputOptions = {dev: true},
-        options: void | {assumeFlatNodeModules: boolean},
+        options?: {assumeFlatNodeModules: boolean},
       ) =>
         dependencyGraph.resolveDependency(
           from,
@@ -3278,6 +3278,291 @@ function dep(name: string): TransformResultDependency {
           }),
         ).toEqual({type: 'sourceFile', filePath: p('/target1.js')});
         expect(resolveRequest).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('unstable_incrementalResolution', () => {
+      const incremental: InputConfigT = {
+        resolver: {unstable_incrementalResolution: true},
+      };
+      // Canonical paths: root-relative, with system separators.
+      const canonical = (...posixPaths: Array<string>) =>
+        new Set(posixPaths.map(posixPath => joinPath(...posixPath.split('/'))));
+
+      test('resolutions carry no observations by default', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        resolver = await createResolver();
+        expect(
+          resolver.resolve(p('/root/index.js'), dep('./a')),
+        ).not.toHaveProperty('unstable_observations');
+      });
+
+      test('records every candidate probed for a relative import', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        resolver = await createResolver(incremental, 'ios');
+        expect(resolver.resolve(p('/root/index.js'), dep('./a'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/a.js'),
+          unstable_observations: {
+            // A more specific candidate appearing changes the result
+            existence: canonical(
+              'a',
+              'a.ios.js',
+              'a.native.js',
+              'a.js',
+              'package.json',
+            ),
+            content: new Set(),
+            haste: null,
+          },
+        });
+      });
+
+      test('records each level probed for a package', async () => {
+        setMockFileSystem({
+          deep: {dir: {'index.js': ''}},
+          node_modules: {
+            pkg: {
+              'package.json': JSON.stringify({name: 'pkg', main: 'main.js'}),
+              'main.js': '',
+            },
+          },
+        });
+        resolver = await createResolver(incremental, 'ios');
+        expect(
+          resolver.resolve(p('/root/deep/dir/index.js'), dep('pkg')),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/node_modules/pkg/main.js'),
+          unstable_observations: {
+            existence: canonical(
+              // The closest package to the origin
+              'deep/dir/index.js',
+              'deep/dir/package.json',
+              'deep/package.json',
+              'package.json',
+              // Each node_modules on the way up, recorded once
+              'deep/dir/node_modules',
+              'deep/node_modules',
+              'node_modules',
+              // The package scope of the files directly in node_modules
+              'node_modules/package.json',
+              // A file is preferred to a package of the same name
+              'node_modules/pkg.ios.js',
+              'node_modules/pkg.native.js',
+              'node_modules/pkg.js',
+              'node_modules/pkg.ios.json',
+              'node_modules/pkg.native.json',
+              'node_modules/pkg.json',
+              'node_modules/pkg',
+              'node_modules/pkg/package.json',
+              'node_modules/pkg/main.js',
+            ),
+            content: new Set(),
+            haste: null,
+          },
+        });
+      });
+
+      test('records a traversed symlink as content, and lookups by real path', async () => {
+        setMockFileSystem({'index.js': '', real: {'x.js': ''}});
+        fs.symlinkSync(p('/root/real'), p('/root/link'));
+        resolver = await createResolver(incremental, 'ios');
+        expect(resolver.resolve(p('/root/index.js'), dep('./link/x'))).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/real/x.js'),
+          unstable_observations: {
+            existence: canonical(
+              'real/x',
+              'real/x.ios.js',
+              'real/x.native.js',
+              'real/x.js',
+              'real/package.json',
+              'package.json',
+            ),
+            // Retargeting the link changes what every path through it means
+            content: canonical('link'),
+            haste: null,
+          },
+        });
+      });
+
+      test('records every asset variant probed', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'asset.png': '',
+          'asset@2x.png': '',
+        });
+        resolver = await createResolver(incremental, 'ios');
+        expect(
+          resolver.resolve(p('/root/index.js'), dep('./asset.png'))
+            .unstable_observations,
+        ).toEqual({
+          existence: canonical(
+            'asset.png',
+            'asset@1x.png',
+            'asset@1.5x.png',
+            'asset@2x.png',
+            'asset@3x.png',
+            'asset@4x.png',
+            'package.json',
+          ),
+          content: new Set(),
+          haste: null,
+        });
+      });
+
+      test('a resolution landing on the empty module includes what resolving the empty module observed', async () => {
+        setMockFileSystem({
+          'empty.js': '',
+          withBrowser: {
+            'package.json': JSON.stringify({
+              name: 'with-browser',
+              browser: {'./gone.js': false},
+            }),
+            'index.js': '',
+            'gone.js': '',
+          },
+        });
+        resolver = await createResolver(
+          {
+            resolver: {
+              emptyModulePath: p('/root/empty.js'),
+              unstable_incrementalResolution: true,
+            },
+          },
+          'ios',
+        );
+        expect(
+          resolver.resolve(p('/root/withBrowser/index.js'), dep('./gone')),
+        ).toEqual({
+          type: 'sourceFile',
+          filePath: p('/root/empty.js'),
+          unstable_observations: {
+            existence: canonical(
+              // What led to the empty module
+              'withBrowser/gone',
+              'withBrowser/package.json',
+              // What resolving the empty module observed
+              'empty.js',
+              'package.json',
+            ),
+            content: new Set(),
+            haste: null,
+          },
+        });
+      });
+
+      test('origins sharing a cached resolution share its observations', async () => {
+        setMockFileSystem({'index.js': '', 'other.js': '', 'a.js': ''});
+        resolver = await createResolver(incremental, 'ios');
+        const first = resolver.resolve(p('/root/index.js'), dep('./a'));
+        const second = resolver.resolve(p('/root/other.js'), dep('./a'));
+        expect(second).toBe(first);
+        expect(second.unstable_observations?.existence.size).toBeGreaterThan(0);
+      });
+      describe('Haste names', () => {
+        const withHaste: InputConfigT = {
+          resolver: {
+            hasteImplModulePath: path.join(
+              __dirname,
+              '../__fixtures__/hasteImpl.js',
+            ),
+            unstable_incrementalResolution: true,
+          },
+        };
+
+        test('are not observed when no file can be given one', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {'index.js': ''}},
+          });
+          resolver = await createResolver(incremental, 'ios');
+          // Bare specifiers go to the Haste map, which stays empty
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg'))
+              .unstable_observations?.haste,
+          ).toBe(null);
+        });
+
+        test('records a name that is found', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            'hasteModule.js': '@providesModule hasteModule',
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          const resolution = resolver.resolve(
+            p('/root/index.js'),
+            dep('hasteModule'),
+          );
+          expect(resolution.filePath).toBe(p('/root/hasteModule.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['hasteModule']),
+          );
+        });
+
+        test('records a name that is not found, since it may appear later', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {'index.js': ''}},
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          const resolution = resolver.resolve(p('/root/index.js'), dep('pkg'));
+          expect(resolution.filePath).toBe(
+            p('/root/node_modules/pkg/index.js'),
+          );
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['pkg']),
+          );
+        });
+
+        test('records only the package name of a deep import', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            node_modules: {pkg: {lib: {'thing.js': ''}}},
+          });
+          resolver = await createResolver(withHaste, 'ios');
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('pkg/lib/thing'))
+              .unstable_observations?.haste,
+          ).toEqual(new Set(['pkg']));
+        });
+
+        test('records nothing for a relative import, which does not consult Haste', async () => {
+          setMockFileSystem({'index.js': '', 'a.js': ''});
+          resolver = await createResolver(withHaste, 'ios');
+          expect(
+            resolver.resolve(p('/root/index.js'), dep('./a'))
+              .unstable_observations?.haste,
+          ).toBe(null);
+        });
+
+        test('records a global package name', async () => {
+          setMockFileSystem({
+            'index.js': '',
+            aPackage: {
+              'package.json': JSON.stringify({name: 'aPackage'}),
+              'index.js': '',
+            },
+          });
+          resolver = await createResolver(
+            {
+              resolver: {
+                enableGlobalPackages: true,
+                unstable_incrementalResolution: true,
+              },
+            },
+            'ios',
+          );
+          const resolution = resolver.resolve(
+            p('/root/index.js'),
+            dep('aPackage'),
+          );
+          expect(resolution.filePath).toBe(p('/root/aPackage/index.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['aPackage']),
+          );
+        });
       });
     });
 

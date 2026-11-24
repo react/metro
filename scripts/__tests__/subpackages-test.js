@@ -164,6 +164,8 @@ export type * from './${flowFileBaseName}';
 */
 
 try {
+  // A devDependency, so only installed in the monorepo.
+  // eslint-disable-next-line import/no-extraneous-dependencies
   require('metro-babel-register').unstable_registerForMetroMonorepo();
 } catch {}
 

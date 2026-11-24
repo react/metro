@@ -67,15 +67,9 @@ export default function saveAsAssets(
   if (sourcemapOutput) {
     const sourceMap = buildSourcemapWithMetadata({
       fixWrapperOffset: true,
-      lazyModules: lazyModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      lazyModules: lazyModules.concat<ModuleTransportLike>(),
       moduleGroups: null,
-      startupModules: startupModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      startupModules: startupModules.concat<ModuleTransportLike>(),
     });
     if (sourcemapSourcesRoot != null) {
       relativizeSourceMapInline(sourceMap, sourcemapSourcesRoot);
@@ -99,7 +93,7 @@ function createDir(dirName: string): Promise<void> {
 function writeModuleFile(
   module: ModuleTransportLike,
   modulesDir: string,
-  encoding: void | 'ascii' | 'utf16le' | 'utf8',
+  encoding?: 'ascii' | 'utf16le' | 'utf8',
 ): Promise<unknown> {
   const {code, id} = module;
   return writeFile(path.join(modulesDir, id + '.js'), code, encoding);
@@ -108,7 +102,7 @@ function writeModuleFile(
 function writeModules(
   modules: ReadonlyArray<ModuleTransportLike>,
   modulesDir: string,
-  encoding: void | 'ascii' | 'utf16le' | 'utf8',
+  encoding?: 'ascii' | 'utf16le' | 'utf8',
 ): Promise<Array<unknown>> {
   const writeFiles = modules.map(
     (module: ModuleTransportLike): Promise<unknown> =>

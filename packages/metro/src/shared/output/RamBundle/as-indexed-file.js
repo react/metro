@@ -60,14 +60,8 @@ export function save(
 
   if (sourcemapOutput) {
     const sourceMap = buildSourcemapWithMetadata({
-      startupModules: startupModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
-      lazyModules: lazyModules.concat<
-        ModuleTransportLike,
-        ModuleTransportLike,
-      >(),
+      startupModules: startupModules.concat<ModuleTransportLike>(),
+      lazyModules: lazyModules.concat<ModuleTransportLike>(),
       moduleGroups,
       fixWrapperOffset: true,
     });
@@ -107,7 +101,7 @@ function writeBuffers(
 
 function nullTerminatedBuffer(
   contents: string,
-  encoding: void | 'ascii' | 'utf16le' | 'utf8',
+  encoding?: 'ascii' | 'utf16le' | 'utf8',
 ): Buffer {
   return Buffer.concat([Buffer.from(contents, encoding), nullByteBuffer]);
 }
@@ -115,7 +109,7 @@ function nullTerminatedBuffer(
 function moduleToBuffer(
   id: number,
   code: string,
-  encoding: void | 'ascii' | 'utf16le' | 'utf8',
+  encoding?: 'ascii' | 'utf16le' | 'utf8',
 ): {buffer: Buffer, id: number} {
   return {
     id,
@@ -200,7 +194,7 @@ function groupCode(
 function buildModuleBuffers(
   modules: ReadonlyArray<ModuleTransportLike>,
   moduleGroups: ModuleGroups,
-  encoding: void | 'ascii' | 'utf16le' | 'utf8',
+  encoding?: 'ascii' | 'utf16le' | 'utf8',
 ): Array<{
   buffer: Buffer,
   id: number,
