@@ -41,6 +41,21 @@ describe('FallbackWatcher', () => {
   // whose events are withheld from it.
   let listeners: Map<string, (event: string, filename: ?string) => void>;
   let mutedDirs: Set<string>;
+  // Every path a watch has reported, muted or not.
+  let reportedPaths: Set<string>;
+
+  // On macOS, `fs.watch` starts an FSEvents stream asynchronously, so a watch
+  // may miss a change made as soon as it is opened, and report one made just
+  // before. Wait until the root's watch reports a probe, by which time it has
+  // reported any earlier change.
+  const waitUntilRootIsLive = async () => {
+    const probe = join(watchRoot, 'live-probe');
+    const deadline = Date.now() + 5000;
+    for (let i = 0; !reportedPaths.has(probe) && Date.now() < deadline; i++) {
+      await writeFile(probe, String(i));
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  };
 
   const indexOfCall = (op: 'watch' | 'readdir', dir: string) =>
     calls.indexOf(`${op}:${dir}`);
@@ -70,6 +85,7 @@ describe('FallbackWatcher', () => {
     watchOverride = null;
     listeners = new Map();
     mutedDirs = new Set();
+    reportedPaths = new Set();
 
     const {watch} = fs;
     jest.spyOn(fs, 'watch').mockImplementation((dir, options, listener) => {
@@ -88,6 +104,9 @@ describe('FallbackWatcher', () => {
       }
       listeners.set(String(dir), listener);
       return watch(dir, options, (event, filename) => {
+        if (filename != null) {
+          reportedPaths.add(join(String(dir), String(filename)));
+        }
         if (!mutedDirs.has(String(dir))) {
           listener(event, filename);
         }
@@ -129,6 +148,7 @@ describe('FallbackWatcher', () => {
 
     test('for a directory created while watching', async () => {
       await watcher?.startWatching();
+      await waitUntilRootIsLive();
       calls = [];
 
       const nested = join(watchRoot, 'new', 'nested');
@@ -220,6 +240,9 @@ describe('FallbackWatcher', () => {
     async (code, expectedErrors) => {
       await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
       watchFailure = {code, path: join(watchRoot, 'a')};
+      // Only the crawl watches `a`. On macOS, the root's watch may report the
+      // creation of `a`, and walking it from there tries to watch it again.
+      mutedDirs.add(watchRoot);
       const errors: Array<Error> = [];
       watcher?.onError(error => {
         errors.push(error);
@@ -265,13 +288,14 @@ describe('FallbackWatcher', () => {
     await mkdir(join(watchRoot, 'target'));
     await fs.promises.symlink(join(watchRoot, 'target'), link, 'junction');
     watcher = createJsWatcher();
+    // Report the change only once the swap is complete. On macOS, the root's
+    // watch may also report the setup's changes after it starts.
+    mutedDirs.add(watchRoot);
     await watcher?.startWatching();
     const events: Array<WatcherBackendChangeEvent> = [];
     watcher?.onFileEvent(event => {
       events.push(event);
     });
-    // Report the change only once the swap is complete
-    mutedDirs.add(watchRoot);
     // A junction on Windows, which is removed as a directory
     await (
       process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
@@ -396,6 +420,7 @@ describe('FallbackWatcher', () => {
       erroredWatcher = new ErroredFSWatcher();
       watchOverride = {path: join(watchRoot, 'a'), watcher: erroredWatcher};
       await watcher?.startWatching();
+      await waitUntilRootIsLive();
       erroredWatcher.emit('error', fsError('ENOENT', join(watchRoot, 'a')));
     });
 
@@ -452,11 +477,12 @@ describe('FallbackWatcher', () => {
     beforeEach(async () => {
       await mkdir(join(watchRoot, 'a'));
       await writeFile(join(watchRoot, 'a', 'existing.js'), '');
-      await watcher?.startWatching();
-      // Only the unnamed change reports anything, and on macOS the root's
-      // watcher also sees changes in subdirectories.
+      // Only the unnamed change reports anything. On macOS the root's watcher
+      // also sees changes in subdirectories, and may report the setup's changes
+      // after it starts.
       mutedDirs.add(watchRoot);
       mutedDirs.add(join(watchRoot, 'a'));
+      await watcher?.startWatching();
       calls = [];
     });
 
