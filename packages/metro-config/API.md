@@ -13,7 +13,7 @@ import type {ServerResponse} from 'node:http';
 export type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult>>;
 
 export type ConfigT = Readonly<
-  MetalConfigT & {
+  Omit<MetalConfigT, 'cacheStores' | 'resolver' | 'server' | 'serializer' | 'symbolicator' | 'transformer' | 'watcher'> & {
     cacheStores: CacheStoresConfigT;
     resolver: Readonly<ResolverConfigT>;
     server: Readonly<ServerConfigT>;
@@ -63,7 +63,7 @@ export type GetTransformOptionsOpts = {
 
 export type InputConfigT = Partial<
   Readonly<
-    MetalConfigT & {
+    Omit<MetalConfigT, 'cacheStores' | 'resolver' | 'server' | 'serializer' | 'symbolicator' | 'transformer' | 'watcher'> & {
       cacheStores: CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT);
       resolver: Readonly<Partial<ResolverConfigT>>;
       server: Readonly<Partial<ServerConfigT>>;
