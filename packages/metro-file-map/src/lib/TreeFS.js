@@ -1302,11 +1302,14 @@ export default class TreeFS implements MutableFileSystem {
     return null;
   }
 
-  *metadataIterator(opts: MetadataIteratorOptions): IteratorObject<{
-    baseName: string,
-    canonicalPath: string,
-    metadata: FileMetadata,
-  }> {
+  *metadataIterator(opts: MetadataIteratorOptions): IteratorObject<
+    {
+      baseName: string,
+      canonicalPath: string,
+      metadata: FileMetadata,
+    },
+    void,
+  > {
     yield* this.#metadataIterator(this.#rootNode, opts);
   }
 
@@ -1374,7 +1377,7 @@ export default class TreeFS implements MutableFileSystem {
     node: DirectoryNode,
     ancestorOfRootIdx: ?number,
     nextAncestorNode: ?DirectoryNode,
-  ): IteratorObject<[string, MixedNode]> {
+  ): IteratorObject<[string, MixedNode], void> {
     if (
       ancestorOfRootIdx != null &&
       ancestorOfRootIdx > 0 &&
