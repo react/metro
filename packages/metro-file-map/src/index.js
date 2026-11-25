@@ -752,7 +752,11 @@ export default class FileMap extends EventEmitter {
       crawl: this.#crawler,
       enableSymlinks,
       extensions,
-      healthCheckFilePrefix: this.#options.healthCheck.filePrefix,
+      // Files whose names start with this prefix are health check files, which
+      // are left out of the crawl and the watcher's changes. Every name starts
+      // with an empty prefix, so the default is used instead.
+      healthCheckFilePrefix:
+        this.#options.healthCheck.filePrefix || '.metro-health-check',
       // TODO: Refactor out the two different ignore strategies here.
       ignoreForCrawl: filePath => {
         const ignoreMatched = ignorePattern.test(filePath);
