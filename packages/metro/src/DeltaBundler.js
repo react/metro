@@ -87,11 +87,12 @@ export default class DeltaBundler<T = MixedOutput> {
       options,
     );
 
-    await deltaCalculator.getDelta({reset: true, shallow: options.shallow});
-    const graph = deltaCalculator.getGraph();
-
-    deltaCalculator.end();
-    return graph.dependencies;
+    try {
+      await deltaCalculator.getDelta({reset: true, shallow: options.shallow});
+      return deltaCalculator.getGraph().dependencies;
+    } finally {
+      deltaCalculator.end();
+    }
   }
 
   // Note: the graph returned by this function needs to be ended when finished
@@ -119,7 +120,16 @@ export default class DeltaBundler<T = MixedOutput> {
         : {...options, transform: recordingTransform},
     );
 
-    await deltaCalculator.getDelta({reset: true, shallow: options.shallow});
+    try {
+      await deltaCalculator.getDelta({reset: true, shallow: options.shallow});
+    } catch (error) {
+      // A graph whose first build fails is never returned, so nothing else
+      // can end it: its calculator would keep listening for file changes and
+      // hold its partial graph for the life of the server, once per failed
+      // build. What the build transformed stays shared for its retries.
+      deltaCalculator.end();
+      throw error;
+    }
     const graph = deltaCalculator.getGraph();
 
     this._deltaCalculators.set(graph, deltaCalculator);
