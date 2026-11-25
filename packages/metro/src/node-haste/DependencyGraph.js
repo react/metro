@@ -13,6 +13,7 @@ import type {
   BundlerResolution,
   ResolutionObservations,
   TransformResultDependency,
+  UnresolvedOptionalDependency,
 } from '../DeltaBundler/types';
 import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {ResolverInputOptions} from '../shared/types';
@@ -308,6 +309,49 @@ export default class DependencyGraph extends EventEmitter {
       assumeFlatNodeModules: false,
     },
   ): BundlerResolution {
+    const resolution = this.#resolveDependency(
+      originModulePath,
+      dependency,
+      platform,
+      resolverOptions,
+      extraOptions,
+      false,
+    );
+    if (resolution.type === 'unresolved') {
+      throw new Error('Only an optional dependency can be unresolved');
+    }
+    return resolution;
+  }
+
+  /**
+   * Resolves an optional dependency as `resolveDependency` does, but returns an
+   * `unresolved` result where `resolveDependency` throws
+   * `UnableToResolveError`.
+   */
+  resolveOptionalDependency(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): BundlerResolution | UnresolvedOptionalDependency {
+    return this.#resolveDependency(
+      originModulePath,
+      dependency,
+      platform,
+      resolverOptions,
+      {assumeFlatNodeModules: false},
+      true,
+    );
+  }
+
+  #resolveDependency(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+    extraOptions: {assumeFlatNodeModules: boolean},
+    isOptional: boolean,
+  ): BundlerResolution | UnresolvedOptionalDependency {
     const to = dependency.name;
     const isSensitiveToOriginFolder =
       // Resolution is always relative to the origin folder unless we assume a flat node_modules
@@ -340,41 +384,55 @@ export default class DependencyGraph extends EventEmitter {
     // same specifier in two sibling files may be two modules. Only virtual
     // resolutions are stored per file, so the per-directory memo is checked
     // first and a hit there needs no second lookup.
-    let resolution: ?BundlerResolution =
+    const resolution: ?BundlerResolution =
       mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey) ??
       mapByOrigin.get(originModulePath)?.get(targetKey)?.get(platformKey);
 
-    if (!resolution) {
-      try {
-        resolution = this._moduleResolver.resolveDependency(
-          originModulePath,
-          dependency,
-          true,
-          platform,
-          resolverOptions,
-        );
-      } catch (error) {
-        if (error instanceof DuplicateHasteCandidatesError) {
-          throw new AmbiguousModuleResolutionError(originModulePath, error);
-        }
-        if (error instanceof InvalidPackageError) {
-          throw new PackageResolutionError({
-            packageError: error,
+    if (resolution) {
+      return resolution;
+    }
+    let result: BundlerResolution | UnresolvedOptionalDependency;
+    try {
+      result = isOptional
+        ? this._moduleResolver.resolveOptionalDependency(
             originModulePath,
-            targetModuleName: to,
-          });
-        }
-        throw error;
+            dependency,
+            true,
+            platform,
+            resolverOptions,
+          )
+        : this._moduleResolver.resolveDependency(
+            originModulePath,
+            dependency,
+            true,
+            platform,
+            resolverOptions,
+          );
+    } catch (error) {
+      if (error instanceof DuplicateHasteCandidatesError) {
+        throw new AmbiguousModuleResolutionError(originModulePath, error);
       }
+      if (error instanceof InvalidPackageError) {
+        throw new PackageResolutionError({
+          packageError: error,
+          originModulePath,
+          targetModuleName: to,
+        });
+      }
+      throw error;
+    }
+    // Not memoized, as a failure that throws is not
+    if (result.type === 'unresolved') {
+      return result;
     }
 
     const memoOriginKey =
-      resolution.type === 'virtualModule' ? originModulePath : originKey;
+      result.type === 'virtualModule' ? originModulePath : originKey;
     getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
       platformKey,
-      resolution,
+      result,
     );
-    return resolution;
+    return result;
   }
 
   doesFileExist = (filePath: string): boolean => {

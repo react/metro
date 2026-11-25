@@ -81,6 +81,12 @@ export class DependencyGraph extends EventEmitter {
     resolverOptions: ResolverInputOptions,
     extraOptions?: {assumeFlatNodeModules: boolean},
   ): BundlerResolution;
+  resolveOptionalDependency(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): BundlerResolution | UnresolvedOptionalDependency;
 }
 
 export function getSchemeResolvers(): Readonly<{

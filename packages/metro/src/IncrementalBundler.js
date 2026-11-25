@@ -116,7 +116,7 @@ export default class IncrementalBundler {
     const absoluteEntryFiles = await this._getAbsoluteEntryFiles(entryFiles);
 
     const graph = await this._deltaBundler.buildGraph(absoluteEntryFiles, {
-      resolve: await transformHelpers.getResolveDependencyFn(
+      resolve: await transformHelpers.getGraphResolveFn(
         this._bundler,
         transformOptions.platform,
         resolverOptions,
@@ -166,7 +166,7 @@ export default class IncrementalBundler {
     const dependencies = await this._deltaBundler.getDependencies(
       absoluteEntryFiles,
       {
-        resolve: await transformHelpers.getResolveDependencyFn(
+        resolve: await transformHelpers.getGraphResolveFn(
           this._bundler,
           transformOptions.platform,
           resolverOptions,
