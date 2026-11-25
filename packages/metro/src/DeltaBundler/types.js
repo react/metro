@@ -133,13 +133,11 @@ export type TransformInputOptions = Omit<
 
 export type GraphInputOptions = Readonly<{
   entryPoints: ReadonlySet<string>,
-  // Unused in core but useful for custom serializers / experimentalSerializerHook
   transformOptions: TransformInputOptions,
 }>;
 
 export interface ReadOnlyGraph<T = MixedOutput> {
   readonly entryPoints: ReadonlySet<string>;
-  // Unused in core but useful for custom serializers / experimentalSerializerHook
   readonly transformOptions: Readonly<TransformInputOptions>;
   readonly dependencies: ReadOnlyDependencies<T>;
 }
@@ -234,6 +232,23 @@ export type ReleasedModules<T = MixedOutput> = Readonly<{
   // `paths` is null.
   heldOutputs: ReadonlySet<ReadonlyArray<T>>,
 }>;
+
+/**
+ * What `createModuleId` is told about the graph a module belongs to, besides
+ * the module's path.
+ */
+export type ModuleIdContext = Readonly<{
+  transformOptions: Readonly<TransformInputOptions>,
+}>;
+
+/**
+ * Maps a module's path to its ID. Metro passes `context` wherever the module's
+ * graph is known.
+ */
+export type CreateModuleIdFn = (
+  path: string,
+  context?: ModuleIdContext,
+) => number;
 
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,

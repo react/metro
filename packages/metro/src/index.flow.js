@@ -166,10 +166,12 @@ export {Terminal, JsonReporter, TerminalReporter, getSchemeResolvers};
 export type {AssetData} from './Assets';
 export type {
   AsyncDependencyType,
+  CreateModuleIdFn,
   DeltaResult,
   Dependency,
   MixedOutput,
   Module,
+  ModuleIdContext,
   ReadOnlyDependencies,
   ReadOnlyGraph,
   SerializerOptions,

@@ -15,6 +15,7 @@ import type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
 import type {CustomResolver} from 'metro-resolver';
 import type {JsTransformerConfig} from 'metro-transform-worker';
 import type {
+  CreateModuleIdFn,
   DeltaResult,
   Module,
   ReadOnlyGraph,
@@ -131,7 +132,7 @@ type ResolverConfigT = {
 };
 
 type SerializerConfigT = {
-  createModuleIdFactory: () => (path: string) => number,
+  createModuleIdFactory: () => CreateModuleIdFn,
   customSerializer: ?(
     entryPoint: string,
     preModules: ReadonlyArray<Module<>>,

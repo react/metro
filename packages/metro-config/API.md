@@ -172,7 +172,7 @@ export interface RootPerfLogger extends PerfLogger {
 }
 
 export type SerializerConfigT = {
-  createModuleIdFactory: () => (path: string) => number;
+  createModuleIdFactory: () => CreateModuleIdFn;
   customSerializer: null | undefined | ((entryPoint: string, preModules: ReadonlyArray<Module>, graph: ReadOnlyGraph, options: SerializerOptions) => Promise<string | {code: string; map: string}>);
   experimentalSerializerHook: (graph: ReadOnlyGraph, delta: DeltaResult) => unknown;
   getModulesRunBeforeMainModule: (entryFilePath: string) => Array<string>;

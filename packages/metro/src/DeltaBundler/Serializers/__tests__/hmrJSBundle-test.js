@@ -296,3 +296,30 @@ test('async paths in updated modules carry the platform of the bundle', () => {
     '"paths":{"0":"/chunk.ios.js.bundle?lazy=true&platform=ios&modulesOnly=true&runModule=false"}',
   );
 });
+
+test('passes only the path to createModuleId for inverse dependencies', () => {
+  const createModuleId = jest.fn((path: string) =>
+    path === '/root/foo' ? 1 : 0,
+  );
+  hmrJSBundle(
+    {
+      added: new Map(),
+      modified: new Map([['/root/bar', barModule]]),
+      deleted: new Set(),
+      reset: false,
+    },
+    {
+      entryPoints: new Set(['/root/foo']),
+      transformOptions,
+      dependencies: new Map([
+        ['/root/foo', fooModule],
+        ['/root/bar', barModule],
+      ]),
+    },
+    {...options, createModuleId},
+  );
+  expect(createModuleId.mock.calls).toContainEqual(['/root/foo']);
+  for (const call of createModuleId.mock.calls) {
+    expect(call).toHaveLength(1);
+  }
+});

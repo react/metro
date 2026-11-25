@@ -776,9 +776,13 @@ Formats the require statements appended to the end of the bundle: one for each m
 
 #### `createModuleIdFactory`
 
-Type: `() => (path: string) => number`
+Type: `() => (path: string, context?: {transformOptions: TransformInputOptions}) => number`
 
 Returns a function mapping a [module](./Concepts.md#module)'s absolute path to the ID used in `require` statements. By default, IDs are sequential numbers in the order modules are first seen.
+
+When Metro serializes a graph (bundle, source map, symbolication, RAM bundle, HMR and `build` requests, including the `createModuleId` it passes to a custom serializer), it also passes a `context` with the graph's transform options (`platform`, `dev`, `customTransformOptions` and so on). A factory can use it to give a path a different ID per platform or environment, for example when bundles for several of them run in one JavaScript environment.
+
+Compare `context` by value: Metro doesn't reuse context objects between calls. A lazily loaded bundle has its parent's transform options, so a value-deterministic factory gives a module the same ID in both. `context` is absent when the function is called directly, such as through `Server.getCreateModuleId()`.
 
 #### `getPolyfills`
 
