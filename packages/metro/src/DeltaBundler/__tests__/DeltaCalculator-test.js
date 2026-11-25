@@ -815,4 +815,98 @@ describe.each(['posix', 'win32'])('DeltaCalculator (%s)', osPlatform => {
 
     expect(graph.dependencies.size).toEqual(numDependencies);
   });
+
+  describe('with incremental resolution', () => {
+    let getModulesInvalidatedBy;
+    // Canonical paths: root-relative, with system separators.
+    const c = (posixPath: string) =>
+      osPlatform === 'win32' ? posixPath.replaceAll('/', '\\') : posixPath;
+
+    beforeEach(() => {
+      const {Graph} = require('../Graph');
+      getModulesInvalidatedBy = jest.spyOn(
+        Graph.prototype,
+        'getModulesInvalidatedBy',
+      );
+      deltaCalculator.end();
+      const DeltaCalculator = require('../DeltaCalculator').default;
+      deltaCalculator = new DeltaCalculator(
+        new Set([p('/bundle')]),
+        fileWatcher,
+        {...options, unstable_incrementalResolution: true},
+      );
+    });
+
+    test('revisits the modules whose resolutions a change may invalidate', async () => {
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+
+      getModulesInvalidatedBy.mockReturnValueOnce(new Set([p('/foo')]));
+      traverseDependencies.mockResolvedValueOnce({
+        added: new Map(),
+        modified: new Map([[p('/foo'), fooModule]]),
+        deleted: new Set(),
+      });
+      // A new file the graph doesn't hold, in a new directory
+      emitChange({addedFiles: ['dir/foo.ios.js'], addedDirectories: ['dir']});
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+
+      expect(getModulesInvalidatedBy).toHaveBeenCalledWith({
+        addedOrRemoved: new Set([c('dir/foo.ios.js'), c('dir')]),
+        // Adding an entry modifies its directory
+        modified: new Set([c('dir'), '']),
+        hasteNames: new Set(),
+      });
+      expect(traverseDependencies.mock.calls[0][0]).toEqual([p('/foo')]);
+    });
+
+    test('passes on changed Haste names, or all of them if unreported', async () => {
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+
+      getModulesInvalidatedBy.mockReturnValue(new Set());
+      emitChange({
+        modifiedFiles: ['Foo.js'],
+        pluginChanges: new Map([['haste', {changedNames: new Set(['Foo'])}]]),
+      });
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+      expect(getModulesInvalidatedBy.mock.lastCall[0].hasteNames).toEqual(
+        new Set(['Foo']),
+      );
+
+      emitChange({modifiedFiles: ['Foo.js'], pluginChanges: null});
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+      expect(getModulesInvalidatedBy.mock.lastCall[0].hasteNames).toBe('all');
+    });
+
+    test('revisits invalidated modules in the next build if a build fails', async () => {
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+
+      getModulesInvalidatedBy.mockReturnValueOnce(new Set([p('/foo')]));
+      traverseDependencies.mockRejectedValueOnce(new Error('Failed'));
+      emitChange({addedFiles: ['foo.ios.js']});
+      await expect(
+        deltaCalculator.getDelta({reset: false, shallow: false}),
+      ).rejects.toThrow('Failed');
+
+      traverseDependencies.mockResolvedValueOnce({
+        added: new Map(),
+        modified: new Map(),
+        deleted: new Set(),
+      });
+      await deltaCalculator.getDelta({reset: false, shallow: false});
+
+      expect(traverseDependencies.mock.calls[1][0]).toEqual([p('/foo')]);
+    });
+  });
+
+  test('without incremental resolution, invalidation is not consulted', async () => {
+    const {Graph} = require('../Graph');
+    const getModulesInvalidatedBy = jest.spyOn(
+      Graph.prototype,
+      'getModulesInvalidatedBy',
+    );
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+    emitChange({addedFiles: ['foo.ios.js']});
+    await deltaCalculator.getDelta({reset: false, shallow: false});
+    expect(getModulesInvalidatedBy).not.toHaveBeenCalled();
+  });
 });

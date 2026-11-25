@@ -18,6 +18,11 @@ export type ChangeEventInput = {
   addedFiles?: ReadonlyArray<FileEntry>,
   modifiedFiles?: ReadonlyArray<FileEntry>,
   removedFiles?: ReadonlyArray<FileEntry>,
+  addedDirectories?: ReadonlyArray<string>,
+  removedDirectories?: ReadonlyArray<string>,
+  // Defaults to none. Null stands for a file map that doesn't report plugin
+  // changes.
+  pluginChanges?: ?ReadonlyMap<string, unknown>,
 };
 
 /**
@@ -29,30 +34,32 @@ export function createEmitChange(
   rootDir: string,
   pathSeparator: string,
 ): (changes: ChangeEventInput) => void {
+  // Convert forward slashes to platform-specific separators for canonical paths
+  const toCanonical = (file: string) =>
+    pathSeparator !== '/' ? file.replaceAll('/', '\\') : file;
   return function emitChange(changes: ChangeEventInput): void {
     const toEntry = (
       entry: FileEntry,
     ): [string, {modifiedTime: ?number, isSymlink: boolean}] => {
       const [file, opts] = typeof entry === 'string' ? [entry, {}] : entry;
-      // Convert forward slashes to platform-specific separators for canonical paths
-      const canonicalPath =
-        pathSeparator !== '/' ? file.replaceAll('/', '\\') : file;
       return [
-        canonicalPath,
+        toCanonical(file),
         {
           modifiedTime: opts.modifiedTime ?? Date.now(),
           isSymlink: opts.isSymlink ?? false,
         },
       ];
     };
+    const {pluginChanges = new Map<string, unknown>()} = changes;
     fileWatcher.emit('change', {
       changes: {
         addedFiles: (changes.addedFiles ?? []).map(toEntry),
         modifiedFiles: (changes.modifiedFiles ?? []).map(toEntry),
         removedFiles: (changes.removedFiles ?? []).map(toEntry),
-        addedDirectories: [],
-        removedDirectories: [],
+        addedDirectories: (changes.addedDirectories ?? []).map(toCanonical),
+        removedDirectories: (changes.removedDirectories ?? []).map(toCanonical),
       },
+      pluginChanges,
       rootDir,
       logger: null,
     });
