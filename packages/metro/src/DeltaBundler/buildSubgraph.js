@@ -90,7 +90,7 @@ function resolveDependencies(
           throw error;
         }
       }
-      if (resolution == null) {
+      if (resolution == null || resolution.type === 'unresolved') {
         maybeResolvedDep = {data: dep};
       } else {
         if (resolution.type === 'virtualModule') {

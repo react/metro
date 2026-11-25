@@ -77,6 +77,9 @@ describe('GraphTraversal', () => {
         if (dependency.name === 'does-not-exist') {
           throw new DoesNotExistError();
         }
+        if (dependency.name === 'unresolved') {
+          return {type: 'unresolved' as const};
+        }
         return {
           filePath: p(`/${dependency.name}`),
           type: 'sourceFile' as const,
@@ -308,5 +311,20 @@ describe('GraphTraversal', () => {
       params,
     );
     expect([...result.errors]).toEqual([[p('/bar'), new DoesNotExistError()]]);
+  });
+
+  test('records an unresolved dependency without a path', async () => {
+    transformDeps.set(p('/bar'), [makeTransformDep('unresolved')]);
+    const {moduleData, errors} = await buildSubgraph(
+      new Set([p('/bundle')]),
+      new Map(),
+      params,
+    );
+    expect(errors.size).toBe(0);
+    const dependency = moduleData
+      .get(p('/bar'))
+      ?.dependencies.get('key-unresolved');
+    expect(dependency).toEqual({data: makeTransformDep('unresolved')});
+    expect(dependency).not.toHaveProperty('absolutePath');
   });
 });

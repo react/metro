@@ -13,6 +13,7 @@ import type {
   BundlerResolution,
   ResolutionObservations,
   TransformResultDependency,
+  UnresolvedOptionalDependency,
 } from '../DeltaBundler/types';
 import type {DynamicRoot} from '../lib/dynamicRoots';
 import type {ResolverInputOptions} from '../shared/types';
@@ -301,6 +302,55 @@ export default class DependencyGraph extends EventEmitter {
       assumeFlatNodeModules: false,
     },
   ): BundlerResolution {
+    return this.#resolveMemoized(
+      originModulePath,
+      dependency,
+      platform,
+      resolverOptions,
+      extraOptions,
+      () =>
+        this._moduleResolver.resolveDependency(
+          originModulePath,
+          dependency,
+          true,
+          platform,
+          resolverOptions,
+        ),
+    );
+  }
+
+  // See `ModuleResolver.resolveOptionalDependency`.
+  resolveOptionalDependency(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): BundlerResolution | UnresolvedOptionalDependency {
+    return this.#resolveMemoized(
+      originModulePath,
+      dependency,
+      platform,
+      resolverOptions,
+      {assumeFlatNodeModules: false},
+      () =>
+        this._moduleResolver.resolveOptionalDependency(
+          originModulePath,
+          dependency,
+          true,
+          platform,
+          resolverOptions,
+        ),
+    );
+  }
+
+  #resolveMemoized<R extends BundlerResolution | UnresolvedOptionalDependency>(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+    extraOptions: {assumeFlatNodeModules: boolean},
+    resolveUncached: () => R,
+  ): BundlerResolution | R {
     const to = dependency.name;
     const isSensitiveToOriginFolder =
       // Resolution is always relative to the origin folder unless we assume a flat node_modules
@@ -333,41 +383,41 @@ export default class DependencyGraph extends EventEmitter {
     // same specifier in two sibling files may be two modules. Only virtual
     // resolutions are stored per file, so the per-directory memo is checked
     // first and a hit there needs no second lookup.
-    let resolution: ?BundlerResolution =
+    const resolution: ?BundlerResolution =
       mapByOrigin.get(originKey)?.get(targetKey)?.get(platformKey) ??
       mapByOrigin.get(originModulePath)?.get(targetKey)?.get(platformKey);
 
-    if (!resolution) {
-      try {
-        resolution = this._moduleResolver.resolveDependency(
-          originModulePath,
-          dependency,
-          true,
-          platform,
-          resolverOptions,
-        );
-      } catch (error) {
-        if (error instanceof DuplicateHasteCandidatesError) {
-          throw new AmbiguousModuleResolutionError(originModulePath, error);
-        }
-        if (error instanceof InvalidPackageError) {
-          throw new PackageResolutionError({
-            packageError: error,
-            originModulePath,
-            targetModuleName: to,
-          });
-        }
-        throw error;
+    if (resolution) {
+      return resolution;
+    }
+    let result: R;
+    try {
+      result = resolveUncached();
+    } catch (error) {
+      if (error instanceof DuplicateHasteCandidatesError) {
+        throw new AmbiguousModuleResolutionError(originModulePath, error);
       }
+      if (error instanceof InvalidPackageError) {
+        throw new PackageResolutionError({
+          packageError: error,
+          originModulePath,
+          targetModuleName: to,
+        });
+      }
+      throw error;
+    }
+    // Failures aren't memoized
+    if (result.type === 'unresolved') {
+      return result;
     }
 
     const memoOriginKey =
-      resolution.type === 'virtualModule' ? originModulePath : originKey;
+      result.type === 'virtualModule' ? originModulePath : originKey;
     getOrCreateMap(getOrCreateMap(mapByOrigin, memoOriginKey), targetKey).set(
       platformKey,
-      resolution,
+      result,
     );
-    return resolution;
+    return result;
   }
 
   doesFileExist = (filePath: string): boolean => {

@@ -13,6 +13,7 @@ import type Bundler from '../Bundler';
 import type {TransformFn, default as DeltaBundler} from '../DeltaBundler';
 import type {
   BundlerResolution,
+  ResolveFn,
   TransformInputOptions,
   TransformResultDependency,
   VirtualSource,
@@ -74,7 +75,7 @@ async function calcTransformerOptions(
     const dependencies = await deltaBundler.getDependencies([path], {
       lazy: false,
       onProgress: null,
-      resolve: await getResolveDependencyFn(
+      resolve: await getGraphResolveFn(
         bundler,
         options.platform,
         resolverOptions,
@@ -228,4 +229,28 @@ export async function getResolveDependencyFn(
       platform ?? null,
       resolverOptions,
     );
+}
+
+// As `getResolveDependencyFn`, but an optional dependency may be unresolved.
+export async function getGraphResolveFn(
+  bundler: Bundler,
+  platform: ?string,
+  resolverOptions: ResolverInputOptions,
+): Promise<ResolveFn> {
+  const dependencyGraph = await bundler.getDependencyGraph();
+
+  return (from: string, dependency: TransformResultDependency) =>
+    dependency.data.isOptional === true
+      ? dependencyGraph.resolveOptionalDependency(
+          from,
+          dependency,
+          platform ?? null,
+          resolverOptions,
+        )
+      : dependencyGraph.resolveDependency(
+          from,
+          dependency,
+          platform ?? null,
+          resolverOptions,
+        );
 }

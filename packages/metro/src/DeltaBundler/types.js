@@ -165,7 +165,7 @@ export type TransformFn<T = MixedOutput> = (
 export type ResolveFn = (
   from: string,
   dependency: TransformResultDependency,
-) => BundlerResolution;
+) => BundlerResolution | UnresolvedOptionalDependency;
 
 export type AllowOptionalDependenciesWithOptions = {
   readonly exclude: Array<string>,
@@ -204,6 +204,13 @@ export type BundlerResolution =
       // Set if `resolver.unstable_incrementalResolution` is enabled.
       unstable_observations?: ResolutionObservations,
     }>;
+
+// See `ModuleResolver.resolveOptionalDependency`.
+export type UnresolvedOptionalDependency = Readonly<{
+  type: 'unresolved',
+  // Set if `resolver.unstable_incrementalResolution` is enabled.
+  unstable_observations?: ResolutionObservations,
+}>;
 
 export type Options<T = MixedOutput> = Readonly<{
   resolve: ResolveFn,

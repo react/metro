@@ -13,6 +13,7 @@ import type {
   BundlerResolution,
   ResolutionObservations,
   TransformResultDependency,
+  UnresolvedOptionalDependency,
 } from '../../DeltaBundler/types';
 import type {Reporter} from '../../lib/reporting';
 import type {ResolverInputOptions} from '../../shared/types';
@@ -210,6 +211,47 @@ export class ModuleResolver {
             dependency,
           },
         );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Resolves an optional dependency as `resolveDependency` does, but returns an
+   * `unresolved` result where `resolveDependency` throws
+   * `UnableToResolveError`. An optional dependency's failure is expected, so
+   * this skips building an error nobody reads.
+   */
+  resolveOptionalDependency(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    allowHaste: boolean,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): BundlerResolution | UnresolvedOptionalDependency {
+    const observations = this._options.unstable_incrementalResolution
+      ? createObservations()
+      : null;
+
+    try {
+      const result = this._resolve(
+        originModulePath,
+        dependency,
+        allowHaste,
+        platform,
+        resolverOptions,
+        observations,
+      );
+      return this._getFileResolvedModule(result, observations);
+    } catch (error) {
+      if (
+        error instanceof Resolver.FailedToResolvePathError ||
+        error instanceof Resolver.FailedToResolveUnsupportedError ||
+        error instanceof Resolver.FailedToResolveNameError
+      ) {
+        return observations == null
+          ? {type: 'unresolved'}
+          : {type: 'unresolved', unstable_observations: observations};
       }
       throw error;
     }
