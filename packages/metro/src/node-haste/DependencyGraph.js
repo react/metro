@@ -231,6 +231,13 @@ export default class DependencyGraph extends EventEmitter {
       },
       observations,
     );
+    if (result != null && observations != null) {
+      // The package's manifest is read, so its contents are observed too.
+      const manifest = this._fileSystem.lookup(result.absolutePath);
+      if (manifest.exists) {
+        observations.content.add(manifest.canonicalPath);
+      }
+    }
     return result
       ? {
           packageJsonPath: result.absolutePath,
