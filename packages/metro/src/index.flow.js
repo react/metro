@@ -74,7 +74,7 @@ export type RunMetroOptions = {
 export type RunServerOptions = Readonly<{
   hasReducedPerformance?: boolean,
   host?: string,
-  onError?: (err: Error & {code?: string}) => void,
+  onError?: (err: Error & {code?: string, ...}) => void,
   onReady?: (server: HttpServer | HttpsServer) => void,
   onClose?: () => void,
   secureServerOptions?: HttpsServerOptions,

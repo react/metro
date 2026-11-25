@@ -117,6 +117,32 @@ describe('DeltaBundler', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  test('should end the calculator when the first build of a graph fails', async () => {
+    DeltaCalculator.prototype.end.mockClear();
+    DeltaCalculator.prototype.getDelta.mockRejectedValueOnce(
+      new Error('Build failed'),
+    );
+
+    await expect(
+      deltaBundler.buildGraph(mockGraph.entryPoints, options),
+    ).rejects.toThrow('Build failed');
+
+    expect(DeltaCalculator.prototype.end).toHaveBeenCalledTimes(1);
+  });
+
+  test('should end the calculator when getDependencies fails', async () => {
+    DeltaCalculator.prototype.end.mockClear();
+    DeltaCalculator.prototype.getDelta.mockRejectedValueOnce(
+      new Error('Build failed'),
+    );
+
+    await expect(
+      deltaBundler.getDependencies(mockGraph.entryPoints, options),
+    ).rejects.toThrow('Build failed');
+
+    expect(DeltaCalculator.prototype.end).toHaveBeenCalledTimes(1);
+  });
+
   test('should throw an error when trying to end a graph twice', async () => {
     const graph = await deltaBundler.buildGraph(mockGraph.entryPoints, options);
 
