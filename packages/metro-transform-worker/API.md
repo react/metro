@@ -77,8 +77,8 @@ export type MinifierOptions = {
 
 export type MinifierResult = {
   code: string;
-  map?: BasicSourceMap | undefined;
-  decodedMap?: null | undefined | BabelDecodedMap;
+  readonly map?: BasicSourceMap | undefined;
+  readonly decodedMap?: null | undefined | BabelDecodedMap;
 };
 
 export const transform: (config: JsTransformerConfig, projectRoot: string, projectRelativePath: string, data: Buffer, options: JsTransformOptions, assetUrlPath?: string) => Promise<TransformResponse>;

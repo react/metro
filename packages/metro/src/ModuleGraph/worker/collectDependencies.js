@@ -8,6 +8,10 @@
  * @format
  */
 
+import type {
+  AllowOptionalDependencies,
+  AsyncDependencyType,
+} from '../../DeltaBundler/types';
 import type {ReadonlySourceLocation} from '../../shared/types';
 import type {NodePath} from '@babel/traverse';
 import type {
@@ -21,10 +25,6 @@ import type {
   SpreadElement,
   StringLiteral,
 } from '@babel/types';
-import type {
-  AllowOptionalDependencies,
-  AsyncDependencyType,
-} from 'metro/private/DeltaBundler/types';
 
 import {traverse} from '@babel/core';
 import generate from '@babel/generator';

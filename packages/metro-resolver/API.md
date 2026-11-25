@@ -67,7 +67,7 @@ export type ResolutionContext = Readonly<{
   dev: boolean;
   getPackage: (packageJsonPath: string) => null | undefined | PackageJson;
   getPackageForModule: (absoluteModulePath: string) => null | undefined | PackageForModule;
-  dependency?: TransformResultDependency | undefined;
+  dependency?: Dependency | undefined;
   isESMImport: boolean;
   fileSystemLookup: FileSystemLookup;
   mainFields: ReadonlyArray<string>;
