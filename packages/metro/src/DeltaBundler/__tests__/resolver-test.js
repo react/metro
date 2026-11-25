@@ -3358,7 +3358,8 @@ function dep(name: string): TransformResultDependency {
               'node_modules/pkg/package.json',
               'node_modules/pkg/main.js',
             ),
-            content: new Set(),
+            // The package's manifest
+            content: canonical('node_modules/pkg/package.json'),
             haste: null,
           },
         });
@@ -3447,7 +3448,8 @@ function dep(name: string): TransformResultDependency {
               'empty.js',
               'package.json',
             ),
-            content: new Set(),
+            // The closest package's manifest, read for its `browser` map
+            content: canonical('withBrowser/package.json'),
             haste: null,
           },
         });
@@ -3461,6 +3463,58 @@ function dep(name: string): TransformResultDependency {
         expect(second).toBe(first);
         expect(second.unstable_observations?.existence.size).toBeGreaterThan(0);
       });
+      describe('a custom resolver reading manifests', () => {
+        const files = {
+          'index.js': '',
+          'a.js': '',
+          included: {'package.json': JSON.stringify({name: 'included'})},
+          excluded: {'package.json': JSON.stringify({name: 'excluded'})},
+        };
+        const config = (
+          read: Array<?string>,
+          unstable_incrementalResolution: boolean,
+        ): InputConfigT => ({
+          resolver: {
+            blockList: [/excluded/],
+            unstable_incrementalResolution,
+            resolveRequest: (context, moduleName, platform) => {
+              // Through `map`, so each call also gets an index and the array
+              read.push(
+                ...['included', 'excluded']
+                  .map(name => p(`/root/${name}/package.json`))
+                  .map(context.getPackage)
+                  .map(pkg => pkg?.name),
+              );
+              return context.resolveRequest(context, moduleName, platform);
+            },
+          },
+        });
+
+        test('reads through the file map, and observes what it read', async () => {
+          setMockFileSystem(files);
+          const read: Array<?string> = [];
+          resolver = await createResolver(config(read, true), 'ios');
+          const {unstable_observations: observations} = resolver.resolve(
+            p('/root/index.js'),
+            dep('./a'),
+          );
+          // The blocklisted manifest is missing, and recorded as such
+          expect(read).toEqual(['included', undefined]);
+          expect(observations?.content).toEqual(
+            canonical('included/package.json'),
+          );
+          expect(observations?.existence).toContain('excluded');
+        });
+
+        test('reads any manifest from disk without the flag', async () => {
+          setMockFileSystem(files);
+          const read: Array<?string> = [];
+          resolver = await createResolver(config(read, false), 'ios');
+          resolver.resolve(p('/root/index.js'), dep('./a'));
+          expect(read).toEqual(['included', 'excluded']);
+        });
+      });
+
       describe('Haste names', () => {
         const withHaste: InputConfigT = {
           resolver: {
