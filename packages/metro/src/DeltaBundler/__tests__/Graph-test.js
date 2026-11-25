@@ -42,6 +42,7 @@ import type {
   Options,
   ReadOnlyDependencies,
   ReadOnlyGraph,
+  ResolutionObservations,
   ResolvedDependency,
   TransformFn,
   TransformResultDependency,
@@ -57,6 +58,7 @@ import {
 } from '../../lib/modulePath';
 import {Graph} from '../Graph';
 import {createPathNormalizer} from './test-utils';
+import {sep} from 'node:path';
 import nullthrows from 'nullthrows';
 
 const {objectContaining} = expect;
@@ -3893,6 +3895,29 @@ describe('optional dependencies', () => {
       ]),
     );
   });
+
+  test.each([
+    [['anything.js'], [], ['/bundle-o']],
+    [[], ['package.json'], ['/bundle-o']],
+    [[], [['node_modules', 'pkg', 'package.json'].join(sep)], ['/bundle-o']],
+    [[], ['anything.js'], []],
+  ])(
+    'with changes added or removed %j and modified %j, invalidates holders %j',
+    async (addedOrRemoved, modified, expected) => {
+      await localGraph.initialTraverseDependencies({
+        ...options,
+        transform: createMockTransform(),
+      });
+      expect(
+        localGraph.getModulesInvalidatedBy({
+          addedOrRemoved: new Set(addedOrRemoved),
+          modified: new Set(modified),
+          hasteNames: new Set(),
+        }),
+      ).toEqual(new Set(expected));
+    },
+  );
+
   test('missing non-optional dependency will throw', async () => {
     localOptions = {
       ...options,
@@ -4303,4 +4328,115 @@ test('when only the order of transformer dependencies changes, the resolved depe
     objectContaining({absolutePath: '/baz'}),
     objectContaining({absolutePath: '/bar'}),
   ]);
+});
+
+describe('incremental resolution', () => {
+  // What resolving each target observes, recreated per resolution as a
+  // resolver does.
+  let observedFor: Map<string, () => ResolutionObservations>;
+  let incrementalOptions: Options<>;
+
+  const record = (existence: ReadonlyArray<string>) => () => ({
+    existence: new Set(existence),
+    content: new Set<string>(),
+    haste: null,
+  });
+  const added = (...paths: ReadonlyArray<string>) => ({
+    addedOrRemoved: new Set(paths),
+    modified: new Set<string>(),
+    hasteNames: new Set<string>(),
+  });
+
+  beforeEach(() => {
+    observedFor = new Map([
+      ['/foo', record(['foo.ios.js'])],
+      ['/bar', record(['bar.ios.js'])],
+      ['/baz', record(['baz.ios.js'])],
+    ]);
+    incrementalOptions = {
+      ...options,
+      unstable_incrementalResolution: true,
+      resolve: (from: string, to: TransformResultDependency) => {
+        const resolution = options.resolve(from, to);
+        const observe = observedFor.get(resolution.filePath);
+        return observe == null
+          ? resolution
+          : {...resolution, unstable_observations: observe()};
+      },
+    };
+  });
+
+  test('finds the modules whose resolutions a change may invalidate', async () => {
+    await graph.initialTraverseDependencies(incrementalOptions);
+    expect(graph.getModulesInvalidatedBy(added('bar.ios.js'))).toEqual(
+      new Set(['/foo']),
+    );
+    expect(
+      graph.getModulesInvalidatedBy(added('foo.ios.js', 'baz.ios.js')),
+    ).toEqual(new Set(['/bundle', '/foo']));
+    expect(graph.getModulesInvalidatedBy(added('bar.js'))).toEqual(new Set());
+  });
+
+  test("keeps what a module observed current when it's unchanged", async () => {
+    await graph.initialTraverseDependencies(incrementalOptions);
+    observedFor.set('/bar', record(['bar.native.js']));
+
+    // `/foo` itself is unchanged, so it isn't in the delta
+    expect(
+      getPaths(await graph.traverseDependencies(['/foo'], incrementalOptions)),
+    ).toEqual({added: new Set(), modified: new Set(), deleted: new Set()});
+
+    expect(graph.getModulesInvalidatedBy(added('bar.native.js'))).toEqual(
+      new Set(['/foo']),
+    );
+    expect(graph.getModulesInvalidatedBy(added('bar.ios.js'))).toEqual(
+      new Set(),
+    );
+  });
+
+  test('forgets what a released module observed', async () => {
+    Actions.createFile('/qux');
+    Actions.addDependency('/baz', '/qux');
+    observedFor.set('/qux', record(['qux.ios.js']));
+    await graph.initialTraverseDependencies(incrementalOptions);
+    expect(graph.getModulesInvalidatedBy(added('qux.ios.js'))).toEqual(
+      new Set(['/baz']),
+    );
+
+    Actions.removeDependency('/foo', '/baz');
+    await graph.traverseDependencies([...files], incrementalOptions);
+
+    expect(graph.getModulesInvalidatedBy(added('qux.ios.js'))).toEqual(
+      new Set(),
+    );
+  });
+
+  test('restores what modules observed when a traversal fails', async () => {
+    class BadError extends Error {}
+    const failingOptions = {
+      ...incrementalOptions,
+      transform(path: string, context: ?VirtualSource) {
+        if (path === '/bad') {
+          throw new BadError();
+        }
+        // $FlowFixMe[object-this-reference]: transform should not be bound to anything
+        return incrementalOptions.transform.call(this, path, context);
+      },
+    };
+    await graph.initialTraverseDependencies(failingOptions);
+
+    Actions.createFile('/bad');
+    Actions.addDependency('/foo', '/bad');
+    observedFor.set('/bar', record(['bar.native.js']));
+    await expect(
+      graph.traverseDependencies(['/foo'], failingOptions),
+    ).rejects.toBeInstanceOf(BadError);
+
+    expect(graph.getModulesInvalidatedBy(added('bar.ios.js'))).toEqual(
+      new Set(['/foo']),
+    );
+    expect(graph.getModulesInvalidatedBy(added('bar.native.js'))).toEqual(
+      new Set(),
+    );
+  });
 });

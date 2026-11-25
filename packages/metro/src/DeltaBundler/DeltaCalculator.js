@@ -9,8 +9,9 @@
  * @oncall react_native
  */
 
+import type {ObservedChanges} from './ObservationIndex';
 import type {DeltaResult, Options} from './types';
-import type {ChangeEvent} from 'metro-file-map';
+import type {ChangeEvent, HasteChanges} from 'metro-file-map';
 
 import {Graph} from './Graph';
 import debugModule from 'debug';
@@ -43,6 +44,9 @@ export default class DeltaCalculator<T> extends EventEmitter {
   _modifiedFiles: Set<string> = new Set();
   _addedFiles: Set<string> = new Set();
   _requiresReset: boolean = false;
+  // Changes since the last build, to find the resolutions they invalidate,
+  // with `resolver.unstable_incrementalResolution` on.
+  #observedChanges: PendingObservedChanges = createPendingObservedChanges();
 
   _graph: Graph<T>;
 
@@ -83,6 +87,7 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this._modifiedFiles = new Set();
     this._deletedFiles = new Set();
     this._addedFiles = new Set();
+    this.#observedChanges = createPendingObservedChanges();
   }
 
   /**
@@ -115,6 +120,8 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this._addedFiles = new Set();
     const requiresReset = this._requiresReset;
     this._requiresReset = false;
+    const observedChanges = this.#observedChanges;
+    this.#observedChanges = createPendingObservedChanges();
 
     // Revisit all files if changes require a graph reset - resolutions may be
     // invalidated but we don't yet know which. This should be optimized in the
@@ -136,6 +143,7 @@ export default class DeltaCalculator<T> extends EventEmitter {
       modifiedFiles,
       deletedFiles,
       addedFiles,
+      observedChanges,
     );
 
     let result;
@@ -239,6 +247,10 @@ export default class DeltaCalculator<T> extends EventEmitter {
   _handleMultipleFileChanges = (changeEvent: ChangeEvent) => {
     const {changes, logger, rootDir} = changeEvent;
 
+    if (this._options.unstable_incrementalResolution) {
+      this.#observeChanges(changeEvent);
+    }
+
     for (const [canonicalPath, metadata] of changes.addedFiles) {
       debug('Handling add: %s', canonicalPath);
       if (this.#shouldReset(canonicalPath, metadata)) {
@@ -272,10 +284,54 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this.emit('change', {logger, changeId});
   };
 
+  #observeChanges(changeEvent: ChangeEvent): void {
+    const {changes} = changeEvent;
+    // Absent from file maps that predate plugin summaries, in which case any
+    // Haste name may have changed.
+    const pluginChanges: ?ReadonlyMap<string, unknown> =
+      changeEvent.pluginChanges;
+    const {addedOrRemoved, modified} = this.#observedChanges;
+    const addOrRemove = (canonicalPath: string) => {
+      addedOrRemoved.add(canonicalPath);
+      // Adding or removing an entry modifies its directory.
+      const parentIdx = canonicalPath.lastIndexOf(path.sep);
+      modified.add(parentIdx === -1 ? '' : canonicalPath.slice(0, parentIdx));
+    };
+    for (const [canonicalPath] of changes.addedFiles) {
+      addOrRemove(canonicalPath);
+    }
+    for (const [canonicalPath] of changes.removedFiles) {
+      addOrRemove(canonicalPath);
+    }
+    for (const [canonicalPath] of changes.modifiedFiles) {
+      modified.add(canonicalPath);
+    }
+    for (const canonicalPath of changes.addedDirectories) {
+      addOrRemove(canonicalPath);
+    }
+    for (const canonicalPath of changes.removedDirectories) {
+      addOrRemove(canonicalPath);
+    }
+
+    // $FlowFixMe[incompatible-type] Only `HastePlugin` writes its entry
+    const hasteChanges: ?HasteChanges = pluginChanges?.get('haste');
+    if (pluginChanges == null) {
+      this.#observedChanges.hasteNames = 'all';
+    } else if (hasteChanges != null) {
+      const {hasteNames} = this.#observedChanges;
+      if (hasteNames !== 'all') {
+        for (const name of hasteChanges.changedNames) {
+          hasteNames.add(name);
+        }
+      }
+    }
+  }
+
   async _getChangedDependencies(
     modifiedFiles: Set<string>,
     deletedFiles: Set<string>,
     addedFiles: Set<string>,
+    observedChanges: ObservedChanges,
   ): Promise<DeltaResult<T>> {
     if (!this._graph.dependencies.size) {
       const {added} = await this._graph.initialTraverseDependencies(
@@ -326,6 +382,24 @@ export default class DeltaCalculator<T> extends EventEmitter {
       });
     }
 
+    // Revisit modules whose resolutions the changes may invalidate. This comes
+    // before the filter below, since a changed file may not be in the graph
+    // yet, e.g. a new `foo.ios.js`.
+    if (
+      observedChanges.addedOrRemoved.size > 0 ||
+      observedChanges.modified.size > 0 ||
+      observedChanges.hasteNames === 'all' ||
+      observedChanges.hasteNames.size > 0
+    ) {
+      for (const modulePath of this._graph.getModulesInvalidatedBy(
+        observedChanges,
+      )) {
+        if (!deletedFiles.has(modulePath)) {
+          modifiedFiles.add(modulePath);
+        }
+      }
+    }
+
     // We only want to process files that are in the bundle.
     const modifiedDependencies = Array.from(modifiedFiles).filter(
       (filePath: string) => this._graph.dependencies.has(filePath),
@@ -360,4 +434,18 @@ export default class DeltaCalculator<T> extends EventEmitter {
       reset: false,
     };
   }
+}
+
+type PendingObservedChanges = {
+  addedOrRemoved: Set<string>,
+  modified: Set<string>,
+  hasteNames: Set<string> | 'all',
+};
+
+function createPendingObservedChanges(): PendingObservedChanges {
+  return {
+    addedOrRemoved: new Set(),
+    modified: new Set(),
+    hasteNames: new Set(),
+  };
 }
