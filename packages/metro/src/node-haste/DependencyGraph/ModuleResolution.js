@@ -48,7 +48,10 @@ type Options = Readonly<{
   // Whether any file can have a Haste name. If not, lookups are not observed.
   isHasteEnabled: boolean,
   mainFields: ReadonlyArray<string>,
-  getPackage: (packageJsonPath: string) => ?PackageJson,
+  getPackage: (
+    packageJsonPath: string,
+    observations?: ?ResolutionObservations,
+  ) => ?PackageJson,
   getPackageForModule: (
     absolutePath: string,
     observations?: ?ResolutionObservations,
@@ -274,7 +277,10 @@ export class ModuleResolver {
           observations == null
             ? fileSystemLookup
             : filePath => fileSystemLookup(filePath, observations),
-        getPackage,
+        getPackage:
+          observations == null
+            ? getPackage
+            : packageJsonPath => getPackage(packageJsonPath, observations),
         getPackageForModule:
           observations == null
             ? getPackageForModule
