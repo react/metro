@@ -3485,6 +3485,43 @@ function dep(name: string): TransformResultDependency {
           ).toBe(null);
         });
 
+        test('includes names a custom resolver consulted for the empty module', async () => {
+          setMockFileSystem({
+            'empty.js': '',
+            withBrowser: {
+              'package.json': JSON.stringify({
+                name: 'with-browser',
+                browser: {'./gone.js': false},
+              }),
+              'index.js': '',
+              'gone.js': '',
+            },
+          });
+          resolver = await createResolver(
+            {
+              resolver: {
+                ...withHaste.resolver,
+                emptyModulePath: p('/root/empty.js'),
+                resolveRequest: (context, moduleName, platform) => {
+                  if (moduleName === p('/root/empty.js')) {
+                    context.resolveHasteModule('EmptyOverride');
+                  }
+                  return context.resolveRequest(context, moduleName, platform);
+                },
+              },
+            },
+            'ios',
+          );
+          const resolution = resolver.resolve(
+            p('/root/withBrowser/index.js'),
+            dep('./gone'),
+          );
+          expect(resolution.filePath).toBe(p('/root/empty.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['EmptyOverride']),
+          );
+        });
+
         test('records a name that is found', async () => {
           setMockFileSystem({
             'index.js': '',

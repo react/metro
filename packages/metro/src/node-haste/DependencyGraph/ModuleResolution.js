@@ -318,7 +318,7 @@ export class ModuleResolver {
    */
   _getFileResolvedModule(
     resolution: Resolution,
-    observations: ?ResolutionObservations,
+    observations: ?{...ResolutionObservations},
   ): BundlerResolution {
     switch (resolution.type) {
       case 'sourceFile':
@@ -347,7 +347,8 @@ export class ModuleResolver {
           return emptyModule;
         }
         // The empty module's resolution is cached, so merge in what it observed.
-        // It is resolved without Haste, so has no names to merge.
+        // `metro-resolver` doesn't consult Haste for it, but a custom resolver
+        // may.
         const emptyObservations = emptyModule.unstable_observations;
         if (emptyObservations != null) {
           for (const canonicalPath of emptyObservations.existence) {
@@ -355,6 +356,17 @@ export class ModuleResolver {
           }
           for (const canonicalPath of emptyObservations.content) {
             observations.content.add(canonicalPath);
+          }
+          const emptyHaste = emptyObservations.haste;
+          if (emptyHaste != null) {
+            let names = observations.haste;
+            if (names == null) {
+              names = new Set<string>();
+              observations.haste = names;
+            }
+            for (const name of emptyHaste) {
+              names.add(name);
+            }
           }
         }
         return {...emptyModule, unstable_observations: observations};
