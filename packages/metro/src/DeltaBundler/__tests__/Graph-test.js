@@ -35,7 +35,6 @@
 import type {RequireContextParams} from '../../ModuleGraph/worker/collectDependencies';
 import type {Result} from '../Graph';
 import type {
-  BundlerResolution,
   Dependency,
   MixedOutput,
   Module,
@@ -43,6 +42,7 @@ import type {
   ReadOnlyDependencies,
   ReadOnlyGraph,
   ResolvedDependency,
+  ResolveFn,
   TransformFn,
   TransformResultDependency,
   TransformResultWithSource,
@@ -2986,7 +2986,7 @@ describe('virtual modules', () => {
       resolve: (
         from: string,
         to: TransformResultDependency,
-      ): BundlerResolution =>
+      ): ReturnType<ResolveFn> =>
         to.name === 'test:x'
           ? {
               type: 'virtualModule',
@@ -3109,7 +3109,7 @@ describe('virtual modules', () => {
       resolve: (
         from: string,
         to: TransformResultDependency,
-      ): BundlerResolution =>
+      ): ReturnType<ResolveFn> =>
         to.name === 'test:x'
           ? {
               type: 'virtualModule',
@@ -3133,7 +3133,7 @@ describe('virtual modules', () => {
       resolve: (
         from: string,
         to: TransformResultDependency,
-      ): BundlerResolution =>
+      ): ReturnType<ResolveFn> =>
         to.name === 'test:x'
           ? {
               type: 'virtualModule',

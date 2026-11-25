@@ -14,6 +14,7 @@
 import type {ResolverInputOptions} from '../../shared/types';
 import type {TransformResultDependency} from '../types';
 import type {InputConfigT} from 'metro-config';
+import type {CustomResolver, Resolution} from 'metro-resolver';
 
 const {getDefaultConfig, mergeConfig} = require('metro-config');
 const {AmbiguousModuleResolutionError} = require('metro-core');
@@ -133,6 +134,13 @@ function dep(name: string): TransformResultDependency {
           platform ?? null,
           resolverOptions,
           options,
+        ),
+      resolveOptional: (from: string, dependency: TransformResultDependency) =>
+        dependencyGraph.resolveOptionalDependency(
+          from,
+          dependency,
+          platform ?? null,
+          {dev: true},
         ),
       end: () => dependencyGraph.end(),
     };
@@ -3563,6 +3571,85 @@ function dep(name: string): TransformResultDependency {
             new Set(['aPackage']),
           );
         });
+      });
+    });
+
+    describe('optional dependencies', () => {
+      const optional = (name: string): TransformResultDependency => {
+        const dependency = dep(name);
+        return {...dependency, data: {...dependency.data, isOptional: true}};
+      };
+
+      test('a missing optional dependency is unresolved, not an error', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver();
+        expect(
+          resolver.resolveOptional(p('/root/index.js'), optional('./missing')),
+        ).toEqual({type: 'unresolved'});
+        expect(
+          resolver.resolveOptional(
+            p('/root/index.js'),
+            optional('missing-pkg'),
+          ),
+        ).toEqual({type: 'unresolved'});
+      });
+
+      test('an optional dependency that exists resolves as usual', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        resolver = await createResolver();
+        expect(
+          resolver.resolveOptional(p('/root/index.js'), optional('./a')),
+        ).toEqual({type: 'sourceFile', filePath: p('/root/a.js')});
+      });
+
+      test('resolveDependency still throws for a missing optional dependency', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver();
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), optional('./missing')),
+        ).toThrow(/^Unable to resolve module/);
+      });
+
+      test('an error other than a failure to resolve is thrown', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver({
+          resolver: {
+            resolveRequest: () => {
+              throw new Error('Resolver crashed');
+            },
+          },
+        });
+        expect(() =>
+          resolver.resolveOptional(p('/root/index.js'), optional('./missing')),
+        ).toThrow('Resolver crashed');
+      });
+
+      test('with unstable_incrementalResolution, an unresolved dependency carries observations', async () => {
+        setMockFileSystem({'index.js': ''});
+        resolver = await createResolver(
+          {resolver: {unstable_incrementalResolution: true}},
+          'ios',
+        );
+        const resolution = resolver.resolveOptional(
+          p('/root/index.js'),
+          optional('./missing'),
+        );
+        expect(resolution.type).toBe('unresolved');
+        expect(resolution.unstable_observations?.existence).toContain(
+          'missing.ios.js',
+        );
+      });
+
+      test('an unresolved dependency is not memoized', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = jest.fn<Parameters<CustomResolver>, Resolution>(
+          (context, moduleName, platform) =>
+            context.resolveRequest(context, moduleName, platform),
+        );
+        resolver = await createResolver({resolver: {resolveRequest}});
+        resolver.resolveOptional(p('/root/index.js'), optional('./missing'));
+        resolver.resolveOptional(p('/root/index.js'), optional('./missing'));
+        expect(resolveRequest).toHaveBeenCalledTimes(2);
       });
     });
 
