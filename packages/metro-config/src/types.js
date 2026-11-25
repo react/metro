@@ -258,46 +258,40 @@ type WatcherConfigT = {
 };
 
 export type InputConfigT = Partial<
-  Readonly<
-    MetalConfigT & {
-      cacheStores:
-        CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT),
-      resolver: Readonly<Partial<ResolverConfigT>>,
-      server: Readonly<Partial<ServerConfigT>>,
-      serializer: Readonly<Partial<SerializerConfigT>>,
-      symbolicator: Readonly<Partial<SymbolicatorConfigT>>,
-      transformer: Readonly<Partial<TransformerConfigT>>,
-      watcher: Partial<
-        Readonly<
-          Omit<
-            WatcherConfigT,
-            'healthCheck' | 'unstable_autoSaveCache' | 'watchman',
-          > & {
-            healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>,
-            unstable_autoSaveCache: Partial<
-              Readonly<WatcherConfigT['unstable_autoSaveCache']>,
-            >,
-            watchman: Partial<Readonly<WatcherConfigT['watchman']>>,
-          },
+  Readonly<{
+    ...MetalConfigT,
+    cacheStores:
+      CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT),
+    resolver: Readonly<Partial<ResolverConfigT>>,
+    server: Readonly<Partial<ServerConfigT>>,
+    serializer: Readonly<Partial<SerializerConfigT>>,
+    symbolicator: Readonly<Partial<SymbolicatorConfigT>>,
+    transformer: Readonly<Partial<TransformerConfigT>>,
+    watcher: Partial<
+      Readonly<{
+        ...WatcherConfigT,
+        healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>,
+        unstable_autoSaveCache: Partial<
+          Readonly<WatcherConfigT['unstable_autoSaveCache']>,
         >,
-      >,
-    },
-  >,
+        watchman: Partial<Readonly<WatcherConfigT['watchman']>>,
+      }>,
+    >,
+  }>,
 >;
 
 export type MetroConfig = InputConfigT;
 
-export type ConfigT = Readonly<
-  MetalConfigT & {
-    cacheStores: CacheStoresConfigT,
-    resolver: Readonly<ResolverConfigT>,
-    server: Readonly<ServerConfigT>,
-    serializer: Readonly<SerializerConfigT>,
-    symbolicator: Readonly<SymbolicatorConfigT>,
-    transformer: Readonly<TransformerConfigT>,
-    watcher: Readonly<WatcherConfigT>,
-  },
->;
+export type ConfigT = Readonly<{
+  ...MetalConfigT,
+  cacheStores: CacheStoresConfigT,
+  resolver: Readonly<ResolverConfigT>,
+  server: Readonly<ServerConfigT>,
+  serializer: Readonly<SerializerConfigT>,
+  symbolicator: Readonly<SymbolicatorConfigT>,
+  transformer: Readonly<TransformerConfigT>,
+  watcher: Readonly<WatcherConfigT>,
+}>;
 
 export type YargArguments = Readonly<{
   config?: string,

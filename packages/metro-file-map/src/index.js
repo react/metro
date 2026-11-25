@@ -850,7 +850,7 @@ export default class FileMap extends EventEmitter {
     const readLinkPromises: Array<Promise<void>> = [];
     const readLinkErrors: Array<{
       normalFilePath: string,
-      error: Error & {code?: string},
+      error: Error & {code?: string, ...},
     }> = [];
     const filesToProcess: Array<[string, FileMetadata]> = [];
 
