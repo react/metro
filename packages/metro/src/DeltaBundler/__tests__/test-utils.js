@@ -18,6 +18,11 @@ export type ChangeEventInput = {
   addedFiles?: ReadonlyArray<FileEntry>,
   modifiedFiles?: ReadonlyArray<FileEntry>,
   removedFiles?: ReadonlyArray<FileEntry>,
+  addedDirectories?: ReadonlyArray<string>,
+  removedDirectories?: ReadonlyArray<string>,
+  // Defaults to none reported. Null omits it, as a file map that predates
+  // plugin summaries does.
+  pluginChanges?: ?ReadonlyMap<string, unknown>,
 };
 
 /**
@@ -45,14 +50,20 @@ export function createEmitChange(
         },
       ];
     };
+    const toCanonical = (dir: string) =>
+      pathSeparator !== '/' ? dir.replaceAll('/', '\\') : dir;
+    const pluginChanges = Object.hasOwn(changes, 'pluginChanges')
+      ? changes.pluginChanges
+      : new Map<string, unknown>();
     fileWatcher.emit('change', {
       changes: {
         addedFiles: (changes.addedFiles ?? []).map(toEntry),
         modifiedFiles: (changes.modifiedFiles ?? []).map(toEntry),
         removedFiles: (changes.removedFiles ?? []).map(toEntry),
-        addedDirectories: [],
-        removedDirectories: [],
+        addedDirectories: (changes.addedDirectories ?? []).map(toCanonical),
+        removedDirectories: (changes.removedDirectories ?? []).map(toCanonical),
       },
+      ...(pluginChanges == null ? {} : {pluginChanges}),
       rootDir,
       logger: null,
     });

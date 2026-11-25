@@ -30,6 +30,7 @@
  */
 
 import type {RequireContextParams} from '../ModuleGraph/worker/collectDependencies';
+import type {ObservedChanges} from './ObservationIndex';
 import type {
   Dependencies,
   Dependency,
@@ -47,6 +48,7 @@ import {fileMatchesContext} from '../lib/contextModule';
 import CountingSet from '../lib/CountingSet';
 import {isResolvedDependency} from '../lib/isResolvedDependency';
 import {buildSubgraph} from './buildSubgraph';
+import ObservationIndex from './ObservationIndex';
 import invariant from 'invariant';
 import nullthrows from 'nullthrows';
 
@@ -93,6 +95,7 @@ type Delta<T> = Readonly<{
 }>;
 
 type InternalOptions<T> = Readonly<{
+  incrementalResolution: boolean,
   lazy: boolean,
   onDependencyAdd: () => unknown,
   onDependencyAdded: () => unknown,
@@ -107,11 +110,13 @@ function getInternalOptions<T>({
   onProgress,
   lazy,
   shallow,
+  unstable_incrementalResolution,
 }: Options<T>): InternalOptions<T> {
   let numProcessed = 0;
   let total = 0;
 
   return {
+    incrementalResolution: unstable_incrementalResolution,
     lazy,
     onDependencyAdd: () => onProgress && onProgress(numProcessed, ++total),
     onDependencyAdded: () => onProgress && onProgress(++numProcessed, total),
@@ -154,6 +159,14 @@ export class Graph<T = MixedOutput> {
    * path.
    */
   #virtualSources: Map<string, VirtualSource> = new Map();
+
+  // What each module's resolutions observed, with
+  // `resolver.unstable_incrementalResolution` on.
+  readonly #observations: ObservationIndex<string> = new ObservationIndex();
+
+  // Modules holding an optional dependency that failed to resolve. A failure
+  // records nothing, so any addition may let it resolve.
+  readonly #modulesWithUnresolvedDependencies: Set<string> = new Set();
 
   constructor(options: GraphInputOptions) {
     this.entryPoints = options.entryPoints;
@@ -436,8 +449,27 @@ export class Graph<T = MixedOutput> {
     const {
       dependencies: currentDependencies,
       virtualSources,
+      observations,
       ...transformResult
     } = currentModule;
+
+    // Kept current even if the module turns out unchanged, since what its
+    // resolutions observed may differ when their results don't.
+    if (options.incrementalResolution) {
+      this.#observations.set(path, observations);
+      let hasUnresolved = false;
+      for (const dependency of currentDependencies.values()) {
+        if (!isResolvedDependency(dependency)) {
+          hasUnresolved = true;
+          break;
+        }
+      }
+      if (hasUnresolved) {
+        this.#modulesWithUnresolvedDependencies.add(path);
+      } else {
+        this.#modulesWithUnresolvedDependencies.delete(path);
+      }
+    }
 
     const nextModule = {
       ...(previousModule ?? {
@@ -658,6 +690,21 @@ export class Graph<T = MixedOutput> {
   }
 
   /**
+   * Modules whose resolutions a batch of changes may invalidate, with
+   * `resolver.unstable_incrementalResolution` on. Includes every module with
+   * an unresolved optional dependency if anything was added or removed.
+   */
+  getModulesInvalidatedBy(changes: ObservedChanges): Set<string> {
+    const invalidated = this.#observations.getInvalidated(changes);
+    if (changes.addedOrRemoved.size > 0) {
+      for (const path of this.#modulesWithUnresolvedDependencies) {
+        invalidated.add(path);
+      }
+    }
+    return invalidated;
+  }
+
+  /**
    * Collect a list of context modules which include a given file.
    */
   markModifiedContextModules(
@@ -818,6 +865,7 @@ export class Graph<T = MixedOutput> {
       getSource,
       output,
       virtualSources,
+      observations: this.#observations.get(module.path),
       unstable_transformResultKey,
     };
   }
@@ -869,6 +917,8 @@ export class Graph<T = MixedOutput> {
     this.#gc.possibleCycleRoots.delete(module.path);
     this.#gc.color.delete(module.path);
     this.#virtualSources.delete(module.path);
+    this.#observations.delete(module.path);
+    this.#modulesWithUnresolvedDependencies.delete(module.path);
   }
 
   // Mark a module as a possible cycle root
