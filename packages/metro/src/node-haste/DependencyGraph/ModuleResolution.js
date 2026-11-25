@@ -49,7 +49,10 @@ type Options = Readonly<{
   // Whether any file can have a Haste name. If not, lookups are not observed.
   isHasteEnabled: boolean,
   mainFields: ReadonlyArray<string>,
-  getPackage: (packageJsonPath: string) => ?PackageJson,
+  getPackage: (
+    packageJsonPath: string,
+    observations?: ?ResolutionObservations,
+  ) => ?PackageJson,
   getPackageForModule: (
     absolutePath: string,
     observations?: ?ResolutionObservations,
@@ -81,6 +84,19 @@ type Options = Readonly<{
 // Same shape for every record, to keep lookups monomorphic.
 function createObservations(): {...ResolutionObservations} {
   return {existence: new Set(), content: new Set(), haste: null};
+}
+
+// Most resolutions never consult Haste, so the set is created on demand.
+function addHasteName(
+  observations: {...ResolutionObservations},
+  name: string,
+): void {
+  let names = observations.haste;
+  if (names == null) {
+    names = new Set<string>();
+    observations.haste = names;
+  }
+  names.add(name);
 }
 
 export class ModuleResolver {
@@ -290,17 +306,9 @@ export class ModuleResolver {
       unstable_enablePackageExports,
       unstable_resolveExportsFromPackageRoot,
     } = this._options;
-    // Most resolutions never consult Haste, so the set is created on demand.
     const observeHasteName =
       observations != null && this._options.isHasteEnabled
-        ? (name: string) => {
-            let names = observations.haste;
-            if (names == null) {
-              names = new Set<string>();
-              observations.haste = names;
-            }
-            names.add(name);
-          }
+        ? (name: string) => addHasteName(observations, name)
         : null;
 
     return Resolver.resolve(
@@ -316,7 +324,10 @@ export class ModuleResolver {
           observations == null
             ? fileSystemLookup
             : filePath => fileSystemLookup(filePath, observations),
-        getPackage,
+        getPackage:
+          observations == null
+            ? getPackage
+            : packageJsonPath => getPackage(packageJsonPath, observations),
         getPackageForModule:
           observations == null
             ? getPackageForModule
@@ -360,7 +371,7 @@ export class ModuleResolver {
    */
   _getFileResolvedModule(
     resolution: Resolution,
-    observations: ?ResolutionObservations,
+    observations: ?{...ResolutionObservations},
   ): BundlerResolution {
     switch (resolution.type) {
       case 'sourceFile':
@@ -389,7 +400,8 @@ export class ModuleResolver {
           return emptyModule;
         }
         // The empty module's resolution is cached, so merge in what it observed.
-        // It is resolved without Haste, so has no names to merge.
+        // `metro-resolver` doesn't consult Haste for it, but a custom resolver
+        // may.
         const emptyObservations = emptyModule.unstable_observations;
         if (emptyObservations != null) {
           for (const canonicalPath of emptyObservations.existence) {
@@ -397,6 +409,9 @@ export class ModuleResolver {
           }
           for (const canonicalPath of emptyObservations.content) {
             observations.content.add(canonicalPath);
+          }
+          for (const name of emptyObservations.haste ?? []) {
+            addHasteName(observations, name);
           }
         }
         return {...emptyModule, unstable_observations: observations};

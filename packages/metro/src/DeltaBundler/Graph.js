@@ -30,6 +30,7 @@
  */
 
 import type {RequireContextParams} from '../ModuleGraph/worker/collectDependencies';
+import type {ObservedChanges} from './ObservationIndex';
 import type {
   Dependencies,
   Dependency,
@@ -47,7 +48,9 @@ import {fileMatchesContext} from '../lib/contextModule';
 import CountingSet from '../lib/CountingSet';
 import {isResolvedDependency} from '../lib/isResolvedDependency';
 import {buildSubgraph} from './buildSubgraph';
+import ObservationIndex from './ObservationIndex';
 import invariant from 'invariant';
+import {sep} from 'node:path';
 import nullthrows from 'nullthrows';
 
 // TODO: Convert to a Flow enum
@@ -154,6 +157,10 @@ export class Graph<T = MixedOutput> {
    * path.
    */
   #virtualSources: Map<string, VirtualSource> = new Map();
+
+  // What each module's resolutions observed, with
+  // `resolver.unstable_incrementalResolution` on.
+  readonly #observations: ObservationIndex = new ObservationIndex();
 
   constructor(options: GraphInputOptions) {
     this.entryPoints = options.entryPoints;
@@ -436,8 +443,13 @@ export class Graph<T = MixedOutput> {
     const {
       dependencies: currentDependencies,
       virtualSources,
+      observations,
       ...transformResult
     } = currentModule;
+
+    // Kept current even if the module turns out unchanged, since what its
+    // resolutions observed may differ when their results don't.
+    this.#observations.set(path, observations);
 
     const nextModule = {
       ...(previousModule ?? {
@@ -658,6 +670,34 @@ export class Graph<T = MixedOutput> {
   }
 
   /**
+   * Modules whose resolutions a batch of changes may invalidate, with
+   * `resolver.unstable_incrementalResolution` on.
+   */
+  getModulesInvalidatedBy(changes: ObservedChanges): Set<string> {
+    const invalidated = this.#observations.getInvalidated(changes);
+    // An optional dependency that failed to resolve observed nothing, but an
+    // addition or a `package.json` change may let it resolve.
+    if (
+      changes.addedOrRemoved.size > 0 ||
+      [...changes.modified].some(
+        modifiedPath =>
+          modifiedPath === 'package.json' ||
+          modifiedPath.endsWith(sep + 'package.json'),
+      )
+    ) {
+      for (const [modulePath, module] of this.dependencies) {
+        for (const dependency of module.dependencies.values()) {
+          if (!isResolvedDependency(dependency)) {
+            invalidated.add(modulePath);
+            break;
+          }
+        }
+      }
+    }
+    return invalidated;
+  }
+
+  /**
    * Collect a list of context modules which include a given file.
    */
   markModifiedContextModules(
@@ -818,6 +858,7 @@ export class Graph<T = MixedOutput> {
       getSource,
       output,
       virtualSources,
+      observations: this.#observations.get(module.path),
       unstable_transformResultKey,
     };
   }
@@ -869,6 +910,7 @@ export class Graph<T = MixedOutput> {
     this.#gc.possibleCycleRoots.delete(module.path);
     this.#gc.color.delete(module.path);
     this.#virtualSources.delete(module.path);
+    this.#observations.delete(module.path);
   }
 
   // Mark a module as a possible cycle root
