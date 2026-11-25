@@ -343,6 +343,94 @@ describe('FallbackWatcher', () => {
     });
   });
 
+  test('ignores directory changes while crawling a newly moved-in directory', async () => {
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    const movedIn = join(watchRoot, 'moved-in');
+    mutedDirs.add(watchRoot);
+    mutedDirs.add(movedIn);
+    await mkdir(movedIn);
+    await writeFile(join(movedIn, 'file.js'), '');
+
+    let releaseCrawl: () => void = () => {};
+    const crawlGate = new Promise<void>(resolve => {
+      releaseCrawl = resolve;
+    });
+    let crawlStarted = false;
+    const readdir = jest
+      .spyOn(fs.promises, 'readdir')
+      .mockImplementation(async (dir, ...args) => {
+        if (String(dir) === movedIn && !crawlStarted) {
+          crawlStarted = true;
+          await crawlGate;
+        }
+        return unmockedReaddir(dir, ...args);
+      });
+
+    try {
+      listeners.get(watchRoot)?.('rename', 'moved-in');
+      await waitFor(() => crawlStarted);
+      listeners.get(watchRoot)?.('change', 'moved-in');
+      await writeFile(join(watchRoot, 'probe.js'), '');
+      listeners.get(watchRoot)?.('rename', 'probe.js');
+      await waitFor(() => events.includes('touch:probe.js'));
+    } finally {
+      releaseCrawl();
+    }
+    const movedFileEvent = `touch:${join('moved-in', 'file.js')}`;
+    await waitFor(() => events.includes(movedFileEvent));
+
+    expect(events).toContain('touch:moved-in');
+    expect(events).not.toContain('recrawl:moved-in');
+    expect(
+      readdir.mock.calls.filter(([dir]) => String(dir) === movedIn),
+    ).toHaveLength(1);
+  });
+
+  // A busy thread pool can resolve the stat of a change after a later change
+  // to the same path has been reported.
+  test('reports only the latest of successive changes to a file', async () => {
+    const file = join(watchRoot, 'file.js');
+    await writeFile(file, '');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    mutedDirs.add(watchRoot);
+    const staleStat = await fs.promises.lstat(file);
+    let releaseStaleStat: () => void = () => {};
+    const {lstat} = fs.promises;
+    jest
+      .spyOn(fs.promises, 'lstat')
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseStaleStat = () => resolve(staleStat);
+          }),
+      )
+      .mockImplementation(lstat);
+
+    listeners.get(watchRoot)?.('change', 'file.js');
+    await rm(file);
+    listeners.get(watchRoot)?.('rename', 'file.js');
+    await waitFor(() => events.includes('delete:file.js'));
+    releaseStaleStat();
+    // Reported after anything from the stale change would be
+    mutedDirs.delete(watchRoot);
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    expect(events.filter(event => event.endsWith(':file.js'))).toEqual([
+      'delete:file.js',
+    ]);
+  });
+
   // The file map removes everything under a directory reported deleted, so a
   // deletion reported under it afterwards is redundant.
   test('reports nothing under a directory once it is reported deleted', async () => {
