@@ -782,6 +782,23 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       });
     });
 
+    test('observes a start directory under breakOnSegment', () => {
+      // Removing it would make n_m the first missing segment
+      const observations = emptyObservations();
+      expect(
+        tfs.hierarchicalLookup(
+          p('/A/B/C/a/n_m'),
+          'package.json',
+          {breakOnSegment: 'n_m', subpathType: 'f'},
+          observations,
+        ),
+      ).toEqual({
+        absolutePath: p('/A/B/C/a/package.json'),
+        containerRelativePath: p('n_m'),
+      });
+      expect(observations.existence).toContain(p('a/n_m'));
+    });
+
     test('finds the closest directory with a single-segment subpath', () => {
       const observations = emptyObservations();
       expect(
@@ -946,27 +963,40 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         '/A/B/C/a/n_m/pkg/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'notexist.js',
-        ['/A/B/C/a/n_m/pkg/notexist.js'],
+        ['/A/B/C/a/n_m/pkg/notexist.js', '/A/B/C/a/n_m/pkg'],
         [],
       ],
       [
         '/A/B/C/a/n_m/pkg/subpath/notexist.js',
         '/A/B/C/a/n_m/pkg/subpath/package.json',
         'notexist.js',
-        ['/A/B/C/a/n_m/pkg/subpath/notexist.js'],
+        ['/A/B/C/a/n_m/pkg/subpath/notexist.js', '/A/B/C/a/n_m/pkg/subpath'],
         [],
       ],
       [
         '/A/B/C/a/n_m/pkg/otherpath/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'otherpath/notexist.js',
-        ['/A/B/C/a/n_m/pkg/otherpath'],
+        ['/A/B/C/a/n_m/pkg/otherpath', '/A/B/C/a/n_m/pkg'],
         [],
       ],
       // pkg3 does not exist, doesn't look beyond the containing n_m
-      ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
-      // Does not look beyond n_m, if n_m does not exist
-      ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
+      [
+        '/A/B/C/a/n_m/pkg3/foo.js',
+        null,
+        null,
+        ['/A/B/C/a/n_m/pkg3', '/A/B/C/a/n_m'],
+        [],
+      ],
+      // Does not look beyond n_m, if n_m does not exist. That depends on
+      // n_m's parent existing too
+      [
+        '/A/B/C/a/b/n_m/pkg/foo',
+        null,
+        null,
+        ['/A/B/C/a/b/n_m', '/A/B/C/a/b'],
+        [],
+      ],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
         '/A/B/workspace-pkg/package.json',
