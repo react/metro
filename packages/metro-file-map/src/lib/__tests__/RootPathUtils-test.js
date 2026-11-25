@@ -77,6 +77,16 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     expect(pathRelative).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['', '', ''],
+    ['', 'foo', 'foo'],
+    ['foo', '', 'foo'],
+    ['foo', 'bar/baz', 'foo/bar/baz'],
+  ])("joinNormalPath('%s', '%s') is '%s'", (normalPath, subpath, expected) => {
+    const {joinNormalPath} = require('../RootPathUtils');
+    expect(joinNormalPath(p(normalPath), p(subpath))).toEqual(p(expected));
+  });
+
   describe.each([p('/project/root'), p('/')])('root: %s', rootDir => {
     beforeEach(() => {
       pathRelative.mockClear();

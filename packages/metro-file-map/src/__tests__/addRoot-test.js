@@ -234,6 +234,23 @@ describe('FileMap.addRoot', () => {
     );
   });
 
+  test('a path in the root is unmapped until its crawl is applied', async () => {
+    const {fileSystem} = await fileMap.build();
+    const isMapped = (filePath: string) =>
+      fileSystem.isMapped(path.relative(ROOT_DIR, filePath));
+    const missing = path.join(EXTERNAL_DIR, 'missing.js');
+    expect(isMapped(missing)).toBe(false);
+
+    let mappedAtChange;
+    fileMap.on('change', () => {
+      mappedAtChange = isMapped(missing);
+    });
+    await fileMap.addRoot(EXTERNAL_DIR);
+    // Mapped by the time the change event reports the root's files.
+    expect(mappedAtChange).toBe(true);
+    expect(isMapped(path.join(SRC_DIR, 'missing.js'))).toBe(true);
+  });
+
   test('is idempotent, including for concurrent calls', async () => {
     await fileMap.build();
     await Promise.all([
@@ -288,13 +305,18 @@ describe('FileMap.addRoot', () => {
     ]);
   });
 
-  test('a failed crawl rejects, and the root is not reported', async () => {
-    await fileMap.build();
+  test('a failed crawl rejects, and the root is not reported or mapped', async () => {
+    const {fileSystem} = await fileMap.build();
     mockNodeCrawler.mockImplementationOnce(() =>
       Promise.reject(new Error('crawl failed')),
     );
     await expect(fileMap.addRoot(EXTERNAL_DIR)).rejects.toThrow('crawl failed');
     expect(rootPaths(fileMap)).toEqual([SRC_DIR]);
+    expect(
+      fileSystem.isMapped(
+        path.relative(ROOT_DIR, path.join(EXTERNAL_DIR, 'missing.js')),
+      ),
+    ).toBe(false);
     // A later attempt may succeed.
     await fileMap.addRoot(EXTERNAL_DIR);
     expect(rootPaths(fileMap)).toEqual([SRC_DIR, EXTERNAL_DIR]);

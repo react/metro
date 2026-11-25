@@ -383,6 +383,15 @@ export interface FileSystem {
   getAllFiles(): Array<Path>;
 
   /**
+   * Whether a canonical path is within a mapped root: one whose every retained
+   * file this file system holds, such as a root from `addRoot` once its crawl
+   * is applied. If not, its absence here says nothing about the disk. For a
+   * missing lookup, test the path looked for (`canonicalMissingPath` followed
+   * by `remainingPath`): `canonicalMissingPath` may be above a mapped root.
+   */
+  isMapped(canonicalPath: CanonicalPath): boolean;
+
+  /**
    * Given a map of files, determine which of them are new or modified
    * (changedFiles), and which of them are missing from the input
    * (removedFiles), vs the current state of this instance of FileSystem.
@@ -501,10 +510,16 @@ export type JsonData =
 
 export type LookupResult =
   | {
-      // The node is missing from the FileSystem implementation (note this
-      // could indicate an unwatched path, or a directory containing no watched
-      // files).
+      // The node is missing from the FileSystem implementation: absent from
+      // the disk, a directory containing no watched files, or outside every
+      // mapped root (see `isMapped`).
       exists: false,
+      // Where the lookup stopped, relative to the root, with symlinks
+      // resolved: the topmost missing path, or a file where a directory was
+      // needed.
+      canonicalMissingPath: CanonicalPath,
+      // The normal path following canonicalMissingPath, or '' if none.
+      remainingPath: string,
     }
   | {
       exists: true,
@@ -556,6 +571,15 @@ export interface Observations {
    * the result.
    */
   readonly content: Set<CanonicalPath>;
+
+  /**
+   * Paths that `lookup` and `hierarchicalLookup` looked for and found missing
+   * outside every mapped root (see `isMapped`), in full rather than where the
+   * lookup stopped (as in `existence`). A query that observed one may have a
+   * different answer once the path is mapped, e.g. by `addRoot`. Recorded only
+   * if the record has this bucket.
+   */
+  readonly unmapped?: ?Set<CanonicalPath>;
 }
 
 export interface MockMap {
