@@ -9,8 +9,9 @@
  * @oncall react_native
  */
 
+import type {ObservedChanges} from './ObservationIndex';
 import type {DeltaResult, Options} from './types';
-import type {ChangeEvent} from 'metro-file-map';
+import type {ChangeEvent, HasteChanges} from 'metro-file-map';
 
 import {Graph} from './Graph';
 import debugModule from 'debug';
@@ -43,6 +44,9 @@ export default class DeltaCalculator<T> extends EventEmitter {
   _modifiedFiles: Set<string> = new Set();
   _addedFiles: Set<string> = new Set();
   _requiresReset: boolean = false;
+  // With `resolver.unstable_incrementalResolution` on, every change since the
+  // last build, to find the resolutions it may invalidate.
+  #observedChanges: PendingObservedChanges = createPendingObservedChanges();
 
   _graph: Graph<T>;
 
@@ -83,6 +87,7 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this._modifiedFiles = new Set();
     this._deletedFiles = new Set();
     this._addedFiles = new Set();
+    this.#observedChanges = createPendingObservedChanges();
   }
 
   /**
@@ -115,6 +120,8 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this._addedFiles = new Set();
     const requiresReset = this._requiresReset;
     this._requiresReset = false;
+    const observedChanges = this.#observedChanges;
+    this.#observedChanges = createPendingObservedChanges();
 
     // Revisit all files if changes require a graph reset - resolutions may be
     // invalidated but we don't yet know which. This should be optimized in the
@@ -136,6 +143,7 @@ export default class DeltaCalculator<T> extends EventEmitter {
       modifiedFiles,
       deletedFiles,
       addedFiles,
+      observedChanges,
     );
 
     let result;
@@ -158,6 +166,9 @@ export default class DeltaCalculator<T> extends EventEmitter {
       laterAddedFiles.forEach((file: string) => this.#markAdded(file));
       laterModifiedFiles.forEach((file: string) => this.#markModified(file));
       laterDeletedFiles.forEach((file: string) => this.#markDeleted(file));
+      const laterObservedChanges = this.#observedChanges;
+      this.#observedChanges = observedChanges;
+      mergeObservedChanges(this.#observedChanges, laterObservedChanges);
 
       throw error;
     } finally {
@@ -239,6 +250,10 @@ export default class DeltaCalculator<T> extends EventEmitter {
   _handleMultipleFileChanges = (changeEvent: ChangeEvent) => {
     const {changes, logger, rootDir} = changeEvent;
 
+    if (this._options.unstable_incrementalResolution) {
+      this.#observeChanges(changeEvent);
+    }
+
     for (const [canonicalPath, metadata] of changes.addedFiles) {
       debug('Handling add: %s', canonicalPath);
       if (this.#shouldReset(canonicalPath, metadata)) {
@@ -272,10 +287,66 @@ export default class DeltaCalculator<T> extends EventEmitter {
     this.emit('change', {logger, changeId});
   };
 
+  #observeChanges(changeEvent: ChangeEvent): void {
+    const {changes} = changeEvent;
+    // Absent from events of file maps that predate plugin summaries.
+    const pluginChanges: ?ReadonlyMap<string, unknown> =
+      changeEvent.pluginChanges;
+    const {addedOrRemoved, modified} = this.#observedChanges;
+    const addOrRemove = (canonicalPath: string) => {
+      addedOrRemoved.add(canonicalPath);
+      // Adding or removing an entry modifies its directory.
+      const parentIdx = canonicalPath.lastIndexOf(path.sep);
+      modified.add(parentIdx === -1 ? '' : canonicalPath.slice(0, parentIdx));
+    };
+    let isEmpty = true;
+    for (const [canonicalPath] of changes.addedFiles) {
+      addOrRemove(canonicalPath);
+      isEmpty = false;
+    }
+    for (const [canonicalPath] of changes.removedFiles) {
+      addOrRemove(canonicalPath);
+      isEmpty = false;
+    }
+    for (const [canonicalPath, metadata] of changes.modifiedFiles) {
+      modified.add(canonicalPath);
+      // A file replaced by a symlink within the batch is reported as
+      // modified, but is a removal and an addition.
+      if (metadata.isSymlink) {
+        addOrRemove(canonicalPath);
+      }
+      isEmpty = false;
+    }
+    for (const canonicalPath of changes.addedDirectories) {
+      addOrRemove(canonicalPath);
+    }
+    for (const canonicalPath of changes.removedDirectories) {
+      addOrRemove(canonicalPath);
+    }
+
+    // Without plugin summaries (e.g. from a file map that predates them),
+    // any Haste name may have changed.
+    // $FlowFixMe[incompatible-type] Only `HastePlugin` writes its entry
+    const hasteChanges: ?HasteChanges = pluginChanges?.get('haste');
+    if (pluginChanges == null) {
+      if (!isEmpty) {
+        this.#observedChanges.hasteNames = 'all';
+      }
+    } else if (hasteChanges != null) {
+      const {hasteNames} = this.#observedChanges;
+      if (hasteNames !== 'all') {
+        for (const name of hasteChanges.changedNames) {
+          hasteNames.add(name);
+        }
+      }
+    }
+  }
+
   async _getChangedDependencies(
     modifiedFiles: Set<string>,
     deletedFiles: Set<string>,
     addedFiles: Set<string>,
+    observedChanges?: ?ObservedChanges,
   ): Promise<DeltaResult<T>> {
     if (!this._graph.dependencies.size) {
       const {added} = await this._graph.initialTraverseDependencies(
@@ -326,6 +397,24 @@ export default class DeltaCalculator<T> extends EventEmitter {
       });
     }
 
+    // Revisit modules whose resolutions the changes may invalidate, including
+    // in favour of files not yet in the graph, like a new `foo.ios.js`.
+    if (
+      observedChanges != null &&
+      (observedChanges.addedOrRemoved.size > 0 ||
+        observedChanges.modified.size > 0 ||
+        observedChanges.hasteNames === 'all' ||
+        observedChanges.hasteNames.size > 0)
+    ) {
+      for (const modulePath of this._graph.getModulesInvalidatedBy(
+        observedChanges,
+      )) {
+        if (!deletedFiles.has(modulePath)) {
+          modifiedFiles.add(modulePath);
+        }
+      }
+    }
+
     // We only want to process files that are in the bundle.
     const modifiedDependencies = Array.from(modifiedFiles).filter(
       (filePath: string) => this._graph.dependencies.has(filePath),
@@ -359,5 +448,33 @@ export default class DeltaCalculator<T> extends EventEmitter {
       modified,
       reset: false,
     };
+  }
+}
+
+type PendingObservedChanges = {
+  addedOrRemoved: Set<string>,
+  modified: Set<string>,
+  hasteNames: Set<string> | 'all',
+};
+
+function createPendingObservedChanges(): PendingObservedChanges {
+  return {
+    addedOrRemoved: new Set(),
+    modified: new Set(),
+    hasteNames: new Set(),
+  };
+}
+
+function mergeObservedChanges(
+  target: PendingObservedChanges,
+  source: PendingObservedChanges,
+): void {
+  source.addedOrRemoved.forEach(p => target.addedOrRemoved.add(p));
+  source.modified.forEach(p => target.modified.add(p));
+  if (source.hasteNames === 'all') {
+    target.hasteNames = 'all';
+  } else if (target.hasteNames !== 'all') {
+    const {hasteNames} = target;
+    source.hasteNames.forEach(name => hasteNames.add(name));
   }
 }

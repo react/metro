@@ -190,6 +190,15 @@ type MetadataIteratorOptions = Readonly<{
  *   A root-relative, normalised, real path (no symlinks in dirname), never has
  *   a trailing slash
  */
+function hasSegment(normalPath: string, segment: string): boolean {
+  return (
+    normalPath === segment ||
+    normalPath.startsWith(segment + path.sep) ||
+    normalPath.endsWith(path.sep + segment) ||
+    normalPath.includes(path.sep + segment + path.sep)
+  );
+}
+
 export default class TreeFS implements MutableFileSystem {
   readonly #pathUtils: RootPathUtils;
   readonly #processFile: ProcessFileFunction;
@@ -1038,6 +1047,29 @@ export default class TreeFS implements MutableFileSystem {
       collectAncestors: ancestorsOfInput,
       observations,
     });
+
+    // With `breakOnSegment`, which segment is the first missing one decides
+    // the answer, and removing an existing ancestor can change it. Removing
+    // an ancestor also removes the start directory, or the first missing
+    // path's parent, so recording that one existence is enough.
+    const breakOnSegment = opts.breakOnSegment;
+    if (observations != null && breakOnSegment != null) {
+      const observedPath = closestLookup.exists
+        ? closestLookup.canonicalPath
+        : closestLookup.canonicalMissingPath;
+      if (hasSegment(observedPath, breakOnSegment)) {
+        if (closestLookup.exists) {
+          if (isDirectory(closestLookup.node)) {
+            observations.existence.add(observedPath);
+          }
+        } else {
+          const parentIdx = observedPath.lastIndexOf(path.sep);
+          observations.existence.add(
+            parentIdx === -1 ? '' : observedPath.slice(0, parentIdx),
+          );
+        }
+      }
+    }
 
     if (closestLookup.exists && isDirectory(closestLookup.node)) {
       const maybeAbsolutePathMatch = this.#checkCandidateHasSubpath(

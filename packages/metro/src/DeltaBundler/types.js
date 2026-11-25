@@ -115,6 +115,11 @@ export type ModuleData<T = MixedOutput> = Readonly<{
   dependencies: ReadonlyMap<string, Dependency>,
   /** Keyed by dependency key, for the dependencies that resolved to a module with no file. */
   virtualSources: ReadonlyMap<string, VirtualSource>,
+  /**
+   * Keyed by dependency key, what each dependency's resolution observed, with
+   * `resolver.unstable_incrementalResolution` on.
+   */
+  observations?: ReadonlyMap<string, ResolutionObservations>,
   output: ReadonlyArray<T>,
   getSource: () => Buffer,
   unstable_transformResultKey?: ?string,

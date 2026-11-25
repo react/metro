@@ -3358,7 +3358,8 @@ function dep(name: string): TransformResultDependency {
               'node_modules/pkg/package.json',
               'node_modules/pkg/main.js',
             ),
-            content: new Set(),
+            // The package's manifest, read for its `main`
+            content: canonical('node_modules/pkg/package.json'),
             haste: null,
           },
         });
@@ -3447,7 +3448,8 @@ function dep(name: string): TransformResultDependency {
               'empty.js',
               'package.json',
             ),
-            content: new Set(),
+            // The closest package's manifest, read for its `browser` map
+            content: canonical('withBrowser/package.json'),
             haste: null,
           },
         });
@@ -3461,6 +3463,43 @@ function dep(name: string): TransformResultDependency {
         expect(second).toBe(first);
         expect(second.unstable_observations?.existence.size).toBeGreaterThan(0);
       });
+      test.each([[true], [false]])(
+        'with the flag %s, a custom resolver reads manifests through the file map',
+        async incrementalResolution => {
+          setMockFileSystem({
+            'index.js': '',
+            'a.js': '',
+            excluded: {'package.json': JSON.stringify({name: 'excluded'})},
+          });
+          const read: Array<?string> = [];
+          resolver = await createResolver(
+            {
+              resolver: {
+                blockList: [/excluded/],
+                unstable_incrementalResolution: incrementalResolution,
+                resolveRequest: (context, moduleName, platform) => {
+                  read.push(
+                    context.getPackage(p('/root/excluded/package.json'))?.name,
+                  );
+                  return context.resolveRequest(context, moduleName, platform);
+                },
+              },
+            },
+            'ios',
+          );
+          const resolution = resolver.resolve(p('/root/index.js'), dep('./a'));
+          if (incrementalResolution) {
+            // Outside the file map, so missing, and recorded as such
+            expect(read).toEqual([undefined]);
+            expect(resolution.unstable_observations?.existence).toContain(
+              joinPath('excluded'),
+            );
+          } else {
+            expect(read).toEqual(['excluded']);
+          }
+        },
+      );
+
       describe('Haste names', () => {
         const withHaste: InputConfigT = {
           resolver: {
@@ -3483,6 +3522,43 @@ function dep(name: string): TransformResultDependency {
             resolver.resolve(p('/root/index.js'), dep('pkg'))
               .unstable_observations?.haste,
           ).toBe(null);
+        });
+
+        test('includes names a custom resolver consulted for the empty module', async () => {
+          setMockFileSystem({
+            'empty.js': '',
+            withBrowser: {
+              'package.json': JSON.stringify({
+                name: 'with-browser',
+                browser: {'./gone.js': false},
+              }),
+              'index.js': '',
+              'gone.js': '',
+            },
+          });
+          resolver = await createResolver(
+            {
+              resolver: {
+                ...withHaste.resolver,
+                emptyModulePath: p('/root/empty.js'),
+                resolveRequest: (context, moduleName, platform) => {
+                  if (moduleName === p('/root/empty.js')) {
+                    context.resolveHasteModule('EmptyOverride');
+                  }
+                  return context.resolveRequest(context, moduleName, platform);
+                },
+              },
+            },
+            'ios',
+          );
+          const resolution = resolver.resolve(
+            p('/root/withBrowser/index.js'),
+            dep('./gone'),
+          );
+          expect(resolution.filePath).toBe(p('/root/empty.js'));
+          expect(resolution.unstable_observations?.haste).toEqual(
+            new Set(['EmptyOverride']),
+          );
         });
 
         test('records a name that is found', async () => {
