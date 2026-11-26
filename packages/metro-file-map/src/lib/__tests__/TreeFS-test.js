@@ -1341,6 +1341,14 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         ['/A/B/C/a/b/n_m', '/A/B/C/a/b/package.json'],
         [],
       ],
+      // Nor when it's followed by a trailing separator
+      [
+        '/A/B/C/a/missing/n_m/',
+        '/A/B/C/a/package.json',
+        'missing/n_m/',
+        ['/A/B/C/a/missing'],
+        [],
+      ],
       // The lookup does not walk the ancestors of a symlink's target, so a
       // missing n_m among them does not stop it
       [

@@ -131,10 +131,11 @@ function hasMissingParentSegment(
   ) {
     return true;
   }
-  // Every segment of the remaining path but the last.
+  // Every segment of the remaining path but the last, which may be followed
+  // by a trailing separator.
   let start = Math.max(0, lookup.unseenPathFromIdx - remainingFromIdx);
   let end = remainingPath.indexOf(path.sep, start);
-  while (end !== -1) {
+  while (end !== -1 && end !== remainingPath.length - 1) {
     if (
       end - start === segment.length &&
       remainingPath.startsWith(segment, start)
