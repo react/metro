@@ -10,6 +10,7 @@
 
 import type {
   CacheData,
+  CanonicalPath,
   FileData,
   FileMetadata,
   FileStats,
@@ -23,7 +24,7 @@ import type {
 
 import H from '../constants';
 import normalizePathSeparatorsToSystem from './normalizePathSeparatorsToSystem';
-import {RootPathUtils} from './RootPathUtils';
+import {RootPathUtils, joinNormalPath} from './RootPathUtils';
 import invariant from 'invariant';
 import path from 'node:path';
 
@@ -90,6 +91,20 @@ const LOOKUP_OPTIONS_NO_FOLLOW_LEAF: LookupOptions = {
   ...LOOKUP_OPTIONS,
   followLeaf: false,
 };
+
+// Whether a normal path is within an ancestor ('' contains every path), as
+// relativeToAncestor(...) != null but without building the remainder.
+function isWithinNormal(
+  normalPath: string,
+  ancestorNormalPath: string,
+): boolean {
+  return (
+    ancestorNormalPath === '' ||
+    (normalPath.startsWith(ancestorNormalPath) &&
+      (normalPath.length === ancestorNormalPath.length ||
+        normalPath[ancestorNormalPath.length] === path.sep))
+  );
+}
 
 // Null if not within the ancestor ('' is the root).
 function relativeToAncestor(
@@ -195,6 +210,13 @@ export default class TreeFS implements MutableFileSystem {
   readonly #processFile: ProcessFileFunction;
   readonly #rootDir: Path;
   #rootNode: DirectoryNode = new Map();
+  // Normal paths of the mapped roots other than the root and its ancestors, or
+  // null if every path is mapped.
+  #normalRoots: ?ReadonlyArray<string> = null;
+  // The nearest of the root ('') and its ancestors ('..', '../..', ...) that is
+  // not mapped. A normal path with fewer leading '..' segments than it has is
+  // within a mapped ancestor.
+  #unmappedAncestor: string = '';
 
   constructor(opts: TreeFSOptions) {
     const {rootDir, files, processFile} = opts;
@@ -203,6 +225,106 @@ export default class TreeFS implements MutableFileSystem {
     this.#processFile = processFile;
     if (files != null) {
       this.bulkAddOrModify(files);
+    }
+  }
+
+  /**
+   * Set the directories whose every retained file this file system holds. A
+   * path outside all of them is unmapped. Until this is called, every path is
+   * mapped.
+   */
+  setRoots(mixedRoots: ReadonlyArray<Path>): void {
+    this.#unmappedAncestor = '';
+    const normalRoots = [];
+    for (const root of mixedRoots) {
+      let normalRoot = this.#normalizePath(root);
+      // A root given with a trailing separator (always, for a filesystem root)
+      // normalizes with one.
+      if (normalRoot.endsWith(path.sep)) {
+        normalRoot = normalRoot.slice(0, -1);
+      }
+      // The root or an ancestor of it.
+      if (
+        normalRoot === '' ||
+        normalRoot === '..' ||
+        normalRoot.endsWith(path.sep + '..')
+      ) {
+        const parent = joinNormalPath(normalRoot, '..');
+        if (parent.length > this.#unmappedAncestor.length) {
+          this.#unmappedAncestor = parent;
+        }
+      } else {
+        normalRoots.push(normalRoot);
+      }
+    }
+    this.#normalRoots = normalRoots;
+  }
+
+  isMapped(canonicalPath: CanonicalPath): boolean {
+    const roots = this.#normalRoots;
+    // A normal path has '..' segments only at its start, so a path within a
+    // root that has another segment starts with that root.
+    if (
+      roots == null ||
+      !isWithinNormal(canonicalPath, this.#unmappedAncestor)
+    ) {
+      return true;
+    }
+    for (const root of roots) {
+      if (isWithinNormal(canonicalPath, root)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Record a lookup that went missing at canonicalMissingPath and, if the
+  // record has an `unmapped` bucket and the path it looked for is unmapped,
+  // that path. For a hierarchicalLookup whose start path is missing,
+  // `candidates` also records the unmapped candidates of the start path's
+  // missing ancestors, which are not checked because they are missing too.
+  #observeMissing(
+    observations: Observations,
+    canonicalMissingPath: string,
+    remainingPath: string,
+    candidates?: Readonly<{
+      breakOnSegment: ?string,
+      // Where ancestors of the path looked for start to be candidates (see
+      // unseenPathFromIdx in #lookupByNormalPath).
+      fromIdx: number,
+      subpath: string,
+    }>,
+  ): void {
+    observations.existence.add(canonicalMissingPath);
+    const unmapped = observations.unmapped;
+    // Below a mapped path, everything is mapped.
+    if (unmapped == null || this.isMapped(canonicalMissingPath)) {
+      return;
+    }
+    let target = joinNormalPath(canonicalMissingPath, remainingPath);
+    // A path looked up with a trailing separator keeps it.
+    if (target.endsWith(path.sep)) {
+      target = target.slice(0, -1);
+    }
+    if (!this.isMapped(target)) {
+      unmapped.add(target);
+    }
+    if (candidates == null) {
+      return;
+    }
+    let dir = target;
+    while (dir.length > canonicalMissingPath.length) {
+      dir = dir.slice(0, dir.lastIndexOf(path.sep));
+      if (
+        dir.length <= candidates.fromIdx ||
+        dir.slice(dir.lastIndexOf(path.sep) + 1) === candidates.breakOnSegment
+      ) {
+        return;
+      }
+      const candidate = joinNormalPath(dir, candidates.subpath);
+      if (!this.isMapped(candidate)) {
+        unmapped.add(candidate);
+      }
     }
   }
 
@@ -245,11 +367,8 @@ export default class TreeFS implements MutableFileSystem {
     if (result.exists) {
       return this.#pathUtils.normalToAbsolute(result.canonicalPath);
     }
-    const {canonicalMissingPath, remainingPath} = result;
     return this.#pathUtils.normalToAbsolute(
-      remainingPath === ''
-        ? canonicalMissingPath
-        : canonicalMissingPath + path.sep + remainingPath,
+      joinNormalPath(result.canonicalMissingPath, result.remainingPath),
     );
   }
 
@@ -259,7 +378,7 @@ export default class TreeFS implements MutableFileSystem {
     rootPrefixes: ReadonlyArray<string>,
   ): Iterable<string> {
     for (const [name, child] of node) {
-      const childPath = prefix === '' ? name : prefix + path.sep + name;
+      const childPath = joinNormalPath(prefix, name);
       if (name === '..' && isDirectory(child)) {
         // Past the top of a Windows drive, '..' holds the other drives, which
         // a root containing its own path does not contain.
@@ -456,9 +575,17 @@ export default class TreeFS implements MutableFileSystem {
     );
     if (!result.exists) {
       if (observations) {
-        observations.existence.add(result.canonicalMissingPath);
+        this.#observeMissing(
+          observations,
+          result.canonicalMissingPath,
+          result.remainingPath,
+        );
       }
-      return {exists: false};
+      return {
+        exists: false,
+        canonicalMissingPath: result.canonicalMissingPath,
+        remainingPath: result.remainingPath,
+      };
     }
     const {canonicalPath, node} = result;
     if (observations) {
@@ -763,6 +890,9 @@ export default class TreeFS implements MutableFileSystem {
         missingSegmentName: string,
         // The normal path following the missing segment, or '' if none.
         remainingPath: string,
+        // Where, in canonicalMissingPath followed by remainingPath, ancestors
+        // start to be collected (see unseenPathFromIdx below).
+        unseenPathFromIdx: number,
         exists: false,
       } {
     // We'll update the target if we hit a symlink.
@@ -818,6 +948,7 @@ export default class TreeFS implements MutableFileSystem {
             exists: false,
             missingSegmentName: segmentName,
             remainingPath: targetNormalPath.slice(fromIdx),
+            unseenPathFromIdx,
           };
         }
         segmentNode = new Map();
@@ -881,6 +1012,7 @@ export default class TreeFS implements MutableFileSystem {
             exists: false,
             missingSegmentName: segmentName,
             remainingPath: targetNormalPath.slice(fromIdx),
+            unseenPathFromIdx,
           };
         }
 
@@ -963,6 +1095,7 @@ export default class TreeFS implements MutableFileSystem {
             exists: false,
             missingSegmentName: segmentName,
             remainingPath: '',
+            unseenPathFromIdx,
           };
         }
         fromIdx = 0;
@@ -1058,15 +1191,21 @@ export default class TreeFS implements MutableFileSystem {
         };
       }
     } else {
-      if (
-        observations &&
-        (!closestLookup.exists || !isDirectory(closestLookup.node))
-      ) {
-        observations.existence.add(
-          closestLookup.exists
-            ? closestLookup.canonicalPath
-            : closestLookup.canonicalMissingPath,
-        );
+      if (observations) {
+        if (closestLookup.exists) {
+          observations.existence.add(closestLookup.canonicalPath);
+        } else {
+          this.#observeMissing(
+            observations,
+            closestLookup.canonicalMissingPath,
+            closestLookup.remainingPath,
+            {
+              breakOnSegment: opts.breakOnSegment,
+              fromIdx: closestLookup.unseenPathFromIdx,
+              subpath,
+            },
+          );
+        }
       }
       if (
         opts.breakOnSegment != null &&
@@ -1106,6 +1245,11 @@ export default class TreeFS implements MutableFileSystem {
       }
     }
 
+    // Ancestors of the root up to the filesystem root exist on disk. On
+    // Windows, the '..' of a drive's root holds the other drives, which is not
+    // a directory on disk.
+    const filesystemRootDepth = this.#pathUtils.getDepth();
+
     // Phase 1: Consider descendenants of the common root, from deepest to
     // shallowest.
     for (
@@ -1116,6 +1260,9 @@ export default class TreeFS implements MutableFileSystem {
       const candidate = ancestorsOfInput[candidateIdx];
       if (candidate.segmentName === opts.breakOnSegment) {
         return null;
+      }
+      if ((candidate.ancestorOfRootIdx ?? 0) > filesystemRootDepth) {
+        continue;
       }
       const maybeAbsolutePathMatch = this.#checkCandidateHasSubpath(
         candidate.normalPath,
@@ -1161,21 +1308,25 @@ export default class TreeFS implements MutableFileSystem {
       relativeToAncestor(
         closestLookup.exists
           ? closestLookup.canonicalPath
-          : closestLookup.remainingPath === ''
-            ? closestLookup.canonicalMissingPath
-            : closestLookup.canonicalMissingPath +
-              path.sep +
+          : joinNormalPath(
+              closestLookup.canonicalMissingPath,
               closestLookup.remainingPath,
+            ),
         candidateNormalPath,
       );
     if (remainingNormalPath == null) {
       return null;
     }
 
+    // An ancestor of the root with no node (no file beneath it is in the tree)
+    // is checked as an empty directory, as in lookup.
     let nextNode: ?MixedNode = commonRoot;
     let depthBelowCommonRoot = 0;
 
-    while (isDirectory(nextNode)) {
+    while (
+      isDirectory(nextNode) &&
+      commonRootDepth + depthBelowCommonRoot <= filesystemRootDepth
+    ) {
       const maybeAbsolutePathMatch = this.#checkCandidateHasSubpath(
         candidateNormalPath,
         subpath,
@@ -1209,7 +1360,20 @@ export default class TreeFS implements MutableFileSystem {
         candidateNormalPath === ''
           ? '..'
           : candidateNormalPath + path.sep + '..';
-      nextNode = nextNode.get('..');
+      const parentNode = nextNode.get('..');
+      // Without a node, a subpath can match only by leading back down into the
+      // tree, through a segment named as the root or one of its ancestors.
+      // Otherwise, stop unless there are observations to record.
+      if (
+        parentNode == null &&
+        observations == null &&
+        !subpath
+          .split(path.sep)
+          .some(segment => this.#pathUtils.getParts().includes(segment))
+      ) {
+        return null;
+      }
+      nextNode = parentNode ?? new Map();
     }
     return null;
   }
@@ -1253,12 +1417,13 @@ export default class TreeFS implements MutableFileSystem {
         if (!isMatch && observations == null) {
           return null;
         }
-        const childNormalPath =
-          normalCandidatePath === ''
-            ? subpath
-            : normalCandidatePath + path.sep + subpath;
+        const childNormalPath = joinNormalPath(normalCandidatePath, subpath);
         if (observations) {
-          observations.existence.add(childNormalPath);
+          if (childNode != null) {
+            observations.existence.add(childNormalPath);
+          } else {
+            this.#observeMissing(observations, childNormalPath, '');
+          }
         }
         return isMatch
           ? this.#pathUtils.normalToAbsolute(childNormalPath)
@@ -1293,11 +1458,15 @@ export default class TreeFS implements MutableFileSystem {
       }
       return this.#pathUtils.normalToAbsolute(lookupResult.canonicalPath);
     } else if (observations) {
-      observations.existence.add(
-        lookupResult.exists
-          ? lookupResult.canonicalPath
-          : lookupResult.canonicalMissingPath,
-      );
+      if (lookupResult.exists) {
+        observations.existence.add(lookupResult.canonicalPath);
+      } else {
+        this.#observeMissing(
+          observations,
+          lookupResult.canonicalMissingPath,
+          lookupResult.remainingPath,
+        );
+      }
     }
     return null;
   }

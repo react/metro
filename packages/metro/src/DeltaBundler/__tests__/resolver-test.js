@@ -3311,6 +3311,7 @@ function dep(name: string): TransformResultDependency {
               'a.native.js',
               'a.js',
               'package.json',
+              '../package.json',
             ),
             content: new Set(),
             haste: null,
@@ -3341,6 +3342,7 @@ function dep(name: string): TransformResultDependency {
               'deep/dir/package.json',
               'deep/package.json',
               'package.json',
+              '../package.json',
               // Each node_modules on the way up, recorded once
               'deep/dir/node_modules',
               'deep/node_modules',
@@ -3379,6 +3381,7 @@ function dep(name: string): TransformResultDependency {
               'real/x.js',
               'real/package.json',
               'package.json',
+              '../package.json',
             ),
             // Retargeting the link changes what every path through it means
             content: canonical('link'),
@@ -3406,6 +3409,7 @@ function dep(name: string): TransformResultDependency {
             'asset@3x.png',
             'asset@4x.png',
             'package.json',
+            '../package.json',
           ),
           content: new Set(),
           haste: null,
@@ -3446,6 +3450,7 @@ function dep(name: string): TransformResultDependency {
               // What resolving the empty module observed
               'empty.js',
               'package.json',
+              '../package.json',
             ),
             content: new Set(),
             haste: null,

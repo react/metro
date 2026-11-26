@@ -12,7 +12,7 @@
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
 import H from '../../constants';
-import {RootPathUtils} from '../../lib/RootPathUtils';
+import {RootPathUtils, joinNormalPath} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -102,9 +102,7 @@ async function find(
             // until the walk enters rootDir itself.
             const childNormal = !isWithinRoot
               ? pathUtils.absoluteToNormal(file)
-              : dirNormal === ''
-                ? name
-                : dirNormal + path.sep + name;
+              : joinNormalPath(dirNormal, name);
 
             if (entry.isDirectory()) {
               search(

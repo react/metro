@@ -189,23 +189,28 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     );
 
     test.each([
-      [p('/project/bar.js/bad-parent'), [], p('/project/bar.js')],
-      [p('/project/bar.js/'), [], p('/project/bar.js')],
+      [p('/project/bar.js/bad-parent'), [], p('/project/bar.js'), 'bad-parent'],
+      [p('/project/bar.js/'), [], p('/project/bar.js'), ''],
       [
         p('/project/link-to-nowhere'),
         [p('/project/link-to-nowhere')],
         p('/project/nowhere'),
+        '',
       ],
-      [p('/project/not/exists'), [], p('/project/not')],
-      [p('/project/root/missing'), [p('/project/root')], p('/missing')],
-      [p('/project/../missing'), [], p('/missing')],
-      [p('/project/foo/../../missing'), [], p('/missing')],
-      [p('/project/foo/../../project/missing'), [], p('/project/missing')],
+      [p('/project/not/exists'), [], p('/project/not'), 'exists'],
+      [p('/project/root/missing'), [p('/project/root')], p('/missing'), ''],
+      [p('/project/../missing'), [], p('/missing'), ''],
+      [p('/project/foo/../../missing'), [], p('/missing'), ''],
+      [p('/project/foo/../../project/missing'), [], p('/project/missing'), ''],
     ])(
       'non-existence for bad paths, missing files or broken links %s',
-      (givenPath, expectedSymlinks, missingPath) => {
+      (givenPath, expectedSymlinks, missingPath, remainingPath) => {
         const observations = emptyObservations();
-        expect(tfs.lookup(givenPath, observations)).toEqual({exists: false});
+        expect(tfs.lookup(givenPath, observations)).toEqual({
+          exists: false,
+          canonicalMissingPath: canonical(missingPath),
+          remainingPath,
+        });
         expect(observations).toEqual({
           content: new Set(expectedSymlinks.map(canonical)),
           existence: new Set([canonical(missingPath)]),
@@ -246,7 +251,325 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
           throw new Error('Not implemented');
         },
       });
-      expect(tfs.lookup(p('/project/a/file.js'))).toEqual({exists: false});
+      expect(tfs.lookup(p('/project/a/file.js'))).toMatchObject({
+        exists: false,
+      });
+    });
+
+    describe('unmapped paths', () => {
+      // A symlink out of the project.
+      const makeTfs = (roots: ?ReadonlyArray<string>) => {
+        const tfs = new TreeFS({
+          rootDir: p('/project'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [
+              p('node_modules/store-link'),
+              [123, 0, 0, null, '../store/pkg', null],
+            ],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        if (roots != null) {
+          tfs.setRoots(roots);
+        }
+        return tfs;
+      };
+      const recordWithUnmapped = () => ({
+        ...emptyObservations(),
+        unmapped: new Set<CanonicalPath>(),
+      });
+
+      test.each([
+        // Outside every root, including through a symlink out of a root. The
+        // bucket names where the lookup was headed, beneath where it went
+        // missing.
+        [
+          p('/project/node_modules/store-link/index.js'),
+          [],
+          p('/store'),
+          [p('/store/pkg/index.js')],
+        ],
+        [p('/shared2/pkg/'), [], p('/shared2'), [p('/shared2/pkg')]],
+        // Within a root that has no files, as for a root whose directory does
+        // not exist yet: lookups go missing above it, but absence within it is
+        // known.
+        [
+          p('/project/node_modules/store-link/index.js'),
+          [p('/store/pkg')],
+          p('/store'),
+          [],
+        ],
+        [
+          p('/store/other/index.js'),
+          [p('/store/pkg')],
+          p('/store'),
+          [p('/store/other/index.js')],
+        ],
+      ])(
+        '%s with extra roots %s is missing at %s, unmapped: %s',
+        (givenPath, extraRoots, missingPath, unmapped) => {
+          const tfs = makeTfs([p('/project'), p('/shared'), ...extraRoots]);
+          const observations = recordWithUnmapped();
+          expect(tfs.lookup(givenPath, observations)).toMatchObject({
+            exists: false,
+            canonicalMissingPath: canonical(missingPath),
+          });
+          expect(observations.unmapped).toEqual(
+            new Set(unmapped.map(canonical)),
+          );
+        },
+      );
+
+      test('without roots, nothing is unmapped', () => {
+        const tfs = makeTfs(null);
+        expect(tfs.isMapped(canonical(p('/node_modules/react')))).toBe(true);
+      });
+
+      test('isMapped matches path containment over random roots and paths', () => {
+        const {RootPathUtils} = require('../RootPathUtils');
+        const path = mockPathModule;
+        // A seeded PRNG (Park-Miller), so that a failure reproduces.
+        let seed = 7;
+        const random = () => {
+          seed = (seed * 16807) % 2147483647;
+          return (seed - 1) / 2147483646;
+        };
+        const randomPath = () => {
+          let result = platform === 'win32' && random() < 0.2 ? 'D:\\' : p('/');
+          for (let depth = Math.floor(random() * 5); depth > 0; depth--) {
+            // Including names that start with another name, or with '..'.
+            const names = ['a', 'ab', 'x', '..a'];
+            result = path.join(result, names[Math.floor(random() * 4)]);
+          }
+          return result;
+        };
+        const isWithin = (absolutePath: string, root: string) => {
+          const relativePath = path.relative(root, absolutePath);
+          return (
+            relativePath === '' ||
+            (relativePath !== '..' &&
+              !relativePath.startsWith('..' + path.sep) &&
+              !path.isAbsolute(relativePath))
+          );
+        };
+        for (let i = 0; i < 300; i++) {
+          const rootDir = randomPath();
+          const roots = Array.from(
+            {length: 1 + Math.floor(random() * 3)},
+            randomPath,
+          );
+          const tfs = new TreeFS({
+            rootDir,
+            files: new Map(),
+            processFile: () => {
+              throw new Error('Not implemented');
+            },
+          });
+          tfs.setRoots(roots);
+          const pathUtils = new RootPathUtils(rootDir);
+          for (let j = 0; j < 20; j++) {
+            const absolutePath = randomPath();
+            expect({
+              absolutePath,
+              mapped: tfs.isMapped(pathUtils.absoluteToNormal(absolutePath)),
+              rootDir,
+              roots,
+            }).toEqual({
+              absolutePath,
+              mapped: roots.some(root => isWithin(absolutePath, root)),
+              rootDir,
+              roots,
+            });
+          }
+        }
+      });
+
+      test('hierarchicalLookup records unmapped candidates, up to the filesystem root', () => {
+        // No file outside the package, so no ancestor of it has a node.
+        const tfs = new TreeFS({
+          rootDir: p('/ws/app/pkg'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('src/index.js'), [123, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        tfs.setRoots([p('/ws/app/pkg/src')]);
+        const toCanonical = canonicalTo(p('/ws/app/pkg'));
+        const observations = recordWithUnmapped();
+        expect(
+          tfs.hierarchicalLookup(
+            p('/ws/app/pkg/lib/index.js'),
+            'package.json',
+            {breakOnSegment: 'node_modules', subpathType: 'f'},
+            observations,
+          ),
+        ).toBe(null);
+        expect(observations.existence).toEqual(
+          new Set(
+            [
+              p('/ws/app/pkg/lib'),
+              p('/ws/app/pkg/package.json'),
+              p('/ws/app/package.json'),
+              p('/ws/package.json'),
+              p('/package.json'),
+            ].map(toCanonical),
+          ),
+        );
+        expect(observations.unmapped).toEqual(
+          new Set(
+            [
+              p('/ws/app/pkg/lib/index.js'),
+              p('/ws/app/pkg/lib/package.json'),
+              p('/ws/app/pkg/package.json'),
+              p('/ws/app/package.json'),
+              p('/ws/package.json'),
+              p('/package.json'),
+            ].map(toCanonical),
+          ),
+        );
+      });
+
+      // Files are absolute paths, or a symlink and its target.
+      test.each([
+        // From a missing start path, below where it went missing, until a
+        // mapped root with no files.
+        [
+          p('/ws'),
+          [p('/ws/a/node_modules/pkg/index.js')],
+          [p('/ws/a/node_modules'), p('/ws/a/b/c/d')],
+          p('/ws/a/b/c/d/index.js'),
+          p('node_modules/pkg'),
+          [p('/ws/a/b/c/node_modules/pkg'), p('/ws/a/b/node_modules/pkg')],
+        ],
+        // ...and until breakOnSegment.
+        [
+          p('/ws'),
+          [p('/ws/a/node_modules/pkg/index.js')],
+          [p('/ws/a/node_modules'), p('/ws/a/b/c/d')],
+          p('/ws/a/b/node_modules/x/index.js'),
+          p('node_modules/pkg'),
+          [
+            p('/ws/a/b/node_modules/x/index.js'),
+            p('/ws/a/b/node_modules/x/node_modules/pkg'),
+          ],
+        ],
+        // Outside the project.
+        [
+          p('/ws/app'),
+          [p('/ws/a/node_modules/pkg/index.js')],
+          [p('/ws/app'), p('/other/lib'), p('/node_modules')],
+          p('/other/lib/index.js'),
+          p('node_modules/pkg'),
+          [p('/other/node_modules/pkg')],
+        ],
+        // Through a symlink, only from its target onwards.
+        [
+          p('/ws/app'),
+          [
+            p('/ws/app/src/index.js'),
+            [p('/ws/app/node_modules/@ws/lib'), p('/ws/packages/lib')],
+          ],
+          [p('/ws/app')],
+          p('/ws/app/node_modules/@ws/lib/src/index.js'),
+          'package.json',
+          [
+            p('/ws/packages/lib/src/index.js'),
+            p('/ws/packages/lib/src/package.json'),
+            p('/ws/packages/lib/package.json'),
+          ],
+        ],
+        ...(platform === 'win32'
+          ? [
+              // Up to the root of a UNC share.
+              [
+                '\\\\srv\\share\\proj',
+                ['\\\\srv\\share\\proj\\index.js'],
+                ['\\\\srv\\share\\proj'],
+                '\\\\srv\\share\\proj\\index.js',
+                'package.json',
+                ['\\\\srv\\share\\package.json'],
+              ],
+              // Up to a drive's root, whose '..' holds the other drives.
+              [
+                'C:\\proj',
+                ['C:\\proj\\index.js', 'D:\\lib\\index.js'],
+                ['C:\\proj', 'D:\\lib'],
+                'C:\\proj\\index.js',
+                'package.json',
+                ['C:\\package.json'],
+              ],
+              [
+                'C:\\proj',
+                ['C:\\proj\\index.js', 'D:\\lib\\index.js'],
+                ['C:\\proj', 'D:\\lib'],
+                'D:\\lib\\index.js',
+                'package.json',
+                ['D:\\package.json'],
+              ],
+              [
+                'C:\\w\\proj',
+                ['C:\\w\\proj\\index.js', ['D:\\links\\proj', 'C:\\w\\proj']],
+                ['C:\\w\\proj', 'D:\\links'],
+                'D:\\links\\proj',
+                'package.json',
+                ['D:\\package.json', 'C:\\w\\package.json', 'C:\\package.json'],
+              ],
+            ]
+          : []),
+      ])(
+        'hierarchicalLookup with rootDir %s, files %s and roots %s, from %s for %s, records unmapped %s',
+        (
+          rootDir: string,
+          files: ReadonlyArray<string | [string, string]>,
+          roots: ReadonlyArray<string>,
+          startPath: string,
+          subpath: string,
+          unmapped: ReadonlyArray<string>,
+        ) => {
+          const {RootPathUtils} = require('../RootPathUtils');
+          const pathUtils = new RootPathUtils(rootDir);
+          const tfs = new TreeFS({
+            rootDir,
+            files: new Map<CanonicalPath, FileMetadata>(
+              files.map(file => {
+                const [filePath, target] =
+                  typeof file === 'string' ? [file, null] : file;
+                const symlink =
+                  target == null
+                    ? 0
+                    : pathUtils
+                        .absoluteToNormal(target)
+                        .replaceAll(mockPathModule.sep, '/');
+                return [
+                  pathUtils.absoluteToNormal(filePath),
+                  [123, 0, 0, null, symlink, null],
+                ];
+              }),
+            ),
+            processFile: () => {
+              throw new Error('Not implemented');
+            },
+          });
+          tfs.setRoots(roots);
+          const observations = recordWithUnmapped();
+          tfs.hierarchicalLookup(
+            startPath,
+            subpath,
+            {
+              breakOnSegment: 'node_modules',
+              subpathType: subpath === 'package.json' ? 'f' : 'd',
+            },
+            observations,
+          );
+          expect(observations.unmapped).toEqual(
+            new Set(unmapped.map(file => pathUtils.absoluteToNormal(file))),
+          );
+        },
+      );
     });
 
     test.each([
@@ -295,7 +618,10 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       const toCanonical = canonicalTo(p('/deep/project/root'));
       const expectMissing = (givenPath: string, missingPath: string) => {
         const observations = emptyObservations();
-        expect(tfs.lookup(givenPath, observations)).toEqual({exists: false});
+        expect(tfs.lookup(givenPath, observations)).toMatchObject({
+          exists: false,
+          canonicalMissingPath: toCanonical(missingPath),
+        });
         expect(observations.existence).toEqual(
           new Set([toCanonical(missingPath)]),
         );
@@ -842,6 +1168,32 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         existence: new Set([p('../../foo'), p('a/package.json')]),
       });
     });
+
+    test.each([[emptyObservations()], [null]])(
+      'finds a subpath re-entering the root from an ancestor with no node, with observations %s',
+      observations => {
+        const tfs = new TreeFS({
+          rootDir: p('/A/B/C'),
+          files: new Map<CanonicalPath, FileMetadata>([
+            [p('a/package.json'), [123, 0, 0, null, 0, null]],
+          ]),
+          processFile: () => {
+            throw new Error('Not implemented');
+          },
+        });
+        expect(
+          tfs.hierarchicalLookup(
+            p('/A/B/C/x'),
+            p('B/C/a/package.json'),
+            {breakOnSegment: null, subpathType: 'f'},
+            observations,
+          ),
+        ).toEqual({
+          absolutePath: p('/A/B/C/a/package.json'),
+          containerRelativePath: p('B/C/x'),
+        });
+      },
+    );
 
     // The fourth column is paths, besides the match itself, whose addition or
     // removal changes the result, the fifth those whose modification does too -

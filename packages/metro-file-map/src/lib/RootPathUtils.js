@@ -69,6 +69,16 @@ function indexOfIndirectionSegment(fullPath: string, fromIdx: number): number {
   return -1;
 }
 
+// Join a normal path and a normal path below it, either of which may be ''
+// (the root). The subpath must have no '..' segments, except when it is '..'
+// and normalPath is the root or an ancestor of it.
+export function joinNormalPath(normalPath: string, subpath: string): string {
+  if (normalPath === '') {
+    return subpath;
+  }
+  return subpath === '' ? normalPath : normalPath + path.sep + subpath;
+}
+
 export class RootPathUtils {
   #rootDir: string;
   #rootDirnames: ReadonlyArray<string>;
@@ -105,6 +115,11 @@ export class RootPathUtils {
 
   getParts(): ReadonlyArray<string> {
     return this.#rootParts;
+  }
+
+  // The number of ancestors of the root ('/' is 0, '/foo' is 1).
+  getDepth(): number {
+    return this.#rootDepth;
   }
 
   // absolutePath may be any well-formed absolute path.
