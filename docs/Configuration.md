@@ -1013,7 +1013,7 @@ Whether to periodically check the [filesystem watcher](./Concepts.md#file-watchi
 
 Type: `string`
 
-The name of the temporary file that health checks write into the project. Defaults to `'.metro-health-check'`.
+The name of the temporary file that health checks write into the project. Metro ignores files whose names start with this prefix. Defaults to `'.metro-health-check'`, which is also used if this is an empty string.
 
 :::note
 

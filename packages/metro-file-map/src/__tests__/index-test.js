@@ -540,6 +540,18 @@ describe('FileMap', () => {
     expect([...fileSystem.matchFiles({filter: /Kiwi/})]).toEqual([]);
   });
 
+  test('an empty health check file prefix does not exclude any files', async () => {
+    mockFs[p('/project/fruits/Kiwi.js')] = `
+      // Kiwi!
+    `;
+    const {fileSystem} = await buildNewFileMap({
+      healthCheck: {...defaultConfig.healthCheck, filePrefix: ''},
+    });
+    expect([...fileSystem.matchFiles({filter: /Kiwi/})]).toEqual([
+      p('/project/fruits/Kiwi.js'),
+    ]);
+  });
+
   test('ignores vcs directories without ignore pattern', async () => {
     mockFs[p('/project/fruits/.git/fruit-history.js')] = `
       // test
