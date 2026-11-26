@@ -11,9 +11,19 @@
 'use strict';
 
 const Metro = require('../../..');
+const baseJSBundle =
+  require('../../DeltaBundler/Serializers/baseJSBundle').default;
+const {
+  sourceMapString,
+} = require('../../DeltaBundler/Serializers/sourceMapString');
+const bundleToString = require('../../lib/bundleToString').default;
+const CountingSet = require('../../lib/CountingSet').default;
+const countLines = require('../../lib/countLines').default;
 const execBundle = require('../execBundle');
+const MetroConfig = require('metro-config');
 const fs = require('node:fs');
 const path = require('node:path');
+const {SourceMapConsumer} = require('source-map');
 
 jest.useRealTimers();
 jest.setTimeout(60 * 1000);
@@ -317,5 +327,117 @@ describe('Metro development server serves bundles via HTTP', () => {
         ),
       );
     });
+  });
+});
+
+describe('Metro development server with a custom serializer', () => {
+  const QUERY = '?platform=ios&dev=true&minify=false';
+  let httpServer;
+  let serverClosedPromise;
+  let preModuleCounts;
+  let mutatePreModules;
+
+  const url = (pathname: string) =>
+    'http://localhost:' + httpServer.address().port + pathname;
+
+  const virtualModule = (modulePath: string, code: string) => ({
+    dependencies: new Map(),
+    getSource: () => Buffer.from(code),
+    inverseDependencies: new CountingSet(),
+    path: modulePath,
+    output: [
+      {
+        type: 'js/script/virtual',
+        data: {code, lineCount: countLines(code), map: []},
+      },
+    ],
+  });
+
+  // Adds a three-line pre-module after the prelude and returns a source map
+  // that describes the result. With `mutatePreModules`, it also splices a
+  // module into its input, which the code and map it returns don't include.
+  async function serializer(entryPoint, preModules, graph, options) {
+    preModuleCounts.push(preModules.length);
+    const pre = [
+      ...preModules.slice(0, 1),
+      virtualModule('__injected__', 'var a = 1;\nvar b = 2;\nvar c = 3;'),
+      ...preModules.slice(1),
+    ];
+    if (mutatePreModules) {
+      // Mutate the array, as some serializers have.
+      preModules.splice(1, 0, virtualModule('__spliced__', 'var d = 4;'));
+    }
+    const code = bundleToString(
+      baseJSBundle(entryPoint, pre, graph, options),
+    ).code;
+    const modules = [...graph.dependencies.values()].sort(
+      (a, b) => options.createModuleId(a.path) - options.createModuleId(b.path),
+    );
+    const map = sourceMapString([...pre, ...modules], {
+      excludeSource: false,
+      processModuleFilter: options.processModuleFilter,
+      shouldAddToIgnoreList: options.shouldAddToIgnoreList,
+      getSourceUrl: options.getSourceUrl,
+    });
+    return {code, map};
+  }
+
+  beforeEach(async () => {
+    preModuleCounts = [];
+    mutatePreModules = false;
+    const config = MetroConfig.mergeConfig(
+      await Metro.loadConfig({config: require.resolve('../metro.config.js')}),
+      {serializer: {customSerializer: serializer}},
+    );
+    let onCloseResolve;
+    serverClosedPromise = new Promise(resolve => (onCloseResolve = resolve));
+    ({httpServer} = await Metro.runServer(config, {
+      reporter: {update() {}},
+      onClose: () => onCloseResolve(),
+    }));
+  });
+
+  afterEach(async () => {
+    httpServer.close();
+    await serverClosedPromise;
+  });
+
+  test('.map requests use the source map the serializer returns', async () => {
+    const code = await (
+      await fetchAndClose(url('/ErrorBundle.bundle' + QUERY))
+    ).text();
+    const linesBefore = code
+      .slice(0, code.indexOf("new Error('SOURCEMAP:"))
+      .split('\n');
+    const map = await (
+      await fetchAndClose(url('/ErrorBundle.map' + QUERY))
+    ).json();
+    const original = new SourceMapConsumer(map).originalPositionFor({
+      line: linesBefore.length,
+      column: linesBefore[linesBefore.length - 1].length,
+    });
+    expect({source: original.source, line: original.line}).toEqual({
+      source: path.join(__dirname, '../basic_bundle/ErrorBundle.js'),
+      line: 18,
+    });
+  });
+
+  test('.map requests pass the serializer a copy of the pre-modules', async () => {
+    mutatePreModules = true;
+    for (let i = 0; i < 3; i++) {
+      const response = await fetchAndClose(url('/TestBundle.map' + QUERY));
+      expect(response.ok).toBe(true);
+      await response.text();
+    }
+    expect(preModuleCounts).toEqual(Array(3).fill(preModuleCounts[0]));
+  });
+
+  test('.map requests for modulesOnly bundles do not run the serializer', async () => {
+    const response = await fetchAndClose(
+      url('/TestBundle.map' + QUERY + '&modulesOnly=true&runModule=false'),
+    );
+    expect(response.ok).toBe(true);
+    await response.text();
+    expect(preModuleCounts).toEqual([]);
   });
 });

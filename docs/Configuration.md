@@ -824,6 +824,8 @@ Type: `?(entryPoint: string, preModules: $ReadOnlyArray<Module>, graph: ReadOnly
 
 Replaces Metro's default bundle serializer. Defaults to `null`.
 
+If it returns `{code, map}`, `map` is the bundle's source map, both in builds and from the dev server's `.map` endpoint. A `.map` request runs the serializer with that request's options and a copy of `preModules`. Bundles requested with `modulesOnly` keep Metro's own source map, and so does the dev server's `/symbolicate` endpoint.
+
 `options.reservedString` is the string [reserved for identifiers that Metro generates](./Bundling.md#modules), e.g. `${options.reservedString}MODULE_ID`. Use this option rather than assuming its value. The default transformer rejects this string in source and JSON files, which prevents accidental collisions.
 
 #### `experimentalSerializerHook`

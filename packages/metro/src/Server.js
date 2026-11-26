@@ -17,6 +17,7 @@ import type {
   Module,
   ReadOnlyDependencies,
   ReadOnlyGraph,
+  SerializerOptions as GraphSerializerOptions,
   TransformInputOptions,
   TransformResult,
 } from './DeltaBundler/types';
@@ -218,15 +219,9 @@ export default class Server {
     return this._createModuleId;
   }
 
-  async _serializeGraph({
-    splitOptions,
-    prepend,
-    graph,
-  }: Readonly<{
+  async _getSerializerOptions(
     splitOptions: SplitBundleOptions,
-    prepend: ReadonlyArray<Module<>>,
-    graph: ReadOnlyGraph<>,
-  }>): Promise<{code: string, map: string}> {
+  ): Promise<GraphSerializerOptions> {
     const {
       entryFile,
       graphOptions,
@@ -237,7 +232,7 @@ export default class Server {
 
     const entryPoint = this._getEntryPointAbsolutePath(entryFile);
 
-    const bundleOptions = {
+    return {
       asyncRequireModulePath: await this._resolveRelativePath(
         this._config.transformer.asyncRequireModulePath,
         {
@@ -274,6 +269,22 @@ export default class Server {
       unstable_inlineDependencyMap:
         this._config.serializer.unstable_inlineDependencyMap,
     };
+  }
+
+  async _serializeGraph({
+    splitOptions,
+    prepend,
+    graph,
+  }: Readonly<{
+    splitOptions: SplitBundleOptions,
+    prepend: ReadonlyArray<Module<>>,
+    graph: ReadOnlyGraph<>,
+  }>): Promise<{code: string, map: string}> {
+    const {entryFile, serializerOptions} = splitOptions;
+
+    const entryPoint = this._getEntryPointAbsolutePath(entryFile);
+
+    const bundleOptions = await this._getSerializerOptions(splitOptions);
     let bundleCode = null;
     let bundleMap = null;
     if (this._config.serializer.customSerializer) {
@@ -1311,54 +1322,27 @@ export default class Server {
         prepend = [];
       }
 
-      // If the project defines a custom serializer, then we should run it to ensure any
-      // mutations to the graph are applied in the sourcemap.
-      if (this._config.serializer.customSerializer) {
+      // Lazy chunks and HMR updates (`modulesOnly`) leave out pre-modules, and
+      // a serializer's map may not, so they keep Metro's own map.
+      if (
+        this._config.serializer.customSerializer &&
+        !serializerOptions.modulesOnly
+      ) {
         const bundle = await this._config.serializer.customSerializer(
           entryFile,
-          prepend,
+          // `prepend` belongs to the graph revision and outlives this request,
+          // so a serializer that adds to it in place must not see the original.
+          [...prepend],
           graph,
-          {
-            asyncRequireModulePath: await this._resolveRelativePath(
-              this._config.transformer.asyncRequireModulePath,
-              {
-                relativeTo: 'project',
-                resolverOptions,
-                transformOptions,
-              },
-            ),
-            processModuleFilter: this._config.serializer.processModuleFilter,
-            createModuleId: this._createModuleId,
-            getRunModuleStatement:
-              this._config.serializer.getRunModuleStatement,
-            globalPrefix: this._config.transformer.globalPrefix,
-            includeAsyncPaths: graphOptions.lazy,
-            dev: transformOptions.dev,
-            projectRoot: this._config.projectRoot,
-            modulesOnly: serializerOptions.modulesOnly,
-            reservedString: RESERVED_STRING,
-            runBeforeMainModule:
-              this._config.serializer.getModulesRunBeforeMainModule(
-                path.relative(this._config.projectRoot, entryFile),
-              ),
-            runModule: serializerOptions.runModule,
-            sourceMapUrl: serializerOptions.sourceMapUrl,
-            sourceUrl: serializerOptions.sourceUrl,
-            inlineSourceMap: serializerOptions.inlineSourceMap,
-            serverRoot: this._rootUrlMap.serverRootDir,
-            shouldAddToIgnoreList: (module: Module<>) =>
-              this._shouldAddModuleToIgnoreList(module),
-            getSourceUrl: (module: Module<>) =>
-              this._getModuleSourceUrl(module, serializerOptions.sourcePaths),
-            dependencyMapReservedName:
-              this._config.transformer.unstable_dependencyMapReservedName,
-            unstable_inlineDependencyMap:
-              this._config.serializer.unstable_inlineDependencyMap,
-          },
+          await this._getSerializerOptions({
+            entryFile,
+            graphOptions,
+            onProgress,
+            resolverOptions,
+            serializerOptions,
+            transformOptions,
+          }),
         );
-
-        // If the serializer returned the source map then we can use it here, otherwise
-        // fall back to the default source map generation with the possibly mutated graph.
         if (typeof bundle !== 'string' && bundle.map) {
           return bundle.map;
         }
