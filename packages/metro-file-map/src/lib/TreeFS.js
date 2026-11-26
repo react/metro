@@ -106,6 +106,47 @@ function isWithinNormal(
   );
 }
 
+// Whether `segment` names a missing parent of a hierarchical lookup's start
+// path, other than an ancestor of a symlink's target, which the lookup does not
+// walk. `lookup` is the start path's lookup.
+function hasMissingParentSegment(
+  lookup: Readonly<{
+    canonicalMissingPath: string,
+    missingSegmentName: string,
+    remainingPath: string,
+    unseenPathFromIdx: number,
+    ...
+  }>,
+  segment: string,
+): boolean {
+  const {canonicalMissingPath, missingSegmentName, remainingPath} = lookup;
+  // The start path's own name never stops the lookup.
+  if (remainingPath === '') {
+    return false;
+  }
+  const remainingFromIdx = canonicalMissingPath.length + 1;
+  if (
+    missingSegmentName === segment &&
+    canonicalMissingPath.length - segment.length >= lookup.unseenPathFromIdx
+  ) {
+    return true;
+  }
+  // Every segment of the remaining path but the last.
+  let start = Math.max(0, lookup.unseenPathFromIdx - remainingFromIdx);
+  let end = remainingPath.indexOf(path.sep, start);
+  while (end !== -1) {
+    if (
+      end - start === segment.length &&
+      remainingPath.startsWith(segment, start)
+    ) {
+      return true;
+    }
+    start = end + 1;
+    end = remainingPath.indexOf(path.sep, start);
+  }
+  return false;
+}
+
 // Null if not within the ancestor ('' is the root).
 function relativeToAncestor(
   normalPath: string,
@@ -1119,15 +1160,18 @@ export default class TreeFS implements MutableFileSystem {
    *
    * X = mixedStartPath
    * do
-   *   if basename(X) === opts.breakOnSegment
-   *     return null
    *   if X + subpath exists and has type opts.subpathType
    *     return {
    *       absolutePath: realpath(X + subpath)
    *       containerRelativePath: relative(mixedStartPath, X)
    *     }
    *   X = dirname(X)
+   *   if basename(X) === opts.breakOnSegment
+   *     return null
    * while X !== dirname(X)
+   *
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, only a parent of the start path stops
+   * the walk at `breakOnSegment`, whether or not the parent exists.
    *
    * Each candidate is checked from its own node: a subpath that is a single
    * path segment, such as `package.json`, with one map lookup, and a deeper
@@ -1210,7 +1254,7 @@ export default class TreeFS implements MutableFileSystem {
       if (
         opts.breakOnSegment != null &&
         !closestLookup.exists &&
-        closestLookup.missingSegmentName === opts.breakOnSegment
+        hasMissingParentSegment(closestLookup, opts.breakOnSegment)
       ) {
         return null;
       }
