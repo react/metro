@@ -52,6 +52,11 @@ const CRAWL_CONCURRENCY = 32;
 export default class FallbackWatcher extends AbstractWatcher {
   readonly #changeTimers: Map<string, ReturnType<typeof setTimeout>> =
     new Map();
+  // The latest change to each path still being processed. The stats of
+  // successive changes to a path can resolve out of order, or after the first
+  // change's debounce has elapsed, so only the latest change reports what it
+  // finds. `renamed` is whether any change it supersedes was a rename.
+  readonly #latestChanges: Map<string, {renamed: boolean}> = new Map();
   // Directories and symlinks we have registered. Regular files aren't
   // tracked: whether a deletion is wanted follows from the file's name, and the
   // file map removes a directory's files when told the directory is deleted.
@@ -338,6 +343,12 @@ export default class FallbackWatcher extends AbstractWatcher {
   async #processChange(dir: string, event: string, file: string) {
     const fullPath = path.join(dir, file);
     const relativePath = path.join(path.relative(this.root, dir), file);
+    const latest = {
+      renamed:
+        event === 'rename' ||
+        this.#latestChanges.get(fullPath)?.renamed === true,
+    };
+    this.#latestChanges.set(fullPath, latest);
 
     const isKnownDir = this.#knownDirs.has(fullPath);
     // Whether something here may have been reported to the file map.
@@ -347,11 +358,15 @@ export default class FallbackWatcher extends AbstractWatcher {
       (!this.doIgnore(relativePath) &&
         common.isIncluded('f', this.included, relativePath));
 
+    let crawlDirectory = false;
     try {
       const stat = await fsPromises.lstat(fullPath);
+      if (this.#latestChanges.get(fullPath) !== latest) {
+        return;
+      }
       if (stat.isDirectory()) {
         // win32 emits useless change events on dirs.
-        if (event === 'change') {
+        if (!latest.renamed) {
           return;
         }
 
@@ -361,21 +376,7 @@ export default class FallbackWatcher extends AbstractWatcher {
         ) {
           return;
         }
-        await recReaddir(
-          path.resolve(this.root, relativePath),
-          dir => (this.#watchdir(dir) ? this.#touch(dir, 'd') : null),
-          file => (this.#register(file, 'f') ? this.#touch(file, 'f') : null),
-          symlink =>
-            this.#register(symlink, 'l') ? this.#touch(symlink, 'l') : null,
-          this.#checkedEmitError,
-          this.ignored,
-        );
-        // What was reported here before has been replaced by a directory, or
-        // entries under a directory we knew may have changed or been removed.
-        // Have the file map reconcile it.
-        if (mayBeReported) {
-          this.#emitEvent({event: RECRAWL_EVENT, relativePath});
-        }
+        crawlDirectory = true;
       } else {
         const type = common.typeFromStat(stat);
         if (type == null) {
@@ -396,6 +397,9 @@ export default class FallbackWatcher extends AbstractWatcher {
     } catch (error) {
       if (!isIgnorableFileError(error)) {
         this.emitError(error);
+        return;
+      }
+      if (this.#latestChanges.get(fullPath) !== latest) {
         return;
       }
       if (
@@ -419,6 +423,27 @@ export default class FallbackWatcher extends AbstractWatcher {
       // watches by path, so there an open handle is merely redundant.
       if (isKnownDir || this.#watched[fullPath]) {
         await this.#stopWatchingTree(fullPath);
+      }
+    } finally {
+      if (this.#latestChanges.get(fullPath) === latest) {
+        this.#latestChanges.delete(fullPath);
+      }
+    }
+    if (crawlDirectory) {
+      await recReaddir(
+        path.resolve(this.root, relativePath),
+        dir => (this.#watchdir(dir) ? this.#touch(dir, 'd') : null),
+        file => (this.#register(file, 'f') ? this.#touch(file, 'f') : null),
+        symlink =>
+          this.#register(symlink, 'l') ? this.#touch(symlink, 'l') : null,
+        this.#checkedEmitError,
+        this.ignored,
+      );
+      // What was reported here before has been replaced by a directory, or
+      // entries under a directory we knew may have changed or been removed.
+      // Have the file map reconcile it.
+      if (mayBeReported) {
+        this.#emitEvent({event: RECRAWL_EVENT, relativePath});
       }
     }
   }
