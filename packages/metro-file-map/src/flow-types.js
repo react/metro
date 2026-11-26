@@ -440,8 +440,6 @@ export interface FileSystem {
     removedFiles: Set<string>,
     filesToStat: Map<string, number>,
   };
-  // A copy of the file system's data, which later changes don't affect.
-  getSerializableSnapshot(): CacheData['fileSystemData'];
   getSha1(file: Path): ?string;
   getOrComputeSha1(file: Path): Promise<?{sha1: string, content?: Buffer}>;
 
@@ -656,8 +654,8 @@ export interface ReadonlyFileSystemChanges<out T = FileMetadata> {
 export interface MutableFileSystem extends FileSystem {
   /**
    * The file system's own data, not a copy, so it changes with the file
-   * system. Serialize it synchronously (see `CacheManager.write`), or use
-   * `getSerializableSnapshot()` for a copy.
+   * system. Serialize it synchronously (see `CacheManager.write`), or copy it
+   * to keep it.
    */
   getSerializableState(): CacheData['fileSystemData'];
   remove(filePath: Path, listener?: FileSystemListener): void;
