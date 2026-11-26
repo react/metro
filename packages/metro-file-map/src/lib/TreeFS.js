@@ -1092,28 +1092,35 @@ export default class TreeFS implements MutableFileSystem {
         // If the symlink target is an ancestor of the root *and* joining it
         // with the remaining path results in collapsing segments, e.g:
         // '../..' + 'parentofroot/root/foo.js' = 'foo.js', then we must add
-        // parentofroot and root as ancestors.
+        // the target and each ancestor collapsed into, i.e. grandparentofroot,
+        // parentofroot and root, as ancestors.
         if (
           collectAncestors &&
           !isLastSegment &&
           // No-op optimisation to bail out the common case of nothing to do.
           (normalSymlinkTarget === '' || joinedResult.collapsedSegments > 0)
         ) {
+          // The target is '..' repeated this many times.
+          const targetDepth =
+            normalSymlinkTarget === ''
+              ? 0
+              : (normalSymlinkTarget.length + 1) / 3;
           let node: MixedNode = this.#rootNode;
           let collapsedPath = '';
           const reverseAncestors = [];
           for (
             let i = 0;
-            i <= joinedResult.collapsedSegments &&
-            /* for Flow, always true: */ isDirectory(node);
+            i <= targetDepth && /* for Flow, always true: */ isDirectory(node);
             i++
           ) {
-            reverseAncestors.push({
-              ancestorOfRootIdx: i,
-              node,
-              normalPath: collapsedPath,
-              segmentName: this.#pathUtils.getBasenameOfNthAncestor(i),
-            });
+            if (i >= targetDepth - joinedResult.collapsedSegments) {
+              reverseAncestors.push({
+                ancestorOfRootIdx: i,
+                node,
+                normalPath: collapsedPath,
+                segmentName: this.#pathUtils.getBasenameOfNthAncestor(i),
+              });
+            }
             node = node.get('..') ?? new Map();
             collapsedPath =
               collapsedPath === '' ? '..' : collapsedPath + path.sep + '..';
@@ -1124,10 +1131,10 @@ export default class TreeFS implements MutableFileSystem {
         }
 
         // For the purpose of collecting ancestors: Ignore the traversal to
-        // the symlink target, and start collecting ancestors only
-        // from the target itself (ie, the basename of the normal target path)
-        // onwards. Each collapsed segment beyond the first removed a '..' and
-        // its separator from before the target's basename.
+        // the symlink target, and start collecting ancestors only from the
+        // target itself (i.e. the basename of the normal target path) onwards,
+        // or, if segments collapsed, from the first that didn't. Each
+        // collapsed segment beyond the first removed a '../' before that.
         unseenPathFromIdx =
           normalSymlinkTarget.lastIndexOf(path.sep) +
           1 -
@@ -1267,6 +1274,9 @@ export default class TreeFS implements MutableFileSystem {
     // 2. The common root, and its ancestors.
     let commonRoot = this.#rootNode;
     let commonRootDepth = 0;
+    // Collected ancestors start with any ancestors of the root, one for each
+    // leading segment of the input path that resolves to one.
+    let firstDescendantIdx = 0;
 
     // Collected ancestors do not include the lookup result itself, so go one
     // further if the input path is itself a root ancestor.
@@ -1277,6 +1287,7 @@ export default class TreeFS implements MutableFileSystem {
         'ancestors of the root must be directories',
       );
       commonRoot = closestLookup.node;
+      firstDescendantIdx = commonRootDepth;
     } else {
       // Establish the common root by counting the '..' segments at the start
       // of the collected ancestors.
@@ -1286,6 +1297,7 @@ export default class TreeFS implements MutableFileSystem {
         }
         commonRootDepth = ancestor.ancestorOfRootIdx;
         commonRoot = ancestor.node;
+        firstDescendantIdx++;
       }
     }
 
@@ -1298,7 +1310,7 @@ export default class TreeFS implements MutableFileSystem {
     // shallowest.
     for (
       let candidateIdx = ancestorsOfInput.length - 1;
-      candidateIdx >= commonRootDepth;
+      candidateIdx >= firstDescendantIdx;
       --candidateIdx
     ) {
       const candidate = ancestorsOfInput[candidateIdx];
@@ -1326,8 +1338,8 @@ export default class TreeFS implements MutableFileSystem {
         //
         // The next 5 lines are equivalent to (but faster than)
         // normalPath.split('/').slice(candidateIdx + 1).join('/').
-        let prefixLength = commonRootDepth * 3; // Leading '../'
-        for (let i = commonRootDepth; i <= candidateIdx; i++) {
+        let prefixLength = -1;
+        for (let i = 0; i <= candidateIdx; i++) {
           prefixLength = normalPath.indexOf(path.sep, prefixLength + 1);
         }
         const containerRelativePath = normalPath.slice(prefixLength + 1);
