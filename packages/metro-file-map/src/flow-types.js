@@ -470,8 +470,8 @@ export interface FileSystem {
    *     return null
    * while X !== dirname(X)
    *
-   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent stops the walk whether or not
-   * it exists.
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent named `breakOnSegment` stops
+   * the walk whether or not it exists.
    *
    * If `observations` is given, records the paths this result depends upon.
    *

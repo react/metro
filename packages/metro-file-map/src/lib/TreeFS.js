@@ -119,8 +119,8 @@ function relativeToAncestor(
     : null;
 }
 
-// Where the deepest missing parent of a hierarchical lookup's start path named
-// `segment` ends, as an index into the lookup's canonical missing path joined
+// Where the deepest missing parent named `segment` of a hierarchical lookup's
+// start path ends, as an index into the lookup's canonical missing path joined
 // with its remaining path, or -1 if there is none. The start path's own name
 // doesn't count, and nor do the ancestors of a symlink's target, which the
 // lookup doesn't walk. `lookup` is #lookupByNormalPath's result for the
@@ -135,12 +135,17 @@ function missingParentSegmentEnd(
   }>,
   segment: string,
 ): number {
-  const {canonicalMissingPath, remainingPath, unseenPathFromIdx} = lookup;
+  const {
+    canonicalMissingPath,
+    missingSegmentName,
+    remainingPath,
+    unseenPathFromIdx,
+  } = lookup;
   if (remainingPath === '') {
     return -1;
   }
   let segmentEnd =
-    lookup.missingSegmentName === segment &&
+    missingSegmentName === segment &&
     canonicalMissingPath.length > unseenPathFromIdx
       ? canonicalMissingPath.length
       : -1;
@@ -332,8 +337,8 @@ export default class TreeFS implements MutableFileSystem {
     remainingPath: string,
     candidates?: Readonly<{
       // Where ancestors of the path looked for start to be candidates, i.e.
-      // below any the lookup doesn't walk (see unseenPathFromIdx in
-      // #lookupByNormalPath) and below where it stops at `breakOnSegment`.
+      // below the ancestors the lookup doesn't walk (see unseenPathFromIdx in
+      // #lookupByNormalPath) and below a `breakOnSegment` it stops at.
       fromIdx: number,
       subpath: string,
     }>,
@@ -1180,8 +1185,8 @@ export default class TreeFS implements MutableFileSystem {
    *     return null
    * while X !== dirname(X)
    *
-   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent stops the walk whether or not
-   * it exists.
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent named `breakOnSegment` stops
+   * the walk whether or not it exists.
    *
    * Each candidate is checked from its own node: a subpath that is a single
    * path segment, such as `package.json`, with one map lookup, and a deeper

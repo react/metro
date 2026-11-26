@@ -1380,6 +1380,13 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         ['/A/B/C/a/missing'],
         [],
       ],
+      [
+        '/A/B/C/a/missing/xn_m/pkg/foo',
+        '/A/B/C/a/package.json',
+        'missing/xn_m/pkg/foo',
+        ['/A/B/C/a/missing'],
+        [],
+      ],
       // The start path's own name never stops the walk, whether or not it
       // exists
       [
@@ -1433,13 +1440,6 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         null,
         null,
         ['/A/B/C/b'],
-        ['/A/B/C/a/b/c/d/link-to-A'],
-      ],
-      [
-        '/A/B/C/a/b/c/d/link-to-A/B/C/b/xn_m/foo',
-        '/A/package.json',
-        'B/C/b/xn_m/foo',
-        ['/A/B/C/b', '/A/B/C/package.json', '/A/B/package.json'],
         ['/A/B/C/a/b/c/d/link-to-A'],
       ],
       [
