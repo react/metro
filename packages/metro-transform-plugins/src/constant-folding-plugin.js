@@ -159,11 +159,10 @@ export default function constantFoldingPlugin(context: {
           // `var`s are hoisted out of the branch that is dropped. Keep a bare
           // declaration for those still used outside it, so they read as
           // `undefined` instead of throwing a ReferenceError.
-          const dropped: NodePath<> = result.value
-            ? // $FlowFixMe[incompatible-type]
-              path.get('alternate')
-            : // $FlowFixMe[incompatible-type]
-              path.get('consequent');
+          // $FlowFixMe[incompatible-type] get() with a union key is typed as possibly an array.
+          const dropped: NodePath<> = path.get(
+            result.value ? 'alternate' : 'consequent',
+          );
           const hoisted = new Set<string>();
           // Bindings are only recomputed once the whole pass ends, so they
           // still list paths in branches dropped earlier in this pass.
@@ -171,22 +170,34 @@ export default function constantFoldingPlugin(context: {
           const outside = (p: NodePath<>) =>
             !state.dropped.some(d => p.isDescendant(d));
           const collect = (declaration: NodePath<>) => {
-            const {node} = declaration;
-            if (node?.type !== 'VariableDeclaration' || node.kind !== 'var') {
+            if (!declaration.isVariableDeclaration({kind: 'var'})) {
               return;
             }
+            // Look the name up where the var is hoisted to, which is not
+            // necessarily the declaration's own scope (e.g. in a catch clause
+            // whose param has the same name).
+            const varScope =
+              declaration.scope.getFunctionParent() ??
+              declaration.scope.getProgramParent();
             for (const name of Object.keys(
               declaration.getBindingIdentifiers(),
             )) {
-              const binding = declaration.scope.getBinding(name);
-              // Declared elsewhere too (as a param or function, say).
-              if (binding?.kind !== 'var') {
+              const binding = varScope.getBinding(name);
+              // A param, or a function declared before the branch, binds the
+              // name already. The var shadows a function or class expression's
+              // own name ('local'), so it must be kept.
+              if (
+                binding?.kind !== 'var' &&
+                // $FlowFixMe[invalid-compare] Babel's BindingKind libdef is missing 'local'.
+                binding?.kind !== 'local'
+              ) {
                 continue;
               }
               const writes = [binding.path, ...binding.constantViolations];
               if (
                 !writes.some(p => p.isVariableDeclarator() && outside(p)) &&
-                [...binding.referencePaths, ...writes].some(outside)
+                (binding.referencePaths.some(outside) ||
+                  binding.constantViolations.some(outside))
               ) {
                 hoisted.add(name);
               }
@@ -195,7 +206,9 @@ export default function constantFoldingPlugin(context: {
           if (dropped.node != null) {
             collect(dropped);
             dropped.traverse({
-              Function(p: NodePath<>) {
+              // Vars in nested functions and static blocks are scoped to
+              // them, so there is nothing to collect there.
+              FunctionParent(p: NodePath<>) {
                 p.skip();
               },
               VariableDeclaration: collect,

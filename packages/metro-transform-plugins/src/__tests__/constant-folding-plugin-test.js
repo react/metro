@@ -202,18 +202,61 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
-  test('does not keep a var from a removed branch that is only used in a nested function there', () => {
-    const code = `
-      if (false) {
-        (function () {
-          var c;
-        });
-      }
-      use(c);
-    `;
+  test.each([
+    [
+      'a branch without braces',
+      'if (false) var a = 1; use(a);',
+      'var a; use(a);',
+    ],
+    [
+      'a catch clause whose param has the same name',
+      'function f() { if (false) { try {} catch (a) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; return a; } use(f);',
+    ],
+    [
+      'a catch clause with the same param, around the branch',
+      'function f() { try {} catch (a) { if (false) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; try {} catch (a) {} return a; } use(f);',
+    ],
+    [
+      'a function expression with the same name',
+      'use(function g() { if (false) { var g = 1; } return g; });',
+      'use(function g() { var g; return g; });',
+    ],
+    [
+      'a function expression with the same name that is assigned to',
+      'use(function g() { if (false) { var g; } g = 2; return g; });',
+      'use(function g() { var g; g = 2; return g; });',
+    ],
+  ])(
+    'keeps the declaration of a removed var used elsewhere, in %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
 
-    compare([constantFoldingPlugin], code, 'use(c);');
-  });
+  test.each([
+    [
+      'a param with the same name',
+      'function f(a) { if (false) { var a = 1; } return a; } use(f);',
+      'function f(a) { return a; } use(f);',
+    ],
+    [
+      'a var only used in a nested function in the branch',
+      'if (false) { (function () { var c; }); } use(c);',
+      'use(c);',
+    ],
+    [
+      'a function expression with the same name that does not use it',
+      'use(function g() { if (false) { var g = 1; } return 0; });',
+      'use(function g() { return 0; });',
+    ],
+  ])(
+    'does not keep the declaration of a removed var for %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
 
   test('does not fold non-literal void expressions', () => {
     const code = `
