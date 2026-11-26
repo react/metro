@@ -20,6 +20,7 @@ import type {
   FunctionExpression as BabelNodeFunctionExpression,
   IfStatement as BabelNodeIfStatement,
   LogicalExpression as BabelNodeLogicalExpression,
+  Node as BabelNode,
   Program as BabelNodeProgram,
   UnaryExpression as BabelNodeUnaryExpression,
 } from '@babel/types';
@@ -27,7 +28,7 @@ import type {
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-type State = {stripped: boolean, dropped: Array<NodePath<>>};
+type State = {stripped: boolean, droppedNodes: Set<BabelNode>};
 
 export default function constantFoldingPlugin(context: {
   types: Types,
@@ -166,9 +167,8 @@ export default function constantFoldingPlugin(context: {
           const hoisted = new Set<string>();
           // Bindings are only recomputed once the whole pass ends, so they
           // still list paths in branches dropped earlier in this pass.
-          state.dropped.push(dropped);
           const outside = (p: NodePath<>) =>
-            !state.dropped.some(d => p.isDescendant(d));
+            p.findParent(a => state.droppedNodes.has(a.node)) == null;
           const collect = (declaration: NodePath<>) => {
             if (!declaration.isVariableDeclaration({kind: 'var'})) {
               return;
@@ -204,6 +204,7 @@ export default function constantFoldingPlugin(context: {
             }
           };
           if (dropped.node != null) {
+            state.droppedNodes.add(dropped.node);
             collect(dropped);
             dropped.traverse({
               // Vars in nested functions and static blocks are scoped to
@@ -275,7 +276,7 @@ export default function constantFoldingPlugin(context: {
   const Program = {
     enter(path: NodePath<BabelNodeProgram>, state: State): void {
       state.stripped = false;
-      state.dropped = [];
+      state.droppedNodes = new Set();
     },
 
     exit(path: NodePath<BabelNodeProgram>, state: State): void {
@@ -298,7 +299,7 @@ export default function constantFoldingPlugin(context: {
         // Re-traverse all program, if we removed any blocks. Manually re-call
         // enter and exit, because traversing a Program node won't call them.
         Program.enter(path, state);
-        path.traverse(visitor, {stripped: false, dropped: []});
+        path.traverse(visitor, {stripped: false, droppedNodes: new Set()});
         Program.exit(path, state);
       }
     },
