@@ -14,6 +14,7 @@
 import type {ResolverInputOptions} from '../../shared/types';
 import type {TransformResultDependency} from '../types';
 import type {InputConfigT} from 'metro-config';
+import type {CustomResolver, Resolution} from 'metro-resolver';
 
 const {getDefaultConfig, mergeConfig} = require('metro-config');
 const {AmbiguousModuleResolutionError} = require('metro-core');
@@ -355,6 +356,24 @@ function dep(name: string): TransformResultDependency {
         expect(() =>
           resolver.resolve(p('/root/index.js'), dep('./a.another')),
         ).toThrowErrorMatchingSnapshot();
+      });
+
+      test('omits the code frame for a missing optional dependency', async () => {
+        setMockFileSystem({
+          'index.js': mockFileImport("import a from './a';"),
+        });
+
+        resolver = await createResolver();
+        const optionalDep = dep('./a');
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), {
+            ...optionalDep,
+            data: {...optionalDep.data, isOptional: true},
+          }),
+        ).toThrow(/^(?![\s\S]*import a from)Unable to resolve module/);
+        expect(() =>
+          resolver.resolve(p('/root/index.js'), optionalDep),
+        ).toThrow(/import a from '\.\/a'/);
       });
 
       test('resolves relative paths on different folders', async () => {
@@ -3562,6 +3581,192 @@ function dep(name: string): TransformResultDependency {
           expect(resolution.unstable_observations?.haste).toEqual(
             new Set(['aPackage']),
           );
+        });
+      });
+    });
+
+    describe('observations of failed resolutions', () => {
+      // Observed paths are canonical: relative to the root, with system
+      // separators. Each maps to what the file map held: 'f' for a file, 'd'
+      // for a directory, 'l' for a symlink, null for nothing.
+      const existence = (entries: {
+        [posixPath: string]: 'f' | 'd' | 'l' | null,
+      }) =>
+        new Map(
+          Object.entries(entries).map(([posixPath, type]) => [
+            joinPath(...posixPath.split('/')),
+            type,
+          ]),
+        );
+
+      // `./missing` from `/root/index.js`, with no other files
+      const missingRelativeObservations = {
+        rootDir: p('/root'),
+        existence: existence({
+          // A directory of that name, with no package.json or index
+          missing: null,
+          // The closest package to the origin
+          'package.json': null,
+          // Each source extension, for each platform
+          'missing.ios.js': null,
+          'missing.native.js': null,
+          'missing.js': null,
+          'missing.ios.json': null,
+          'missing.native.json': null,
+          'missing.json': null,
+        }),
+        content: new Map<string, 'f' | 'd' | 'l' | null>(),
+        haste: null,
+      };
+
+      function resolveError(
+        from: string,
+        dependency: TransformResultDependency,
+      ) {
+        try {
+          resolver.resolve(from, dependency);
+        } catch (error) {
+          if (error.type === 'UnableToResolveError') {
+            return error;
+          }
+          throw error;
+        }
+        throw new Error('Expected resolution to fail');
+      }
+
+      // Counts resolutions, including replays, by wrapping the default resolver.
+      const countingResolveRequest = () =>
+        jest.fn<Parameters<CustomResolver>, Resolution>(
+          (context, moduleName, platform) =>
+            context.resolveRequest(context, moduleName, platform),
+        );
+
+      test('a failed relative import carries what a replay observed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver({resolver: {resolveRequest}}, 'ios');
+        const error = resolveError(p('/root/index.js'), dep('./missing'));
+        expect(resolveRequest).toHaveBeenCalledTimes(2);
+        expect(error.observations).toEqual(missingRelativeObservations);
+      });
+
+      test('a failed package import carries what a replay observed', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          node_modules: {other: {'index.js': ''}},
+        });
+        resolver = await createResolver({}, 'ios');
+        expect(
+          resolveError(p('/root/index.js'), dep('missing-pkg')).observations,
+        ).toEqual({
+          rootDir: p('/root'),
+          existence: existence({
+            // The closest package to the origin, searched for from the origin
+            // file
+            'index.js': 'f',
+            'package.json': null,
+            // Each node_modules on the way up. One outside the project is
+            // missing, which is one entry for every package beneath it.
+            node_modules: 'd',
+            // The package scope of the files directly in node_modules
+            'node_modules/package.json': null,
+            'node_modules/missing-pkg': null,
+            'node_modules/missing-pkg.ios.js': null,
+            'node_modules/missing-pkg.native.js': null,
+            'node_modules/missing-pkg.js': null,
+            'node_modules/missing-pkg.ios.json': null,
+            'node_modules/missing-pkg.native.json': null,
+            'node_modules/missing-pkg.json': null,
+            '../node_modules': null,
+          }),
+          content: new Map(),
+          haste: null,
+        });
+      });
+
+      test('with unstable_incrementalResolution, the first attempt is not replayed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver(
+          {resolver: {resolveRequest, unstable_incrementalResolution: true}},
+          'ios',
+        );
+        const error = resolveError(p('/root/index.js'), dep('./missing'));
+        expect(resolveRequest).toHaveBeenCalledTimes(1);
+        expect(error.observations).toEqual(missingRelativeObservations);
+      });
+
+      test('a symlink traversed by a failed resolution is described as one', async () => {
+        setMockFileSystem({
+          'index.js': '',
+          'package.json': JSON.stringify({name: 'root'}),
+          store: {lib: {'index.js': ''}},
+        });
+        fs.symlinkSync(p('/root/store/lib'), p('/root/lib'));
+        resolver = await createResolver({}, 'ios');
+        const observations = resolveError(
+          p('/root/index.js'),
+          dep('./lib/missing'),
+        ).observations;
+        expect(observations?.content).toEqual(new Map([['lib', 'l']]));
+      });
+
+      test('a symlink cycle is described as a symlink where the lookup stopped', async () => {
+        setMockFileSystem({'index.js': ''});
+        fs.symlinkSync(p('/root/b'), p('/root/a'));
+        fs.symlinkSync(p('/root/a'), p('/root/b'));
+        resolver = await createResolver({}, 'ios');
+        const observations = resolveError(
+          p('/root/index.js'),
+          dep('./a'),
+        ).observations;
+        expect(observations?.existence.get('b')).toBe('l');
+        expect(observations?.content).toEqual(
+          new Map([
+            ['a', 'l'],
+            ['b', 'l'],
+          ]),
+        );
+      });
+
+      test('an optional dependency is not replayed', async () => {
+        setMockFileSystem({'index.js': ''});
+        const resolveRequest = countingResolveRequest();
+        resolver = await createResolver({resolver: {resolveRequest}}, 'ios');
+        const optional = dep('./missing');
+        const error = resolveError(p('/root/index.js'), {
+          ...optional,
+          data: {...optional.data, isOptional: true},
+        });
+        expect(resolveRequest).toHaveBeenCalledTimes(1);
+        expect(error.observations).toBeNull();
+      });
+
+      test('a replay that succeeds is reported, and the original failure is thrown', async () => {
+        setMockFileSystem({'index.js': '', 'a.js': ''});
+        let calls = 0;
+        const update = jest.fn();
+        resolver = await createResolver(
+          {
+            reporter: {update},
+            resolver: {
+              // Fails the first time only, as if reading state it does not
+              // observe through the context.
+              resolveRequest: (context, moduleName, platform) =>
+                context.resolveRequest(
+                  context,
+                  calls++ === 0 ? './missing' : './a',
+                  platform,
+                ),
+            },
+          },
+          'ios',
+        );
+        const error = resolveError(p('/root/index.js'), dep('./a'));
+        expect(error.observations).toBeNull();
+        expect(update).toHaveBeenCalledWith({
+          type: 'resolver_warning',
+          message: expect.stringContaining('succeeded on a retry'),
         });
       });
     });
