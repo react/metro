@@ -108,7 +108,7 @@ type JsonSerializable = /* Any JSON-serializable value */;
 
 Type: `?number`
 
-If a transform cache read has not returned after this many milliseconds, Metro also queues the transform locally and uses whichever result arrives first. Use it with a remote cache store, so that a slow or congested link can't make builds slower than transforming locally. Local transforms that race a cache read run newest first, at most [`maxWorkers`](#maxworkers) at a time, and are dropped if the cache answers before they start. Defaults to `null` (wait for the cache).
+If a transform cache read has not returned after this many milliseconds, Metro also queues the transform locally and uses whichever result arrives first. Use it with a remote cache store, so that a slow or congested link can't make builds slower than transforming locally. Local transforms that race a cache read run newest first, sharing twice as many slots as [`maxWorkers`](#maxworkers) with the transforms of cache misses (which go first), and are dropped if the cache answers before they start. When a local transform wins, Metro writes its result to a later cache store only once that store's pending read has missed. Defaults to `null` (wait for the cache).
 
 #### `cacheVersion`
 

@@ -434,10 +434,19 @@ export default class HttpStore<T> {
     if (getParams == null) {
       return request(endpoint.params);
     }
-    // `getParams` may throw rather than reject, or return a plain value, as
-    // configs are often untyped JS: wrapping it here turns all of these into a
-    // `NetworkError`, which callers treat like any other failed request.
+    // Configs are often untyped JS, so `getParams` may throw rather than
+    // reject, or resolve to a plain object or nothing. Building the parameters
+    // inside the guarded part turns any of these that fails into a
+    // `NetworkError`, which callers treat like any other failed request;
+    // errors from the request itself are left as they are.
     return new Promise<URLSearchParams>(resolve => resolve(getParams()))
+      .then(
+        extraParams =>
+          new URLSearchParams([
+            ...endpoint.params,
+            ...new URLSearchParams(extraParams ?? undefined),
+          ]),
+      )
       .catch((error: unknown) => {
         throw new NetworkError(
           'Could not get request parameters: ' +
@@ -445,9 +454,7 @@ export default class HttpStore<T> {
           'EGETPARAMS',
         );
       })
-      .then(extraParams =>
-        request(new URLSearchParams([...endpoint.params, ...extraParams])),
-      );
+      .then(request);
   }
 
   #withRetries<R>(fn: () => Promise<R>, endpoint: Endpoint): Promise<R> {

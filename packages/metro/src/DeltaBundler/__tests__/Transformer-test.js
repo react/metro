@@ -700,6 +700,28 @@ describe('Transformer', function () {
       expect(await promise).toEqual(new Error('worker crashed'));
     });
 
+    test('does not write a local winner to the remote store that then hits', async () => {
+      const remoteSet = jest.fn();
+      const transformer = new Transformer(
+        {
+          ...commonOptions,
+          cacheStores: [
+            {get: () => null, set: jest.fn()},
+            {get: () => after(1000, {output: 'cache'}), set: remoteSet},
+          ],
+          unstable_hedgeCacheReadsAfterMs: 100,
+          watchFolders,
+        },
+        {getOrComputeSha1},
+      );
+      const promise = transformer.transformFile('./foo.js', {});
+      await jest.advanceTimersByTimeAsync(100);
+
+      expect(await promise).toMatchObject({output: 'local'});
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(remoteSet).not.toHaveBeenCalled();
+    });
+
     test('does not start a queued speculative transform after the cache read fails', async () => {
       // Two slots (maxWorkers * 2) are busy with required transforms.
       transform.mockImplementation(() => after(1000, local));

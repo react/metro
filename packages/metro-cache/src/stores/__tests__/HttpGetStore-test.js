@@ -117,6 +117,31 @@ describe('HttpGetStore', () => {
     expect(await first).toEqual({foo: 42});
   });
 
+  // Untyped configs can resolve `getParams` to these; JSON.parse stands in
+  // for such a config.
+  test.each([
+    ['a plain object', '{"token": "abc"}', '?token=abc'],
+    ['nothing', 'null', ''],
+  ])(
+    'accepts a getParams that resolves to %s',
+    async (_description, json, query) => {
+      const store = new HttpGetStore({
+        endpoint: 'http://www.example.com/endpoint',
+        getParams: () => Promise.resolve(JSON.parse(json)),
+      });
+      const promise = store.get(Buffer.from('key'));
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+      const [opts, callback] =
+        jest.requireMock('node:http').request.mock.calls[0];
+      callback(responseHttpOk(JSON.stringify({foo: 42})));
+
+      expect(await promise).toEqual({foo: 42});
+      expect(opts.path).toBe('/endpoint/6b6579' + query);
+    },
+  );
+
   test("doesn't throw any error and doesn't warn on http status 404 errors", async () => {
     const store = new HttpGetStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));
