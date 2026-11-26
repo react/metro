@@ -20,6 +20,7 @@ import type {
   FunctionExpression as BabelNodeFunctionExpression,
   IfStatement as BabelNodeIfStatement,
   LogicalExpression as BabelNodeLogicalExpression,
+  Node as BabelNode,
   Program as BabelNodeProgram,
   UnaryExpression as BabelNodeUnaryExpression,
 } from '@babel/types';
@@ -27,7 +28,7 @@ import type {
 // eslint-disable-next-line import/no-extraneous-dependencies
 import typeof * as Types from '@babel/types';
 
-type State = {stripped: boolean};
+type State = {stripped: boolean, droppedNodes: Set<BabelNode>};
 
 export default function constantFoldingPlugin(context: {
   types: Types,
@@ -156,6 +157,70 @@ export default function constantFoldingPlugin(context: {
         if (result.confident) {
           state.stripped = true;
 
+          // `var`s are hoisted out of the branch that is dropped. Keep a bare
+          // declaration for those still used outside it, so they read as
+          // `undefined` instead of throwing a ReferenceError.
+          // $FlowFixMe[incompatible-type] get() with a union key is typed as possibly an array.
+          const dropped: NodePath<> = path.get(
+            result.value ? 'alternate' : 'consequent',
+          );
+          const hoisted = new Set<string>();
+          // Bindings are only recomputed once the whole pass ends, so they
+          // still list paths in branches dropped earlier in this pass.
+          const outside = (p: NodePath<>) =>
+            p.findParent(a => state.droppedNodes.has(a.node)) == null;
+          const collect = (declaration: NodePath<>) => {
+            if (!declaration.isVariableDeclaration({kind: 'var'})) {
+              return;
+            }
+            // Look the name up where the var is hoisted to, which is not
+            // necessarily the declaration's own scope (e.g. in a catch clause
+            // whose param has the same name).
+            const varScope =
+              declaration.scope.getFunctionParent() ??
+              declaration.scope.getProgramParent();
+            for (const name of Object.keys(
+              declaration.getBindingIdentifiers(),
+            )) {
+              const binding = varScope.getBinding(name);
+              // A param, or a function declared before the branch, binds the
+              // name already. The var shadows a function or class expression's
+              // own name ('local'), so it must be kept.
+              if (
+                binding?.kind !== 'var' &&
+                // $FlowFixMe[invalid-compare] Babel's BindingKind libdef is missing 'local'.
+                binding?.kind !== 'local'
+              ) {
+                continue;
+              }
+              const writes = [binding.path, ...binding.constantViolations];
+              if (
+                !writes.some(p => p.isVariableDeclarator() && outside(p)) &&
+                (binding.referencePaths.some(outside) ||
+                  binding.constantViolations.some(outside))
+              ) {
+                hoisted.add(name);
+              }
+            }
+          };
+          if (dropped.node != null) {
+            state.droppedNodes.add(dropped.node);
+            collect(dropped);
+            dropped.traverse({
+              // Vars in nested functions and static blocks are scoped to
+              // them, so there is nothing to collect there.
+              FunctionParent(p: NodePath<>) {
+                p.skip();
+              },
+              VariableDeclaration: collect,
+            });
+          }
+          const scope =
+            path.scope.getFunctionParent() ?? path.scope.getProgramParent();
+          for (const name of hoisted) {
+            scope.push({id: t.identifier(name)});
+          }
+
           if (result.value || node.alternate) {
             const valueIsTruthy = Boolean(result.value);
             // $FlowFixMe[incompatible-type]
@@ -216,6 +281,7 @@ export default function constantFoldingPlugin(context: {
   const Program = {
     enter(path: NodePath<BabelNodeProgram>, state: State): void {
       state.stripped = false;
+      state.droppedNodes = new Set();
     },
 
     exit(path: NodePath<BabelNodeProgram>, state: State): void {
@@ -238,7 +304,7 @@ export default function constantFoldingPlugin(context: {
         // Re-traverse all program, if we removed any blocks. Manually re-call
         // enter and exit, because traversing a Program node won't call them.
         Program.enter(path, state);
-        path.traverse(visitor, {stripped: false});
+        path.traverse(visitor, {stripped: false, droppedNodes: new Set()});
         Program.exit(path, state);
       }
     },

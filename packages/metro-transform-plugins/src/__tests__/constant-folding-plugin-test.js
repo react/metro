@@ -130,6 +130,136 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, '');
   });
 
+  test('keeps the declaration of a var in a removed branch that is used elsewhere', () => {
+    const code = `
+      if ('production' === 'development') {
+        var a = 1;
+        for (var i = 0; i < 3; i++) {}
+      }
+      if (true) {
+        f();
+      } else {
+        var b = 1, c = 2;
+      }
+      if (x) {
+        g();
+      } else if (false) {
+        var d;
+      }
+      export function h() {
+        if (false) {
+          var k = 1;
+        }
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    const expected = `
+      var a, i, b, c, d;
+      {
+        f();
+      }
+      if (x) {
+        g();
+      }
+      export function h() {
+        var k;
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('keeps the declaration of a var declared in more than one removed branch', () => {
+    const code = `
+      if (false) {
+        var a = 1;
+      }
+      if (false) {
+        var a = 2;
+      }
+      if (true) {
+      } else {
+        var b = 1;
+      }
+      if (true) {
+      } else {
+        var b = 2;
+      }
+      use(a, b);
+    `;
+
+    const expected = `
+      var a, b;
+      {}
+      {}
+      use(a, b);
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test.each([
+    [
+      'a branch without braces',
+      'if (false) var a = 1; use(a);',
+      'var a; use(a);',
+    ],
+    [
+      'a catch clause whose param has the same name',
+      'function f() { if (false) { try {} catch (a) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; return a; } use(f);',
+    ],
+    [
+      'a catch clause with the same param, around the branch',
+      'function f() { try {} catch (a) { if (false) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; try {} catch (a) {} return a; } use(f);',
+    ],
+    [
+      'a function expression with the same name',
+      'use(function g() { if (false) { var g = 1; } return g; });',
+      'use(function g() { var g; return g; });',
+    ],
+    [
+      'a function expression with the same name that is assigned to',
+      'use(function g() { if (false) { var g; } g = 2; return g; });',
+      'use(function g() { var g; g = 2; return g; });',
+    ],
+  ])(
+    'keeps the declaration of a removed var used elsewhere, in %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
+
+  test.each([
+    [
+      'a param with the same name',
+      'function f(a) { if (false) { var a = 1; } return a; } use(f);',
+      'function f(a) { return a; } use(f);',
+    ],
+    [
+      'a var only used in a nested function in the branch',
+      'if (false) { (function () { var c; }); } use(c);',
+      'use(c);',
+    ],
+    [
+      'a function expression with the same name that does not use it',
+      'use(function g() { if (false) { var g = 1; } return 0; });',
+      'use(function g() { return 0; });',
+    ],
+  ])(
+    'does not keep the declaration of a removed var for %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
+
   test('does not fold non-literal void expressions', () => {
     const code = `
       void obj.prop;
