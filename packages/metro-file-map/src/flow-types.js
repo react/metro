@@ -460,15 +460,18 @@ export interface FileSystem {
    *
    * X = mixedStartPath
    * do
-   *   if basename(X) === opts.breakOnSegment
-   *     return null
    *   if X + subpath exists and has type opts.subpathType
    *     return {
    *       absolutePath: realpath(X + subpath)
    *       containerRelativePath: relative(mixedStartPath, X)
    *     }
    *   X = dirname(X)
+   *   if basename(X) === opts.breakOnSegment
+   *     return null
    * while X !== dirname(X)
+   *
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, only a parent of the start path stops
+   * the walk at `breakOnSegment`, whether or not the parent exists.
    *
    * If `observations` is given, records the paths this result depends upon.
    *
