@@ -663,6 +663,16 @@ function isBranch(t: Types, node: Node) {
   return (
     t.isIfStatement(node) ||
     t.isLogicalExpression(node) ||
+    // `a ||= b`, `a &&= b` and `a ??= b` may skip `b`.
+    (t.isAssignmentExpression(node) &&
+      (node.operator === '||=' ||
+        node.operator === '&&=' ||
+        node.operator === '??=')) ||
+    // `a?.(b)`, `a?.[b]` and the rest of an optional chain may be skipped.
+    t.isOptionalCallExpression(node) ||
+    t.isOptionalMemberExpression(node) ||
+    // A default value is only evaluated for `undefined`.
+    t.isAssignmentPattern(node) ||
     t.isConditionalExpression(node) ||
     t.isSwitchStatement(node) ||
     t.isSwitchCase(node) ||

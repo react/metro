@@ -428,6 +428,38 @@ describe('inline-requires', () => {
     },
   );
 
+  test.each([
+    ['an optional call', 'cb?.(foo.a);'],
+    ['an optional member', 'cb?.[foo.a];'],
+    ['a later link of an optional chain', 'cb?.x.y(foo.a);'],
+    ['a logical assignment', 'let x = 1; x ||= foo.a;'],
+    ['a default value', 'const {x = foo.a} = {x: 2};'],
+    ['an optional call, destructured', 'cb?.(a);'],
+  ])(
+    'memoizes a require whose first reference, in %s, is skipped',
+    (_, skipped) => {
+      const code = nullthrows(
+        babel.transformSync(
+          [
+            'const foo = require("foo");',
+            'const {a} = require("foo");',
+            'const cb = null;',
+            skipped,
+            'out.push(foo.a, a);',
+          ].join('\n'),
+          {
+            babelrc: false,
+            configFile: false,
+            plugins: [[inlineRequiresPlugin, {memoizeCalls: true}]],
+          },
+        )?.code,
+      );
+      const out: Array<unknown> = [];
+      vm.runInNewContext(code, {require: () => ({a: 1}), out});
+      expect(out).toEqual([1, 1]);
+    },
+  );
+
   const transform = (
     source: ReadonlyArray<string>,
     plugins?: Plugins = [[inlineRequiresPlugin, {}]],
