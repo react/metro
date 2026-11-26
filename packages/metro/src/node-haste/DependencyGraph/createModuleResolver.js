@@ -53,6 +53,15 @@ export default function createModuleResolver({
     emptyModulePath: config.resolver.emptyModulePath,
     extraNodeModules: config.resolver.extraNodeModules,
     fileSystemLookup,
+    fileSystemPathType: (absolutePath: string) => {
+      // A regular file or a symlink, without following it
+      const stats = fileSystem.linkStats(absolutePath);
+      if (stats != null) {
+        return stats.fileType;
+      }
+      const result = fileSystem.lookup(absolutePath);
+      return result.exists && result.type === 'd' ? 'd' : null;
+    },
     // Mirrors which files `HastePlugin` gives a name
     isHasteEnabled:
       config.resolver.enableGlobalPackages ||

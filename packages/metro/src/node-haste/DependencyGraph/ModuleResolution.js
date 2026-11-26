@@ -43,6 +43,9 @@ type Options = Readonly<{
     filePath: string,
     observations?: ?ResolutionObservations,
   ) => ReturnType<FileSystemLookup>,
+  // What the file map holds at a path, without following a symlink there:
+  // 'f' for a regular file, 'd' for a directory, 'l' for a symlink.
+  fileSystemPathType: (absolutePath: string) => 'f' | 'd' | 'l' | null,
   getHasteModulePath: (name: string, platform: ?string) => ?string,
   getHastePackagePath: (name: string, platform: ?string) => ?string,
   // Whether any file can have a Haste name. If not, lookups are not observed.
@@ -77,9 +80,40 @@ type Options = Readonly<{
   unstable_resolveExportsFromPackageRoot: boolean,
 }>;
 
+// What a failed resolution observed, as `ResolutionObservations`, with what the
+// file map held at each path when it failed. Paths are relative to `rootDir`,
+// and paths outside it start with '..'.
+//
+// Each path maps to what the file map held there, without following a symlink:
+// 'f' for a regular file, 'd' for a directory, 'l' for a symlink, or null for
+// nothing. `existence` holds each path a lookup ended at, which is a symlink
+// only where Metro stopped following a cycle or an overlong chain of them.
+// `content` holds each regular file whose contents were read, directory that
+// was listed, and symlink that was traversed.
+//
+// null means only that the file map has nothing there. The path may still exist
+// outside the file map's roots, or be excluded by `resolver.blockList`. A
+// missing entry is the topmost missing segment of the path looked up, so it can
+// be an ancestor of the candidate that was tried.
+export type FailedResolutionObservations = Readonly<{
+  rootDir: string,
+  existence: ReadonlyMap<string, 'f' | 'd' | 'l' | null>,
+  content: ReadonlyMap<string, 'f' | 'd' | 'l' | null>,
+  haste: ?ReadonlySet<string>,
+}>;
+
 // Same shape for every record, to keep lookups monomorphic.
 function createObservations(): {...ResolutionObservations} {
   return {existence: new Set(), content: new Set(), haste: null};
+}
+
+// The failures `ModuleResolver` reports as `UnableToResolveError`.
+function isResolutionFailure(error: unknown): boolean {
+  return (
+    error instanceof Resolver.FailedToResolvePathError ||
+    error instanceof Resolver.FailedToResolveUnsupportedError ||
+    error instanceof Resolver.FailedToResolveNameError
+  );
 }
 
 export class ModuleResolver {
@@ -154,6 +188,18 @@ export class ModuleResolver {
       );
       return this._getFileResolvedModule(result, observations);
     } catch (error) {
+      const failureObservations = isResolutionFailure(error)
+        ? this._describeFailedResolution(
+            observations ??
+              this._observeFailedResolution(
+                originModulePath,
+                dependency,
+                allowHaste,
+                platform,
+                resolverOptions,
+              ),
+          )
+        : null;
       if (error instanceof Resolver.FailedToResolvePathError) {
         const {candidates} = error;
         throw new UnableToResolveError(
@@ -172,6 +218,7 @@ export class ModuleResolver {
           {
             cause: error,
             dependency,
+            observations: failureObservations,
           },
         );
       } else if (error instanceof Resolver.FailedToResolveUnsupportedError) {
@@ -179,7 +226,7 @@ export class ModuleResolver {
           originModulePath,
           dependency.name,
           error.message,
-          {cause: error, dependency},
+          {cause: error, dependency, observations: failureObservations},
         );
       } else if (error instanceof Resolver.FailedToResolveNameError) {
         const dirPaths = error.dirPaths;
@@ -208,11 +255,80 @@ export class ModuleResolver {
           {
             cause: error,
             dependency,
+            observations: failureObservations,
           },
         );
       }
       throw error;
     }
+  }
+
+  /**
+   * Replays a failed resolution, recording what it observes. Resolution is
+   * synchronous and observes the file system only through the capabilities
+   * bound in `_resolve`, so the replay sees the same state and fails the same
+   * way. Returns null when the failure is expected (an optional dependency)
+   * or when the replay does not fail.
+   */
+  _observeFailedResolution(
+    originModulePath: string,
+    dependency: TransformResultDependency,
+    allowHaste: boolean,
+    platform: string | null,
+    resolverOptions: ResolverInputOptions,
+  ): ?ResolutionObservations {
+    if (dependency.data.isOptional === true) {
+      return null;
+    }
+    const observations = createObservations();
+    try {
+      this._resolve(
+        originModulePath,
+        dependency,
+        allowHaste,
+        platform,
+        resolverOptions,
+        observations,
+      );
+    } catch {
+      return observations;
+    }
+    this._logWarning(
+      `Resolving ${dependency.name} from ${originModulePath} failed, then ` +
+        'succeeded on a retry. A custom resolver may be reading the file ' +
+        'system outside its resolution context.',
+    );
+    return null;
+  }
+
+  /**
+   * Looks up each entry of a failed resolution's record in the file map, so the
+   * error says what Metro saw at each path without the caller looking it up
+   * again, possibly after it has changed.
+   */
+  _describeFailedResolution(
+    observations: ?ResolutionObservations,
+  ): ?FailedResolutionObservations {
+    if (observations == null) {
+      return null;
+    }
+    const {fileSystemPathType, projectRoot} = this._options;
+    const describe = (canonicalPaths: ReadonlySet<string>) => {
+      const described = new Map<string, 'f' | 'd' | 'l' | null>();
+      for (const canonicalPath of canonicalPaths) {
+        described.set(
+          canonicalPath,
+          fileSystemPathType(path.resolve(projectRoot, canonicalPath)),
+        );
+      }
+      return described;
+    };
+    return {
+      rootDir: projectRoot,
+      existence: describe(observations.existence),
+      content: describe(observations.content),
+      haste: observations.haste,
+    };
   }
 
   /**
@@ -440,6 +556,13 @@ export class UnableToResolveError extends Error {
    */
   cause: ?Error;
   /**
+   * Everything the failed resolution observed, by canonical path, with what
+   * the file map held at each path when it failed. Not recorded for an optional
+   * dependency, whose failure is expected, unless
+   * `resolver.unstable_incrementalResolution` is enabled.
+   */
+  observations: ?FailedResolutionObservations;
+  /**
    * Fixed type field in common with other Metro build errors.
    */
   readonly type: 'UnableToResolveError' = 'UnableToResolveError';
@@ -451,12 +574,18 @@ export class UnableToResolveError extends Error {
     options?: Readonly<{
       dependency?: ?TransformResultDependency,
       cause?: Error,
+      observations?: ?FailedResolutionObservations,
     }>,
   ) {
     super();
     this.originModulePath = originModulePath;
     this.targetModuleName = targetModuleName;
-    const codeFrameMessage = this.buildCodeFrameMessage(options?.dependency);
+    // A failed optional dependency is expected, so skip the code frame, which
+    // reads the origin file from disk.
+    const codeFrameMessage =
+      options?.dependency?.data.isOptional === true
+        ? null
+        : this.buildCodeFrameMessage(options?.dependency);
     this.message =
       util.format(
         'Unable to resolve module %s from %s: %s',
@@ -466,6 +595,7 @@ export class UnableToResolveError extends Error {
       ) + (codeFrameMessage ? '\n' + codeFrameMessage : '');
 
     this.cause = options?.cause;
+    this.observations = options?.observations;
   }
 
   buildCodeFrameMessage(dependency: ?TransformResultDependency): ?string {
