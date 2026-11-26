@@ -59,7 +59,7 @@ export type EventHelpers = {
   nextEvent: (afterFn: () => Promise<void>) => Promise<{
     eventType: string,
     path: string,
-    metadata?: ChangeEventMetadata,
+    metadata?: ChangeEventMetadata | void,
   }>,
   untilEvent: (
     afterFn: () => Promise<void>,
@@ -69,7 +69,11 @@ export type EventHelpers = {
   allEvents: (
     afterFn: () => Promise<void>,
     events: ReadonlyArray<[string, 'touch' | 'delete' | 'recrawl']>,
-    opts?: {rejectUnexpected: boolean},
+    opts?: {
+      rejectUnexpected: boolean,
+      // Events that may arrive, but needn't
+      optionalEvents?: ReadonlyArray<[string, 'touch' | 'delete' | 'recrawl']>,
+    },
   ) => Promise<void>,
 };
 
@@ -146,7 +150,7 @@ export const startWatching = async (
       Promise.all([
         new Promise<{
           eventType: string,
-          metadata?: ChangeEventMetadata,
+          metadata?: ChangeEventMetadata | void,
           path: string,
         }>((resolve, reject) => {
           const unsubscribe: () => void = watcherInstance.onFileEvent(
@@ -179,12 +183,19 @@ export const startWatching = async (
         rejectUnexpected: false,
       }),
 
-    allEvents: (afterFn, expectedEvents, {rejectUnexpected = true} = {}) =>
+    allEvents: (
+      afterFn,
+      expectedEvents,
+      {rejectUnexpected = true, optionalEvents = []} = {},
+    ) =>
       Promise.all([
         new Promise((resolve, reject) => {
           const tupleToKey = (tuple: ReadonlyArray<string>) => tuple.join('\0');
           const allEventKeys = new Set(
             expectedEvents.map(tuple => tupleToKey(tuple)),
+          );
+          const optionalEventKeys = new Set(
+            optionalEvents.map(tuple => tupleToKey(tuple)),
           );
           const unsubscribe: () => void = watcherInstance.onFileEvent(
             change => {
@@ -203,7 +214,10 @@ export const startWatching = async (
                   unsubscribe();
                   resolve();
                 }
-              } else if (rejectUnexpected) {
+              } else if (
+                rejectUnexpected &&
+                !optionalEventKeys.has(receivedKey)
+              ) {
                 unsubscribe();
                 reject(
                   new Error(

@@ -10,19 +10,22 @@
  */
 
 import type {HandleFunction, Server} from 'connect';
-import type {CacheStore, MetroCache} from 'metro-cache';
-import type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
-import type {CustomResolver} from 'metro-resolver';
-import type {JsTransformerConfig} from 'metro-transform-worker';
 import type {
+  CustomResolver,
   DeltaResult,
+  JsTransformerConfig,
+  MetroServer,
   Module,
   ReadOnlyGraph,
+  Reporter,
   SerializerOptions,
   TransformResult,
-} from 'metro/private/DeltaBundler/types';
-import type {Reporter} from 'metro/private/lib/reporting';
-import type MetroServer from 'metro/private/Server';
+} from 'metro';
+import type {CacheStore, MetroCache} from 'metro-cache';
+import type {
+  CacheManagerFactory,
+  InputFileMapPlugin,
+} from 'metro/private/node-haste/DependencyGraph/createFileMap';
 import type {IntermediateStackFrame} from 'metro/private/Server/symbolicate';
 
 export type ExtraTransformOptions = Readonly<{
@@ -166,6 +169,9 @@ type TransformerConfigT = {
   // TODO(moti): Remove this Meta-internal option from Metro's public config
   transformVariants: {readonly [name: string]: Partial<ExtraTransformOptions>},
   publicPath: string,
+  // Share one in-memory copy of each transform result between graphs with
+  // equal transform options. Experimental.
+  unstable_shareTransformResults: boolean,
   unstable_workerThreads: boolean,
 };
 
@@ -180,6 +186,7 @@ type MetalConfigT = {
   projectRoot: string,
   stickyWorkers: boolean,
   transformerPath: string,
+  unstable_hedgeCacheReadsAfterMs: ?number,
   reporter: Reporter,
   resetCache: boolean,
   watchFolders: ReadonlyArray<string>,
@@ -254,46 +261,40 @@ type WatcherConfigT = {
 };
 
 export type InputConfigT = Partial<
-  Readonly<
-    MetalConfigT & {
-      cacheStores:
-        CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT),
-      resolver: Readonly<Partial<ResolverConfigT>>,
-      server: Readonly<Partial<ServerConfigT>>,
-      serializer: Readonly<Partial<SerializerConfigT>>,
-      symbolicator: Readonly<Partial<SymbolicatorConfigT>>,
-      transformer: Readonly<Partial<TransformerConfigT>>,
-      watcher: Partial<
-        Readonly<
-          Omit<
-            WatcherConfigT,
-            'healthCheck' | 'unstable_autoSaveCache' | 'watchman',
-          > & {
-            healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>,
-            unstable_autoSaveCache: Partial<
-              Readonly<WatcherConfigT['unstable_autoSaveCache']>,
-            >,
-            watchman: Partial<Readonly<WatcherConfigT['watchman']>>,
-          },
+  Readonly<{
+    ...MetalConfigT,
+    cacheStores:
+      CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT),
+    resolver: Readonly<Partial<ResolverConfigT>>,
+    server: Readonly<Partial<ServerConfigT>>,
+    serializer: Readonly<Partial<SerializerConfigT>>,
+    symbolicator: Readonly<Partial<SymbolicatorConfigT>>,
+    transformer: Readonly<Partial<TransformerConfigT>>,
+    watcher: Partial<
+      Readonly<{
+        ...WatcherConfigT,
+        healthCheck: Partial<Readonly<WatcherConfigT['healthCheck']>>,
+        unstable_autoSaveCache: Partial<
+          Readonly<WatcherConfigT['unstable_autoSaveCache']>,
         >,
-      >,
-    },
-  >,
+        watchman: Partial<Readonly<WatcherConfigT['watchman']>>,
+      }>,
+    >,
+  }>,
 >;
 
 export type MetroConfig = InputConfigT;
 
-export type ConfigT = Readonly<
-  MetalConfigT & {
-    cacheStores: CacheStoresConfigT,
-    resolver: Readonly<ResolverConfigT>,
-    server: Readonly<ServerConfigT>,
-    serializer: Readonly<SerializerConfigT>,
-    symbolicator: Readonly<SymbolicatorConfigT>,
-    transformer: Readonly<TransformerConfigT>,
-    watcher: Readonly<WatcherConfigT>,
-  },
->;
+export type ConfigT = Readonly<{
+  ...MetalConfigT,
+  cacheStores: CacheStoresConfigT,
+  resolver: Readonly<ResolverConfigT>,
+  server: Readonly<ServerConfigT>,
+  serializer: Readonly<SerializerConfigT>,
+  symbolicator: Readonly<SymbolicatorConfigT>,
+  transformer: Readonly<TransformerConfigT>,
+  watcher: Readonly<WatcherConfigT>,
+}>;
 
 export type YargArguments = Readonly<{
   config?: string,

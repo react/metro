@@ -53,6 +53,8 @@ const NODE_MODULES_SEP = 'node_modules' + sep;
 const MAX_FILES_PER_WORKER = 100;
 
 export class FileProcessor {
+  // Indices of the plugins whose workers run on a batch, rather than on demand.
+  #eagerPluginIdxs: ReadonlyArray<number>;
   #maxFilesPerWorker: number;
   #maxWorkers: number;
   #perfLogger: ?PerfLogger;
@@ -72,6 +74,9 @@ export class FileProcessor {
     this.#maxFilesPerWorker = opts.maxFilesPerWorker ?? MAX_FILES_PER_WORKER;
     this.#maxWorkers = opts.maxWorkers;
     this.#pluginWorkers = opts.pluginWorkers ?? [];
+    this.#eagerPluginIdxs = this.#pluginWorkers.flatMap((plugin, idx) =>
+      plugin.lazy === true ? [] : [idx],
+    );
     this.#inBandWorker = new Worker({
       plugins: this.#pluginWorkers.map(plugin => plugin.worker),
     });
@@ -89,6 +94,17 @@ export class FileProcessor {
     }>,
   }> {
     const errors = [];
+
+    if (req.maybeReturnContent) {
+      throw new Error(
+        'Batch processing does not support returning file contents',
+      );
+    }
+
+    if (!req.computeSha1 && this.#eagerPluginIdxs.length === 0) {
+      // No file needs a worker.
+      return {errors};
+    }
 
     const workerJobs = files
       .map(([normalFilePath, fileMetadata]) => {
@@ -109,12 +125,6 @@ export class FileProcessor {
       Math.ceil(workerJobs.length / this.#maxFilesPerWorker),
     );
     const batchWorker = this.#getBatchWorker(numWorkers);
-
-    if (req.maybeReturnContent) {
-      throw new Error(
-        'Batch processing does not support returning file contents',
-      );
-    }
 
     await Promise.all(
       workerJobs.map(([workerInput, fileMetadata]) => {
@@ -170,7 +180,9 @@ export class FileProcessor {
       filePath: absolutePath,
       maybeReturnContent: false,
       pluginsToRun: [pluginIdx],
+      returnStats: fileMetadata[H.MTIME] == null,
     });
+    applyStats(reply, fileMetadata);
     // `undefined` is reserved to mean that no worker has run.
     const pluginData = reply.pluginData?.[0] ?? null;
     // $FlowFixMe[invalid-tuple-index]
@@ -198,16 +210,9 @@ export class FileProcessor {
       (nodeModulesIdx > 0 && normalPath[nodeModulesIdx - 1] === sep);
 
     // Indices of plugins with a passing filter
-    const pluginsToRun =
-      this.#pluginWorkers?.reduce((prev, plugin, idx) => {
-        if (
-          plugin.lazy !== true &&
-          plugin.filter({isNodeModules, normalPath})
-        ) {
-          prev.push(idx);
-        }
-        return prev;
-      }, [] as Array<number>) ?? [];
+    const pluginsToRun = this.#eagerPluginIdxs.filter(idx =>
+      this.#pluginWorkers[idx].filter({isNodeModules, normalPath}),
+    );
 
     if (!computeSha1 && pluginsToRun.length === 0) {
       // Nothing to process
@@ -219,6 +224,7 @@ export class FileProcessor {
       filePath: this.#rootPathUtils.normalToAbsolute(normalPath),
       maybeReturnContent,
       pluginsToRun,
+      returnStats: fileMetadata[H.MTIME] == null,
     };
   }
 
@@ -270,6 +276,7 @@ function processWorkerReply(
   fileMetadata: FileMetadata,
 ) {
   fileMetadata[H.VISITED] = 1;
+  applyStats(metadata, fileMetadata);
   const pluginData = metadata.pluginData;
   if (pluginData) {
     for (const [i, pluginIdx] of pluginsRun.entries()) {
@@ -284,6 +291,16 @@ function processWorkerReply(
   }
 
   return metadata.content;
+}
+
+// Records the stats of a file that hadn't been stat'd, taken as data was first
+// derived from it (see `FileMetadata`).
+function applyStats(metadata: WorkerMetadata, fileMetadata: FileMetadata) {
+  const {stats} = metadata;
+  if (stats != null) {
+    fileMetadata[H.MTIME] = stats.mtime;
+    fileMetadata[H.SIZE] = stats.size;
+  }
 }
 
 function normalizeWorkerError(mixedError: ?Error | string): MaybeCodedError {

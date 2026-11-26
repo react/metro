@@ -32,7 +32,7 @@ function sha1hex(content /*: string | Buffer */) /*: string */ {
 
 class Worker {
   // prettier-ignore
-  #plugins /*: ReadonlyArray<MetadataWorker> */;
+  #plugins /*: ReadonlyArray<MetadataWorker> */
 
   constructor({plugins = []} /*: WorkerSetupArgs */) {
     this.#plugins = plugins.map(({modulePath, setupArgs}) => {
@@ -47,8 +47,17 @@ class Worker {
   processFile(data /*: WorkerMessage */) /*: WorkerMetadata */ {
     let content;
     let sha1;
+    let stats;
 
-    const {computeSha1, filePath, pluginsToRun} = data;
+    const {computeSha1, filePath, pluginsToRun, returnStats} = data;
+
+    // Stat before deriving anything, so that the recorded mtime is never newer
+    // than the content the data was derived from. `getTime()` truncates to
+    // whole milliseconds, as the crawler's mtimes are.
+    if (returnStats) {
+      const {mtime, size} = fs.statSync(filePath);
+      stats = {mtime: mtime.getTime(), size};
+    }
 
     const getContent = () /*: Buffer */ => {
       if (content == null) {
@@ -69,8 +78,8 @@ class Worker {
     }
 
     return content && data.maybeReturnContent
-      ? {content, pluginData, sha1}
-      : {pluginData, sha1};
+      ? {content, pluginData, sha1, stats}
+      : {pluginData, sha1, stats};
   }
 }
 

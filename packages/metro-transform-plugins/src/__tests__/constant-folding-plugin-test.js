@@ -11,11 +11,13 @@
 
 'use strict';
 
-const {compare} = require('../__mocks__/test-helpers');
+const {compare, transformToAst} = require('../__mocks__/test-helpers');
 const constantFoldingPlugin = require('../constant-folding-plugin');
+const generate = require('@babel/generator').default;
 const nullishCoalescingOperatorPlugin =
   // $FlowFixMe[untyped-import] @babel/plugin-syntax-nullish-coalescing-operator (in OSS only)
   require('@babel/plugin-syntax-nullish-coalescing-operator').default;
+const vm = require('node:vm');
 
 describe('constant expressions', () => {
   test('can optimize conditional expressions with constant conditions', () => {
@@ -128,12 +130,161 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, '');
   });
 
+  test('keeps the declaration of a var in a removed branch that is used elsewhere', () => {
+    const code = `
+      if ('production' === 'development') {
+        var a = 1;
+        for (var i = 0; i < 3; i++) {}
+      }
+      if (true) {
+        f();
+      } else {
+        var b = 1, c = 2;
+      }
+      if (x) {
+        g();
+      } else if (false) {
+        var d;
+      }
+      export function h() {
+        if (false) {
+          var k = 1;
+        }
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    const expected = `
+      var a, i, b, c, d;
+      {
+        f();
+      }
+      if (x) {
+        g();
+      }
+      export function h() {
+        var k;
+        return k;
+      }
+      use(a, i, b, d);
+      c = 3;
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('keeps the declaration of a var declared in more than one removed branch', () => {
+    const code = `
+      if (false) {
+        var a = 1;
+      }
+      if (false) {
+        var a = 2;
+      }
+      if (true) {
+      } else {
+        var b = 1;
+      }
+      if (true) {
+      } else {
+        var b = 2;
+      }
+      use(a, b);
+    `;
+
+    const expected = `
+      var a, b;
+      {}
+      {}
+      use(a, b);
+    `;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test.each([
+    [
+      'a branch without braces',
+      'if (false) var a = 1; use(a);',
+      'var a; use(a);',
+    ],
+    [
+      'a catch clause whose param has the same name',
+      'function f() { if (false) { try {} catch (a) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; return a; } use(f);',
+    ],
+    [
+      'a catch clause with the same param, around the branch',
+      'function f() { try {} catch (a) { if (false) { var a = 1; } } return a; } use(f);',
+      'function f() { var a; try {} catch (a) {} return a; } use(f);',
+    ],
+    [
+      'a function expression with the same name',
+      'use(function g() { if (false) { var g = 1; } return g; });',
+      'use(function g() { var g; return g; });',
+    ],
+    [
+      'a function expression with the same name that is assigned to',
+      'use(function g() { if (false) { var g; } g = 2; return g; });',
+      'use(function g() { var g; g = 2; return g; });',
+    ],
+  ])(
+    'keeps the declaration of a removed var used elsewhere, in %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
+
+  test.each([
+    [
+      'a param with the same name',
+      'function f(a) { if (false) { var a = 1; } return a; } use(f);',
+      'function f(a) { return a; } use(f);',
+    ],
+    [
+      'a var only used in a nested function in the branch',
+      'if (false) { (function () { var c; }); } use(c);',
+      'use(c);',
+    ],
+    [
+      'a function expression with the same name that does not use it',
+      'use(function g() { if (false) { var g = 1; } return 0; });',
+      'use(function g() { return 0; });',
+    ],
+  ])(
+    'does not keep the declaration of a removed var for %s',
+    (_, code, expected) => {
+      compare([constantFoldingPlugin], code, expected);
+    },
+  );
+
   test('does not fold non-literal void expressions', () => {
     const code = `
       void obj.prop;
     `;
 
     compare([constantFoldingPlugin], code, code);
+  });
+
+  test.each([
+    ['a parameter', '(function (undefined) { return void 0; })(123);'],
+    [
+      'an enclosing parameter',
+      '(function (undefined) { return () => void 0; })(123)();',
+    ],
+    [
+      'a lexical binding in its temporal dead zone',
+      '(() => { const value = void 0; let undefined = 123; return value; })();',
+    ],
+  ])('preserves void when undefined is shadowed by %s', (_name, code) => {
+    const ast = transformToAst([constantFoldingPlugin], code, {});
+    expect(vm.runInNewContext(generate(ast).code)).toBeUndefined();
+  });
+
+  test('folds literal void to undefined when it is not shadowed', () => {
+    compare([constantFoldingPlugin], 'void 0;', 'undefined;');
   });
 
   test('folds literal void expressions', () => {
@@ -289,6 +440,46 @@ describe('constant expressions', () => {
     compare([constantFoldingPlugin], code, expected);
   });
 
+  test('does not wipe unused functions whose bindings are reassigned', () => {
+    const code = `
+      export function load() {
+        let cleanup = () => {};
+        cleanup = null;
+
+        var handler = function () {};
+        handler = null;
+
+        function callback() {}
+        callback = null;
+
+        function retry() {
+          retry = null;
+        }
+        retry = null;
+      }
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('wipes unused functions that only reassign themselves', () => {
+    const code = `
+      function _devOnly() {
+        const data = require('dev-only');
+        _devOnly = function () {
+          return data;
+        };
+        return data;
+      }
+
+      var _lazy = function () {
+        _lazy = null;
+      };
+    `;
+
+    compare([constantFoldingPlugin], code, '');
+  });
+
   test('recursively strips off functions', () => {
     const code = `
       function x() {}
@@ -393,6 +584,39 @@ describe('constant expressions', () => {
     const code = `void foo?.();`;
 
     const expected = `void foo?.();`;
+
+    compare([constantFoldingPlugin], code, expected);
+  });
+
+  test('does not drop side effects from the leading operands of a sequence', () => {
+    const code = `
+      if ((i++, false)) {
+        a();
+      }
+      var b = (delete o.x, true) ? 1 : 2;
+      var c = (new Foo(), null) || 3;
+      var d = (--j, 1) + 2;
+      var h = (tag\`x\`, 0) || 4;
+      async function e() {
+        if ((await f, false)) {}
+      }
+      function* g() {
+        if ((yield, false)) {}
+      }
+      export {e, g};
+    `;
+
+    compare([constantFoldingPlugin], code, code);
+  });
+
+  test('folds a sequence whose leading operands have no side effects', () => {
+    const code = `
+      var a = (0, 'production' !== 'production') ? 1 : 2;
+    `;
+
+    const expected = `
+      var a = 2;
+    `;
 
     compare([constantFoldingPlugin], code, expected);
   });

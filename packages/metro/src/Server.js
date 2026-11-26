@@ -251,6 +251,7 @@ export default class Server {
       getRunModuleStatement: this._config.serializer.getRunModuleStatement,
       globalPrefix: this._config.transformer.globalPrefix,
       dev: transformOptions.dev,
+      excludeSource: serializerOptions.excludeSource,
       includeAsyncPaths: graphOptions.lazy,
       projectRoot: this._config.projectRoot,
       modulesOnly: serializerOptions.modulesOnly,
@@ -1149,6 +1150,7 @@ export default class Server {
           globalPrefix: this._config.transformer.globalPrefix,
           includeAsyncPaths: graphOptions.lazy,
           dev: transformOptions.dev,
+          excludeSource: serializerOptions.excludeSource,
           projectRoot: this._config.projectRoot,
           modulesOnly: serializerOptions.modulesOnly,
           reservedString: RESERVED_STRING,
@@ -1825,7 +1827,6 @@ export default class Server {
 }
 
 function* zip<X, Y>(xs: Iterable<X>, ys: Iterable<Y>): Iterable<[X, Y]> {
-  //$FlowFixMe[incompatible-type] #9324959
   const ysIter: Iterator<Y> = ys[Symbol.iterator]();
   for (const x of xs) {
     const y = ysIter.next();

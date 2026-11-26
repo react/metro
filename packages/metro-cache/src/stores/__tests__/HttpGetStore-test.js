@@ -69,6 +69,79 @@ describe('HttpGetStore', () => {
     expect(warningMessages.length).toBe(0);
   });
 
+  test('treats a getParams that throws as a miss', async () => {
+    const store = new HttpGetStore({
+      endpoint: 'http://www.example.com/endpoint',
+      getParams: () => {
+        throw new Error('token file missing');
+      },
+    });
+
+    expect(await store.get(Buffer.from('key'))).toBe(null);
+    expect(jest.requireMock('node:http').request).not.toHaveBeenCalled();
+  });
+
+  test('returns a miss without a request once maxInFlightReads are in flight', async () => {
+    const store = new HttpGetStore({
+      endpoint: 'http://example.com',
+      maxInFlightReads: 1,
+    });
+    const {request} = jest.requireMock('node:http');
+    const first = store.get(Buffer.from('key1'));
+
+    expect(await store.get(Buffer.from('key2'))).toBe(null);
+    expect(request).toHaveBeenCalledTimes(1);
+
+    request.mock.calls[0][1](responseHttpOk(JSON.stringify({foo: 42})));
+    expect(await first).toEqual({foo: 42});
+
+    const third = store.get(Buffer.from('key3'));
+    expect(request).toHaveBeenCalledTimes(2);
+    request.mock.calls[1][1](responseHttpOk(JSON.stringify({bar: 1})));
+    expect(await third).toEqual({bar: 1});
+  });
+
+  test('honours maxInFlightReads set beside getOptions', async () => {
+    const store = new HttpGetStore({
+      getOptions: {endpoint: 'http://example.com'},
+      setOptions: {endpoint: 'http://example.com'},
+      maxInFlightReads: 1,
+    });
+    const {request} = jest.requireMock('node:http');
+    const first = store.get(Buffer.from('key1'));
+
+    expect(await store.get(Buffer.from('key2'))).toBe(null);
+    expect(request).toHaveBeenCalledTimes(1);
+
+    request.mock.calls[0][1](responseHttpOk(JSON.stringify({foo: 42})));
+    expect(await first).toEqual({foo: 42});
+  });
+
+  // Untyped configs can resolve `getParams` to these; JSON.parse stands in
+  // for such a config.
+  test.each([
+    ['a plain object', '{"token": "abc"}', '?token=abc'],
+    ['nothing', 'null', ''],
+  ])(
+    'accepts a getParams that resolves to %s',
+    async (_description, json, query) => {
+      const store = new HttpGetStore({
+        endpoint: 'http://www.example.com/endpoint',
+        getParams: () => Promise.resolve(JSON.parse(json)),
+      });
+      const promise = store.get(Buffer.from('key'));
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+      const [opts, callback] =
+        jest.requireMock('node:http').request.mock.calls[0];
+      callback(responseHttpOk(JSON.stringify({foo: 42})));
+
+      expect(await promise).toEqual({foo: 42});
+      expect(opts.path).toBe('/endpoint/6b6579' + query);
+    },
+  );
+
   test("doesn't throw any error and doesn't warn on http status 404 errors", async () => {
     const store = new HttpGetStore({endpoint: 'http://example.com'});
     const promise = store.get(Buffer.from('key'));

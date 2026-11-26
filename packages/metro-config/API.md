@@ -13,7 +13,7 @@ import type {ServerResponse} from 'node:http';
 export type CacheStoresConfigT = ReadonlyArray<CacheStore<TransformResult>>;
 
 export type ConfigT = Readonly<
-  MetalConfigT & {
+  Omit<MetalConfigT, 'cacheStores' | 'resolver' | 'server' | 'serializer' | 'symbolicator' | 'transformer' | 'watcher'> & {
     cacheStores: CacheStoresConfigT;
     resolver: Readonly<ResolverConfigT>;
     server: Readonly<ServerConfigT>;
@@ -63,7 +63,7 @@ export type GetTransformOptionsOpts = {
 
 export type InputConfigT = Partial<
   Readonly<
-    MetalConfigT & {
+    Omit<MetalConfigT, 'cacheStores' | 'resolver' | 'server' | 'serializer' | 'symbolicator' | 'transformer' | 'watcher'> & {
       cacheStores: CacheStoresConfigT | ((metroCache: MetroCache) => CacheStoresConfigT);
       resolver: Readonly<Partial<ResolverConfigT>>;
       server: Readonly<Partial<ServerConfigT>>;
@@ -101,6 +101,7 @@ export type MetalConfigT = {
   projectRoot: string;
   stickyWorkers: boolean;
   transformerPath: string;
+  unstable_hedgeCacheReadsAfterMs: null | undefined | number;
   reporter: Reporter;
   resetCache: boolean;
   watchFolders: ReadonlyArray<string>;
@@ -217,12 +218,13 @@ export type SymbolicatorConfigT = {
   customizeStack: (symbolicatedStack: Array<IntermediateStackFrame>, extraData: unknown) => Array<IntermediateStackFrame> | Promise<Array<IntermediateStackFrame>>;
 };
 
-export type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_workerThreads'> & {
+export type TransformerConfigT = Omit<JsTransformerConfig, 'getTransformOptions' | 'transformVariants' | 'publicPath' | 'unstable_shareTransformResults' | 'unstable_workerThreads'> & {
   getTransformOptions: GetTransformOptions;
   transformVariants: {
     readonly [name: string]: Partial<ExtraTransformOptions>;
   };
   publicPath: string;
+  unstable_shareTransformResults: boolean;
   unstable_workerThreads: boolean;
 };
 

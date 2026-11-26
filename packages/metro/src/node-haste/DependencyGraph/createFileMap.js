@@ -18,9 +18,16 @@ import MetroFileMap, {
   HastePlugin,
 } from 'metro-file-map';
 
+export type {CacheManagerFactory, InputFileMapPlugin} from 'metro-file-map';
+
 const flattenBlockList = (regexes: ConfigT['resolver']['blockList']) => {
   if (!Array.isArray(regexes)) {
     return regexes;
+  }
+  // An empty list blocks nothing. Joining no patterns would give an empty
+  // RegExp, which matches every path.
+  if (regexes.length === 0) {
+    return /.^/;
   }
   return new RegExp(
     regexes
@@ -57,7 +64,7 @@ export default function createFileMap(
   }>,
 ): {
   fileMap: MetroFileMap,
-  hasteMap: HasteMap,
+  hasteMap: ?HasteMap,
   dependencyPlugin: ?DependencyPlugin,
 } {
   const watch = options?.watch ?? !isCIEnv();
@@ -82,18 +89,25 @@ export default function createFileMap(
     plugins.push(dependencyPlugin);
   }
 
-  const hasteMap = new HastePlugin({
-    platforms: new Set([
-      ...config.resolver.platforms,
-      MetroFileMap.H.NATIVE_PLATFORM,
-    ]),
-    hasteImplModulePath: config.resolver.hasteImplModulePath,
-    enableHastePackages: config.resolver.enableGlobalPackages,
-    rootDir: config.projectRoot,
-    failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
-  });
-
-  plugins.push(hasteMap);
+  let hasteMap = null;
+  // Add HastePlugin if any file can have a Haste name, which needs a
+  // `hasteImplModulePath` or, for `package.json` files, Haste packages.
+  if (
+    config.resolver.hasteImplModulePath != null ||
+    config.resolver.enableGlobalPackages
+  ) {
+    hasteMap = new HastePlugin({
+      platforms: new Set([
+        ...config.resolver.platforms,
+        MetroFileMap.H.NATIVE_PLATFORM,
+      ]),
+      hasteImplModulePath: config.resolver.hasteImplModulePath,
+      enableHastePackages: config.resolver.enableGlobalPackages,
+      rootDir: config.projectRoot,
+      failValidationOnConflicts: options?.throwOnModuleCollision ?? true,
+    });
+    plugins.push(hasteMap);
+  }
 
   const fileMap = new MetroFileMap({
     cacheManagerFactory:

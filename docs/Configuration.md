@@ -104,6 +104,12 @@ type MetroCache = {
 type JsonSerializable = /* Any JSON-serializable value */;
 ```
 
+#### `unstable_hedgeCacheReadsAfterMs`
+
+Type: `?number`
+
+If a transform cache read has not returned after this many milliseconds, Metro also queues the transform locally and uses whichever result arrives first. Use it with a remote cache store, so that a slow or congested link can't make builds slower than transforming locally. Local transforms that race a cache read run newest first, sharing twice as many slots as [`maxWorkers`](#maxworkers) with the transforms of cache misses (which go first), and are dropped if the cache answers before they start. When a local transform wins, Metro writes its result to a later cache store only once that store's pending read has missed. Defaults to `null` (wait for the cache).
+
 #### `cacheVersion`
 
 Type: `string`
@@ -681,6 +687,16 @@ The URL path prefix written into each asset's `httpServerLocation`, which the ap
 Type: `boolean`
 
 Enables `require.context()`, which imports all the files in a directory that match a pattern. Defaults to `false`.
+
+#### `unstable_shareTransformResults` <div class="label experimental">Experimental</div>
+
+Type: `boolean`
+
+Whether graphs with equal transform options share one in-memory copy of each module's transform output. Each lazy bundle is served by its own graph, so without sharing, every module it has in common with its parent is held once per graph. Defaults to `true`.
+
+A module's `output` and its dependencies' `data` are read-only, and with sharing on, every graph that uses a module holds the same objects. Code that reads modules, such as a [custom serializer](#customserializer), serializer plugins, or a wrapper around the bundler's `transformFile`, must not write to them: a write through one graph's module changes it in every other graph. Set this option to `false` if code you depend on writes to them.
+
+A shared result is reused whenever a module's transform cache key is unchanged, even where a cache store declines to store it. Also set this option to `false` if a transformer's output depends on inputs outside the cache key, and it relies on a store not storing its results so that the module is transformed again.
 
 #### `unstable_workerThreads` <div class="label experimental">Experimental</div>
 

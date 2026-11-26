@@ -49,6 +49,31 @@ module.exports = {
       },
     },
     {
+      // Published sources and their generated TypeScript definitions resolve
+      // type imports against the package's own dependencies.
+      files: ['packages/*/src/**/*.js'],
+      excludedFiles: [
+        'packages/metro/src/integration_tests/**/*.js',
+        '**/__tests__/**/*.js',
+        '**/__mocks__/**/*.js',
+        '**/__fixtures__/**/*.js',
+        '**/__flowtests__/**/*.js',
+      ],
+      settings: {
+        // Resolves `metro*/private/*` through package.json#exports, which the
+        // resolver bundled with eslint-plugin-import (^0.3.9) doesn't.
+        'import/resolver': {
+          [require.resolve('eslint-import-resolver-node')]: {},
+        },
+      },
+      rules: {
+        'import/no-extraneous-dependencies': [
+          'error',
+          {devDependencies: false, includeTypes: true},
+        ],
+      },
+    },
+    {
       files: [
         'packages/metro/src/integration_tests/**/*.js',
         'packages/metro-runtime/**/*.js',

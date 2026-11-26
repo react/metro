@@ -9,7 +9,26 @@
  * @oncall react_native
  */
 
-import type {TransformResultDependency} from 'metro/private/DeltaBundler/types';
+type SourcePosition = Readonly<{line: number, column: number}>;
+
+/**
+ * A descriptor of a dependency in the origin module. Other properties of `data`
+ * are internal to the caller.
+ */
+export type Dependency = Readonly<{
+  /** The literal specifier, e.g. 'foo' for `require('foo')`. */
+  name: string,
+  data: Readonly<{
+    /** A locally unique key for this dependency within the origin module. */
+    key: string,
+    /** Source locations of this dependency in the origin module. May be empty. */
+    locs: ReadonlyArray<Readonly<{start: SourcePosition, end: SourcePosition}>>,
+    /** E.g. 'async' for `import('foo')`, and null for `import` and `require()`. */
+    asyncType: 'async' | 'maybeSync' | 'prefetch' | 'weak' | null,
+    ...
+  }>,
+  ...
+}>;
 
 export type Result<out TResolution, out TCandidates> =
   | {readonly type: 'resolved', readonly resolution: TResolution}
@@ -189,7 +208,7 @@ export type ResolutionContext = Readonly<{
    * current resolution request. This is provided for diagnostic purposes ONLY
    * and may not be used for resolution purposes.
    */
-  dependency?: TransformResultDependency,
+  dependency?: Dependency,
 
   /**
    * Whether the dependency to be resolved was declared with an ESM import,
@@ -197,8 +216,7 @@ export type ResolutionContext = Readonly<{
    * Corresponds to the criteria Node.js uses to assert an "import"
    * resolution condition, vs "require".
    *
-   * Always equal to dependency.data.isESMImport where dependency is provided,
-   * but may be used for resolution.
+   * Unlike dependency, this may be used for resolution.
    */
   isESMImport: boolean,
 

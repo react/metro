@@ -59,7 +59,7 @@ export interface IConsumer {
     order?: IterationOrder,
   ): void;
 
-  // flowlint-next-line unsafe-getters-setters:off
+  // $FlowFixMe[unsafe-getters-setters]
   get file(): ?string;
 
   sourceContentFor(

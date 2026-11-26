@@ -17,7 +17,7 @@ A typical setup involves:
 2. Running [`metro build`](./CLI.md#build-entry) periodically (e.g. in a CI job) to populate the cache, using `HttpStore` (or a custom read/write cache store) in your Metro config.
 3. Configuring Metro on development machines to read from the cache, using `HttpGetStore` (or a custom read-only cache store).
 
-Caches are configured with [`cacheStores`](./Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
+Caches are configured with [`cacheStores`](./Configuration.md#cachestores). Metro reads the stores in order and uses the first hit, then writes the result to every store listed before the one that hit (or to all of them, on a miss). If a result is written while a read of the same key is still under way, the stores that read has already missed are written at once, and the rest once the read finishes, again stopping at the one that hit. So the local cache (e.g. `FileStore`) should usually come first, followed by the remote cache (e.g. `HttpStore` or `HttpGetStore`): a result found only remotely is then copied into the local cache for the next build. For example, on development machines:
 
 ```js
 // metro.config.js
@@ -44,10 +44,13 @@ Metro provides these stores for use with [`cacheStores`](./Configuration.md#cach
 - **`HttpStore(options)`** is a bare-bones remote cache client that reads (`GET`) and writes (`PUT`) compressed cache artifacts over HTTP or HTTPS.
   - **`options.endpoint: string`**: Base URL of the cache server. For example, with `'http://www.example.com/endpoint'`, requests go to URLs such as `http://www.example.com/endpoint/c083bff944879d9f528cf185eba0f4962fd4e5b1a6a7d2a1c0bd42c3c0d5f0e1b6a9e7c8` (the hex-encoded cache key).
   - **`options.timeout: number`**: Request timeout in milliseconds. Defaults to 5000.
+  - **`options.maxSockets: number`**: Maximum concurrent connections to the cache server. Requests beyond this wait for a free connection, and that wait counts towards the request's duration. Defaults to 64.
+  - **`options.maxInFlightReads: number`**: `HttpGetStore` only. Once this many reads are in flight, further reads return a miss right away instead of waiting, so Metro transforms those files locally. Pair it with [`unstable_hedgeCacheReadsAfterMs`](./Configuration.md#unstable_hedgecachereadsafterms) so a slow link can't make builds slower than not using the cache. Defaults to no limit.
   - **`options.family: 4 | 6`**: Same as the `family` parameter to Node's [`http.request`](https://nodejs.org/api/http.html#httprequesturl-options-callback).
   - **`options.cert`, `options.ca`, `options.key`**: HTTPS options passed directly to [Node's built-in HTTPS client](https://nodejs.org/api/https.html).
   - **`options.headers: {[string]: string}`**: HTTP headers sent with every request.
   - **`options.params: URLSearchParams`**: Query parameters appended to every request URL.
+  - **`options.getParams: () => Promise<URLSearchParams>`**: Called before every request (and retry); the parameters it resolves to are added to `options.params`. Use it for short-lived credentials such as auth tokens that need refreshing. If it throws or rejects, the request fails with a network error.
   - **`options.additionalSuccessStatuses: Array<number>`**: Additional HTTP status codes treated as success.
   - **`options.maxAttempts: number`**: Maximum attempts per request, with exponential backoff. Defaults to 1 (no retries).
   - **`options.retryStatuses: Set<number>`**: HTTP status codes that trigger a retry.

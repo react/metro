@@ -10,6 +10,7 @@
  */
 
 import type {InputOptions} from '..';
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   BuildResult,
   CanonicalPath,
@@ -26,7 +27,7 @@ import type {
 } from '../flow-types';
 import type {DependencyPlugin} from '../index';
 import type {default as FileMapT} from '../index';
-import type {HasteMapOptions} from '../plugins/HastePlugin';
+import type HastePluginT, {HasteMapOptions} from '../plugins/HastePlugin';
 import type {MockMapOptions} from '../plugins/MockPlugin';
 import type {WatcherOptions} from '../watchers/common';
 import typeof WorkerModule from '../worker';
@@ -156,6 +157,14 @@ class MockWatcher extends AbstractWatcher {
   static isSupported(): boolean {
     return true;
   }
+  // Stands in for FallbackWatcher too, which a node crawl may report to
+  getCrawlWatcher(): CrawlWatcher {
+    return {
+      onDirectory: () => {},
+      onSkippedDirectory: async () => {},
+      onSymlink: () => {},
+    };
+  }
 }
 
 jest.mock('../watchers/FallbackWatcher', () => MockWatcher);
@@ -252,6 +261,7 @@ const assertFileSystemEqual = (fileSystem: FileSystem, fileData: FileData) => {
   expect(fileSystem.getDifference(fileData)).toEqual({
     changedFiles: new Map(),
     removedFiles: new Set(),
+    filesToStat: new Map(),
   });
 };
 
@@ -302,7 +312,7 @@ let buildNewFileMap: (
 ) => Promise<{
   ...BuildResult,
   fileMap: FileMapT,
-  hasteMap: HasteMap,
+  hasteMap: HastePluginT,
   mockMap: ?MockMap,
   dependencyPlugin: ?DependencyPlugin,
 }>;
@@ -502,6 +512,24 @@ describe('FileMap', () => {
     expect(
       dependencyPlugin.getOrComputeFileData(p('/project/fruits/Pear.json')),
     ).toMatchObject({exists: true, type: 'f', data: null});
+  });
+
+  test('throws on plugins that share a name, with or without a worker', () => {
+    const MockPlugin = require('../plugins/MockPlugin').default;
+    const mockConfig = {
+      console: globalThis.console,
+      rootDir: defaultConfig.rootDir,
+      mocksPattern: /__mocks__/,
+      throwOnModuleCollision: false,
+    };
+    expect(
+      () =>
+        new FileMap({
+          ...defaultConfig,
+          // MockPlugin has no worker, so holds no plugin data slot
+          plugins: [new MockPlugin(mockConfig), new MockPlugin(mockConfig)],
+        }),
+    ).toThrow('metro-file-map: Duplicate plugin name: mocks');
   });
 
   test('ignores files given a pattern', async () => {
@@ -898,7 +926,6 @@ describe('FileMap', () => {
       buildNewFileMap(
         {},
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -906,7 +933,6 @@ describe('FileMap', () => {
           failValidationOnConflicts: true,
         },
         {
-          // $FlowFixMe[cannot-spread-interface]
           console: {
             ...globalThis.console,
             warn: mockWarn,
@@ -1503,6 +1529,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Banana.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1511,6 +1538,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1519,6 +1547,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/Strawberry.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1527,6 +1556,7 @@ describe('FileMap', () => {
           filePath: p('/project/fruits/__mocks__/Pear.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
       [
@@ -1535,6 +1565,7 @@ describe('FileMap', () => {
           filePath: p('/project/vegetables/Melon.js'),
           maybeReturnContent: false,
           pluginsToRun: [0],
+          returnStats: false,
         },
       ],
     ]);
@@ -1743,6 +1774,28 @@ describe('FileMap', () => {
       }
     });
 
+    fm_it(
+      'publishes what each plugin reports about a batch on the change event',
+      async ({fileMap, hasteMap}) => {
+        const getPluginChanges = require('../lib/getPluginChanges').default;
+        const fruitsRoot = p('/project/fruits');
+        mockFs[path.join(fruitsRoot, 'Tomato.js')] = '// Tomato!';
+        mockEmitters[fruitsRoot].emitFileEvent({
+          event: 'touch',
+          relativePath: 'Tomato.js',
+          metadata: MOCK_CHANGE_FILE,
+        });
+        mockDeleteFile(fruitsRoot, 'Banana.js');
+        const changeEvent = await waitForItToChange(fileMap);
+
+        expect(getPluginChanges(changeEvent, hasteMap)).toEqual({
+          changedNames: new Set(['Tomato', 'Banana']),
+        });
+        // Only plugins with something to say are present
+        expect([...changeEvent.pluginChanges.keys()]).toEqual([hasteMap.name]);
+      },
+    );
+
     function mockDeleteFile(root: string, relativePath: string) {
       const e = mockEmitters[root];
       e.emitFileEvent({event: 'delete', relativePath});
@@ -1757,7 +1810,7 @@ describe('FileMap', () => {
 
     function fm_it(
       title: string,
-      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HasteMap}>) => unknown,
+      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HastePluginT}>) => unknown,
       options?: FileMapTestOptions = {},
     ): void {
       options = options || {};
@@ -1780,7 +1833,7 @@ describe('FileMap', () => {
 
     fm_it.only = (
       title: string,
-      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HasteMap}>) => unknown,
+      fn: (fm: Readonly<{fileMap: FileMap, hasteMap: HastePluginT}>) => unknown,
       options?: FileMapTestOptions,
     ): void => fm_it(title, fn, {...options, only: true});
 
@@ -1843,6 +1896,62 @@ describe('FileMap', () => {
         }
       },
     );
+
+    test('starts watching while the cache is read', async () => {
+      let watchedRoots: ?Array<string> = null;
+      mockNodeCrawler.mockImplementationOnce(async () => ({
+        changedFiles: new Map(),
+        removedFiles: new Set(),
+      }));
+      mockCacheManager.read.mockImplementationOnce(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        watchedRoots = Object.keys(mockEmitters);
+        return null;
+      });
+
+      const {fileMap} = await buildNewFileMap({
+        useWatchman: false,
+        watch: true,
+      });
+      await fileMap.end();
+
+      expect(watchedRoots).toEqual([
+        p('/project/fruits'),
+        p('/project/vegetables'),
+      ]);
+    });
+
+    test('end() while the cache is read stops the watch started meanwhile', async () => {
+      let finishRead: () => void = () => {};
+      mockCacheManager.read.mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            finishRead = () => resolve(null);
+          }),
+      );
+      const fileMap = new FileMap({
+        ...defaultConfig,
+        plugins: [],
+        useWatchman: false,
+        watch: true,
+      });
+
+      const built = fileMap.build();
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const backends = Object.values(mockEmitters);
+      expect(backends).toHaveLength(2);
+      const stops = backends.map(backend =>
+        jest.spyOn(backend, 'stopWatching'),
+      );
+      await fileMap.end();
+      finishRead();
+
+      await expect(built).rejects.toMatchObject({name: 'AbortError'});
+      for (const stop of stops) {
+        expect(stop).toHaveBeenCalled();
+      }
+      expect(mockNodeCrawler).not.toHaveBeenCalled();
+    });
 
     test('does not miss a change made while the file map is being built', async () => {
       mockNodeCrawler.mockImplementationOnce(async () => {
@@ -2620,7 +2729,12 @@ describe('FileMap', () => {
             relativePath: 'tropical',
           });
 
-          await waitForItToChange(fileMap);
+          const changeEvent = await waitForItToChange(fileMap);
+
+          // What plugins report during a recrawl still reaches the event
+          expect(
+            require('../lib/getPluginChanges').default(changeEvent, hasteMap),
+          ).toEqual({changedNames: new Set(['Mango', 'Papaya'])});
 
           // Verify crawl was called with the correct directory
           expect(mockNodeCrawler).toHaveBeenNthCalledWith(

@@ -663,6 +663,16 @@ function isBranch(t: Types, node: Node) {
   return (
     t.isIfStatement(node) ||
     t.isLogicalExpression(node) ||
+    // `a ||= b`, `a &&= b` and `a ??= b` may skip `b`.
+    (t.isAssignmentExpression(node) &&
+      (node.operator === '||=' ||
+        node.operator === '&&=' ||
+        node.operator === '??=')) ||
+    // `a?.(b)`, `a?.[b]` and the rest of an optional chain may be skipped.
+    t.isOptionalCallExpression(node) ||
+    t.isOptionalMemberExpression(node) ||
+    // A default value is only evaluated for `undefined`.
+    t.isAssignmentPattern(node) ||
     t.isConditionalExpression(node) ||
     t.isSwitchStatement(node) ||
     t.isSwitchCase(node) ||
@@ -693,9 +703,6 @@ function isDirectlyEnclosedByBlock(t: Types, path: NodePath<Node>) {
 // references.
 function getTreePosition(t: Types, path: NodePath<>): Array<number> {
   const visitorKeys: {readonly [type: string]: ReadonlyArray<string>} =
-    // VISITOR_KEYS is missing from flow-typed's @babel/types.
-    // $FlowFixMe[prop-missing]
-    // $FlowFixMe[incompatible-type]
     t.VISITOR_KEYS;
   const position: Array<number> = [];
   for (const current of path.getAncestry()) {
@@ -707,7 +714,9 @@ function getTreePosition(t: Types, path: NodePath<>): Array<number> {
     }
     position.push(
       visitorKeys[current.parent.type].indexOf(
-        // $FlowFixMe[incompatible-type] Only the root path has a null key.
+        // Only the root path has a null key, and only a path in a list, which
+        // has a `listKey`, has a numeric key.
+        // $FlowFixMe[incompatible-type]
         current.listKey ?? current.key,
       ),
     );

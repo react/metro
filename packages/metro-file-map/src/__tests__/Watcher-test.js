@@ -9,6 +9,7 @@
  * @oncall react_native
  */
 
+import type {CrawlWatcher} from '../crawlers/node';
 import type {
   Crawler,
   CrawlerOptions,
@@ -24,38 +25,65 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const mockWatchmanCrawl = jest.fn<[CrawlerOptions], Promise<CrawlResult>>();
-const mockNodeCrawl = jest.fn<[CrawlerOptions], Promise<CrawlResult>>();
+const mockNodeCrawl = jest.fn<
+  [CrawlerOptions] | [CrawlerOptions, ReadonlyArray<?CrawlWatcher>],
+  Promise<CrawlResult>,
+>();
 jest.mock(
   '../crawlers/watchman',
   () => (options: CrawlerOptions) => mockWatchmanCrawl(options),
 );
 jest.mock(
   '../crawlers/node',
-  () => (options: CrawlerOptions) => mockNodeCrawl(options),
+  () =>
+    (options: CrawlerOptions, crawlWatchers?: ?ReadonlyArray<?CrawlWatcher>) =>
+      crawlWatchers != null
+        ? mockNodeCrawl(options, crawlWatchers)
+        : mockNodeCrawl(options),
 );
 
 type MockBackend = {
-  kind: 'native' | 'watchman',
+  kind: 'fallback' | 'native' | 'watchman',
   root: string,
   clocks: ?Map<string, string>,
+  crawlFed: boolean,
+  crawledDirectories: Array<string>,
   emit: (event: WatcherBackendChangeEvent) => void,
 };
 const mockStartedBackends: Array<MockBackend> = [];
 let mockNativeLiveOnStart = true;
+let mockNativeSupported = true;
 function mockBackendClass(kind: MockBackend['kind']) {
   return class {
+    readonly root: string;
     #root: string;
     #clocks: ?Map<string, string>;
+    #crawlFed: boolean;
+    #crawledDirectories: Array<string> = [];
     #listener: ?(event: WatcherBackendChangeEvent) => void;
     static isSupported(): boolean {
-      return true;
+      return kind !== 'native' || mockNativeSupported;
     }
     static isLiveOnStart(): boolean {
       return kind !== 'native' || mockNativeLiveOnStart;
     }
-    constructor(root: string, opts: {clocks?: ?Map<string, string>, ...}) {
+    constructor(
+      root: string,
+      opts: {clocks?: ?Map<string, string>, crawlFed?: boolean, ...},
+    ) {
+      this.root = root;
       this.#root = root;
       this.#clocks = opts.clocks;
+      this.#crawlFed = opts.crawlFed === true;
+    }
+    getCrawlWatcher(): CrawlWatcher {
+      return {
+        onDirectory: dir => {
+          this.#crawledDirectories.push(dir);
+        },
+        onSkippedDirectory: async () => {},
+        onSymlink: () => {},
+      };
     }
     onFileEvent(listener: (event: WatcherBackendChangeEvent) => void) {
       this.#listener = listener;
@@ -65,6 +93,8 @@ function mockBackendClass(kind: MockBackend['kind']) {
         kind,
         root: this.#root,
         clocks: this.#clocks,
+        crawlFed: this.#crawlFed,
+        crawledDirectories: this.#crawledDirectories,
         emit: event => this.#listener?.(event),
       });
     }
@@ -81,6 +111,10 @@ jest.mock('../watchers/NativeWatcher', () => ({
 jest.mock('../watchers/WatchmanWatcher', () => ({
   __esModule: true,
   default: mockBackendClass('watchman'),
+}));
+jest.mock('../watchers/FallbackWatcher', () => ({
+  __esModule: true,
+  default: mockBackendClass('fallback'),
 }));
 
 const rootDir = path.join(path.sep, 'project');
@@ -122,15 +156,6 @@ function createWatcher(
     ignoreForCrawl: () => false,
     ignorePatternForWatch: /^$/,
     perfLogger: null,
-    previousState: {
-      clocks: new Map(),
-      fileSystem: new TreeFS({
-        processFile: () => {
-          throw new Error('not implemented');
-        },
-        rootDir,
-      }),
-    },
     rootDir,
     roots: [rootDir],
     useWatchman,
@@ -139,9 +164,22 @@ function createWatcher(
   });
 }
 
+function emptyState(): CrawlerOptions['previousState'] {
+  return {
+    clocks: new Map(),
+    fileSystem: new TreeFS({
+      processFile: () => {
+        throw new Error('not implemented');
+      },
+      rootDir,
+    }),
+  };
+}
+
 beforeEach(() => {
   mockStartedBackends.length = 0;
   mockNativeLiveOnStart = true;
+  mockNativeSupported = true;
   mockWatchmanCrawl.mockReset();
   mockNodeCrawl.mockReset();
   jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -156,7 +194,7 @@ describe('Watcher crawl fallback', () => {
     const canonicalPath = path.join('src', 'index.js');
     mockNodeCrawl.mockImplementation(async () => crawlResult([canonicalPath]));
 
-    const result = await createWatcher(false).crawl();
+    const result = await createWatcher(false).crawl(emptyState());
 
     expect([...result.changedFiles.keys()]).toEqual([canonicalPath]);
     expect(mockNodeCrawl).toHaveBeenCalledTimes(1);
@@ -166,7 +204,7 @@ describe('Watcher crawl fallback', () => {
   test('a failing node crawler propagates, with no retry', async () => {
     mockNodeCrawl.mockImplementation(rejectWith('node crawl failed'));
 
-    await expect(createWatcher(false).crawl()).rejects.toThrow(
+    await expect(createWatcher(false).crawl(emptyState())).rejects.toThrow(
       'node crawl failed',
     );
     // The retry exists for Watchman only - retrying node with node is pointless.
@@ -179,7 +217,7 @@ describe('Watcher crawl fallback', () => {
       crawlResult([canonicalPath]),
     );
 
-    const result = await createWatcher(true).crawl();
+    const result = await createWatcher(true).crawl(emptyState());
 
     expect([...result.changedFiles.keys()]).toEqual([canonicalPath]);
     expect(mockWatchmanCrawl).toHaveBeenCalledTimes(1);
@@ -191,7 +229,7 @@ describe('Watcher crawl fallback', () => {
     mockWatchmanCrawl.mockImplementation(rejectWith('watchman unavailable'));
     mockNodeCrawl.mockImplementation(async () => crawlResult([canonicalPath]));
 
-    const result = await createWatcher(true).crawl();
+    const result = await createWatcher(true).crawl(emptyState());
 
     expect([...result.changedFiles.keys()]).toEqual([canonicalPath]);
     expect(mockNodeCrawl).toHaveBeenCalledTimes(1);
@@ -203,7 +241,7 @@ describe('Watcher crawl fallback', () => {
     mockNodeCrawl.mockImplementation(rejectWith('node crawl failed'));
 
     const thrown = await createWatcher(true)
-      .crawl()
+      .crawl(emptyState())
       .then(
         () => null,
         (error: Error) => error,
@@ -218,7 +256,7 @@ describe('Watcher crawl fallback', () => {
     mockWatchmanCrawl.mockImplementation(rejectWith('watchman unavailable'));
     mockNodeCrawl.mockImplementation(async () => crawlResult([]));
 
-    await createWatcher(true).crawl();
+    await createWatcher(true).crawl(emptyState());
 
     expect(mockNodeCrawl.mock.calls[0][0]).toBe(
       mockWatchmanCrawl.mock.calls[0][0],
@@ -238,7 +276,7 @@ describe('Watcher backend choice in watch mode', () => {
     mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));
     const watcher = createWatcher(true, null, true);
 
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
     expect(mockStartedBackends).toEqual([]);
 
     await watcher.watch(() => {});
@@ -249,7 +287,7 @@ describe('Watcher backend choice in watch mode', () => {
     mockWatchmanCrawl.mockImplementation(async () => crawlResult([]));
     const watcher = createWatcher(true, null, true);
 
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
     await watcher.watch(() => {}, new Map([['', 'c:crawl-clock:1']]));
     const addedRoot = path.join(path.sep, 'other');
     await watcher.watchRoot(addedRoot);
@@ -272,7 +310,7 @@ describe('Watcher backend choice in watch mode', () => {
     });
     const watcher = createWatcher(true, null, true);
 
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
     const onChange = jest.fn<[WatcherBackendChangeEvent], void>();
     await watcher.watch(onChange);
 
@@ -331,7 +369,7 @@ describe('Watcher with a backend that is not live on start', () => {
     const watcher = createWatcher(false, null, true);
     const warn = jest.spyOn(console, 'warn');
 
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
 
     // The first health check went unreported, the second was reported.
     expect(writesBeforeCrawl).toBe(2);
@@ -351,7 +389,7 @@ describe('Watcher with a backend that is not live on start', () => {
     const watcher = createWatcher(false, null, true);
     const warn = jest.spyOn(console, 'warn');
 
-    const crawled = watcher.crawl();
+    const crawled = watcher.crawl(emptyState());
     // $FlowFixMe[prop-missing] - in Jest 29.5+, missing from flow-typed's defs
     await jest.advanceTimersByTimeAsync(11000);
     await crawled;
@@ -367,7 +405,7 @@ describe('Watcher with a backend that is not live on start', () => {
   test('confirms the watch of a root added later', async () => {
     mockNodeCrawl.mockImplementation(async () => crawlResult([]));
     const watcher = createWatcher(false, null, true);
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
     await watcher.watch(() => {});
     writtenFiles = [];
 
@@ -377,14 +415,85 @@ describe('Watcher with a backend that is not live on start', () => {
     expect(writtenFiles.map(f => path.dirname(f))).toEqual([addedRoot]);
   });
 
+  test('prepareCrawl() starts and confirms the watch, which the crawl then uses', async () => {
+    mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+    const watcher = createWatcher(false, null, true);
+
+    await watcher.prepareCrawl();
+
+    expect(mockStartedBackends.map(b => b.root)).toEqual([rootDir]);
+    expect(writtenFiles.map(f => path.dirname(f))).toEqual([rootDir]);
+    expect(mockNodeCrawl).not.toHaveBeenCalled();
+
+    await watcher.crawl(emptyState());
+
+    // Neither started nor confirmed again
+    expect(mockStartedBackends).toHaveLength(1);
+    expect(writtenFiles).toHaveLength(1);
+    expect(mockNodeCrawl).toHaveBeenCalledTimes(1);
+  });
+
   test('a backend that is live on start is not checked', async () => {
     mockNativeLiveOnStart = true;
     mockNodeCrawl.mockImplementation(async () => crawlResult([]));
     const watcher = createWatcher(false, null, true);
 
-    await watcher.crawl();
+    await watcher.crawl(emptyState());
 
     expect(writtenFiles).toEqual([]);
+  });
+});
+
+describe('Watcher with FallbackWatcher and the node crawler', () => {
+  beforeEach(() => {
+    mockNativeSupported = false;
+  });
+
+  test('watches what the crawl lists, instead of walking the roots', async () => {
+    const src = path.join(rootDir, 'src');
+    mockNodeCrawl.mockImplementation(async (options, crawlWatchers) => {
+      // Started, and watching the root, before the crawl
+      expect(mockStartedBackends.map(b => [b.kind, b.crawlFed])).toEqual([
+        ['fallback', true],
+      ]);
+      expect(crawlWatchers).toHaveLength(1);
+      crawlWatchers?.[0]?.onDirectory(src);
+      return crawlResult([]);
+    });
+    const watcher = createWatcher(false, null, true);
+
+    await watcher.crawl(emptyState());
+
+    expect(mockStartedBackends[0].crawledDirectories).toEqual([src]);
+  });
+
+  test('a scoped recrawl is not reported to the watcher', async () => {
+    mockNodeCrawl.mockImplementation(async () => crawlResult([]));
+    const watcher = createWatcher(false, null, true);
+    await watcher.crawl(emptyState());
+    mockNodeCrawl.mockClear();
+
+    await watcher.recrawl(
+      'src',
+      new TreeFS({
+        processFile: () => {
+          throw new Error('not implemented');
+        },
+        rootDir,
+      }),
+    );
+
+    expect(mockNodeCrawl.mock.calls).toEqual([[expect.any(Object)]]);
+  });
+
+  test('with a custom crawler, the watcher walks the roots itself', async () => {
+    const watcher = createWatcher(false, async () => crawlResult([]), true);
+
+    await watcher.crawl(emptyState());
+
+    expect(mockStartedBackends.map(b => [b.kind, b.crawlFed])).toEqual([
+      ['fallback', false],
+    ]);
   });
 });
 
@@ -400,7 +509,7 @@ describe('Watcher crawl option', () => {
     const result = await createWatcher(
       true,
       stubCrawler([canonicalPath]),
-    ).crawl();
+    ).crawl(emptyState());
 
     expect([...result.changedFiles.keys()]).toEqual([canonicalPath]);
     expect(mockWatchmanCrawl).not.toHaveBeenCalled();
@@ -412,7 +521,7 @@ describe('Watcher crawl option', () => {
       stubCrawler([]),
     );
 
-    await createWatcher(true, crawl).crawl();
+    await createWatcher(true, crawl).crawl(emptyState());
 
     const options = crawl.mock.calls[0][0];
     expect(options).toMatchObject({
@@ -455,9 +564,9 @@ describe('Watcher crawl option', () => {
     // what a supplied crawler exists to avoid.
     const crawl: Crawler = rejectWith('crawler exploded');
 
-    await expect(createWatcher(true, crawl).crawl()).rejects.toThrow(
-      'crawler exploded',
-    );
+    await expect(
+      createWatcher(true, crawl).crawl(emptyState()),
+    ).rejects.toThrow('crawler exploded');
     expect(mockNodeCrawl).not.toHaveBeenCalled();
   });
 });

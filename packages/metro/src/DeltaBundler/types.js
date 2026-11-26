@@ -173,10 +173,22 @@ export type AllowOptionalDependenciesWithOptions = {
 export type AllowOptionalDependencies =
   boolean | AllowOptionalDependenciesWithOptions;
 
+// Canonical paths whose addition or removal (`existence`) or modification
+// (`content`) can change a resolution's result, and every Haste name it looked
+// up, found or not (`haste`). `haste` is null if there were none, which is
+// always so when no file can have a Haste name.
+export type ResolutionObservations = Readonly<{
+  existence: Set<string>,
+  content: Set<string>,
+  haste: ?Set<string>,
+}>;
+
 export type BundlerResolution =
   | Readonly<{
       type: 'sourceFile',
       filePath: string,
+      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      unstable_observations?: ResolutionObservations,
     }>
   | Readonly<{
       type: 'virtualModule',
@@ -189,6 +201,8 @@ export type BundlerResolution =
       source: Buffer,
       /** SHA-1 of `source`. */
       sha1: string,
+      // Set if `resolver.unstable_incrementalResolution` is enabled.
+      unstable_observations?: ResolutionObservations,
     }>;
 
 export type Options<T = MixedOutput> = Readonly<{
@@ -210,11 +224,23 @@ export type DeltaResult<T = MixedOutput> = {
   readonly reset: boolean,
 };
 
+// Modules that graphs released, with the outputs live graphs still hold.
+export type ReleasedModules<T = MixedOutput> = Readonly<{
+  // The source paths the released modules were transformed as, or null if they
+  // aren't known, in which case `heldOutputs` covers every module of every live
+  // graph.
+  paths: ?ReadonlyArray<string>,
+  // The outputs live graphs hold at the released modules, or at any module if
+  // `paths` is null.
+  heldOutputs: ReadonlySet<ReadonlyArray<T>>,
+}>;
+
 export type SerializerOptions = Readonly<{
   asyncRequireModulePath: string,
   createModuleId: (absolutePath: string) => number,
   dependencyMapReservedName?: ?string,
   dev: boolean,
+  excludeSource?: ?boolean,
   getRunModuleStatement: (
     moduleId: number | string,
     globalPrefix: string,

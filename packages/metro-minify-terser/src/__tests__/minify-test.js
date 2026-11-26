@@ -11,10 +11,11 @@
 
 'use strict';
 
-import type {BasicSourceMap} from 'metro-source-map';
 import type {MinifierOptions} from 'metro-transform-worker';
 
 const minify = require('..');
+
+type BasicSourceMap = NonNullable<MinifierOptions['map']>;
 
 jest.mock('terser', () => ({
   minify: jest.fn(code => {
@@ -107,7 +108,7 @@ describe('Minification:', () => {
     terser.minify.mockResolvedValue({
       code: '',
       decoded_map: decodedMap,
-      // flowlint-next-line unsafe-getters-setters:off
+      // $FlowFixMe[unsafe-getters-setters]
       get map() {
         encodeCount++;
         return JSON.stringify(map);

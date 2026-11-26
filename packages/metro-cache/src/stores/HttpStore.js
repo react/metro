@@ -27,10 +27,21 @@ type EndpointOptions = {
   endpoint: string,
   family?: 4 | 6,
   timeout?: number,
+  maxSockets?: number,
+  /**
+   * `HttpGetStore` only: once this many reads are in flight, further reads
+   * return a miss right away instead of waiting for a socket.
+   */
+  maxInFlightReads?: number,
   key?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   cert?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   ca?: string | ReadonlyArray<string> | Buffer | ReadonlyArray<Buffer>,
   params?: URLSearchParams,
+  /**
+   * Called before every request; the parameters it resolves to are added to
+   * `params`. Use it for short-lived credentials.
+   */
+  getParams?: () => Promise<URLSearchParams>,
   headers?: {[key: string]: string},
   additionalSuccessStatuses?: ReadonlyArray<number>,
   /**
@@ -55,6 +66,7 @@ type Endpoint = {
   port: number,
   agent: http$Agent<tls$TLSSocket> | http$Agent<net$Socket>,
   params: URLSearchParams,
+  getParams: ?() => Promise<URLSearchParams>,
   headers?: {[key: string]: string},
   timeout: number,
   additionalSuccessStatuses: ReadonlySet<number>,
@@ -92,31 +104,34 @@ export default class HttpStore<T> {
   }
 
   #createEndpointConfig(options: EndpointOptions): Endpoint {
-    const agentConfig: http$agentOptions & HttpsProxyAgentOptions = {
+    const agentConfig: {
+      ...HttpsProxyAgentOptions,
+      key?: EndpointOptions['key'],
+      cert?: EndpointOptions['cert'],
+      ca?: EndpointOptions['ca'],
+      socketPath?: string,
+      ...
+    } = {
       family: options.family,
       keepAlive: true,
       keepAliveMsecs: options.timeout || 5000,
-      maxFreeSockets: 64,
-      maxSockets: 64,
+      maxFreeSockets: options.maxSockets ?? 64,
+      maxSockets: options.maxSockets ?? 64,
     };
 
     if (options.key != null) {
-      // $FlowFixMe[incompatible-use] `key` is missing in the Flow definition
       agentConfig.key = options.key;
     }
 
     if (options.cert != null) {
-      // $FlowFixMe[incompatible-use] `cert` is missing in the Flow definition
       agentConfig.cert = options.cert;
     }
 
     if (options.ca != null) {
-      // $FlowFixMe[incompatible-use] `ca` is missing in the Flow definition
       agentConfig.ca = options.ca;
     }
 
     if (options.socketPath != null) {
-      // $FlowFixMe[incompatible-use] `socketPath` is missing in the Flow definition
       agentConfig.socketPath = options.socketPath;
     }
 
@@ -138,6 +153,7 @@ export default class HttpStore<T> {
       ),
       agent,
       debug: options.debug ?? false,
+      getParams: options.getParams,
       headers: options.headers,
       host: uri.hostname,
       maxAttempts: options.maxAttempts ?? 1,
@@ -152,12 +168,18 @@ export default class HttpStore<T> {
   }
 
   get(key: Buffer): Promise<?T> {
-    return this.#withRetries(() => this.#getOnce(key), this.#getEndpoint);
+    return this.#withRetries(
+      () =>
+        this.#withParams(this.#getEndpoint, params =>
+          this.#getOnce(key, params),
+        ),
+      this.#getEndpoint,
+    );
   }
 
-  #getOnce(key: Buffer): Promise<?T> {
+  #getOnce(key: Buffer, params: URLSearchParams): Promise<?T> {
     return new Promise((resolve, reject) => {
-      let searchParamsString = this.#getEndpoint.params.toString();
+      let searchParamsString = params.toString();
       if (searchParamsString != '') {
         searchParamsString = '?' + searchParamsString;
       }
@@ -275,16 +297,19 @@ export default class HttpStore<T> {
 
   set(key: Buffer, value: T): Promise<void> {
     return this.#withRetries(
-      () => this.#setOnce(key, value),
+      () =>
+        this.#withParams(this.#setEndpoint, params =>
+          this.#setOnce(key, value, params),
+        ),
       this.#setEndpoint,
     );
   }
 
-  #setOnce(key: Buffer, value: T): Promise<void> {
+  #setOnce(key: Buffer, value: T, params: URLSearchParams): Promise<void> {
     return new Promise((resolve, reject) => {
       const gzip = zlib.createGzip(ZLIB_OPTIONS);
 
-      let searchParamsString = this.#setEndpoint.params.toString();
+      let searchParamsString = params.toString();
       if (searchParamsString != '') {
         searchParamsString = '?' + searchParamsString;
       }
@@ -398,6 +423,38 @@ export default class HttpStore<T> {
 
   clear() {
     // Not implemented.
+  }
+
+  // Requests go out synchronously unless `getParams` is set.
+  #withParams<R>(
+    endpoint: Endpoint,
+    request: (params: URLSearchParams) => Promise<R>,
+  ): Promise<R> {
+    const getParams = endpoint.getParams;
+    if (getParams == null) {
+      return request(endpoint.params);
+    }
+    // Configs are often untyped JS, so `getParams` may throw rather than
+    // reject, or resolve to a plain object or nothing. Building the parameters
+    // inside the guarded part turns any of these that fails into a
+    // `NetworkError`, which callers treat like any other failed request;
+    // errors from the request itself are left as they are.
+    return new Promise<URLSearchParams>(resolve => resolve(getParams()))
+      .then(
+        extraParams =>
+          new URLSearchParams([
+            ...endpoint.params,
+            ...new URLSearchParams(extraParams ?? undefined),
+          ]),
+      )
+      .catch((error: unknown) => {
+        throw new NetworkError(
+          'Could not get request parameters: ' +
+            (error instanceof Error ? error.message : String(error)),
+          'EGETPARAMS',
+        );
+      })
+      .then(request);
   }
 
   #withRetries<R>(fn: () => Promise<R>, endpoint: Endpoint): Promise<R> {

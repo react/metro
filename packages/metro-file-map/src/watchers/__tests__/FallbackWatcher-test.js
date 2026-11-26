@@ -21,8 +21,9 @@ jest.useRealTimers();
 jest.setTimeout(10 * 1000);
 
 const {mkdir, rm, writeFile} = fs.promises;
-// Captured before any test replaces `fs.watch`.
+// Captured before any test replaces `fs.watch` or `fs.promises.readdir`.
 const {watch: unmockedWatch} = fs;
+const {readdir: unmockedReaddir} = fs.promises;
 
 // An `FSWatcher` after it has reported an error: Node closes the handle before
 // emitting 'error', so a subsequent `close()` returns early and emits nothing.
@@ -40,6 +41,21 @@ describe('FallbackWatcher', () => {
   // whose events are withheld from it.
   let listeners: Map<string, (event: string, filename: ?string) => void>;
   let mutedDirs: Set<string>;
+  // Every path a watch has reported, muted or not.
+  let reportedPaths: Set<string>;
+
+  // On macOS, `fs.watch` starts an FSEvents stream asynchronously, so a watch
+  // may miss a change made as soon as it is opened, and report one made just
+  // before. Wait until the root's watch reports a probe, by which time it has
+  // reported any earlier change.
+  const waitUntilRootIsLive = async () => {
+    const probe = join(watchRoot, 'live-probe');
+    const deadline = Date.now() + 5000;
+    for (let i = 0; !reportedPaths.has(probe) && Date.now() < deadline; i++) {
+      await writeFile(probe, String(i));
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  };
 
   const indexOfCall = (op: 'watch' | 'readdir', dir: string) =>
     calls.indexOf(`${op}:${dir}`);
@@ -49,6 +65,19 @@ describe('FallbackWatcher', () => {
     expect(indexOfCall('watch', dir)).toBeLessThan(indexOfCall('readdir', dir));
   };
 
+  // As Metro does, include only some files, so that a directory or symlink
+  // isn't included by name.
+  const createJsWatcher = () =>
+    new FallbackWatcher(watchRoot, {
+      included: {
+        extensions: new Set(['js']),
+        basenames: new Set(),
+        basenamePrefixes: [],
+      },
+      ignored: null,
+      watchmanDeferStates: [],
+    });
+
   beforeEach(async () => {
     watchRoot = await createTempWatchRoot('Fallback', false);
     calls = [];
@@ -56,6 +85,7 @@ describe('FallbackWatcher', () => {
     watchOverride = null;
     listeners = new Map();
     mutedDirs = new Set();
+    reportedPaths = new Set();
 
     const {watch} = fs;
     jest.spyOn(fs, 'watch').mockImplementation((dir, options, listener) => {
@@ -63,7 +93,6 @@ describe('FallbackWatcher', () => {
       const override = watchOverride;
       if (override != null && dir === override.path) {
         watchOverride = null;
-        // $FlowFixMe[incompatible-type] - models an errored FSWatcher
         return override.watcher;
       }
       const failure = watchFailure;
@@ -75,6 +104,9 @@ describe('FallbackWatcher', () => {
       }
       listeners.set(String(dir), listener);
       return watch(dir, options, (event, filename) => {
+        if (filename != null) {
+          reportedPaths.add(join(String(dir), String(filename)));
+        }
         if (!mutedDirs.has(String(dir))) {
           listener(event, filename);
         }
@@ -116,6 +148,7 @@ describe('FallbackWatcher', () => {
 
     test('for a directory created while watching', async () => {
       await watcher?.startWatching();
+      await waitUntilRootIsLive();
       calls = [];
 
       const nested = join(watchRoot, 'new', 'nested');
@@ -129,6 +162,73 @@ describe('FallbackWatcher', () => {
     });
   });
 
+  test('starts without stat-ing what it finds', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'file.js'), '');
+    await fs.promises.symlink('file.js', join(watchRoot, 'a', 'link.js'));
+    // Windows reports a directory as changed when it is listed. Withhold those
+    // events, whose handling stats the directory.
+    for (const dir of ['', 'a', join('a', 'b')]) {
+      mutedDirs.add(join(watchRoot, dir));
+    }
+    const lstat = jest.spyOn(fs.promises, 'lstat');
+
+    await watcher?.startWatching();
+
+    // Types come from the listings
+    expect(lstat).not.toHaveBeenCalled();
+    expectWatchedBeforeListed(join(watchRoot, 'a', 'b'));
+  });
+
+  // A directory's type comes from its parent's listing, so it may be replaced
+  // before it is visited, eg by a package manager. Its parent's watch reports
+  // the replacement.
+  test('starts past a directory replaced by a file before it is listed', async () => {
+    await mkdir(join(watchRoot, 'a'));
+    jest
+      .spyOn(fs.promises, 'readdir')
+      .mockImplementation(async (dir, ...args) => {
+        const entries = await unmockedReaddir(dir, ...args);
+        if (String(dir) === watchRoot) {
+          await rm(join(watchRoot, 'a'), {recursive: true});
+          await writeFile(join(watchRoot, 'a'), '');
+        }
+        return entries;
+      });
+
+    // Without an error listener, as Metro runs it
+    await expect(watcher?.startWatching()).resolves.toBeUndefined();
+  });
+
+  // Every watch is live once `startWatching` resolves, Windows included.
+  // Skipped on macOS, where `fs.watch` starts FSEvents streams asynchronously
+  // (FallbackWatcher isn't used there).
+  (process.platform === 'darwin' ? test.skip : test)(
+    'reports changes made as soon as it has started',
+    async () => {
+      const dirs = Array.from({length: 20}, (_, i) => join(watchRoot, `d${i}`));
+      for (const dir of dirs) {
+        await mkdir(dir);
+      }
+      const touched = new Set<string>();
+      watcher?.onFileEvent(event => {
+        if (event.event === 'touch' && event.metadata?.type === 'f') {
+          touched.add(event.relativePath);
+        }
+      });
+
+      await watcher?.startWatching();
+      for (const dir of dirs) {
+        await writeFile(join(dir, 'file.js'), '');
+      }
+
+      await waitFor(() => touched.size === dirs.length);
+      expect(touched).toEqual(
+        new Set(dirs.map((_, i) => join(`d${i}`, 'file.js'))),
+      );
+    },
+  );
+
   // A watch we cannot establish - one directory over the inotify limit, say -
   // must not cost us the files under it, which would silently truncate the
   // file map.
@@ -140,6 +240,9 @@ describe('FallbackWatcher', () => {
     async (code, expectedErrors) => {
       await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
       watchFailure = {code, path: join(watchRoot, 'a')};
+      // Only the crawl watches `a`. On macOS, the root's watch may report the
+      // creation of `a`, and walking it from there tries to watch it again.
+      mutedDirs.add(watchRoot);
       const errors: Array<Error> = [];
       watcher?.onError(error => {
         errors.push(error);
@@ -156,6 +259,159 @@ describe('FallbackWatcher', () => {
     },
   );
 
+  test('reports the deletion of a directory it cannot watch', async () => {
+    await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+    await writeFile(join(watchRoot, 'a', 'b', 'file.js'), '');
+    watchFailure = {code: 'ENOSPC', path: join(watchRoot, 'a')};
+    watcher = createJsWatcher();
+    watcher.onError(() => {});
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    await watcher?.startWatching();
+    // Wait until the root's watch is reporting changes
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    await rm(join(watchRoot, 'a'), {recursive: true});
+
+    // The file map removes everything under it
+    await waitFor(() => events.includes('delete:a'));
+    expect(events).toContain('delete:a');
+  });
+
+  // As npm replaces a linked package with a copy. The file map holds the
+  // symlink, so it must reconcile the path.
+  test('requests a recrawl of a symlink replaced by a directory', async () => {
+    const link = join(watchRoot, 'link');
+    await mkdir(join(watchRoot, 'target'));
+    await fs.promises.symlink(join(watchRoot, 'target'), link, 'junction');
+    watcher = createJsWatcher();
+    // Report the change only once the swap is complete. On macOS, the root's
+    // watch may also report the setup's changes after it starts.
+    mutedDirs.add(watchRoot);
+    await watcher?.startWatching();
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher?.onFileEvent(event => {
+      events.push(event);
+    });
+    // A junction on Windows, which is removed as a directory
+    await (
+      process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
+    )(link);
+    await mkdir(link);
+    await writeFile(join(link, 'file.js'), '');
+    listeners.get(watchRoot)?.('rename', 'link');
+
+    await waitFor(() => events.some(event => event.event === 'recrawl'));
+    expect(events).toContainEqual({
+      event: 'recrawl',
+      relativePath: 'link',
+      root: watchRoot,
+    });
+  });
+
+  // As `ln -sfn` does. The file map holds the symlink, so it must be told of
+  // the new target.
+  test('reports a symlink retargeted in place', async () => {
+    const link = join(watchRoot, 'link');
+    await mkdir(join(watchRoot, 'a'));
+    await mkdir(join(watchRoot, 'b'));
+    await fs.promises.symlink(join(watchRoot, 'a'), link, 'junction');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher?.onFileEvent(event => {
+      events.push(event);
+    });
+    // Report the change only once the swap is complete
+    mutedDirs.add(watchRoot);
+    // A junction on Windows, which is removed as a directory
+    await (
+      process.platform === 'win32' ? fs.promises.rmdir : fs.promises.unlink
+    )(link);
+    await fs.promises.symlink(join(watchRoot, 'b'), link, 'junction');
+    listeners.get(watchRoot)?.('rename', 'link');
+
+    await waitFor(() => events.some(event => event.relativePath === 'link'));
+    expect(events).toContainEqual({
+      event: 'touch',
+      relativePath: 'link',
+      root: watchRoot,
+      metadata: expect.objectContaining({type: 'l'}),
+    });
+  });
+
+  // The file map removes everything under a directory reported deleted, so a
+  // deletion reported under it afterwards is redundant.
+  test('reports nothing under a directory once it is reported deleted', async () => {
+    await mkdir(join(watchRoot, 'a'));
+    await writeFile(join(watchRoot, 'a', 'file.js'), '');
+    watcher = createJsWatcher();
+    await watcher?.startWatching();
+    const events: Array<string> = [];
+    watcher?.onFileEvent(event => {
+      events.push(`${event.event}:${event.relativePath}`);
+    });
+    // Report the deletions in this order: the directory, then its file
+    mutedDirs.add(watchRoot);
+    mutedDirs.add(join(watchRoot, 'a'));
+    await rm(join(watchRoot, 'a'), {recursive: true});
+    listeners.get(watchRoot)?.('rename', 'a');
+    await waitFor(() => events.includes('delete:a'));
+    listeners.get(join(watchRoot, 'a'))?.('rename', 'file.js');
+    // Reported after anything from the file's deletion would be
+    mutedDirs.delete(watchRoot);
+    await writeFile(join(watchRoot, 'probe.js'), '');
+    await waitFor(() => events.includes('touch:probe.js'));
+
+    expect(events).toContain('delete:a');
+    expect(events).not.toContain(`delete:${join('a', 'file.js')}`);
+  });
+
+  describe('fed by a crawl', () => {
+    beforeEach(() => {
+      watcher = new FallbackWatcher(watchRoot, {
+        crawlFed: true,
+        included: null,
+        ignored: /ignored/,
+        watchmanDeferStates: [],
+      });
+    });
+
+    test('watches only what the crawl reports', async () => {
+      await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+      await mkdir(join(watchRoot, 'ignored', 'c'), {recursive: true});
+      await watcher?.startWatching();
+      expect(calls).toEqual([`watch:${watchRoot}`]);
+
+      const crawlWatcher = watcher?.getCrawlWatcher();
+      crawlWatcher?.onDirectory(join(watchRoot, 'a'));
+      crawlWatcher?.onDirectory(join(watchRoot, 'ignored'));
+      crawlWatcher?.onDirectory(join(watchRoot, 'ignored', 'c'));
+
+      expect(calls).toEqual([
+        `watch:${watchRoot}`,
+        `watch:${join(watchRoot, 'a')}`,
+      ]);
+    });
+
+    // end() may be called while the crawl is still listing directories
+    test('watches nothing once stopped', async () => {
+      await mkdir(join(watchRoot, 'a', 'b'), {recursive: true});
+      await watcher?.startWatching();
+      const crawlWatcher = watcher?.getCrawlWatcher();
+      await watcher?.stopWatching();
+      calls = [];
+
+      crawlWatcher?.onDirectory(join(watchRoot, 'a'));
+      await crawlWatcher?.onSkippedDirectory(join(watchRoot, 'a'));
+
+      expect(calls.filter(call => call.startsWith('watch:'))).toEqual([]);
+    });
+  });
+
   describe('after a directory watcher errors', () => {
     let erroredWatcher: ErroredFSWatcher;
 
@@ -164,6 +420,7 @@ describe('FallbackWatcher', () => {
       erroredWatcher = new ErroredFSWatcher();
       watchOverride = {path: join(watchRoot, 'a'), watcher: erroredWatcher};
       await watcher?.startWatching();
+      await waitUntilRootIsLive();
       erroredWatcher.emit('error', fsError('ENOENT', join(watchRoot, 'a')));
     });
 
@@ -220,11 +477,12 @@ describe('FallbackWatcher', () => {
     beforeEach(async () => {
       await mkdir(join(watchRoot, 'a'));
       await writeFile(join(watchRoot, 'a', 'existing.js'), '');
-      await watcher?.startWatching();
-      // Only the unnamed change reports anything, and on macOS the root's
-      // watcher also sees changes in subdirectories.
+      // Only the unnamed change reports anything. On macOS the root's watcher
+      // also sees changes in subdirectories, and may report the setup's changes
+      // after it starts.
       mutedDirs.add(watchRoot);
       mutedDirs.add(join(watchRoot, 'a'));
+      await watcher?.startWatching();
       calls = [];
     });
 

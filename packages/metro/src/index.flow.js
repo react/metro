@@ -74,7 +74,7 @@ export type RunMetroOptions = {
 export type RunServerOptions = Readonly<{
   hasReducedPerformance?: boolean,
   host?: string,
-  onError?: (err: Error & {code?: string}) => void,
+  onError?: (err: Error & {code?: string, ...}) => void,
   onReady?: (server: HttpServer | HttpsServer) => void,
   onClose?: () => void,
   secureServerOptions?: HttpsServerOptions,
@@ -185,6 +185,9 @@ export type {
   RequireContextParams,
 } from './ModuleGraph/worker/collectDependencies';
 export type {ServerOptions} from './Server';
+export type {MetroLogEntry} from './shared/types';
+export type {CustomResolver} from 'metro-resolver';
+export type {JsTransformerConfig} from 'metro-transform-worker';
 export type {MetroConfig, MetroServer};
 
 async function getConfig(config: InputConfigT): Promise<ConfigT> {
@@ -593,6 +596,7 @@ async function earlyPortCheck(host: void | string, port: number) {
       server.on('error', err => {
         reject(err);
       });
+      // $FlowFixMe[incompatible-type] `void` is not `undefined` under experimental.ts_void
       server.listen(port, host, undefined, () => resolve());
     });
   } finally {

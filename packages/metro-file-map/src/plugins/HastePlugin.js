@@ -52,8 +52,14 @@ export type HasteMapOptions = Readonly<{
   failValidationOnConflicts: boolean,
 }>;
 
+/** What `HastePlugin` reports via `getPluginChanges`. */
+export type HasteChanges = Readonly<{
+  // Names whose lookup may have changed, on any platform, duplicates included
+  changedNames: ReadonlySet<string>,
+}>;
+
 export default class HastePlugin
-  implements HasteMap, FileMapPlugin<null, string | null>
+  implements HasteMap, FileMapPlugin<null, string | null, HasteChanges | void>
 {
   readonly name: 'haste' = 'haste';
 
@@ -236,14 +242,28 @@ export default class HastePlugin
     );
   }
 
-  onChanged(delta: ReadonlyFileSystemChanges<?string>): void {
+  onChanged(delta: ReadonlyFileSystemChanges<?string>): HasteChanges | void {
+    let changedNames: ?Set<string> = null;
+    const onNameChanged = (name: string) => {
+      if (changedNames == null) {
+        changedNames = new Set<string>();
+      }
+      changedNames.add(name);
+    };
     // Process removals first so that moves aren't treated as duplicates.
     for (const [canonicalPath, maybeHasteId] of delta.removedFiles) {
       this.#onRemovedFile(canonicalPath, maybeHasteId);
+      if (maybeHasteId != null) {
+        onNameChanged(maybeHasteId);
+      }
     }
     for (const [canonicalPath, maybeHasteId] of delta.addedFiles) {
       this.#onNewFile(canonicalPath, maybeHasteId);
+      if (maybeHasteId != null) {
+        onNameChanged(maybeHasteId);
+      }
     }
+    return changedNames != null ? {changedNames} : undefined;
   }
 
   #onNewFile(canonicalPath: string, id: ?string) {

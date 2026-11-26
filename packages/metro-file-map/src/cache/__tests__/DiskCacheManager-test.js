@@ -75,6 +75,30 @@ describe('cacheManager', () => {
     );
   });
 
+  test('creates different cache file paths under Bun', () => {
+    const nodePath = DiskCacheManager.getCacheFilePath(
+      buildParameters,
+      'file-prefix',
+      '/',
+    );
+    // `process.versions` is read-only, but its properties can be defined.
+    Object.defineProperty(process.versions, 'bun', {
+      configurable: true,
+      value: '1.3.0',
+    });
+    let bunPath;
+    try {
+      bunPath = DiskCacheManager.getCacheFilePath(
+        buildParameters,
+        'file-prefix',
+        '/',
+      );
+    } finally {
+      delete process.versions.bun;
+    }
+    expect(bunPath).toBe(nodePath + '-bun');
+  });
+
   test('creates different cache file paths for different roots', () => {
     const cacheManager1 = new DiskCacheManager(
       {
@@ -188,6 +212,33 @@ describe('cacheManager', () => {
     expect(mockWriteFile).toHaveBeenCalledWith(
       cacheManager.getCacheFilePath(),
       serialize(getSnapshot()),
+    );
+  });
+
+  test('serialises the snapshot before anything can change it', async () => {
+    const cacheManager = new DiskCacheManager({buildParameters}, defaultConfig);
+    // The file map's own state, which may change at the next `await`.
+    const fileSystemData = new Map<string, unknown>();
+    const snapshot: CacheData = {
+      clocks: new Map(),
+      fileSystemData,
+      plugins: new Map(),
+    };
+    const written = serialize(snapshot);
+    const getSnapshot = () => {
+      queueMicrotask(() => {
+        fileSystemData.set('later.js', [0, 0, 0, null, 0]);
+      });
+      return snapshot;
+    };
+    await cacheManager.write(getSnapshot, {
+      changedSinceCacheRead: true,
+      eventSource: {onChange: () => () => {}},
+      onWriteError: () => {},
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      cacheManager.getCacheFilePath(),
+      written,
     );
   });
 

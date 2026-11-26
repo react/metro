@@ -34,7 +34,6 @@ describe('subpath imports resolution support', () => {
   test('"imports" subpath that maps directly to a file', () => {
     const context = {
       ...baseContext,
-      // $FlowFixMe[incompatible-type]
       ...createPackageAccessors({
         [p('/root/node_modules/test-pkg/package.json')]: {
           main: 'index-main.js',

@@ -8,6 +8,7 @@
  * @format
  */
 
+import type {CrawlWatcher} from './crawlers/node';
 import type {
   Console,
   Crawler,
@@ -48,6 +49,8 @@ const LIVE_CHECK_TIMEOUT = 200;
 const MAX_LIVE_WAIT_TIME = 10000;
 
 type InternalCrawlOptions = Readonly<{
+  // For a node crawl to report what it lists to, one for each root.
+  crawlWatchers?: ?ReadonlyArray<?CrawlWatcher>,
   previousState: CrawlerOptions['previousState'],
   roots: ReadonlyArray<string>,
   subpath?: string,
@@ -73,7 +76,6 @@ type WatcherOptions = {
   healthCheckFilePrefix: string,
   ignoreForCrawl: (filePath: string) => boolean,
   ignorePatternForWatch: RegExp,
-  previousState: CrawlerOptions['previousState'],
   perfLogger: ?PerfLogger,
   roots: ReadonlyArray<string>,
   rootDir: string,
@@ -104,6 +106,7 @@ export class Watcher extends EventEmitter {
   #nextHealthCheckId: number = 0;
   #onChange: ?(change: WatcherBackendChangeEvent) => void;
   readonly #options: WatcherOptions;
+  #prepared: ?Promise<?ReadonlyArray<?CrawlWatcher>>;
   readonly #pendingHealthChecks: Map<
     /* basename */ string,
     /* resolve */ () => void,
@@ -119,8 +122,20 @@ export class Watcher extends EventEmitter {
     this.#useWatchmanWatcher = options.useWatchman;
   }
 
-  async crawl(): Promise<CrawlResult> {
-    this.#options.perfLogger?.point('crawl_start');
+  /**
+   * Start anything that must be running before the crawl begins, which in
+   * watch mode without Watchman is the backends, with their watches
+   * confirmed. crawl() waits for this, and calling it earlier lets other work,
+   * such as reading a cache, overlap with it. Resolves to the node crawl's
+   * watchers, if any.
+   */
+  prepareCrawl(): Promise<?ReadonlyArray<?CrawlWatcher>> {
+    this.#prepared ??= this.#prepareCrawl();
+    return this.#prepared;
+  }
+
+  async #prepareCrawl(): Promise<?ReadonlyArray<?CrawlWatcher>> {
+    this.#options.perfLogger?.point('prepareCrawl_start');
     const options = this.#options;
 
     // Non-Watchman backends have no clock to subscribe `since`, so they must
@@ -130,12 +145,35 @@ export class Watcher extends EventEmitter {
     // the same window. If the Watchman crawl falls back to the node crawler,
     // there is no clock, so #crawl() starts non-Watchman backends before the
     // node crawl instead.
+    //
+    // The node crawler lists every directory under the roots, so a
+    // FallbackWatcher started for it can watch each just before it is listed,
+    // instead of walking the roots again.
+    let crawlWatchers: ?ReadonlyArray<?CrawlWatcher> = null;
     if (!options.useWatchman) {
-      await this.#startBackendsBeforeCrawl();
+      const crawlFed =
+        options.crawl == null && this.#getBackendClass() === FallbackWatcher;
+      await this.#startBackendsBeforeCrawl({crawlFed});
+      if (crawlFed) {
+        crawlWatchers = this.#backends.map(backend =>
+          backend instanceof FallbackWatcher ? backend.getCrawlWatcher() : null,
+        );
+      }
     }
+    this.#options.perfLogger?.point('prepareCrawl_end');
+    return crawlWatchers;
+  }
+
+  async crawl(
+    previousState: CrawlerOptions['previousState'],
+  ): Promise<CrawlResult> {
+    this.#options.perfLogger?.point('crawl_start');
+    const options = this.#options;
+    const crawlWatchers = await this.prepareCrawl();
 
     const result = await this.#crawl({
-      previousState: options.previousState,
+      crawlWatchers,
+      previousState,
       roots: options.roots,
       useWatchman: options.useWatchman,
     });
@@ -144,11 +182,13 @@ export class Watcher extends EventEmitter {
     return result;
   }
 
-  async #startBackendsBeforeCrawl(): Promise<void> {
+  async #startBackendsBeforeCrawl({
+    crawlFed = false,
+  }: {crawlFed?: boolean} = {}): Promise<void> {
     if (!this.#options.watch) {
       return;
     }
-    await this.#startBackends();
+    await this.#startBackends(null, {crawlFed});
     // end() may have closed us before the backends were set - don't leak them.
     if (this.#options.abortSignal.aborted) {
       await this.close();
@@ -172,7 +212,7 @@ export class Watcher extends EventEmitter {
 
   async #crawl(crawlOptions: InternalCrawlOptions): Promise<CrawlResult> {
     const options = this.#options;
-    const {useWatchman, subpath} = crawlOptions;
+    const {crawlWatchers, useWatchman, subpath} = crawlOptions;
 
     const ignoreForCrawl = (filePath: string) =>
       options.ignoreForCrawl(filePath) ||
@@ -208,7 +248,11 @@ export class Watcher extends EventEmitter {
 
     let delta: CrawlResult;
     try {
-      delta = await crawl(crawlerOptions);
+      // Crawl watchers are only given for the node crawler.
+      delta =
+        crawlWatchers != null
+          ? await nodeCrawl(crawlerOptions, crawlWatchers)
+          : await crawl(crawlerOptions);
     } catch (firstError) {
       if (crawl !== watchmanCrawl) {
         throw firstError;
@@ -267,16 +311,23 @@ export class Watcher extends EventEmitter {
     }
   }
 
-  async #startBackends(clocks?: WatchmanClocks): Promise<void> {
-    const {extensions, ignorePatternForWatch} = this.#options;
-    const useWatchman = this.#useWatchmanWatcher;
-
+  #getBackendClass():
+    Class<WatchmanWatcher> | Class<NativeWatcher> | Class<FallbackWatcher> {
     // WatchmanWatcher > NativeWatcher > FallbackWatcher
-    const WatcherImpl = useWatchman
+    return this.#useWatchmanWatcher
       ? WatchmanWatcher
       : NativeWatcher.isSupported()
         ? NativeWatcher
         : FallbackWatcher;
+  }
+
+  async #startBackends(
+    clocks: ?WatchmanClocks,
+    {crawlFed = false}: {crawlFed?: boolean} = {},
+  ): Promise<void> {
+    const {extensions, ignorePatternForWatch} = this.#options;
+    const useWatchman = this.#useWatchmanWatcher;
+    const WatcherImpl = this.#getBackendClass();
 
     let watcher = 'fallback';
     if (WatcherImpl === WatchmanWatcher) {
@@ -307,8 +358,10 @@ export class Watcher extends EventEmitter {
     const createWatcherBackend = (
       root: Path,
       rootClocks: ?Map<string, WatchmanClockSpec>,
+      {crawlFed = false}: {crawlFed?: boolean} = {},
     ): Promise<WatcherBackend> => {
       const watcherOptions: WatcherBackendOptions = {
+        crawlFed,
         included: {
           extensions: new Set(extensions),
           // Ensure we always include package.json files, which are crucial for
@@ -369,7 +422,7 @@ export class Watcher extends EventEmitter {
     this.#createBackend = root => createWatcherBackend(root, null);
     this.#backends = await Promise.all(
       this.#options.roots.map(root =>
-        createWatcherBackend(root, watchmanClocks),
+        createWatcherBackend(root, watchmanClocks, {crawlFed}),
       ),
     );
     // Confirmed only once every backend has started, because starting one may

@@ -255,4 +255,62 @@ describe('Cache', () => {
       expect(log).toEqual([]);
     });
   });
+  describe('set while a get of the same key is under way', () => {
+    function deferred<T>(): {promise: Promise<T>, resolve: (value: T) => void} {
+      let resolve: (value: T) => void = () => {};
+      const promise = new Promise<T>(r => {
+        resolve = r;
+      });
+      return {promise, resolve};
+    }
+
+    async function flush() {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+    }
+
+    test('does not write to the store that then hits', async () => {
+      const local = createStore();
+      const remote = createStore();
+      const remoteRead = deferred<?string>();
+      remote.get.mockImplementation(() => remoteRead.promise);
+      const cache = new Cache([local, remote]);
+      const key = Buffer.from('foo');
+
+      const read = cache.get(key);
+      await flush();
+      const write = cache.set(key, 'computed');
+      await flush();
+
+      // The store the read has missed is written at once.
+      expect(local.set).toHaveBeenCalledWith(key, 'computed');
+      expect(remote.set).not.toHaveBeenCalled();
+
+      remoteRead.resolve('cached');
+      expect(await read).toBe('cached');
+      await write;
+      expect(remote.set).not.toHaveBeenCalled();
+    });
+
+    test('writes the rest once the read misses', async () => {
+      const local = createStore();
+      const remote = createStore();
+      const remoteRead = deferred<?string>();
+      remote.get.mockImplementation(() => remoteRead.promise);
+      const cache = new Cache([local, remote]);
+      const key = Buffer.from('foo');
+
+      const read = cache.get(key);
+      await flush();
+      const write = cache.set(key, 'computed');
+      await flush();
+      expect(remote.set).not.toHaveBeenCalled();
+
+      remoteRead.resolve(null);
+      expect(await read).toBe(null);
+      await write;
+      expect(remote.set).toHaveBeenCalledWith(key, 'computed');
+    });
+  });
 });

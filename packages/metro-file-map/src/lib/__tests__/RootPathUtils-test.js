@@ -54,6 +54,16 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
     p('/'),
     p('/outside'),
     p('/outside/'),
+    p('/project/..'),
+    p('/project/root/../..'),
+    p('/project/root/a.'),
+    p('/project/root/foo..'),
+    p('/project/root/...'),
+    p('/project/root/a./foo'),
+    p('/project/root/foo../bar'),
+    p('/project/root/.../bar'),
+    p('/project/root/../a./foo'),
+    p('/project/root/../../project/root/a./foo.js'),
   ])(`absoluteToNormal('%s') is correct and optimised`, absolutePath => {
     const rootDir = p('/project/root');
     pathUtils = new RootPathUtils(rootDir);
@@ -77,9 +87,14 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       p('/project/root/../root2/../root3/foo'),
       p('/project/root/./baz/foo/bar'),
       p('/project/root/a./../foo'),
-      p('/project/root/../a./foo'),
+      p('/project/root/a./.'),
       p('/project/root/.././foo'),
       p('/project/root/.././foo/'),
+      p('/project/root/.'),
+      p('/project/root/baz/.'),
+      p('/project/root/baz/..'),
+      p('/project/root/../root2/.'),
+      p('/project/root/../root2/..'),
     ])(`absoluteToNormal('%s') falls back to path.relative`, absolutePath => {
       let expected = mockPathModule.relative(rootDir, absolutePath);
       // Unlike path.relative, we expect to preserve trailing separators.
@@ -136,6 +151,11 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
             p('../../project/root'),
             p('../../project/root/'),
             p('../../..'),
+            p('.'),
+            p('foo/.'),
+            p('foo/..'),
+            p('../root/.'),
+            p('../root/..'),
             // On POSIX, `..` at the root re-enters the root
             ...(platform === 'posix'
               ? [p('../../../normal/path'), p('../../../normal/path/')]
@@ -163,6 +183,25 @@ describe.each([['win32'], ['posix']])('RootPathUtils on %s', platform => {
       },
     );
   });
+
+  test.each([
+    // A final indirection is kept
+    [p('..'), p('foo/.'), p('../foo/.'), 0],
+    [p('..'), p('foo/..'), p('../foo/..'), 0],
+    // A name ending in a dot is not an indirection
+    [p('..'), p('root/a./foo'), p('a./foo'), 1],
+    [p('../..'), p('project/root/foo../bar'), p('foo../bar'), 2],
+    [p('..'), p('sibling./foo'), p('../sibling./foo'), 0],
+  ])(
+    'joinNormalToRelative(%s, %s) is %s, collapsing %s segments',
+    (normalPath, relativePath, expected, collapsedSegments) => {
+      pathUtils = new RootPathUtils(p('/project/root'));
+      expect(pathUtils.joinNormalToRelative(normalPath, relativePath)).toEqual({
+        collapsedSegments,
+        normalPath: expected,
+      });
+    },
+  );
 
   if (platform === 'win32') {
     describe('cross-drive absolute paths (Windows)', () => {

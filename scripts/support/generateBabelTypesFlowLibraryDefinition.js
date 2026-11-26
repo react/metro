@@ -245,7 +245,7 @@ function main() {
     key: string,
     index?: number,
   }>;
-  declare export type TraversalHandler<T> = (BabelNode, TraversalAncestors, T) => void;
+  declare export type TraversalHandler<T> = (node: BabelNode, parent: TraversalAncestors, state: T) => void;
   declare export type TraversalHandlers<T> = {
     enter?: TraversalHandler<T>,
     exit?: TraversalHandler<T>,
@@ -261,7 +261,7 @@ function main() {
 
     // validators/
     // eslint-disable-next-line max-len
-    `declare export function buildMatchMemberExpression(match: string, allowPartial?: boolean): (?BabelNode) => boolean`,
+    `declare export function buildMatchMemberExpression(match: string, allowPartial?: boolean): (member: ?BabelNode) => boolean`,
     `declare export function is(type: string, n: BabelNode, opts: Object): boolean;`,
     `declare export function isBinding(node: BabelNode, parent: BabelNode, grandparent?: BabelNode): boolean`,
     `declare export function isBlockScoped(node: BabelNode): boolean`,
@@ -307,6 +307,36 @@ function main() {
     ...aliasedTypes.map(
       type => `declare export type ${type} = ${NODE_PREFIX}${type};`,
     ),
+  );
+
+  // definitions/
+  typeDecls += `
+declare type ${NODE_PREFIX}Validator = {
+  (node?: ${NODE_PREFIX}, key?: string | { toString(): string }, val?: unknown): void;
+  type?: 'string' | 'number' | 'bigint' | 'boolean' | 'symbol' | 'undefined' | 'object' | 'function' | 'array' | 'null' | 'any';
+  each?: ${NODE_PREFIX}Validator;
+  chainOf?: ReadonlyArray<${NODE_PREFIX}Validator>;
+  oneOf?: ReadonlyArray<unknown>;
+  oneOfNodeTypes?: ReadonlyArray<string>;
+  oneOfNodeOrValueTypes?: ReadonlyArray<string>;
+  shapeOf?: { [field: string]: ${NODE_PREFIX}FieldOptions };
+};
+
+declare type ${NODE_PREFIX}FieldOptions = {
+  default?: string | number | boolean | [] | null;
+  optional?: boolean;
+  deprecated?: boolean;
+  validate?: ${NODE_PREFIX}Validator;
+};
+`;
+  lines.push(
+    `declare export var VISITOR_KEYS: { [type: string]: Array<string> };`,
+    `declare export var ALIAS_KEYS: { [type: ${NODE_PREFIX}['type']]: Array<string> };`,
+    `declare export var FLIPPED_ALIAS_KEYS: { [alias: string]: Array<${NODE_PREFIX}['type']> };`,
+    `declare export var NODE_FIELDS: { [type: string]: { [field: string]: ${NODE_PREFIX}FieldOptions } };`,
+    `declare export var BUILDER_KEYS: { [type: string]: Array<string> };`,
+    `declare export var DEPRECATED_KEYS: { [type: string]: ${NODE_PREFIX}['type'] };`,
+    `declare export var TYPES: Array<string>;`,
   );
 
   // Node type declarations, kept module-local. The exported aliases and

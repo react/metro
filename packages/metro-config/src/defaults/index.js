@@ -149,6 +149,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
     unstable_compactOutput: false,
     unstable_disableInputAstCloning: true,
     unstable_memoizeInlineRequires: false,
+    unstable_shareTransformResults: true,
     unstable_workerThreads: false,
   },
   watcher: {
@@ -180,6 +181,7 @@ const getDefaultValues = (projectRoot: ?string): ConfigT => ({
   stickyWorkers: true,
   watchFolders: [],
   transformerPath: 'metro-transform-worker',
+  unstable_hedgeCacheReadsAfterMs: null,
   maxWorkers: getMaxWorkers(),
   resetCache: false,
   reporter: new TerminalReporter(new Terminal(process.stdout)),

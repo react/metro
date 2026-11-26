@@ -328,7 +328,7 @@ test('exports members of another module directly from an import (as all)', () =>
     var _bar = require('bar');
 
     for (var _key in _bar) {
-      if (_key === "default") continue;
+      if (_key === "default" || _key === "__esModule") continue;
       exports[_key] = _bar[_key];
     }
   `;
@@ -377,7 +377,7 @@ test('places export all above explicit exports', () => {
     var _foo = require('foo');
 
     for (var _key in _foo) {
-      if (_key === "default") continue;
+      if (_key === "default" || _key === "__esModule") continue;
       exports[_key] = _foo[_key];
     }
 
@@ -456,6 +456,29 @@ test('export all does not re-export the default of the source', () => {
   // named exports but never the source module's default export.
   expect(context.exports.named).toBe('star named');
   expect('default' in context.exports).toBe(false);
+});
+
+test('export all does not copy an enumerable __esModule of the source', () => {
+  const transformedCode = generate(
+    transformToAst(
+      [importExportPlugin],
+      `
+        export * from 'foo';
+      `,
+      opts,
+    ),
+  ).code;
+  const context = {
+    exports: {} as {[key: string]: unknown},
+    // e.g. a CommonJS module compiled by Babel in loose mode
+    require: () => ({__esModule: true, named: 'star named'}),
+  };
+
+  // `__esModule` is defined read-only, so copying it throws in strict mode.
+  vm.runInNewContext('"use strict";\n' + transformedCode, context);
+
+  expect(context.exports.__esModule).toBe(true);
+  expect(context.exports.named).toBe('star named');
 });
 
 test('export all as namespace includes the default of the source', () => {
