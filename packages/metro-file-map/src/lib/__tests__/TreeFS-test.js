@@ -1077,6 +1077,10 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
               [p('a/b/c/d/link-to-A'), [0, 0, 0, null, '../..', null]],
               [p('link-to-B'), [0, 0, 0, null, '..', null]],
               [
+                p('a/b/link-to-missing-n_m'),
+                [0, 0, 0, null, 'a/b/n_m/pkg', null],
+              ],
+              [
                 p('n_m/workspace/link-to-pkg'),
                 [0, 0, 0, null, '../workspace-pkg', null],
               ],
@@ -1319,6 +1323,33 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
       // Does not look beyond n_m, if n_m does not exist
       ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
+      // Nor if a segment above n_m does not exist either
+      ['/A/B/C/a/missing/n_m/pkg/foo', null, null, ['/A/B/C/a/missing'], []],
+      // The start path's own name never stops the walk, whether or not it
+      // exists
+      [
+        '/A/B/C/a/n_m',
+        '/A/B/C/a/package.json',
+        'n_m',
+        ['/A/B/C/a/n_m/package.json'],
+        [],
+      ],
+      [
+        '/A/B/C/a/b/n_m',
+        '/A/B/C/a/package.json',
+        'b/n_m',
+        ['/A/B/C/a/b/n_m', '/A/B/C/a/b/package.json'],
+        [],
+      ],
+      // The lookup does not walk the ancestors of a symlink's target, so a
+      // missing n_m among them does not stop it
+      [
+        '/A/B/C/a/b/link-to-missing-n_m/foo',
+        '/A/B/C/a/package.json',
+        'b/link-to-missing-n_m/foo',
+        ['/A/B/C/a/b/n_m', '/A/B/C/a/b/package.json'],
+        ['/A/B/C/a/b/link-to-missing-n_m'],
+      ],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
         '/A/B/workspace-pkg/package.json',
