@@ -104,16 +104,6 @@ function relativeToAncestor(
     : null;
 }
 
-// Whether `segment` is a whole segment of `normalPath`.
-function hasSegment(normalPath: string, segment: string): boolean {
-  return (
-    normalPath === segment ||
-    normalPath.startsWith(segment + path.sep) ||
-    normalPath.endsWith(path.sep + segment) ||
-    normalPath.includes(path.sep + segment + path.sep)
-  );
-}
-
 type DeserializedSnapshotInput = {
   rootDir: string,
   fileSystemData: DirectoryNode,
@@ -1049,10 +1039,6 @@ export default class TreeFS implements MutableFileSystem {
       observations,
     });
 
-    // Removing an existing ancestor can make a `breakOnSegment` segment the
-    // first missing one. Any such removal also removes the start directory or
-    // the first missing path's parent, so record that when the path has the
-    // segment.
     if (closestLookup.exists && isDirectory(closestLookup.node)) {
       const maybeAbsolutePathMatch = this.#checkCandidateHasSubpath(
         closestLookup.canonicalPath,
@@ -1065,13 +1051,6 @@ export default class TreeFS implements MutableFileSystem {
         },
         isBasename,
       );
-      if (
-        observations != null &&
-        opts.breakOnSegment != null &&
-        hasSegment(closestLookup.canonicalPath, opts.breakOnSegment)
-      ) {
-        observations.existence.add(closestLookup.canonicalPath);
-      }
       if (maybeAbsolutePathMatch != null) {
         return {
           absolutePath: maybeAbsolutePathMatch,
@@ -1088,20 +1067,6 @@ export default class TreeFS implements MutableFileSystem {
             ? closestLookup.canonicalPath
             : closestLookup.canonicalMissingPath,
         );
-        if (
-          !closestLookup.exists &&
-          opts.breakOnSegment != null &&
-          hasSegment(closestLookup.canonicalMissingPath, opts.breakOnSegment)
-        ) {
-          const {canonicalMissingPath} = closestLookup;
-          // The root is never added or removed, so isn't recorded.
-          const parentIdx = canonicalMissingPath.lastIndexOf(path.sep);
-          if (parentIdx !== -1) {
-            observations.existence.add(
-              canonicalMissingPath.slice(0, parentIdx),
-            );
-          }
-        }
       }
       if (
         opts.breakOnSegment != null &&

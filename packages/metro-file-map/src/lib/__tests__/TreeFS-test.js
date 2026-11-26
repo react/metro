@@ -750,7 +750,6 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
               [p('a/b/c/d/link-to-B'), [0, 0, 0, null, '..', null]],
               [p('a/b/c/d/link-to-A'), [0, 0, 0, null, '../..', null]],
               [p('link-to-B'), [0, 0, 0, null, '..', null]],
-              [p('a/b/link-to-pkg3'), [0, 0, 0, null, 'a/n_m/pkg3', null]],
               [
                 p('n_m/workspace/link-to-pkg'),
                 [0, 0, 0, null, '../workspace-pkg', null],
@@ -947,57 +946,27 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         '/A/B/C/a/n_m/pkg/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'notexist.js',
-        ['/A/B/C/a/n_m/pkg/notexist.js', '/A/B/C/a/n_m/pkg'],
+        ['/A/B/C/a/n_m/pkg/notexist.js'],
         [],
       ],
       [
         '/A/B/C/a/n_m/pkg/subpath/notexist.js',
         '/A/B/C/a/n_m/pkg/subpath/package.json',
         'notexist.js',
-        ['/A/B/C/a/n_m/pkg/subpath/notexist.js', '/A/B/C/a/n_m/pkg/subpath'],
+        ['/A/B/C/a/n_m/pkg/subpath/notexist.js'],
         [],
       ],
       [
         '/A/B/C/a/n_m/pkg/otherpath/notexist.js',
         '/A/B/C/a/n_m/pkg/package.json',
         'otherpath/notexist.js',
-        ['/A/B/C/a/n_m/pkg/otherpath', '/A/B/C/a/n_m/pkg'],
+        ['/A/B/C/a/n_m/pkg/otherpath'],
         [],
       ],
       // pkg3 does not exist, doesn't look beyond the containing n_m
-      [
-        '/A/B/C/a/n_m/pkg3/foo.js',
-        null,
-        null,
-        ['/A/B/C/a/n_m/pkg3', '/A/B/C/a/n_m'],
-        [],
-      ],
-      // An existing start directory under n_m, whose removal would make n_m
-      // the first missing segment
-      [
-        '/A/B/C/a/n_m',
-        '/A/B/C/a/package.json',
-        'n_m',
-        ['/A/B/C/a/n_m/package.json', '/A/B/C/a/n_m'],
-        [],
-      ],
-      // A link into n_m, whose target is missing
-      [
-        '/A/B/C/a/b/link-to-pkg3/foo',
-        '/A/B/C/a/package.json',
-        'b/link-to-pkg3/foo',
-        ['/A/B/C/a/n_m/pkg3', '/A/B/C/a/n_m', '/A/B/C/a/b/package.json'],
-        ['/A/B/C/a/b/link-to-pkg3'],
-      ],
-      // Does not look beyond n_m, if n_m does not exist, so this also depends
-      // on n_m's parent existing
-      [
-        '/A/B/C/a/b/n_m/pkg/foo',
-        null,
-        null,
-        ['/A/B/C/a/b/n_m', '/A/B/C/a/b'],
-        [],
-      ],
+      ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
+      // Does not look beyond n_m, if n_m does not exist
+      ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
         '/A/B/workspace-pkg/package.json',
