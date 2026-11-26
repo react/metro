@@ -106,48 +106,6 @@ function isWithinNormal(
   );
 }
 
-// Whether `segment` names a missing parent of a hierarchical lookup's start
-// path, other than an ancestor of a symlink's target, which the lookup does not
-// walk. `lookup` is the start path's lookup.
-function hasMissingParentSegment(
-  lookup: Readonly<{
-    canonicalMissingPath: string,
-    missingSegmentName: string,
-    remainingPath: string,
-    unseenPathFromIdx: number,
-    ...
-  }>,
-  segment: string,
-): boolean {
-  const {canonicalMissingPath, missingSegmentName, remainingPath} = lookup;
-  // The start path's own name never stops the lookup.
-  if (remainingPath === '') {
-    return false;
-  }
-  const remainingFromIdx = canonicalMissingPath.length + 1;
-  if (
-    missingSegmentName === segment &&
-    canonicalMissingPath.length - segment.length >= lookup.unseenPathFromIdx
-  ) {
-    return true;
-  }
-  // Every segment of the remaining path but the last, which may be followed
-  // by a trailing separator.
-  let start = Math.max(0, lookup.unseenPathFromIdx - remainingFromIdx);
-  let end = remainingPath.indexOf(path.sep, start);
-  while (end !== -1 && end !== remainingPath.length - 1) {
-    if (
-      end - start === segment.length &&
-      remainingPath.startsWith(segment, start)
-    ) {
-      return true;
-    }
-    start = end + 1;
-    end = remainingPath.indexOf(path.sep, start);
-  }
-  return false;
-}
-
 // Null if not within the ancestor ('' is the root).
 function relativeToAncestor(
   normalPath: string,
@@ -159,6 +117,49 @@ function relativeToAncestor(
   return normalPath.startsWith(ancestorNormalPath + path.sep)
     ? normalPath.slice(ancestorNormalPath.length + 1)
     : null;
+}
+
+// Where the deepest missing parent of a hierarchical lookup's start path named
+// `segment` ends, as an index into the lookup's canonical missing path joined
+// with its remaining path, or -1 if there is none. The start path's own name
+// doesn't count, and nor do the ancestors of a symlink's target, which the
+// lookup doesn't walk. `lookup` is #lookupByNormalPath's result for the
+// missing start path.
+function missingParentSegmentEnd(
+  lookup: Readonly<{
+    canonicalMissingPath: string,
+    missingSegmentName: string,
+    remainingPath: string,
+    unseenPathFromIdx: number,
+    ...
+  }>,
+  segment: string,
+): number {
+  const {canonicalMissingPath, remainingPath, unseenPathFromIdx} = lookup;
+  if (remainingPath === '') {
+    return -1;
+  }
+  let segmentEnd =
+    lookup.missingSegmentName === segment &&
+    canonicalMissingPath.length > unseenPathFromIdx
+      ? canonicalMissingPath.length
+      : -1;
+  // Every segment of the remaining path but the last, which may be followed
+  // by a trailing separator.
+  const remainingFromIdx = canonicalMissingPath.length + 1;
+  let start = Math.max(0, unseenPathFromIdx - remainingFromIdx);
+  let end = remainingPath.indexOf(path.sep, start);
+  while (end !== -1 && end !== remainingPath.length - 1) {
+    if (
+      end - start === segment.length &&
+      remainingPath.startsWith(segment, start)
+    ) {
+      segmentEnd = remainingFromIdx + end;
+    }
+    start = end + 1;
+    end = remainingPath.indexOf(path.sep, start);
+  }
+  return segmentEnd;
 }
 
 type DeserializedSnapshotInput = {
@@ -330,9 +331,9 @@ export default class TreeFS implements MutableFileSystem {
     canonicalMissingPath: string,
     remainingPath: string,
     candidates?: Readonly<{
-      breakOnSegment: ?string,
-      // Where ancestors of the path looked for start to be candidates (see
-      // unseenPathFromIdx in #lookupByNormalPath).
+      // Where ancestors of the path looked for start to be candidates, i.e.
+      // below any the lookup doesn't walk (see unseenPathFromIdx in
+      // #lookupByNormalPath) and below where it stops at `breakOnSegment`.
       fromIdx: number,
       subpath: string,
     }>,
@@ -357,10 +358,7 @@ export default class TreeFS implements MutableFileSystem {
     let dir = target;
     while (dir.length > canonicalMissingPath.length) {
       dir = dir.slice(0, dir.lastIndexOf(path.sep));
-      if (
-        dir.length <= candidates.fromIdx ||
-        dir.slice(dir.lastIndexOf(path.sep) + 1) === candidates.breakOnSegment
-      ) {
+      if (dir.length <= candidates.fromIdx) {
         return;
       }
       const candidate = joinNormalPath(dir, candidates.subpath);
@@ -1128,8 +1126,12 @@ export default class TreeFS implements MutableFileSystem {
         // For the purpose of collecting ancestors: Ignore the traversal to
         // the symlink target, and start collecting ancestors only
         // from the target itself (ie, the basename of the normal target path)
-        // onwards.
-        unseenPathFromIdx = normalSymlinkTarget.lastIndexOf(path.sep) + 1;
+        // onwards. Each collapsed segment beyond the first removed a '..' and
+        // its separator from before the target's basename.
+        unseenPathFromIdx =
+          normalSymlinkTarget.lastIndexOf(path.sep) +
+          1 -
+          3 * Math.max(0, joinedResult.collapsedSegments - 1);
 
         if (++followedSymlinks > MAX_SYMLINK_FOLLOWS) {
           return {
@@ -1171,8 +1173,8 @@ export default class TreeFS implements MutableFileSystem {
    *     return null
    * while X !== dirname(X)
    *
-   * As in Node.js's LOOKUP_PACKAGE_SCOPE, only a parent of the start path stops
-   * the walk at `breakOnSegment`, whether or not the parent exists.
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent stops the walk whether or not
+   * it exists.
    *
    * Each candidate is checked from its own node: a subpath that is a single
    * path segment, such as `package.json`, with one map lookup, and a deeper
@@ -1235,28 +1237,25 @@ export default class TreeFS implements MutableFileSystem {
           containerRelativePath: '',
         };
       }
+    } else if (closestLookup.exists) {
+      observations?.existence.add(closestLookup.canonicalPath);
     } else {
+      const breakEnd =
+        opts.breakOnSegment == null
+          ? -1
+          : missingParentSegmentEnd(closestLookup, opts.breakOnSegment);
       if (observations) {
-        if (closestLookup.exists) {
-          observations.existence.add(closestLookup.canonicalPath);
-        } else {
-          this.#observeMissing(
-            observations,
-            closestLookup.canonicalMissingPath,
-            closestLookup.remainingPath,
-            {
-              breakOnSegment: opts.breakOnSegment,
-              fromIdx: closestLookup.unseenPathFromIdx,
-              subpath,
-            },
-          );
-        }
+        this.#observeMissing(
+          observations,
+          closestLookup.canonicalMissingPath,
+          closestLookup.remainingPath,
+          {
+            fromIdx: Math.max(closestLookup.unseenPathFromIdx, breakEnd),
+            subpath,
+          },
+        );
       }
-      if (
-        opts.breakOnSegment != null &&
-        !closestLookup.exists &&
-        hasMissingParentSegment(closestLookup, opts.breakOnSegment)
-      ) {
+      if (breakEnd !== -1) {
         return null;
       }
     }

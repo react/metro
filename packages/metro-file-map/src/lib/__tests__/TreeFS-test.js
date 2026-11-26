@@ -1081,6 +1081,10 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
                 [0, 0, 0, null, 'a/b/n_m/pkg', null],
               ],
               [
+                p('a/b/link-to-below-missing-n_m'),
+                [0, 0, 0, null, 'a/missing/n_m/pkg', null],
+              ],
+              [
                 p('n_m/workspace/link-to-pkg'),
                 [0, 0, 0, null, '../workspace-pkg', null],
               ],
@@ -1323,8 +1327,16 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
       // Does not look beyond n_m, if n_m does not exist
       ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
-      // Nor if a segment above n_m does not exist either
+      // Nor if a segment above n_m does not exist
       ['/A/B/C/a/missing/n_m/pkg/foo', null, null, ['/A/B/C/a/missing'], []],
+      // Only a whole segment stops the walk
+      [
+        '/A/B/C/a/missing/n_mx/pkg/foo',
+        '/A/B/C/a/package.json',
+        'missing/n_mx/pkg/foo',
+        ['/A/B/C/a/missing'],
+        [],
+      ],
       // The start path's own name never stops the walk, whether or not it
       // exists
       [
@@ -1357,6 +1369,35 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
         'b/link-to-missing-n_m/foo',
         ['/A/B/C/a/b/n_m', '/A/B/C/a/b/package.json'],
         ['/A/B/C/a/b/link-to-missing-n_m'],
+      ],
+      [
+        '/A/B/C/a/b/link-to-below-missing-n_m/foo',
+        '/A/B/C/a/package.json',
+        'b/link-to-below-missing-n_m/foo',
+        ['/A/B/C/a/missing', '/A/B/C/a/b/package.json'],
+        ['/A/B/C/a/b/link-to-below-missing-n_m'],
+      ],
+      // Through a link to an ancestor of the root, back into the root
+      [
+        '/A/B/C/a/b/c/d/link-to-A/B/C/a/b/foo',
+        '/A/B/C/a/package.json',
+        'b/foo',
+        ['/A/B/C/a/b/foo', '/A/B/C/a/b/package.json'],
+        ['/A/B/C/a/b/c/d/link-to-A'],
+      ],
+      [
+        '/A/B/C/a/b/c/d/link-to-A/B/C/b/n_m/foo',
+        null,
+        null,
+        ['/A/B/C/b'],
+        ['/A/B/C/a/b/c/d/link-to-A'],
+      ],
+      [
+        '/A/B/C/a/b/c/d/link-to-A/B/C/b/xn_m/foo',
+        '/A/package.json',
+        'B/C/b/xn_m/foo',
+        ['/A/B/C/b', '/A/B/C/package.json', '/A/B/package.json'],
+        ['/A/B/C/a/b/c/d/link-to-A'],
       ],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
