@@ -1055,6 +1055,59 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     },
   );
 
+  test.each([
+    // A link to the grandparent of the root, into another directory
+    ['/A/B/C/to-A/other/src/x.js', '/A/other/package.json', 'src/x.js'],
+    // ...or back down to the parent of the root
+    ['/A/B/C/to-A/B/y/z/w.js', '/A/B/package.json', 'y/z/w.js'],
+    // A link to the filesystem root
+    ['/A/B/C/to-fs-root/A/other/src/x.js', '/A/other/package.json', 'src/x.js'],
+    ['/A/B/C/to-fs-root/A/B/y/z/w.js', '/A/B/package.json', 'y/z/w.js'],
+    // A link to the root or one of its ancestors, given relative to the real
+    // path it resolves to
+    ['/A/B/C/to-C/x/w.js', '/A/B/C/package.json', 'x/w.js'],
+    ['/A/B/C/to-A/B/C/x/w.js', '/A/B/C/package.json', 'x/w.js'],
+    ['/A/B/to-B/x/w.js', '/A/B/package.json', 'x/w.js'],
+  ])(
+    'hierarchicalLookup through a link above the root from %s finds %s',
+    (startPath, expectedPath, expectedRelativeSubpath) => {
+      const tfs = new TreeFS({
+        rootDir: p('/A/B/C'),
+        files: new Map<CanonicalPath, FileMetadata>([
+          [p('to-C'), [0, 0, 0, null, '', null]],
+          [p('to-A'), [0, 0, 0, null, '../..', null]],
+          [p('to-fs-root'), [0, 0, 0, null, '../../..', null]],
+          [p('../to-B'), [0, 0, 0, null, '..', null]],
+          ...[
+            'package.json',
+            'x/w.js',
+            '../package.json',
+            '../x/w.js',
+            '../../package.json',
+            '../../other/package.json',
+            '../../other/src/x.js',
+            '../y/z/w.js',
+          ].map((posixPath): [CanonicalPath, FileMetadata] => [
+            p(posixPath),
+            [0, 0, 0, null, 0, null],
+          ]),
+        ]),
+        processFile: () => {
+          throw new Error('Not implemented');
+        },
+      });
+      expect(
+        tfs.hierarchicalLookup(p(startPath), 'package.json', {
+          breakOnSegment: 'n_m',
+          subpathType: 'f',
+        }),
+      ).toEqual({
+        absolutePath: p(expectedPath),
+        containerRelativePath: p(expectedRelativeSubpath),
+      });
+    },
+  );
+
   describe('hierarchicalLookup', () => {
     let tfs: TreeFSType;
 
@@ -1319,6 +1372,14 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
       ['/A/B/C/a/n_m/pkg3/foo.js', null, null, ['/A/B/C/a/n_m/pkg3'], []],
       // Does not look beyond n_m, if n_m does not exist
       ['/A/B/C/a/b/n_m/pkg/foo', null, null, ['/A/B/C/a/b/n_m'], []],
+      // Through a link to an ancestor of the root, back into the root
+      [
+        '/A/B/C/a/b/c/d/link-to-A/B/C/a/b/bar.js',
+        '/A/B/C/a/package.json',
+        'b/bar.js',
+        ['/A/B/C/a/b/bar.js', '/A/B/C/a/b/package.json'],
+        ['/A/B/C/a/b/c/d/link-to-A'],
+      ],
       [
         '/A/B/C/n_m/workspace/link-to-pkg/subpath',
         '/A/B/workspace-pkg/package.json',
