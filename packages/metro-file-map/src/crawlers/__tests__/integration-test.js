@@ -14,6 +14,7 @@ import nodeCrawl from '../node';
 import watchmanCrawl from '../watchman';
 import invariant from 'invariant';
 import {execSync} from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 import {join} from 'node:path';
 
@@ -145,6 +146,74 @@ describe.each(Object.keys(CRAWLERS))(
         if (crawlerName === 'watchman') {
           expect(result.clocks).toBeInstanceOf(Map);
         }
+      },
+    );
+  },
+);
+
+describe.each(Object.keys(CRAWLERS))(
+  'Crawler extension matching (%s)',
+  crawlerName => {
+    const crawl = CRAWLERS[crawlerName];
+    const maybeTest = crawl ? test : test.skip;
+    let rootDir: string;
+
+    beforeAll(() => {
+      rootDir = fs.realpathSync(
+        fs.mkdtempSync(join(os.tmpdir(), 'metro-file-map-extensions-')),
+      );
+      for (const name of [
+        '.env',
+        '.env.local',
+        '.envrc',
+        'a.js',
+        'B.JS',
+        'b.ts',
+        'c.env.json',
+        'types.d.ts',
+      ]) {
+        fs.writeFileSync(join(rootDir, name), '');
+      }
+    });
+
+    afterAll(() => {
+      fs.rmSync(rootDir, {recursive: true, force: true});
+    });
+
+    // As the watchers match them, a listed extension must follow a dot, and
+    // may itself contain one.
+    maybeTest.each([[false], [true]])(
+      'includes the files with a listed extension (includeSymlinks: %s)',
+      async includeSymlinks => {
+        invariant(crawl, 'crawl should not be null within maybeTest');
+        const {changedFiles} = await crawl({
+          console: global.console,
+          previousState: {
+            fileSystem: new TreeFS({
+              rootDir,
+              files: new Map(),
+              processFile: () => {
+                throw new Error('Not implemented');
+              },
+            }),
+            clocks: new Map(),
+          },
+          includeSymlinks,
+          extensions: ['js', 'env', 'd.ts', 'env.local'],
+          ignore: () => false,
+          roots: [rootDir],
+          rootDir,
+          abortSignal: null,
+          computeSha1: false,
+          onStatus: () => {},
+        });
+
+        expect([...changedFiles.keys()].sort()).toEqual([
+          '.env',
+          '.env.local',
+          'a.js',
+          'types.d.ts',
+        ]);
       },
     );
   },
