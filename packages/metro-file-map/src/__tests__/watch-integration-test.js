@@ -27,6 +27,7 @@ jest.setTimeout(30000);
 let rootDir: string;
 let fileMap: FileMap;
 let fileSystem: FileSystem;
+let modifiedFiles: Set<string>;
 let removedFiles: Set<string>;
 
 const abs = (normalPath: string) => path.join(rootDir, normalPath);
@@ -62,7 +63,7 @@ function createFileMap({
       end: async () => {},
     }),
     enableSymlinks: true,
-    extensions: ['js'],
+    extensions: ['js', 'env'],
     healthCheck: {
       enabled: false,
       interval: 10000,
@@ -88,6 +89,7 @@ describe('FileMap in watch mode', () => {
     write('src/two.js');
     write('pkg/real/index.js');
     write('ignored-dir/x.js');
+    write('.env', 'A=1');
     for (let i = 0; i < 20; i++) {
       write(`many/d${i}/f.js`);
     }
@@ -98,10 +100,14 @@ describe('FileMap in watch mode', () => {
       'junction',
     );
 
+    modifiedFiles = new Set();
     removedFiles = new Set();
     fileMap = createFileMap({retainAllFiles: true});
     ({fileSystem} = await fileMap.build());
     fileMap.on('change', ({changes}: ChangeEvent) => {
+      for (const [canonicalPath] of changes.modifiedFiles) {
+        modifiedFiles.add(canonicalPath);
+      }
       for (const [canonicalPath] of changes.removedFiles) {
         removedFiles.add(canonicalPath);
       }
@@ -170,6 +176,13 @@ describe('FileMap in watch mode', () => {
       'link removed',
       () => fileSystem.linkStats(abs('node_modules/linked')) == null,
     );
+  });
+
+  // `path.extname('.env')` is '', but `.env` has the extension `env`.
+  test('crawls and watches a dotfile with a listed extension', async () => {
+    expect(exists('.env')).toBe(true);
+    write('.env', 'A=2');
+    await until('.env modified', () => modifiedFiles.has('.env'));
   });
 
   test('ignores changes in an ignored directory', async () => {

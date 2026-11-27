@@ -108,6 +108,27 @@ jest.mock('node:fs', () => {
             ),
           0,
         );
+      } else if (dir === mockP('/project/dotfiles')) {
+        setTimeout(
+          () =>
+            callback(
+              null,
+              [
+                '.env',
+                '.env.local',
+                '.envrc',
+                '.js',
+                'env',
+                'index.js',
+                'types.d.ts',
+              ].map(name => ({
+                isDirectory: () => false,
+                isSymbolicLink: () => false,
+                name,
+              })),
+            ),
+          0,
+        );
       } else if (dir === mockP('/project')) {
         setTimeout(
           () =>
@@ -500,6 +521,28 @@ describe.each([['win32'], ['posix']])('node crawler on %s', platform => {
 
     // Extensions that name Object.prototype properties are not listed.
     expect([...changedFiles.keys()]).toEqual([p('prototype/a.js')]);
+  });
+
+  test('crawls dotfiles and multi-part extensions with a listed extension', async () => {
+    nodeCrawl = require('../node').default;
+
+    const {changedFiles} = await nodeCrawl({
+      console: global.console,
+      previousState: {fileSystem: emptyFS},
+      extensions: ['js', 'env', 'd.ts'],
+      ignore: pearMatcher,
+      rootDir,
+      roots: [p('/project/dotfiles')],
+    });
+
+    expect([...changedFiles.keys()].sort()).toEqual(
+      [
+        'dotfiles/.env',
+        'dotfiles/.js',
+        'dotfiles/index.js',
+        'dotfiles/types.d.ts',
+      ].map(p),
+    );
   });
 
   test('crawls a root that is the parent of rootDir', async () => {

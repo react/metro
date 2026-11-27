@@ -12,6 +12,7 @@
 import type {CrawlerOptions, CrawlResult, FileData} from '../../flow-types';
 
 import H from '../../constants';
+import hasIncludedExtension from '../../lib/hasIncludedExtension';
 import {RootPathUtils, joinNormalPath} from '../../lib/RootPathUtils';
 import fs from 'node:fs';
 import * as path from 'node:path';
@@ -115,8 +116,7 @@ async function find(
               continue;
             }
 
-            const ext = path.extname(name).substr(1);
-            if (!isSymbolicLink && !exts.has(ext)) {
+            if (!isSymbolicLink && !hasIncludedExtension(exts, name)) {
               continue;
             }
 
