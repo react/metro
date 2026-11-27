@@ -62,7 +62,7 @@ describe('getWatchRoot', () => {
     jest.restoreAllMocks();
   });
 
-  test('does not resolve ordinary Windows paths or junction aliases', () => {
+  test('skips expansion for Windows paths without ~', () => {
     jest.spyOn(os, 'platform').mockReturnValue('win32');
     const realpath = jest.spyOn(fs.realpathSync, 'native');
     const root = 'C:\\workspace\\linked-project';
