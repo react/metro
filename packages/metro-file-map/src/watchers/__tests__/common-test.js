@@ -11,7 +11,9 @@
 
 import type {WatcherIncludedFiles} from '../../flow-types';
 
-import {isIncluded} from '../common';
+import {getWatchRoot, isIncluded} from '../common';
+import fs from 'node:fs';
+import os from 'node:os';
 import {join} from 'node:path';
 
 describe('isIncluded', () => {
@@ -52,5 +54,19 @@ describe('isIncluded', () => {
 
   test('null included files include every regular file', () => {
     expect(isIncluded('f', null, join('src', 'foo.ts'))).toBe(true);
+  });
+});
+
+describe('getWatchRoot', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('does not resolve ordinary Windows paths or junction aliases', () => {
+    jest.spyOn(os, 'platform').mockReturnValue('win32');
+    const realpath = jest.spyOn(fs.realpathSync, 'native');
+    const root = 'C:\\workspace\\linked-project';
+    expect(getWatchRoot(root)).toBe(root);
+    expect(realpath).not.toHaveBeenCalled();
   });
 });
