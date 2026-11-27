@@ -329,7 +329,7 @@ export type FileMapPluginWorker = Readonly<{
   lazy?: boolean,
 }>;
 
-type V8SerializablePrimitive = string | number | boolean | null;
+type V8SerializablePrimitive = string | number | boolean | null | void;
 
 type V8SerializableCollection =
   | ReadonlyArray<V8Serializable>
