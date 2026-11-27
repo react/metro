@@ -1063,16 +1063,26 @@ describe.each([['win32'], ['posix']])('TreeFS on %s', platform => {
     // A link to the filesystem root
     ['/A/B/C/to-fs-root/A/other/src/x.js', '/A/other/package.json', 'src/x.js'],
     ['/A/B/C/to-fs-root/A/B/y/z/w.js', '/A/B/package.json', 'y/z/w.js'],
+    // A link to the root or one of its ancestors, given relative to the real
+    // path it resolves to
+    ['/A/B/C/to-C/x/w.js', '/A/B/C/package.json', 'x/w.js'],
+    ['/A/B/C/to-A/B/C/x/w.js', '/A/B/C/package.json', 'x/w.js'],
+    ['/A/B/to-B/x/w.js', '/A/B/package.json', 'x/w.js'],
   ])(
     'hierarchicalLookup through a link above the root from %s finds %s',
     (startPath, expectedPath, expectedRelativeSubpath) => {
       const tfs = new TreeFS({
         rootDir: p('/A/B/C'),
         files: new Map<CanonicalPath, FileMetadata>([
+          [p('to-C'), [0, 0, 0, null, '', null]],
           [p('to-A'), [0, 0, 0, null, '../..', null]],
           [p('to-fs-root'), [0, 0, 0, null, '../../..', null]],
+          [p('../to-B'), [0, 0, 0, null, '..', null]],
           ...[
+            'package.json',
+            'x/w.js',
             '../package.json',
+            '../x/w.js',
             '../../package.json',
             '../../other/package.json',
             '../../other/src/x.js',

@@ -92,8 +92,7 @@ const LOOKUP_OPTIONS_NO_FOLLOW_LEAF: LookupOptions = {
   followLeaf: false,
 };
 
-// Whether a normal path is within an ancestor ('' contains every path), as
-// relativeToAncestor(...) != null but without building the remainder.
+// Whether a normal path is within an ancestor ('' contains every path).
 function isWithinNormal(
   normalPath: string,
   ancestorNormalPath: string,
@@ -104,19 +103,6 @@ function isWithinNormal(
       (normalPath.length === ancestorNormalPath.length ||
         normalPath[ancestorNormalPath.length] === path.sep))
   );
-}
-
-// Null if not within the ancestor ('' is the root).
-function relativeToAncestor(
-  normalPath: string,
-  ancestorNormalPath: string,
-): ?string {
-  if (ancestorNormalPath === '' || normalPath === ancestorNormalPath) {
-    return ancestorNormalPath === '' ? normalPath : '';
-  }
-  return normalPath.startsWith(ancestorNormalPath + path.sep)
-    ? normalPath.slice(ancestorNormalPath.length + 1)
-    : null;
 }
 
 type DeserializedSnapshotInput = {
@@ -1240,7 +1226,9 @@ export default class TreeFS implements MutableFileSystem {
 
     // Collected ancestors do not include the lookup result itself, so go one
     // further if the input path is itself a root ancestor.
+    let startIsCommonRoot = false;
     if (closestLookup.exists && closestLookup.ancestorOfRootIdx != null) {
+      startIsCommonRoot = true;
       commonRootDepth = closestLookup.ancestorOfRootIdx;
       invariant(
         isDirectory(closestLookup.node),
@@ -1317,21 +1305,15 @@ export default class TreeFS implements MutableFileSystem {
       commonRootDepth > 0
         ? '..' + (path.sep + '..').repeat(commonRootDepth - 1)
         : '';
-    // By its real path, if the start path reaches the common root through a
-    // symlink.
-    const remainingNormalPath =
-      relativeToAncestor(normalPath, candidateNormalPath) ??
-      relativeToAncestor(
-        closestLookup.exists
-          ? closestLookup.canonicalPath
-          : joinNormalPath(
-              closestLookup.canonicalMissingPath,
-              closestLookup.remainingPath,
-            ),
-        candidateNormalPath,
-      );
-    if (remainingNormalPath == null) {
-      return null;
+    // The input path below the common root, i.e. after the leading segments
+    // that resolve to it and its ancestors, or '' if it is the common root.
+    let remainingNormalPath = startIsCommonRoot ? '' : normalPath;
+    if (!startIsCommonRoot && firstDescendantIdx > 0) {
+      let prefixLength = -1;
+      for (let i = 0; i < firstDescendantIdx; i++) {
+        prefixLength = normalPath.indexOf(path.sep, prefixLength + 1);
+      }
+      remainingNormalPath = normalPath.slice(prefixLength + 1);
     }
 
     // An ancestor of the root with no node (no file beneath it is in the tree)
