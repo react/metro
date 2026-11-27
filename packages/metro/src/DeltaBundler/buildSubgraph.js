@@ -12,6 +12,7 @@ import type {RequireContext} from '../lib/contextModule';
 import type {
   Dependency,
   ModuleData,
+  ResolutionObservations,
   ResolvedDependency,
   ResolveFn,
   TransformFn,
@@ -44,9 +45,12 @@ function resolveDependencies(
 ): {
   dependencies: Map<string, Dependency>,
   virtualSources: Map<string, VirtualSource>,
+  // Only with `resolver.unstable_incrementalResolution` on.
+  observations: Map<string, ResolutionObservations> | void,
 } {
   const maybeResolvedDeps = new Map<string, Dependency>();
   const virtualSources = new Map<string, VirtualSource>();
+  let observations: Map<string, ResolutionObservations> | void;
 
   for (const dep of dependencies) {
     let maybeResolvedDep: Dependency;
@@ -110,6 +114,11 @@ function resolveDependencies(
           virtualSources.set(key, {type: 'buffer', source, sha1});
         }
         maybeResolvedDep = {absolutePath: resolution.filePath, data: dep};
+        const resolutionObservations = resolution.unstable_observations;
+        if (resolutionObservations != null) {
+          observations ??= new Map();
+          observations.set(key, resolutionObservations);
+        }
       }
     }
 
@@ -124,6 +133,7 @@ function resolveDependencies(
   return {
     dependencies: maybeResolvedDeps,
     virtualSources,
+    observations,
   };
 }
 
