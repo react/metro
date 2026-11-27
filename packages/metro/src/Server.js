@@ -17,6 +17,7 @@ import type {
   Module,
   ReadOnlyDependencies,
   ReadOnlyGraph,
+  SerializerOptions as GraphSerializerOptions,
   TransformInputOptions,
   TransformResult,
 } from './DeltaBundler/types';
@@ -218,15 +219,9 @@ export default class Server {
     return this._createModuleId;
   }
 
-  async _serializeGraph({
-    splitOptions,
-    prepend,
-    graph,
-  }: Readonly<{
+  async _getSerializerOptions(
     splitOptions: SplitBundleOptions,
-    prepend: ReadonlyArray<Module<>>,
-    graph: ReadOnlyGraph<>,
-  }>): Promise<{code: string, map: string}> {
+  ): Promise<GraphSerializerOptions> {
     const {
       entryFile,
       graphOptions,
@@ -237,7 +232,7 @@ export default class Server {
 
     const entryPoint = this._getEntryPointAbsolutePath(entryFile);
 
-    const bundleOptions = {
+    return {
       asyncRequireModulePath: await this._resolveRelativePath(
         this._config.transformer.asyncRequireModulePath,
         {
@@ -274,6 +269,22 @@ export default class Server {
       unstable_inlineDependencyMap:
         this._config.serializer.unstable_inlineDependencyMap,
     };
+  }
+
+  async _serializeGraph({
+    splitOptions,
+    prepend,
+    graph,
+  }: Readonly<{
+    splitOptions: SplitBundleOptions,
+    prepend: ReadonlyArray<Module<>>,
+    graph: ReadOnlyGraph<>,
+  }>): Promise<{code: string, map: string}> {
+    const {entryFile, serializerOptions} = splitOptions;
+
+    const entryPoint = this._getEntryPointAbsolutePath(entryFile);
+
+    const bundleOptions = await this._getSerializerOptions(splitOptions);
     let bundleCode = null;
     let bundleMap = null;
     if (this._config.serializer.customSerializer) {
@@ -1309,6 +1320,32 @@ export default class Server {
       let {prepend, graph} = revision;
       if (serializerOptions.modulesOnly) {
         prepend = [];
+      }
+
+      // Lazy chunks and HMR updates (`modulesOnly`) leave out pre-modules, and
+      // a serializer's map may not, so they keep Metro's own map.
+      if (
+        this._config.serializer.customSerializer &&
+        !serializerOptions.modulesOnly
+      ) {
+        const bundle = await this._config.serializer.customSerializer(
+          entryFile,
+          // `prepend` belongs to the graph revision and outlives this request,
+          // so a serializer that adds to it in place must not see the original.
+          [...prepend],
+          graph,
+          await this._getSerializerOptions({
+            entryFile,
+            graphOptions,
+            onProgress,
+            resolverOptions,
+            serializerOptions,
+            transformOptions,
+          }),
+        );
+        if (typeof bundle !== 'string' && bundle.map) {
+          return bundle.map;
+        }
       }
 
       return await sourceMapStringNonBlocking(
