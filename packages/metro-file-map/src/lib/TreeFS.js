@@ -105,6 +105,54 @@ function isWithinNormal(
   );
 }
 
+// Where the deepest missing parent named `segment` of a hierarchical lookup's
+// start path ends, as an index into the lookup's canonical missing path joined
+// with its remaining path, or -1 if there is none. The start path's own name
+// doesn't count, and nor do the ancestors of a symlink's target, which the
+// lookup doesn't walk. `lookup` is #lookupByNormalPath's result for the
+// missing start path.
+function missingParentSegmentEnd(
+  lookup: Readonly<{
+    canonicalMissingPath: string,
+    missingSegmentName: string,
+    remainingPath: string,
+    unseenPathFromIdx: number,
+    ...
+  }>,
+  segment: string,
+): number {
+  const {
+    canonicalMissingPath,
+    missingSegmentName,
+    remainingPath,
+    unseenPathFromIdx,
+  } = lookup;
+  if (remainingPath === '') {
+    return -1;
+  }
+  let segmentEnd =
+    missingSegmentName === segment &&
+    canonicalMissingPath.length > unseenPathFromIdx
+      ? canonicalMissingPath.length
+      : -1;
+  // Every segment of the remaining path but the last, which may be followed
+  // by a trailing separator.
+  const remainingFromIdx = canonicalMissingPath.length + 1;
+  let start = Math.max(0, unseenPathFromIdx - remainingFromIdx);
+  let end = remainingPath.indexOf(path.sep, start);
+  while (end !== -1 && end !== remainingPath.length - 1) {
+    if (
+      end - start === segment.length &&
+      remainingPath.startsWith(segment, start)
+    ) {
+      segmentEnd = remainingFromIdx + end;
+    }
+    start = end + 1;
+    end = remainingPath.indexOf(path.sep, start);
+  }
+  return segmentEnd;
+}
+
 type DeserializedSnapshotInput = {
   rootDir: string,
   fileSystemData: DirectoryNode,
@@ -274,9 +322,9 @@ export default class TreeFS implements MutableFileSystem {
     canonicalMissingPath: string,
     remainingPath: string,
     candidates?: Readonly<{
-      breakOnSegment: ?string,
-      // Where ancestors of the path looked for start to be candidates (see
-      // unseenPathFromIdx in #lookupByNormalPath).
+      // Where ancestors of the path looked for start to be candidates, i.e.
+      // below the ancestors the lookup doesn't walk (see unseenPathFromIdx in
+      // #lookupByNormalPath) and below a `breakOnSegment` it stops at.
       fromIdx: number,
       subpath: string,
     }>,
@@ -301,10 +349,7 @@ export default class TreeFS implements MutableFileSystem {
     let dir = target;
     while (dir.length > canonicalMissingPath.length) {
       dir = dir.slice(0, dir.lastIndexOf(path.sep));
-      if (
-        dir.length <= candidates.fromIdx ||
-        dir.slice(dir.lastIndexOf(path.sep) + 1) === candidates.breakOnSegment
-      ) {
+      if (dir.length <= candidates.fromIdx) {
         return;
       }
       const candidate = joinNormalPath(dir, candidates.subpath);
@@ -1116,15 +1161,18 @@ export default class TreeFS implements MutableFileSystem {
    *
    * X = mixedStartPath
    * do
-   *   if basename(X) === opts.breakOnSegment
-   *     return null
    *   if X + subpath exists and has type opts.subpathType
    *     return {
    *       absolutePath: realpath(X + subpath)
    *       containerRelativePath: relative(mixedStartPath, X)
    *     }
    *   X = dirname(X)
+   *   if basename(X) === opts.breakOnSegment
+   *     return null
    * while X !== dirname(X)
+   *
+   * As in Node.js's LOOKUP_PACKAGE_SCOPE, a parent named `breakOnSegment` stops
+   * the walk whether or not it exists.
    *
    * Each candidate is checked from its own node: a subpath that is a single
    * path segment, such as `package.json`, with one map lookup, and a deeper
@@ -1187,28 +1235,25 @@ export default class TreeFS implements MutableFileSystem {
           containerRelativePath: '',
         };
       }
+    } else if (closestLookup.exists) {
+      observations?.existence.add(closestLookup.canonicalPath);
     } else {
+      const breakEnd =
+        opts.breakOnSegment == null
+          ? -1
+          : missingParentSegmentEnd(closestLookup, opts.breakOnSegment);
       if (observations) {
-        if (closestLookup.exists) {
-          observations.existence.add(closestLookup.canonicalPath);
-        } else {
-          this.#observeMissing(
-            observations,
-            closestLookup.canonicalMissingPath,
-            closestLookup.remainingPath,
-            {
-              breakOnSegment: opts.breakOnSegment,
-              fromIdx: closestLookup.unseenPathFromIdx,
-              subpath,
-            },
-          );
-        }
+        this.#observeMissing(
+          observations,
+          closestLookup.canonicalMissingPath,
+          closestLookup.remainingPath,
+          {
+            fromIdx: Math.max(closestLookup.unseenPathFromIdx, breakEnd),
+            subpath,
+          },
+        );
       }
-      if (
-        opts.breakOnSegment != null &&
-        !closestLookup.exists &&
-        closestLookup.missingSegmentName === opts.breakOnSegment
-      ) {
+      if (breakEnd !== -1) {
         return null;
       }
     }
