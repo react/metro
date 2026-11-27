@@ -165,3 +165,54 @@ describe('NativeWatcher', () => {
     expect(order).toEqual(['touch:first.js', 'error:EACCES', 'touch:third.js']);
   });
 });
+
+// Exercise the Windows path even while NativeWatcher is restricted to macOS.
+describe('NativeWatcher watch roots', () => {
+  const ROOT = resolve('/', 'PROJEC~1');
+  let watcher: NativeWatcher;
+
+  afterEach(async () => {
+    await watcher?.stopWatching();
+    jest.restoreAllMocks();
+  });
+
+  test('expands a Windows watch root while preserving logical paths', async () => {
+    jest.spyOn(os, 'platform').mockReturnValue('win32');
+    jest.spyOn(NativeWatcher, 'isSupported').mockReturnValue(true);
+    const expandedRoot = resolve('/', 'expanded-project');
+    jest.spyOn(fs.realpathSync, 'native').mockReturnValue(expandedRoot);
+    let report: (event: string, relativePath: string) => void = () => {};
+    const watch = jest
+      .spyOn(fs, 'watch')
+      .mockImplementation((_root, _opts, listener) => {
+        report = listener;
+        return {close: () => {}};
+      });
+    const lstat = jest
+      .spyOn(fs.promises, 'lstat')
+      .mockResolvedValue(fileStat(1000));
+    watcher = new NativeWatcher(ROOT, {included: null, ignored: null});
+    const events: Array<WatcherBackendChangeEvent> = [];
+    watcher.onFileEvent(event => {
+      events.push(event);
+    });
+
+    await watcher.startWatching();
+    expect(watch).toHaveBeenCalledWith(
+      expandedRoot,
+      expect.objectContaining({recursive: true}),
+      expect.any(Function),
+    );
+    report('change', join('nested', 'file.js'));
+    await flush();
+    expect(lstat).toHaveBeenCalledWith(join(ROOT, 'nested', 'file.js'));
+    expect(events).toEqual([
+      {
+        event: 'touch',
+        root: ROOT,
+        relativePath: join('nested', 'file.js'),
+        metadata: {type: 'f', size: 42, modifiedTime: 1000},
+      },
+    ]);
+  });
+});

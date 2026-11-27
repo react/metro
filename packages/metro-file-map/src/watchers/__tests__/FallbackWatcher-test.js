@@ -15,6 +15,8 @@ import FallbackWatcher from '../FallbackWatcher';
 import {createTempWatchRoot} from './helpers';
 import EventEmitter from 'node:events';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {join, toNamespacedPath} from 'node:path';
 
 jest.useRealTimers();
@@ -768,3 +770,79 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 20));
   }
 }
+
+class StubWatcher extends EventEmitter {
+  close() {
+    this.emit('close');
+  }
+}
+
+// Model the short/long path distinction; this does not exercise libuv.
+describe('FallbackWatcher Windows watch path mapping', () => {
+  let root: string;
+  let watcher: FallbackWatcher;
+  let listeners: Map<string, (event: string, filename: string) => void>;
+  let events: Array<WatcherBackendChangeEvent>;
+
+  beforeEach(async () => {
+    jest.spyOn(os, 'platform').mockReturnValue('win32');
+    root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'METRO~1-'));
+    await fs.promises.mkdir(path.join(root, 'nested'));
+    await fs.promises.writeFile(path.join(root, 'nested', 'file.js'), '');
+    listeners = new Map();
+    events = [];
+    jest.spyOn(fs, 'watch').mockImplementation((dir, options, listener) => {
+      listeners.set(String(dir), listener);
+      return new StubWatcher();
+    });
+  });
+
+  afterEach(async () => {
+    await watcher?.stopWatching();
+    jest.restoreAllMocks();
+    await fs.promises.rm(root, {recursive: true, force: true});
+  });
+
+  function createWatcher() {
+    watcher = new FallbackWatcher(root, {
+      ignored: null,
+      included: null,
+      watchmanDeferStates: [],
+    });
+    watcher.onFileEvent(event => {
+      events.push(event);
+    });
+  }
+
+  test('expands root and descendant watches while preserving event paths', async () => {
+    const longRoot = path.join(path.dirname(root), 'expanded-root');
+    jest.spyOn(fs.realpathSync, 'native').mockReturnValue(longRoot);
+    createWatcher();
+    await watcher.startWatching();
+    expect([...listeners.keys()]).toEqual([
+      longRoot,
+      path.join(longRoot, 'nested'),
+    ]);
+
+    listeners.get(path.join(longRoot, 'nested'))?.('change', 'file.js');
+    await waitForEvent('touch', path.join('nested', 'file.js'));
+    expect(events).toContainEqual({
+      event: 'touch',
+      root,
+      relativePath: path.join('nested', 'file.js'),
+      metadata: expect.objectContaining({type: 'f'}),
+    });
+  });
+
+  async function waitForEvent(event: string, relativePath: string) {
+    const deadline = Date.now() + 5000;
+    while (
+      !events.some(e => e.event === event && e.relativePath === relativePath)
+    ) {
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for ${event}: ${relativePath}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+});

@@ -22,6 +22,8 @@ import type {
 import type {Stats} from 'node:fs';
 
 import hasIncludedExtension from '../lib/hasIncludedExtension';
+import fs from 'node:fs';
+import {platform} from 'node:os';
 import path from 'node:path';
 
 /**
@@ -99,4 +101,20 @@ export function typeFromStat(stat: Stats): ?ChangeEventMetadata['type'] {
     return 'f'; // "Regular" file
   }
   return null;
+}
+
+/**
+ * Expand possible Windows 8.3 names to avoid libuv's watch-path assertion.
+ * https://github.com/libuv/libuv/issues/5010
+ */
+export function getWatchRoot(root: string): string {
+  if (platform() === 'win32' && root.includes('~')) {
+    try {
+      // The non-native realpath implementation preserves 8.3 short names.
+      return fs.realpathSync.native(root);
+    } catch {
+      // Preserve fs.watch's existing handling of inaccessible roots.
+    }
+  }
+  return root;
 }
