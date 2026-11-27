@@ -1623,7 +1623,10 @@ declare module 'fs' {
     cache?: any,
     callback?: (err: ?ErrnoError, resolvedPath: string) => void,
   ): void;
-  declare function realpathSync(path: string, cache?: any): string;
+  declare var realpathSync: {
+    (path: string, cache?: any): string,
+    native(path: string): string,
+  };
   declare function unlink(
     path: string,
     callback?: (err: ?ErrnoError) => void,
