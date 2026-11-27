@@ -61,9 +61,23 @@ export default function createModuleResolver({
       hasteMap?.getModule(name, platform, true),
     getHastePackagePath: (name, platform) =>
       hasteMap?.getPackage(name, platform, true),
-    getPackage: (packageJsonPath: string) => {
+    getPackage: (
+      packageJsonPath: string,
+      observations?: ?ResolutionObservations,
+    ) => {
+      let filePath = packageJsonPath;
+      if (config.resolver.unstable_incrementalResolution) {
+        // Read through the file map, so that a manifest outside it is treated
+        // as missing, and what was read is observed.
+        const result = fileSystem.lookup(packageJsonPath, observations);
+        if (!result.exists || result.type !== 'f') {
+          return null;
+        }
+        observations?.content.add(result.canonicalPath);
+        filePath = result.realPath;
+      }
       try {
-        return packageCache.getPackage(packageJsonPath).packageJson ?? null;
+        return packageCache.getPackage(filePath).packageJson ?? null;
       } catch {
         // Non-existence or malformed JSON, we treat both as non-existent
         return null;
