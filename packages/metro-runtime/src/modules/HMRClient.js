@@ -29,12 +29,19 @@ const moduleUpdateListeners: Set<{listener: HmrModuleUpdateListener}> =
 
 const inject = (hmrModule: HmrModule) => {
   const {
-    module: [, code],
+    module: [id, code],
     sourceURL,
   } = hmrModule;
-  Array.from(moduleUpdateListeners).forEach(({listener}) =>
-    listener(hmrModule),
-  );
+  Array.from(moduleUpdateListeners).forEach(({listener}) => {
+    try {
+      listener(hmrModule);
+    } catch (error) {
+      console.error(
+        `Error while calling a module update listener for module ${id}: `,
+        error,
+      );
+    }
+  });
   // Some engines do not support `sourceURL` as a comment. We expose a
   // `globalEvalWithSourceUrl` function to handle updates in that case.
   if (global.globalEvalWithSourceUrl) {
@@ -54,7 +61,8 @@ class HMRClient extends EventEmitter {
   /**
    * Registers a listener for HMR module updates. The client invokes it with
    * each added or modified module before evaluating that module. Deleted
-   * modules are not reported.
+   * modules are not reported. An error thrown by a listener is logged with
+   * `console.error` and does not stop the update.
    * Returns a subscription whose `remove` unregisters the listener.
    */
   static addModuleUpdateListener(

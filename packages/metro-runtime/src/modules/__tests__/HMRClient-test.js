@@ -494,4 +494,28 @@ describe('addModuleUpdateListener', () => {
     late?.remove();
     client.close();
   });
+  test('logs a listener error and still evaluates the module', () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const error = new Error('listener failure');
+    const failing = HMRClient.addModuleUpdateListener(() => {
+      throw error;
+    });
+    const seen: Array<string> = [];
+    const next = HMRClient.addModuleUpdateListener(hmrModule => {
+      seen.push(hmrModule.sourceURL);
+    });
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(seen).toEqual(['1.js', '2.js']);
+    expect(evaledCode).toContain('function 1_A() {}');
+    expect(evaledCode).toContain('function 2_A() {}');
+    expect(consoleError).toHaveBeenCalledTimes(2);
+    expect(consoleError.mock.calls[0][1]).toBe(error);
+    failing.remove();
+    next.remove();
+    client.close();
+  });
 });
