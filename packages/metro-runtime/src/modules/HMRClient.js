@@ -11,7 +11,12 @@
 
 'use strict';
 import type {HmrModule} from './types';
-import type {HmrMessage, HmrUpdate} from './types';
+import type {
+  HmrMessage,
+  HmrModuleUpdateListener,
+  HmrModuleUpdateSubscription,
+  HmrUpdate,
+} from './types';
 
 const EventEmitter = require('./vendor/eventemitter3');
 
@@ -19,7 +24,24 @@ const HEARTBEAT_INTERVAL_MS = 20_000;
 
 type SocketState = 'opening' | 'open' | 'closed';
 
-const inject = ({module: [id, code], sourceURL}: HmrModule) => {
+const moduleUpdateListeners: Set<{listener: HmrModuleUpdateListener}> =
+  new Set();
+
+const inject = (hmrModule: HmrModule) => {
+  const {
+    module: [id, code],
+    sourceURL,
+  } = hmrModule;
+  Array.from(moduleUpdateListeners).forEach(({listener}) => {
+    try {
+      listener(code, sourceURL);
+    } catch (error) {
+      console.error(
+        `Error while calling a module update listener for module ${id}: `,
+        error,
+      );
+    }
+  });
   // Some engines do not support `sourceURL` as a comment. We expose a
   // `globalEvalWithSourceUrl` function to handle updates in that case.
   if (global.globalEvalWithSourceUrl) {
@@ -36,6 +58,28 @@ const injectUpdate = (update: HmrUpdate) => {
 };
 
 class HMRClient extends EventEmitter {
+  /**
+   * Registers a listener for HMR module updates. The client invokes it with
+   * the code and source URL of each added or modified module before
+   * evaluating that module. Deleted modules are not reported. An error thrown
+   * by a listener is logged with `console.error` and does not stop the update.
+   * Listeners are kept per copy of this module: a listener registered through
+   * a different copy of `metro-runtime` than the one that created the client
+   * is never invoked. Returns a subscription whose `remove` unregisters the
+   * listener.
+   */
+  static addModuleUpdateListener(
+    listener: HmrModuleUpdateListener,
+  ): HmrModuleUpdateSubscription {
+    const entry = {listener};
+    moduleUpdateListeners.add(entry);
+    return {
+      remove: () => {
+        moduleUpdateListeners.delete(entry);
+      },
+    };
+  }
+
   _isEnabled: boolean = false;
   _pendingUpdate: HmrUpdate | null = null;
   _queue: Array<string> = [];

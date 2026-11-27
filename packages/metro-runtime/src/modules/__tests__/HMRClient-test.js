@@ -382,3 +382,143 @@ test('can enable and disable the client to batch updates', () => {
 
   expect(evaledCode).toMatchSnapshot();
 });
+
+describe('addModuleUpdateListener', () => {
+  const update: HmrUpdate = {
+    isInitialUpdate: false,
+    revisionId: 'listener',
+    added: [
+      {
+        module: [1, 'function 1_A() {}'],
+        sourceMappingURL: '1_A.js.map',
+        sourceURL: '1.js',
+      },
+    ],
+    modified: [
+      {
+        module: [2, 'function 2_A() {}'],
+        sourceMappingURL: '2_A.js.map',
+        sourceURL: '2.js',
+      },
+    ],
+    deleted: [],
+  };
+
+  test('notifies the listener before each module is evaluated', () => {
+    const seen: Array<[string, string, boolean]> = [];
+    const subscription = HMRClient.addModuleUpdateListener(
+      (code, sourceURL) => {
+        seen.push([code, sourceURL, evaledCode.includes(code)]);
+      },
+    );
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(seen).toEqual([
+      ['function 1_A() {}', '1.js', false],
+      ['function 2_A() {}', '2.js', false],
+    ]);
+    subscription.remove();
+    client.close();
+  });
+
+  test('notifies the listener when a pending update is applied', () => {
+    const listener = jest.fn();
+    const subscription = HMRClient.addModuleUpdateListener(listener);
+    const client = new HMRClient('wss://banana.com/phone');
+    sendUpdate(update);
+    expect(listener).not.toHaveBeenCalled();
+    client.enable();
+    expect(listener.mock.calls.map(([, sourceURL]) => sourceURL)).toEqual([
+      '1.js',
+      '2.js',
+    ]);
+    subscription.remove();
+    client.close();
+  });
+
+  test('stops notifying the listener after it is removed', () => {
+    const listener = jest.fn();
+    const subscription = HMRClient.addModuleUpdateListener(listener);
+    subscription.remove();
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(listener).not.toHaveBeenCalled();
+    client.close();
+  });
+  test('notifies every listener, including one registered twice', () => {
+    const calls: Array<string> = [];
+    const first = (code: string, sourceURL: string) => {
+      calls.push('first ' + sourceURL);
+    };
+    const second = (code: string, sourceURL: string) => {
+      calls.push('second ' + sourceURL);
+    };
+    const subscriptions = [
+      HMRClient.addModuleUpdateListener(first),
+      HMRClient.addModuleUpdateListener(second),
+      HMRClient.addModuleUpdateListener(first),
+    ];
+    subscriptions[2].remove();
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(calls).toEqual([
+      'first 1.js',
+      'second 1.js',
+      'first 2.js',
+      'second 2.js',
+    ]);
+    subscriptions.forEach(subscription => subscription.remove());
+    client.close();
+  });
+
+  test('applies listener changes made during a notification to the next module', () => {
+    const calls: Array<string> = [];
+    let late = null;
+    const subscription = HMRClient.addModuleUpdateListener(
+      (code, sourceURL) => {
+        calls.push('early ' + sourceURL);
+        if (late == null) {
+          late = HMRClient.addModuleUpdateListener(
+            (lateCode, lateSourceURL) => {
+              calls.push('late ' + lateSourceURL);
+            },
+          );
+        }
+      },
+    );
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(calls).toEqual(['early 1.js', 'early 2.js', 'late 2.js']);
+    subscription.remove();
+    late?.remove();
+    client.close();
+  });
+  test('logs a listener error and still evaluates the module', () => {
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const error = new Error('listener failure');
+    const failing = HMRClient.addModuleUpdateListener(() => {
+      throw error;
+    });
+    const seen: Array<string> = [];
+    const next = HMRClient.addModuleUpdateListener((code, sourceURL) => {
+      seen.push(sourceURL);
+    });
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(seen).toEqual(['1.js', '2.js']);
+    expect(evaledCode).toContain('function 1_A() {}');
+    expect(evaledCode).toContain('function 2_A() {}');
+    expect(consoleError).toHaveBeenCalledTimes(2);
+    expect(consoleError.mock.calls[0][1]).toBe(error);
+    failing.remove();
+    next.remove();
+    client.close();
+  });
+});

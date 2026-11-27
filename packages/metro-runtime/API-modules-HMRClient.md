@@ -8,6 +8,7 @@ import EventEmitter = require('./vendor/eventemitter3');
 
 class HMRClient extends EventEmitter {
   constructor(url: string);
+  static addModuleUpdateListener(listener: HmrModuleUpdateListener): HmrModuleUpdateSubscription;
   close(): void;
   disable(): void;
   enable(): void;
