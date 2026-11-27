@@ -45,6 +45,18 @@ export type HmrModule = {
   readonly sourceURL: string,
 };
 
+/**
+ * A listener registered with `HMRClient.addModuleUpdateListener`.
+ */
+export type HmrModuleUpdateListener = (hmrModule: HmrModule) => void;
+
+/**
+ * The subscription returned by `HMRClient.addModuleUpdateListener`.
+ */
+export type HmrModuleUpdateSubscription = {
+  readonly remove: () => void,
+};
+
 export type HmrUpdate = {
   readonly added: ReadonlyArray<HmrModule>,
   readonly deleted: ReadonlyArray<number>,

@@ -11,7 +11,12 @@
 
 'use strict';
 import type {HmrModule} from './types';
-import type {HmrMessage, HmrUpdate} from './types';
+import type {
+  HmrMessage,
+  HmrModuleUpdateListener,
+  HmrModuleUpdateSubscription,
+  HmrUpdate,
+} from './types';
 
 const EventEmitter = require('./vendor/eventemitter3');
 
@@ -19,7 +24,14 @@ const HEARTBEAT_INTERVAL_MS = 20_000;
 
 type SocketState = 'opening' | 'open' | 'closed';
 
-const inject = ({module: [id, code], sourceURL}: HmrModule) => {
+const moduleUpdateListeners: Set<HmrModuleUpdateListener> = new Set();
+
+const inject = (hmrModule: HmrModule) => {
+  const {
+    module: [, code],
+    sourceURL,
+  } = hmrModule;
+  Array.from(moduleUpdateListeners).forEach(listener => listener(hmrModule));
   // Some engines do not support `sourceURL` as a comment. We expose a
   // `globalEvalWithSourceUrl` function to handle updates in that case.
   if (global.globalEvalWithSourceUrl) {
@@ -36,6 +48,22 @@ const injectUpdate = (update: HmrUpdate) => {
 };
 
 class HMRClient extends EventEmitter {
+  /**
+   * Registers a listener for HMR module updates. The client invokes it with
+   * each added or modified module before evaluating that module.
+   * Returns a subscription whose `remove` unregisters the listener.
+   */
+  static addModuleUpdateListener(
+    listener: HmrModuleUpdateListener,
+  ): HmrModuleUpdateSubscription {
+    moduleUpdateListeners.add(listener);
+    return {
+      remove: () => {
+        moduleUpdateListeners.delete(listener);
+      },
+    };
+  }
+
   _isEnabled: boolean = false;
   _pendingUpdate: HmrUpdate | null = null;
   _queue: Array<string> = [];

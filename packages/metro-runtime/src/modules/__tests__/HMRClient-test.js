@@ -382,3 +382,70 @@ test('can enable and disable the client to batch updates', () => {
 
   expect(evaledCode).toMatchSnapshot();
 });
+
+describe('addModuleUpdateListener', () => {
+  const update: HmrUpdate = {
+    isInitialUpdate: false,
+    revisionId: 'listener',
+    added: [
+      {
+        module: [1, 'function 1_A() {}'],
+        sourceMappingURL: '1_A.js.map',
+        sourceURL: '1.js',
+      },
+    ],
+    modified: [
+      {
+        module: [2, 'function 2_A() {}'],
+        sourceMappingURL: '2_A.js.map',
+        sourceURL: '2.js',
+      },
+    ],
+    deleted: [],
+  };
+
+  test('notifies the listener before each module is evaluated', () => {
+    const seen: Array<[number, string, boolean]> = [];
+    const subscription = HMRClient.addModuleUpdateListener(hmrModule => {
+      seen.push([
+        hmrModule.module[0],
+        hmrModule.sourceURL,
+        evaledCode.includes(hmrModule.module[1]),
+      ]);
+    });
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(seen).toEqual([
+      [1, '1.js', false],
+      [2, '2.js', false],
+    ]);
+    subscription.remove();
+    client.close();
+  });
+
+  test('notifies the listener when a pending update is applied', () => {
+    const listener = jest.fn();
+    const subscription = HMRClient.addModuleUpdateListener(listener);
+    const client = new HMRClient('wss://banana.com/phone');
+    sendUpdate(update);
+    expect(listener).not.toHaveBeenCalled();
+    client.enable();
+    expect(
+      listener.mock.calls.map(([hmrModule]) => hmrModule.sourceURL),
+    ).toEqual(['1.js', '2.js']);
+    subscription.remove();
+    client.close();
+  });
+
+  test('stops notifying the listener after it is removed', () => {
+    const listener = jest.fn();
+    const subscription = HMRClient.addModuleUpdateListener(listener);
+    subscription.remove();
+    const client = new HMRClient('wss://banana.com/phone');
+    client.enable();
+    sendUpdate(update);
+    expect(listener).not.toHaveBeenCalled();
+    client.close();
+  });
+});
