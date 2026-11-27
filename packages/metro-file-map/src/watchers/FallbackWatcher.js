@@ -66,6 +66,7 @@ export default class FallbackWatcher extends AbstractWatcher {
     Object.create(null);
 
   #closed: boolean = false;
+  #longPathRoot: ?string;
   readonly #crawlFed: boolean;
   // Directories reported by the crawl that are not to be watched, because
   // they or an ancestor are ignored.
@@ -200,6 +201,17 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
   };
 
+  // Cache the expanded prefix once per watcher, retaining original paths for
+  // the crawl, registry keys and reported events.
+  #watchablePath(dir: string): string {
+    if (this.#longPathRoot == null) {
+      this.#longPathRoot = common.getWatchRoot(this.root);
+    }
+    return this.#longPathRoot === this.root
+      ? dir
+      : path.join(this.#longPathRoot, path.relative(this.root, dir));
+  }
+
   /**
    * Watch a directory.
    */
@@ -214,21 +226,25 @@ export default class FallbackWatcher extends AbstractWatcher {
     }
     let watcher: FSWatcher;
     try {
-      watcher = fs.watch(dir, {persistent: true}, (event, filename) => {
-        // libuv on Windows reports a deleted watched directory to its own
-        // handle as a rename naming the directory's absolute path, and before
-        // libuv 1.53 repeats that report until the handle is closed. If the
-        // directory is recreated first, the open handle also stops it from
-        // being watched again. Linux and macOS name the directory by its
-        // basename instead, so this branch is Windows-only.
-        if (filename != null && path.isAbsolute(filename)) {
-          this.#reconcileWatchedDirectory(dir, watcher).catch(error =>
-            this.emitError(error),
-          );
-          return;
-        }
-        this.#normalizeChange(dir, event, filename);
-      });
+      watcher = fs.watch(
+        this.#watchablePath(dir),
+        {persistent: true},
+        (event, filename) => {
+          // libuv on Windows reports a deleted watched directory to its own
+          // handle as a rename naming the directory's absolute path, and before
+          // libuv 1.53 repeats that report until the handle is closed. If the
+          // directory is recreated first, the open handle also stops it from
+          // being watched again. Linux and macOS name the directory by its
+          // basename instead, so this branch is Windows-only.
+          if (filename != null && path.isAbsolute(filename)) {
+            this.#reconcileWatchedDirectory(dir, watcher).catch(error =>
+              this.emitError(error),
+            );
+            return;
+          }
+          this.#normalizeChange(dir, event, filename);
+        },
+      );
     } catch (error) {
       // A directory we cannot watch is still worth crawling, so report the
       // error and carry on rather than losing the subtree under it.

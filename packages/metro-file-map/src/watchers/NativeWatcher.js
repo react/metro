@@ -15,7 +15,7 @@ import type {
 import type {FSWatcher} from 'node:fs';
 
 import {AbstractWatcher} from './AbstractWatcher';
-import {isIncluded, typeFromStat} from './common';
+import {getWatchRoot, isIncluded, typeFromStat} from './common';
 import debugModule from 'debug';
 import {promises as fsPromises, watch} from 'node:fs';
 import {platform} from 'node:os';
@@ -82,7 +82,7 @@ export default class NativeWatcher extends AbstractWatcher {
 
   async startWatching(): Promise<void> {
     this.#fsWatcher = watch(
-      this.root,
+      getWatchRoot(this.root),
       {
         // Don't hold the process open if we forget to close()
         persistent: false,
