@@ -219,3 +219,19 @@ describe('planQuery with includeSymlinks: true', () => {
     });
   });
 });
+
+test.each([[false], [true]])(
+  'queries by the last segment of each extension (includeSymlinks: %s)',
+  includeSymlinks => {
+    const {query} = planQuery({
+      since: 'clock',
+      directoryFilters: [],
+      extensions: ['js', 'd.ts', 'ts', 'env.local'],
+      includeSha1: false,
+      includeSymlinks,
+    });
+    expect(JSON.stringify(query.expression)).toContain(
+      JSON.stringify(['suffix', ['js', 'ts', 'local']]),
+    );
+  },
+);

@@ -31,6 +31,16 @@ export function planQuery({
   query: WatchmanQuery,
   queryGenerator: string,
 } {
+  // Watchman's `suffix` term matches case-insensitively, and given 3 or more
+  // suffixes it compares only the segment after the last dot[1], so it can't
+  // match a multi-part extension such as `d.ts`. Querying by the last segment
+  // of each extension matches a superset of the files the crawler includes,
+  // and the crawler filters the results by the full extension.
+  // [1] https://github.com/facebook/watchman/blob/11b116546968a285c10386fb7048fd68a7b26c29/watchman/query/suffix.cpp#L29-L42
+  const suffixes = [
+    ...new Set(extensions.map(ext => ext.slice(ext.lastIndexOf('.') + 1))),
+  ];
+
   const fields = ['name', 'exists', 'mtime_ms', 'size'];
   if (includeSha1) {
     fields.push('content.sha1hex');
@@ -54,13 +64,7 @@ export function planQuery({
   }
 
   const allOfTerms: Array<WatchmanExpression> = includeSymlinks
-    ? [
-        [
-          'anyof',
-          ['allof', ['type', 'f'], ['suffix', extensions]],
-          ['type', 'l'],
-        ],
-      ]
+    ? [['anyof', ['allof', ['type', 'f'], ['suffix', suffixes]], ['type', 'l']]]
     : [['type', 'f']];
 
   const query: WatchmanQuery = {fields};
@@ -112,7 +116,7 @@ export function planQuery({
   } else if (!includeSymlinks) {
     // Use the `suffix` generator with no path/extension filtering, as long
     // as we don't need (suffixless) directory symlinks.
-    query.suffix = extensions;
+    query.suffix = suffixes;
     queryGenerator = 'suffix';
   } else {
     // Fall back to `all` if we need symlinks and don't have a clock or
@@ -123,7 +127,7 @@ export function planQuery({
   // `includeSymlinks` implies we need (suffixless) directory links. In the
   // case of the `suffix` generator, a suffix expression would be redundant.
   if (!includeSymlinks && queryGenerator !== 'suffix') {
-    allOfTerms.push(['suffix', extensions]);
+    allOfTerms.push(['suffix', suffixes]);
   }
 
   // If we only have one "all of" expression we can use it directly, otherwise

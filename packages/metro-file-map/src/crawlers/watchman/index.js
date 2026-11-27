@@ -20,6 +20,7 @@ import type {
 } from '../../flow-types';
 import type {WatchmanQueryResponse, WatchmanWatchResponse} from 'fb-watchman';
 
+import hasIncludedExtension from '../../lib/hasIncludedExtension';
 import normalizePathSeparatorsToPosix from '../../lib/normalizePathSeparatorsToPosix';
 import normalizePathSeparatorsToSystem from '../../lib/normalizePathSeparatorsToSystem';
 import {RootPathUtils} from '../../lib/RootPathUtils';
@@ -287,6 +288,7 @@ export default async function watchmanCrawl({
   perfLogger?.point('watchmanCrawl/processResults_start');
 
   const freshFileData: FileData = new Map();
+  const extensionSet = new Set(extensions);
 
   for (const [watchRoot, response] of results) {
     const fsRoot = normalizePathSeparatorsToSystem(watchRoot);
@@ -300,6 +302,18 @@ export default async function watchmanCrawl({
     );
 
     for (const fileData of response.files) {
+      // The query asks Watchman for regular files by the last segment of each
+      // extension (see planQuery), so keep only those with a listed extension.
+      if (
+        fileData.exists &&
+        fileData.type !== 'l' &&
+        !hasIncludedExtension(
+          extensionSet,
+          fileData.name.slice(fileData.name.lastIndexOf('/') + 1),
+        )
+      ) {
+        continue;
+      }
       const filePath =
         fsRoot + path.sep + normalizePathSeparatorsToSystem(fileData.name);
       const relativeFilePath = pathUtils.absoluteToNormal(filePath);

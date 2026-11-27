@@ -230,6 +230,62 @@ describe('watchman watch', () => {
     expect(removedFiles).toEqual(new Set([TOMATO_RELATIVE]));
   });
 
+  test('queries by the last segment of each extension and keeps files with a listed one', async () => {
+    const file = (name, type = 'f') => ({
+      exists: true,
+      mtime_ms: {toNumber: () => 42},
+      name,
+      size: 40,
+      type,
+    });
+    mockResponse = {
+      query: {
+        [ROOT_MOCK]: {
+          clock: 'c:fake-clock:2',
+          files: [
+            file('fruits/.env'),
+            file('fruits/.env.local'),
+            file('fruits/kiwi.js'),
+            file('fruits/KIWI.JS'),
+            file('fruits/link', 'l'),
+            file('fruits/types.d.ts'),
+            file('fruits/types.ts'),
+            {exists: false, mtime_ms: null, name: 'fruits/OLD.JS', size: 0},
+          ],
+          is_fresh_instance: false,
+          version: '4.5.0',
+        },
+      },
+      'watch-project': WATCH_PROJECT_MOCK,
+    };
+
+    const {changedFiles, removedFiles} = await watchmanCrawl({
+      previousState: {
+        clocks: createMap({
+          '': 'c:fake-clock:1',
+        }),
+        fileSystem: getFS(new Map()),
+      },
+      extensions: ['js', 'env', 'd.ts'],
+      ignore: pearMatcher,
+      includeSymlinks: true,
+      rootDir: ROOT_MOCK,
+      roots: ROOTS,
+    });
+
+    const query = watchman.Client.mock.instances[0].command.mock.calls[2][0];
+    expect(JSON.stringify(query[2].expression)).toContain(
+      JSON.stringify(['suffix', ['js', 'env', 'ts']]),
+    );
+    expect([...changedFiles.keys()].sort()).toEqual(
+      ['fruits/.env', 'fruits/kiwi.js', 'fruits/link', 'fruits/types.d.ts'].map(
+        p => path.join(...p.split('/')),
+      ),
+    );
+    // Removals aren't filtered, so that a stale entry is removed.
+    expect(removedFiles).toEqual(new Set([path.join('fruits', 'OLD.JS')]));
+  });
+
   test('resets the file map and tracks removedFiles when watchman is fresh', async () => {
     const mockTomatoSha1 = '321f6b7e8bf7f29aab89c5e41a555b1b0baa41a9';
 
