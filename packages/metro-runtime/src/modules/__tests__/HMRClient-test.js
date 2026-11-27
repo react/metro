@@ -11,7 +11,7 @@
 
 'use strict';
 
-import type {HmrModule, HmrUpdate} from '../types';
+import type {HmrUpdate} from '../types';
 
 const HMRClient = require('../HMRClient');
 
@@ -405,20 +405,18 @@ describe('addModuleUpdateListener', () => {
   };
 
   test('notifies the listener before each module is evaluated', () => {
-    const seen: Array<[number, string, boolean]> = [];
-    const subscription = HMRClient.addModuleUpdateListener(hmrModule => {
-      seen.push([
-        hmrModule.module[0],
-        hmrModule.sourceURL,
-        evaledCode.includes(hmrModule.module[1]),
-      ]);
-    });
+    const seen: Array<[string, string, boolean]> = [];
+    const subscription = HMRClient.addModuleUpdateListener(
+      (code, sourceURL) => {
+        seen.push([code, sourceURL, evaledCode.includes(code)]);
+      },
+    );
     const client = new HMRClient('wss://banana.com/phone');
     client.enable();
     sendUpdate(update);
     expect(seen).toEqual([
-      [1, '1.js', false],
-      [2, '2.js', false],
+      ['function 1_A() {}', '1.js', false],
+      ['function 2_A() {}', '2.js', false],
     ]);
     subscription.remove();
     client.close();
@@ -431,9 +429,10 @@ describe('addModuleUpdateListener', () => {
     sendUpdate(update);
     expect(listener).not.toHaveBeenCalled();
     client.enable();
-    expect(
-      listener.mock.calls.map(([hmrModule]) => hmrModule.sourceURL),
-    ).toEqual(['1.js', '2.js']);
+    expect(listener.mock.calls.map(([, sourceURL]) => sourceURL)).toEqual([
+      '1.js',
+      '2.js',
+    ]);
     subscription.remove();
     client.close();
   });
@@ -450,11 +449,11 @@ describe('addModuleUpdateListener', () => {
   });
   test('notifies every listener, including one registered twice', () => {
     const calls: Array<string> = [];
-    const first = (hmrModule: HmrModule) => {
-      calls.push('first ' + hmrModule.sourceURL);
+    const first = (code: string, sourceURL: string) => {
+      calls.push('first ' + sourceURL);
     };
-    const second = (hmrModule: HmrModule) => {
-      calls.push('second ' + hmrModule.sourceURL);
+    const second = (code: string, sourceURL: string) => {
+      calls.push('second ' + sourceURL);
     };
     const subscriptions = [
       HMRClient.addModuleUpdateListener(first),
@@ -478,14 +477,18 @@ describe('addModuleUpdateListener', () => {
   test('applies listener changes made during a notification to the next module', () => {
     const calls: Array<string> = [];
     let late = null;
-    const subscription = HMRClient.addModuleUpdateListener(hmrModule => {
-      calls.push('early ' + hmrModule.sourceURL);
-      if (late == null) {
-        late = HMRClient.addModuleUpdateListener(lateModule => {
-          calls.push('late ' + lateModule.sourceURL);
-        });
-      }
-    });
+    const subscription = HMRClient.addModuleUpdateListener(
+      (code, sourceURL) => {
+        calls.push('early ' + sourceURL);
+        if (late == null) {
+          late = HMRClient.addModuleUpdateListener(
+            (lateCode, lateSourceURL) => {
+              calls.push('late ' + lateSourceURL);
+            },
+          );
+        }
+      },
+    );
     const client = new HMRClient('wss://banana.com/phone');
     client.enable();
     sendUpdate(update);
@@ -503,8 +506,8 @@ describe('addModuleUpdateListener', () => {
       throw error;
     });
     const seen: Array<string> = [];
-    const next = HMRClient.addModuleUpdateListener(hmrModule => {
-      seen.push(hmrModule.sourceURL);
+    const next = HMRClient.addModuleUpdateListener((code, sourceURL) => {
+      seen.push(sourceURL);
     });
     const client = new HMRClient('wss://banana.com/phone');
     client.enable();

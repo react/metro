@@ -48,7 +48,7 @@ export type HmrModule = {
 /**
  * A listener registered with `HMRClient.addModuleUpdateListener`.
  */
-export type HmrModuleUpdateListener = (hmrModule: HmrModule) => void;
+export type HmrModuleUpdateListener = (code: string, sourceURL: string) => void;
 
 /**
  * The subscription returned by `HMRClient.addModuleUpdateListener`.

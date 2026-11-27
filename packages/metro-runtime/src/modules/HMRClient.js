@@ -34,7 +34,7 @@ const inject = (hmrModule: HmrModule) => {
   } = hmrModule;
   Array.from(moduleUpdateListeners).forEach(({listener}) => {
     try {
-      listener(hmrModule);
+      listener(code, sourceURL);
     } catch (error) {
       console.error(
         `Error while calling a module update listener for module ${id}: `,
@@ -60,10 +60,13 @@ const injectUpdate = (update: HmrUpdate) => {
 class HMRClient extends EventEmitter {
   /**
    * Registers a listener for HMR module updates. The client invokes it with
-   * each added or modified module before evaluating that module. Deleted
-   * modules are not reported. An error thrown by a listener is logged with
-   * `console.error` and does not stop the update.
-   * Returns a subscription whose `remove` unregisters the listener.
+   * the code and source URL of each added or modified module before
+   * evaluating that module. Deleted modules are not reported. An error thrown
+   * by a listener is logged with `console.error` and does not stop the update.
+   * Listeners are kept per copy of this module: a listener registered through
+   * a different copy of `metro-runtime` than the one that created the client
+   * is never invoked. Returns a subscription whose `remove` unregisters the
+   * listener.
    */
   static addModuleUpdateListener(
     listener: HmrModuleUpdateListener,
